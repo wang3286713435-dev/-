@@ -1,0 +1,130 @@
+# Scripts
+
+本目录提供本地开发与联调辅助脚本。
+
+## 入口
+
+- [`scripts/dev/bootstrap-infra.sh`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/bootstrap-infra.sh)
+- [`scripts/dev/bootstrap-infra.ps1`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/bootstrap-infra.ps1)
+- [`scripts/dev/start-backend.sh`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/start-backend.sh)
+- [`scripts/dev/start-backend.ps1`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/start-backend.ps1)
+- [`scripts/dev/start-frontend.sh`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/start-frontend.sh)
+- [`scripts/dev/start-frontend.ps1`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/start-frontend.ps1)
+- [`scripts/dev/check-minimal-chain.sh`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/check-minimal-chain.sh)
+- [`scripts/dev/check-minimal-chain.ps1`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/check-minimal-chain.ps1)
+- [`scripts/dev/check-master-data-chain.sh`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/check-master-data-chain.sh)
+- [`scripts/dev/check-master-data-chain.ps1`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/check-master-data-chain.ps1)
+- [`scripts/dev/check-deliverable-standard-chain.sh`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/check-deliverable-standard-chain.sh)
+- [`scripts/dev/check-deliverable-standard-chain.ps1`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/check-deliverable-standard-chain.ps1)
+- [`scripts/dev/check-mvp-chain.sh`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/check-mvp-chain.sh)
+- [`scripts/dev/check-mvp-chain.ps1`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/check-mvp-chain.ps1)
+
+## 本地启动顺序
+
+### 1. 启动基础设施
+
+macOS / Linux:
+
+```bash
+bash scripts/dev/bootstrap-infra.sh
+```
+
+Windows PowerShell:
+
+```powershell
+.\scripts\dev\bootstrap-infra.ps1
+```
+
+该脚本会使用 `infra/.env.example` 拉起 MySQL 8、Redis 7 和 MinIO。
+
+### 2. 启动后端
+
+macOS / Linux:
+
+```bash
+bash scripts/dev/start-backend.sh
+```
+
+Windows PowerShell:
+
+```powershell
+.\scripts\dev\start-backend.ps1
+```
+
+优先使用仓库内的 `backend/mvnw` / `backend/mvnw.cmd` 构建并启动 `delivery-app`。如果本机缺少 Java 21，但已经安装 Docker Desktop，脚本会回退到 `maven:3.9-eclipse-temurin-21` Docker 镜像，并连接 `infra_default` 网络内的 MySQL。
+
+### 3. 启动前端
+
+macOS / Linux:
+
+```bash
+bash scripts/dev/start-frontend.sh
+```
+
+Windows PowerShell:
+
+```powershell
+.\scripts\dev\start-frontend.ps1
+```
+
+脚本使用 `corepack pnpm install` 安装依赖，并通过 Vite 在 `5173` 端口启动前端。
+
+### 4. 执行最小链路检查
+
+macOS / Linux:
+
+```bash
+bash scripts/dev/check-minimal-chain.sh http://localhost:8080 platform.admin Admin@123 2
+```
+
+Windows PowerShell:
+
+```powershell
+.\scripts\dev\check-minimal-chain.ps1 http://localhost:8080 platform.admin Admin@123 2
+```
+
+该脚本会依次验证登录、刷新 token、当前用户、项目切换和工作中心首页概览接口。
+
+### 5. 执行 master-data 最小链路检查
+
+macOS / Linux:
+
+```bash
+bash scripts/dev/check-master-data-chain.sh http://localhost:8080 platform.admin Admin@123 2
+```
+
+Windows PowerShell:
+
+```powershell
+.\scripts\dev\check-master-data-chain.ps1 http://localhost:8080 platform.admin Admin@123 2
+```
+
+该脚本会依次验证登录、项目切换、标准前置条件状态、创建部位节点、查询部位树、创建节点类型、锁定节点类型和查询锁定状态。
+
+### 6. 执行交付标准链路检查
+
+macOS / Linux:
+
+```bash
+bash scripts/dev/check-deliverable-standard-chain.sh http://localhost:8080 platform.admin Admin@123 2
+```
+
+Windows PowerShell:
+
+```powershell
+.\scripts\dev\check-deliverable-standard-chain.ps1 http://localhost:8080 platform.admin Admin@123 2
+```
+
+### 7. 执行 MVP 全链路检查
+
+macOS / Linux:
+
+```bash
+bash scripts/dev/check-mvp-chain.sh http://localhost:8080 platform.admin Admin@123 2
+```
+
+Windows PowerShell:
+
+```powershell
+.\scripts\dev\check-mvp-chain.ps1 http://localhost:8080 platform.admin Admin@123 2
+```

@@ -1,0 +1,41 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: delivery-app
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  datasource:
+    url: ${DELIVERY_DB_URL:jdbc:mysql://localhost:3306/delivery_platform?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8}
+    username: ${DELIVERY_DB_USERNAME:delivery}
+    password: ${DELIVERY_DB_PASSWORD:delivery123}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jackson:
+    time-zone: UTC
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+  mvc:
+    problemdetails:
+      enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+delivery:
+  security:
+    jwt:
+      issuer: delivery-platform
+      secret: ${DELIVERY_JWT_SECRET:delivery-platform-phase1-secret-key-change-me-2026}
+      access-token-ttl: PT30M
+      refresh-token-ttl: P7D
