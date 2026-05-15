@@ -1,0 +1,14 @@
+# Ralph Progress - Phase2 Batch4 File Access
+# Started: 2026-05-15
+# Completed: 2026-05-15
+# Completion promise: PHASE2_BATCH4_FILE_ACCESS_COMPLETE
+US-001: completed - V20 migration: file preview/download permissions + data_file_access_tickets
+US-002: completed - Backend access policy: project access, lifecycle, action permission, path readability
+US-003: completed - Access ticket API: create ticket + public ticket consumption endpoint
+US-004: completed - NAS readonly stream: supports nas:///Volumes and nas:///tmp without writing NAS files
+US-005: completed - Preview/download audit: ticket create, open, denial, failed path
+US-006: completed - Frontend API: FileAccessTicket type and createFileAccessTicket helper
+US-007: completed - Asset detail page: preview/download permission display and ticket-based actions
+US-008: completed - Catalog detail drawer: preview/download status and ticket-based actions
+US-009: completed - Verification script: check-phase2-batch4-file-access.sh PASS=12 FAIL=0
+US-010: completed - Regression: preview shell, phase2 batch1, batch2, batch3 scripts pass

@@ -1,6 +1,8 @@
 # 第一阶段开工清单与 Readiness
 
-> 版本说明：本文档记录早期平台基础工程开工清单。平台基础工程和 MVP 闭环完成后，新的“一期”业务目标已经调整为 `内部 BIM 资产管理试点`。后续一期开发 backlog 必须以 [07-complete-delivery-prd.md](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/docs/07-complete-delivery-prd.md) 和 [08-acceptance-and-agent-integration.md](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/docs/08-acceptance-and-agent-integration.md) 为准。
+> 版本说明：本文档记录早期平台基础工程开工清单。平台基础工程和 MVP 闭环完成后，新的“一期”业务目标已经调整为 `内部 BIM 资产管理试点`。后续一期开发 backlog 必须以 [07-complete-delivery-prd.md](/Users/vc/Documents/数字化交付平台/docs/07-complete-delivery-prd.md) 和 [08-acceptance-and-agent-integration.md](/Users/vc/Documents/数字化交付平台/docs/08-acceptance-and-agent-integration.md) 为准。
+
+> 当前裁决：一期继续按 `后端数据治理优先` 推进。前端资产页面暂缓；下一轮主 agent 应先派发“数据底座与 NAS 扫描入库”，再依次推进“异步任务、checksum、统计与事件流”和“企业 agent、审批与受控物理删除”。
 
 ## 1. 结论先行
 

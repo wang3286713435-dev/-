@@ -45,6 +45,48 @@ const router = createRouter({
           meta: { requiresAuth: true }
         },
         {
+          path: 'data-steward/assets',
+          name: 'data-steward-assets',
+          component: () => import('@/modules/data-steward/pages/AssetOverviewPage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
+          path: 'data-steward/scans',
+          name: 'data-steward-scans',
+          component: () => import('@/modules/data-steward/pages/AssetScanOperationsPage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
+          path: 'data-steward/quality',
+          name: 'data-steward-quality',
+          component: () => import('@/modules/data-steward/pages/AssetQualityOverviewPage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
+          path: 'data-steward/nonstandard-directories',
+          name: 'data-steward-nonstandard-directories',
+          component: () => import('@/modules/data-steward/pages/NonstandardDirectoryGovernancePage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
+          path: 'data-steward/catalog',
+          name: 'data-steward-catalog',
+          component: () => import('@/modules/data-steward/pages/AssetCatalogPage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
+          path: 'data-steward/agent-preview',
+          name: 'data-steward-agent-preview',
+          component: () => import('@/modules/data-steward/pages/AgentPreviewPage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
+          path: 'data-steward/assets/:projectId',
+          name: 'data-steward-asset-detail',
+          component: () => import('@/modules/data-steward/pages/AssetProjectDetailPage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
           path: 'data-steward/files',
           name: 'data-steward-files',
           component: () => import('@/modules/data-steward/pages/FileResourcesPage.vue'),
@@ -72,6 +114,12 @@ const router = createRouter({
           path: 'work/drawing-delivery',
           name: 'work-drawing-delivery',
           component: () => import('@/modules/work-center/pages/DrawingDeliveryPage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
+          path: 'work/rectifications',
+          name: 'work-rectifications',
+          component: () => import('@/modules/work-center/pages/RectificationsPage.vue'),
           meta: { requiresAuth: true }
         },
         {

@@ -15,14 +15,34 @@
 
     <StandardStatusPanel :status="standardStatus" />
 
+    <section class="workflow-guide">
+      <div class="workflow-guide__main">
+        <span class="workflow-guide__step">第 3 步</span>
+        <h2>把“要交什么资料”固化成项目标准</h2>
+        <p>
+          交付物标准会决定文档交付和图纸交付页面的应交项、缺失项和补交流程。推荐顺序是：先定义要交什么，再配置交哪类文件，然后补属性，最后维护目录模板。
+        </p>
+      </div>
+      <ol class="workflow-guide__steps">
+        <li>交付物定义：说明项目必须交哪些资料。</li>
+        <li>交付物类型：说明这些资料用文档、图纸还是模型交付。</li>
+        <li>交付物属性：说明资料还需要补充哪些字段。</li>
+        <li>目录模板：说明交付成果建议按什么目录组织。</li>
+      </ol>
+    </section>
+
     <el-alert v-if="!canWrite" class="node-type-lock" type="warning" :closable="false" show-icon>
       <template #title>请先锁定节点类型</template>
+      <p class="status-helper">节点类型锁定后，平台才能确认交付标准绑定在哪些部位层级上。</p>
     </el-alert>
 
     <div class="deliverable-layout">
       <section class="deliverable-panel">
         <div class="deliverable-panel__header">
-          <h2>交付物定义</h2>
+          <div>
+            <h2>交付物定义</h2>
+            <p>定义项目必须交什么资料，例如“竣工图”“设备清单”“模型文件”。</p>
+          </div>
           <el-button size="small" type="primary" :icon="Plus" :disabled="!canWrite" @click="openCreateDialog('definition')">
             新增
           </el-button>
@@ -56,7 +76,10 @@
 
       <section class="deliverable-panel">
         <div class="deliverable-panel__header">
-          <h2>交付物类型</h2>
+          <div>
+            <h2>交付物类型</h2>
+            <p>说明所选定义应通过文档、图纸或模型交付，并决定后续在哪个交付页面计算缺失项。</p>
+          </div>
           <el-button
             size="small"
             type="primary"
@@ -92,7 +115,10 @@
 
       <section class="deliverable-panel">
         <div class="deliverable-panel__header">
-          <h2>交付物属性</h2>
+          <div>
+            <h2>交付物属性</h2>
+            <p>补充交付资料需要记录的字段，例如版次、签发日期、专业或审核状态。</p>
+          </div>
           <el-button
             size="small"
             type="primary"
@@ -126,7 +152,10 @@
 
       <section class="deliverable-panel">
         <div class="deliverable-panel__header">
-          <h2>目录模板</h2>
+          <div>
+            <h2>目录模板</h2>
+            <p>定义交付成果的建议目录结构，便于后续按标准浏览和导出。</p>
+          </div>
           <el-button size="small" type="primary" :icon="Plus" :disabled="!canWrite" @click="openCreateDialog('template')">
             新增
           </el-button>
@@ -155,6 +184,7 @@
             <el-select v-model="definitionForm.nodeTypeId" filterable>
               <el-option v-for="nodeType in nodeTypes" :key="nodeType.id" :label="nodeType.name" :value="nodeType.id" />
             </el-select>
+            <div class="field-hint">选择这类资料适用于哪一类工程部位。</div>
           </el-form-item>
           <el-form-item label="编码">
             <el-input v-model="definitionForm.code" maxlength="64" />
@@ -164,6 +194,7 @@
           </el-form-item>
           <el-form-item label="分类">
             <el-segmented v-model="definitionForm.category" :options="categoryOptions" />
+            <div class="field-hint">分类用于区分文档、图纸和模型标准，后续会影响交付视图。</div>
           </el-form-item>
           <el-form-item label="必交">
             <el-switch v-model="definitionForm.required" />
@@ -185,9 +216,11 @@
           </el-form-item>
           <el-form-item label="文件类型">
             <el-segmented v-model="typeForm.fileKind" :options="fileKindOptions" />
+            <div class="field-hint">文档类型会进入文档交付，图纸类型会进入图纸交付，模型类型留给模型交付能力扩展。</div>
           </el-form-item>
           <el-form-item label="挂接策略">
             <el-segmented v-model="typeForm.bindingStrategy" :options="bindingOptions" />
+            <div class="field-hint">选择这份资料应该挂到工程部位、管理对象，还是只挂到项目整体。</div>
           </el-form-item>
           <el-form-item label="排序">
             <el-input-number v-model="typeForm.sortOrder" :min="0" controls-position="right" />
@@ -206,6 +239,7 @@
           </el-form-item>
           <el-form-item label="值类型">
             <el-segmented v-model="attributeForm.valueType" :options="valueTypeOptions" />
+            <div class="field-hint">用于限制填写格式，例如文本、日期、数字或枚举。</div>
           </el-form-item>
           <el-form-item label="单位">
             <el-input v-model="attributeForm.unit" maxlength="32" />
@@ -224,6 +258,7 @@
         <template v-if="dialogKind === 'template'">
           <el-form-item label="目录类型">
             <el-segmented v-model="templateForm.templateType" :options="categoryOptions" />
+            <div class="field-hint">目录类型应与文档、图纸或模型交付视图保持一致。</div>
           </el-form-item>
           <el-form-item label="名称">
             <el-input v-model="templateForm.name" maxlength="128" />
@@ -737,5 +772,11 @@ function resetForm(kind: DialogKind) {
 .deliverable-panel__header h2 {
   margin: 0;
   font-size: 18px;
+}
+
+.deliverable-panel__header p {
+  margin: 4px 0 0;
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
 }
 </style>

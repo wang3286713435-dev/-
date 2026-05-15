@@ -1,132 +1,148 @@
-# 测试 Agent 当前任务 Prompt
+# 测试 Agent 当前任务：二期批次四验收 - 文件预览与下载权限分离最小闭环
 
-你是数字化交付平台 v1 的长期测试 agent。你拥有自己的长期会话上下文，请持续记住本项目的测试范围、缺陷状态、回归结果和主 agent 的验收裁决。
+你是数字化交付平台的测试 agent。工作目录：
 
-## 0. 最重要的协作规则
+`/Users/vc/Documents/数字化交付平台`
 
-- 你不是主 agent 创建的临时子 agent。
-- 你在一个独立长期会话中工作，后续会持续接收本项目测试任务。
-- 不要创建新的子 agent 来完成你的任务。
-- 默认只读检查、运行和反馈。
-- 未经主 agent 明确授权，不要修改业务代码。
-- 每轮完成后，必须把测试报告写入 `handoff/test-agent/latest-report.md`。
+本轮只验收二期批次四，不清理样板项目，不验证模型轻量化。
 
-## 1. 当前工作目录
+## 0. 必须先阅读
 
-```text
-/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台
-```
+开始前先阅读：
 
-## 2. 默认权限
+1. `handoff/main-agent/status.md`
+2. `handoff/main-agent/phase2-batch4-file-preview-download-permission-plan.md`
+3. `handoff/dev-agent/latest-report.md`
+4. `scripts/dev/check-phase2-batch4-file-access.sh`
+5. `scripts/dev/check-file-preview-shell.sh`
 
-默认只读。
+## 1. 验收目标
 
-如主 agent 后续授权补测试资产，才可以修改：
+验证本轮是否真正做到：
 
-- `backend/**/test/**`
-- `frontend/**/__tests__/**`
-- `scripts/**`
-- `handoff/test-agent/latest-report.md`
+`文件详情 -> 判断预览/下载权限 -> 生成短时访问票据 -> 平台受控读取文件 -> 浏览器预览或下载 -> 审计留痕`
 
-## 3. 必须先阅读的文件
+重点不是“页面看起来有按钮”，而是权限、路径隐藏、只读访问和审计都成立。
 
-请先阅读这些文件：
+## 2. 必测项
 
-- `handoff/README.md`
-- `handoff/main-agent/status.md`
-- `handoff/dev-agent/latest-report.md`
-- `docs/agents/00-session-governance.md`
-- `docs/05-phase1-dev-baseline.md`
-- `docs/06-phase1-backlog-and-readiness.md`
-- `docs/agents/03-phase1-test-matrix.md`
+### A. 构建与健康
 
-## 4. 当前任务
-
-测试暂缓，等待开发 agent 完成第二阶段下一批 `master-data` 交付物标准最小闭环。
-
-开发 agent 当前任务入口：
-
-```text
-handoff/dev-agent/current-prompt.md
-```
-
-开发完成并更新 `handoff/dev-agent/latest-report.md` 后，再执行下一轮测试验收。
-
-下一轮测试目标预告：
-
-- 验证交付物定义、交付物类型、交付物属性、目录模板的数据库迁移与接口链路。
-- 验证节点类型未全部锁定时，交付物标准写操作被阻断。
-- 验证节点类型锁定后，交付物标准可创建、编辑、查询、删除/停用。
-- 验证同编码删除后重建、再次删除不触发唯一键冲突。
-- 回归第一阶段最小链路和第二阶段已通过的 master-data 部位树/节点类型链路。
-
-主 agent 已裁决：
-
-- 保留“路径项目必须等于 token 当前项目”的项目上下文规则。
-- Flyway 的 MySQL 弃用警告不阻塞本轮验收，但需要记录为后续硬化项。
-- 第二阶段验收先以人工/脚本冒烟为主，自动化测试缺口不作为本轮阻塞项。
-- 第二阶段测试必须覆盖 master-data 的同编码创建、删除、重建、再次删除场景。
-- 接受开发 agent 对 `masterdata_node_types` 增加 `delete_token` 与新唯一键的预防性修复；该表当前无删除接口，不要求本轮补删除接口。
-- 本轮可继续使用 Docker Maven 和 Docker JDK 后端启动方案，不要求本地安装 Java 21 / Maven。
-
-## 5. 测试重点
-
-1. 工程与环境
-2. 后端 Maven 多模块构建与启动
-3. 前端 Vue 3 + Vite 构建与启动
-4. MySQL、Redis、MinIO 本地依赖
-5. 登录、刷新 token、当前用户、项目切换
-6. 前端登录页、主框架、菜单、首页、项目切换
-7. 统一响应结构、错误响应、`traceId`
-8. 样板数据可用性
-9. 前端源码旁路产物检查，除 `frontend/src/vite-env.d.ts` 外，不应残留源码目录旁路 `.js` / `.d.ts` 产物
-10. `GET /api/work-center/projects/{projectId}/home/overview` 对非当前项目上下文应返回项目上下文不匹配错误
-11. Flyway 新迁移应用情况
-12. 交付物标准链路脚本实际通过情况
-
-## 6. 建议执行命令
-
-可按环境选择本地或 Docker 工具链。若本机仍缺 Java 21 / Maven，优先使用 Docker 方案并在报告中说明。
+必须执行：
 
 ```bash
-bash scripts/dev/bootstrap-infra.sh
+cd /Users/vc/Documents/数字化交付平台/backend
+./mvnw -pl delivery-app -am -DskipTests package
+
+cd /Users/vc/Documents/数字化交付平台
+corepack pnpm --dir frontend build
+curl -fsS http://localhost:8080/actuator/health
+git diff --check
 ```
+
+### B. 专项脚本
+
+必须执行：
 
 ```bash
-docker run --rm -v "$PWD/backend:/workspace" -v "$HOME/.m2:/root/.m2" -w /workspace maven:3.9-eclipse-temurin-21 mvn -DskipTests package
+bash scripts/dev/check-phase2-batch4-file-access.sh
+bash scripts/dev/check-file-preview-shell.sh
 ```
+
+专项脚本至少应证明：
+
+1. 管理员可预览。
+2. 管理员可下载。
+3. 查看者可预览但不可下载。
+4. 跨项目用户不可预览或下载。
+5. 文件不存在或不可读时错误清晰。
+6. OpenAPI 包含新增接口。
+7. 访问、拒绝、失败动作写审计。
+
+### C. 页面验收
+
+至少手动打开：
+
+1. `http://localhost:5173/data-steward/assets/1`
+2. `http://localhost:5173/data-steward/catalog`
+
+验证：
+
+1. 文件详情能看到预览/下载状态。
+2. 可预览文件可以打开预览。
+3. 可下载文件可以触发下载。
+4. 无下载权限时下载按钮不可用或被明确拒绝。
+5. 权限不足、路径失效、文件不可读时文案清楚。
+6. 页面不横向撑爆。
+7. 不直接显示真实 NAS 路径给普通用户。
+
+### D. 回归
+
+建议执行：
 
 ```bash
-cd frontend && corepack pnpm build
+bash scripts/dev/check-phase2-batch1-readonly-catalog.sh
+bash scripts/dev/check-phase2-batch2-standard-delivery.sh
+bash scripts/dev/check-phase2-batch3-review-rectification-report.sh
 ```
 
-开发 agent 完成下一批后，启动后端并至少执行：
+重点确认：
 
-```bash
-bash scripts/dev/check-minimal-chain.sh http://localhost:8080 platform.admin Admin@123 2
-```
+1. 只读目录不回归。
+2. 交付完整率不回归。
+3. 审核整改不回归。
+4. 旧 `Agent preview / permission proof` 不回归。
 
-```bash
-bash scripts/dev/check-master-data-chain.sh http://localhost:8080 platform.admin Admin@123 2
-```
+## 3. P0 判定
 
-如开发 agent 新增交付物标准链路脚本，也必须执行并记录结果。
+出现任一项即 P0，不允许收口：
 
-## 7. 报告格式
+1. 无项目权限用户可预览或下载文件。
+2. 只有预览权限的用户可以下载。
+3. 接口或页面暴露真实 NAS 路径给普通用户。
+4. 访问票据绕过权限或过期仍可使用。
+5. 真实 NAS 文件被移动、删除、改名或修改。
+6. 文件不存在却返回成功。
+7. 预览/下载关键动作无审计。
+8. OpenAPI 不可访问或新增接口缺失。
+
+## 4. P1 判定
+
+以下问题为 P1，原则上不建议收口：
+
+1. 页面按钮状态和后端权限不一致。
+2. 错误文案无法让用户判断是无权限、路径失效还是格式不支持。
+3. 预览或下载需要用户手动复制底层路径。
+4. PDF/图片原生预览不可用，但后端声明可用。
+5. 下载大文件时后端一次性读入内存。
+
+## 5. 明确不测
+
+本轮不要求：
+
+1. 模型轻量化。
+2. 构件级解析。
+3. Office/CAD/BIM 在线转换。
+4. 正文抽取。
+5. 向量库。
+6. Agent 自动审批或自动写库。
+7. 客户生产级权限体系。
+8. 样板项目数据清理。
+
+## 6. 报告要求
 
 完成后写入：
 
-```text
-handoff/test-agent/latest-report.md
-```
+`handoff/test-agent/latest-report.md`
 
 报告必须包含：
 
-1. 测试范围
-2. 执行环境
-3. 执行步骤
-4. 通过项
-5. 失败项
-6. 缺陷列表
-7. 阻塞项
-8. 是否建议进入下一阶段
+1. 总结论：通过/不通过。
+2. P0/P1/P2 列表。
+3. 构建与健康检查结果。
+4. 专项脚本结果。
+5. 页面验收结果。
+6. 权限分离验证结果。
+7. NAS 路径隐藏验证结果。
+8. 审计验证结果。
+9. 是否可以收口二期批次四。

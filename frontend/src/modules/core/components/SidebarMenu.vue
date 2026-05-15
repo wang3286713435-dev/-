@@ -31,6 +31,8 @@ import {
   Monitor,
   OfficeBuilding,
   Picture,
+  Search,
+  Warning,
   Tickets
 } from '@element-plus/icons-vue';
 import { useRoute } from 'vue-router';
@@ -54,6 +56,8 @@ const icons = {
   Monitor,
   OfficeBuilding,
   Picture,
+  Search,
+  Warning,
   Tickets
 };
 

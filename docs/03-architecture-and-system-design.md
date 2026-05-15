@@ -7,6 +7,8 @@
 - 资源抽象：文件、模型、管理对象、交付绑定分层建模，避免业务直接依赖物理文件。
 - 存储抽象：文件物理位置必须通过 `StorageProvider` 适配，业务层只依赖稳定资源标识。
 - Agent 友好：企业 agent 通过稳定读模型或 API 检索资产，不直接耦合易变业务底表。
+- 后端数据治理优先：一期先稳定数据库、任务、审核、审计、读模型和 OpenAPI，前端资产页面后置。
+- 高风险操作受控：NAS 原文件物理删除必须申请、审核、隔离和审计，不允许直接永久删除。
 - 三维可插拔：3D 引擎通过适配层接入，不让上层业务依赖具体厂商页面。
 - 私有化友好：默认支持内网部署、细粒度权限、审计追踪和对象存储接入。
 
@@ -59,7 +61,27 @@ flowchart LR
   V["visualization-adapter"] --> BIM["第三方 BIM/轻量化引擎"]
 ```
 
-一期先实现 `NAS + 元数据入库 + Agent Read Model`。二期在不改变上层业务接口的前提下接入对象存储、搜索索引、模型轻量化和构件级能力。
+一期先实现 `NAS + 元数据入库 + 待审核队列 + SQL View + 事件流`。二期在不改变上层业务接口的前提下接入对象存储、搜索索引、模型轻量化和构件级能力。
+
+### 2.2 一期后端数据治理链路
+
+```mermaid
+flowchart LR
+  LIST["项目清单 / NAS路径映射"] --> SCAN["NAS扫描任务"]
+  SCAN --> CONF["高置信自动入库"]
+  SCAN --> REVIEW["低置信待审核"]
+  REVIEW --> ASSET["正式资产库"]
+  CONF --> ASSET
+  ASSET --> CHECKSUM["checksum异步任务"]
+  ASSET --> VIEW["SQL View稳定读模型"]
+  ASSET --> EVENT["审计 / 事件流"]
+  AGENT["企业Agent API Key"] --> VIEW
+  AGENT --> TASK["触发扫描 / checksum任务"]
+  AGENT --> APPLY["提交标注 / 删除申请"]
+  APPLY --> APPROVAL["人工审核"]
+  APPROVAL --> QUAR["NAS隔离区"]
+  QUAR --> PURGE["30天后永久删除任务"]
+```
 
 ## 3. 逻辑模块划分
 
@@ -114,13 +136,20 @@ flowchart LR
 - 管理对象
 - 文件服务
 - NAS 扫描、批量导入、容量统计
+- 待审核队列、人工标注、项目归属修正
+- checksum 异步补齐
+- 任务状态、失败原因、重试
 - `StorageProvider` 存储适配
-- 企业 agent 稳定读模型
+- 企业 agent SQL View 稳定读模型
+- agent API Key、项目范围授权、变更申请
+- 审计/事件流增量同步
+- 隔离删除、恢复和永久删除任务
 - 导入导出
 
 建议包结构：
 
 - `datasteward.asset`
+- `datasteward.asset.review`
 - `datasteward.resource`
 - `datasteward.model`
 - `datasteward.integration`
@@ -128,6 +157,10 @@ flowchart LR
 - `datasteward.service`
 - `datasteward.storage`
 - `datasteward.agentread`
+- `datasteward.agentauth`
+- `datasteward.task`
+- `datasteward.event`
+- `datasteward.deletion`
 
 ## 3.4 `work-center`
 
@@ -184,8 +217,17 @@ flowchart LR
 - `ManagedObject`
 - `DeliveryBinding`
 - `StorageRoot`
+- `StoragePathMapping`
 - `AssetImportJob`
+- `AssetScanTask`
+- `AssetReviewItem`
+- `AssetTask`
+- `AgentApiKey`
+- `AgentChangeRequest`
+- `AssetDeletionRequest`
+- `AssetQuarantineRecord`
 - `AgentReadModel`
+- `AssetEvent`
 - `Issue`
 - `Task`
 - `AuditLog`
@@ -201,8 +243,14 @@ flowchart TD
   DT --> DA["DeliverableAttribute"]
   P --> T["DirectoryTemplate"]
   P --> FR["FileResource"]
+  P --> MAP["StoragePathMapping"]
+  P --> TASK2["AssetTask"]
+  TASK2 --> REVIEW["AssetReviewItem"]
+  REVIEW --> FR
   FR --> MI["ModelIntegration"]
   FR --> MO["ManagedObject"]
+  FR --> DR["AssetDeletionRequest"]
+  DR --> QR["AssetQuarantineRecord"]
   MI --> MO
   S --> DB["DeliveryBinding"]
   DD --> DB
@@ -211,6 +259,7 @@ flowchart TD
   P --> I["Issue"]
   P --> TK["Task"]
   P --> AL["AuditLog"]
+  AL --> EVT["AssetEvent / AgentEvent"]
 ```
 
 ## 4.3 实体字段建议
@@ -313,6 +362,22 @@ flowchart TD
 - `versionNo`
 - `processStatus`
 - `processDurationMs`
+- `confidenceStatus`
+- `reviewStatus`
+- `lastVerifiedAt`
+- `sourcePathDigest`
+- `createdBy`
+- `createdAt`
+
+### `StoragePathMapping`
+
+- `id`
+- `projectId`
+- `providerCode`
+- `rootCode`
+- `nasPath`
+- `matchStrategy`
+- `status`
 - `createdBy`
 - `createdAt`
 
@@ -339,9 +404,72 @@ flowchart TD
 - `createdBy`
 - `createdAt`
 
+### `AssetReviewItem`
+
+- `id`
+- `scanTaskId`
+- `candidatePath`
+- `fileName`
+- `fileExt`
+- `sizeBytes`
+- `mtime`
+- `suggestedProjectId`
+- `suggestedFileKind`
+- `confidenceLevel`
+- `reviewStatus`
+- `reviewedBy`
+- `reviewedAt`
+- `reviewComment`
+
+### `AssetTask`
+
+- `id`
+- `taskType`
+- `status`
+- `progress`
+- `retryCount`
+- `failureReason`
+- `createdBy`
+- `createdAt`
+- `updatedAt`
+
+### `AgentApiKey`
+
+- `id`
+- `agentCode`
+- `keyHash`
+- `projectScope`
+- `status`
+- `expiresAt`
+- `lastUsedAt`
+
+### `AssetDeletionRequest`
+
+- `id`
+- `fileResourceId`
+- `requesterType`
+- `requestedBy`
+- `reason`
+- `approvalStatus`
+- `approvedBy`
+- `approvedAt`
+- `executionStatus`
+
+### `AssetQuarantineRecord`
+
+- `id`
+- `deletionRequestId`
+- `fileResourceId`
+- `originalPath`
+- `quarantinePath`
+- `quarantinedAt`
+- `retentionUntil`
+- `restoreStatus`
+- `permanentDeleteStatus`
+
 ### `AgentReadModel`
 
-`AgentReadModel` 不一定是业务表，可以是 SQL View、物化表或只读宽表。固定输出：
+`AgentReadModel` 一期优先采用 MySQL SQL View。后续如有性能或同步需求，可演进为物化表或同步表，但字段含义必须保持稳定。固定输出：
 
 - `ProjectAssetView`
 - `FileAssetView`

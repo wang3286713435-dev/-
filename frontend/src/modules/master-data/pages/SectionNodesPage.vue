@@ -13,6 +13,21 @@
 
     <StandardStatusPanel :status="standardStatus" />
 
+    <section class="workflow-guide">
+      <div class="workflow-guide__main">
+        <span class="workflow-guide__step">第 1 步</span>
+        <h2>先把项目拆成可交付的工程部位</h2>
+        <p>
+          部位树决定后续交付资料按哪些区域、楼层或系统生成缺失项。根节点通常代表楼栋、区域或系统，下级节点可以是楼层、房间、机房或专业部位。
+        </p>
+      </div>
+      <ol class="workflow-guide__steps">
+        <li>先新增根节点，例如“地下室”“塔楼”“机电系统”。</li>
+        <li>再添加下级，把真实项目范围拆到能挂接资料的层级。</li>
+        <li>部位树稳定后，进入节点类型页面，锁定后再配置交付物标准。</li>
+      </ol>
+    </section>
+
     <el-table
       v-loading="loading"
       :data="sectionTree"
@@ -44,9 +59,11 @@
       <el-form label-position="top" class="master-form">
         <el-form-item label="父节点">
           <el-input :model-value="parentNode?.name ?? '根节点'" disabled />
+          <div class="field-hint">根节点适合放楼栋、区域或系统；添加下级用于继续拆分楼层、房间或具体专业部位。</div>
         </el-form-item>
         <el-form-item label="编码">
           <el-input v-model="form.code" maxlength="64" />
+          <div class="field-hint">建议使用项目内部可识别的编号，后续导入和交付视图会用它追溯部位。</div>
         </el-form-item>
         <el-form-item label="名称">
           <el-input v-model="form.name" maxlength="128" />

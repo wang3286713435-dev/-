@@ -12,9 +12,9 @@
 
 ## 本地运行
 
-优先使用 [`scripts/dev/start-frontend.sh`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/start-frontend.sh)。
+优先使用 [`scripts/dev/start-frontend.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/start-frontend.sh)。
 
-Windows PowerShell 优先使用 [`scripts/dev/start-frontend.ps1`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/start-frontend.ps1)。
+Windows PowerShell 优先使用 [`scripts/dev/start-frontend.ps1`](/Users/vc/Documents/数字化交付平台/scripts/dev/start-frontend.ps1)。
 
 手动命令：
 

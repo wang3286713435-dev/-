@@ -6,6 +6,7 @@ import com.zhuoyu.delivery.datasteward.dto.DataStewardDtos.FileResourceRequest;
 import com.zhuoyu.delivery.datasteward.dto.DataStewardDtos.FileResourceResponse;
 import com.zhuoyu.delivery.datasteward.dto.DataStewardDtos.ProcessFileRequest;
 import com.zhuoyu.delivery.shared.api.ApiResponse;
+import com.zhuoyu.delivery.shared.api.PageResponse;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -54,6 +55,21 @@ public class FileResourceController {
         var principal = securityPrincipalAccessor.requireCurrentPrincipal();
         projectContextApplicationService.requireCurrentProject(principal, projectId);
         return ApiResponse.success(fileResourceApplicationService.list(projectId, fileKind));
+    }
+
+    @GetMapping(params = "pageNo")
+    public ApiResponse<PageResponse<FileResourceResponse>> listPage(
+        @PathVariable Long projectId,
+        @RequestParam(required = false) String fileKind,
+        @RequestParam(required = false) String keyword,
+        @RequestParam(required = false) String processStatus,
+        @RequestParam(required = false, defaultValue = "1") Integer pageNo,
+        @RequestParam(required = false, defaultValue = "50") Integer pageSize
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(fileResourceApplicationService.listPage(
+            projectId, fileKind, keyword, processStatus, pageNo, pageSize));
     }
 
     @PatchMapping("/{fileId}:process")

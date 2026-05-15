@@ -1,0 +1,139 @@
+{
+  "project": "数字化交付平台",
+  "branchName": "ralph/phase2-batch1-readonly-catalog",
+  "description": "二期批次一：只读资产目录与 Agent 对接预览层 - 前端资产目录、REST权限证明、只读catalog API、Agent preview/audit-ready页面",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Add Catalog DTOs and Permission Proof DTOs to AssetDtos.java",
+      "description": "As a backend developer, I need response DTOs for catalog queries and permission proof checks so controllers have stable contracts.",
+      "acceptanceCriteria": [
+        "CatalogProjectResponse record with: projectId, projectCode, projectName, projectStage, assetSource, modelCount, totalSizeBytes, confidenceLevel",
+        "CatalogDirectoryResponse record with: directoryPath, projectId, fileCount, totalSizeBytes",
+        "CatalogFileResponse record with: fileId, fileName, fileExt, fileKind, disciplineCode, disciplineName, version, sizeBytes, checksum, status, confidenceLevel, storageProvider, logicalPath, storagePathVisible, storagePathVisibilityReason, qualityFlags, lastVerifiedAt, updatedAt, agentReadable, agentReadReason, agentContractView",
+        "AuditContextResponse record with: fileId, recentEvents list with eventType/eventSummary/createdAt, totalEventCount",
+        "PermissionProofResponse record with: allowed, decision, actorType, projectScope, reasonCode, reasonText, evidence list, traceId, checkedAt",
+        "PermissionProofCheckRequest record with: fileIds list, actorType string",
+        "All records are serializable and use existing field naming conventions",
+        "Backend compiles: ./mvnw -pl delivery-data-steward -am -DskipTests compile"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Add CatalogApplicationService read-only query methods",
+      "description": "As a backend developer, I need application service methods that query catalog data from existing tables/views with project-scope permission checks.",
+      "acceptanceCriteria": [
+        "listCatalogProjects: returns projects filtered by current user's project access and optional assetSource filter",
+        "listCatalogDirectories: returns distinct directory paths with file counts for a project",
+        "listCatalogFiles: returns paginated files with filters (projectId, keyword, fileExt, fileKind, discipline, qualityIssue)",
+        "getCatalogFileDetail: returns single file detail with all fields including agentReadable/agentReadReason/agentContractView",
+        "getFileAuditContext: returns recent audit events for a file from AuditEventView or audit_event table",
+        "checkFilePermission / checkBulkPermission: evaluates whether current user or agent key can access given files, returns decision/reason/evidence",
+        "Agent contract view fields computed: agentReadable=true when file has valid project and is in formal asset status; agentReadReason explains why; agentContractView lists visible field names",
+        "Storage path visibility: admin in local dev sees real NAS path with reason 'LOCAL_DEV_ADMIN'; regular user sees masked path; unauthorized user gets empty",
+        "All methods are read-only: no INSERT/UPDATE/DELETE on project, file, scan task, path mapping, deletion request, or review tables",
+        "Backend compiles: ./mvnw -pl delivery-data-steward -am -DskipTests compile"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Add CatalogController with read-only GET endpoints",
+      "description": "As a frontend developer, I need REST endpoints to list projects, directories, files, and file details with permission-aware responses.",
+      "acceptanceCriteria": [
+        "GET /api/data-steward/catalog/projects returns ApiResponse<List<CatalogProjectResponse>>, filtered by user's project access and optional ?assetSource= param",
+        "GET /api/data-steward/catalog/directories?projectId= returns ApiResponse<List<CatalogDirectoryResponse>>",
+        "GET /api/data-steward/catalog/files supports query params: projectId, keyword, fileExt, fileKind, disciplineCode, qualityIssue, page, pageSize; returns PageResponse<CatalogFileResponse>",
+        "GET /api/data-steward/catalog/files/{fileId} returns ApiResponse<CatalogFileDetailResponse> (detail includes agent fields); 404 for nonexistent file",
+        "GET /api/data-steward/catalog/files/{fileId}/audit-context returns ApiResponse<AuditContextResponse>",
+        "Unauthorized project access returns empty list (not error) for list endpoints; file detail returns 404",
+        "All responses include traceId via existing ApiResponse wrapper",
+        "Controller annotated with @RestController and @RequestMapping(\"/api/data-steward/catalog\")",
+        "Backend compiles: ./mvnw -pl delivery-data-steward -am -DskipTests compile"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Add PermissionProof REST endpoints",
+      "description": "As a platform developer, I need permission proof endpoints that explain why access is allowed or denied without leaking secrets.",
+      "acceptanceCriteria": [
+        "GET /api/data-steward/catalog/files/{fileId}/permission-proof returns PermissionProofResponse with allowed, decision, actorType, projectScope, reasonCode, reasonText, evidence list, traceId, checkedAt",
+        "POST /api/data-steward/catalog/permission-proofs:check accepts {fileIds:[...], actorType:\"USER\"|\"AGENT_KEY\"} and returns List<PermissionProofResponse>",
+        "Permission proof writes lightweight audit event (event_type=PERMISSION_PROOF_CHECK) but does NOT modify projects, files, scan tasks, path mappings, or NAS data",
+        "Permission proof never returns tokens, API keys, passwords, key hashes, or full permission tables",
+        "Evidence list contains only non-sensitive items: role name, project membership, API key scope",
+        "reasonCode is stable: e.g. PROJECT_MEMBER, ADMIN_FULL_ACCESS, NO_PROJECT_ACCESS, AGENT_KEY_SCOPE_MATCH, AGENT_KEY_OUT_OF_SCOPE",
+        "Backend compiles: ./mvnw -pl delivery-data-steward -am -DskipTests compile"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Add frontend Catalog page with filters and detail drawer",
+      "description": "As a platform user, I want to browse registered assets by directory view with filters for project, path, file type, extension, discipline, checksum status, and quality issues.",
+      "acceptanceCriteria": [
+        "New page at route /data-steward/catalog with component AssetCatalogPage.vue",
+        "Project filter dropdown populated from catalog API (respects user's project access)",
+        "Directory/path filter: text input for path fragment search",
+        "File filters: fileName keyword, fileExt dropdown, fileKind select, discipline select, qualityIssue select",
+        "Results table with columns: fileName, fileExt, fileKind, disciplineName, version, sizeBytes, qualityFlags, agentReadable badge",
+        "Click row opens detail drawer showing: project info, file metadata, storage path visibility info, discipline, version, quality status, agent visibility fields",
+        "Detail drawer shows storagePathVisible and storagePathVisibilityReason",
+        "Pagination with existing page size options",
+        "Uses existing layout, Element Plus table/filter/drawer patterns",
+        "No hero sections, no marketing cards, no 3D",
+        "Frontend builds: corepack pnpm build"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Add Agent Preview page and register routes/menu items",
+      "description": "As a platform team member, I want an Agent Preview page showing what fields agents can see, permission proof results, and explicitly listing prohibited actions.",
+      "acceptanceCriteria": [
+        "New page at route /data-steward/agent-preview with component AgentPreviewPage.vue",
+        "Section 1 - Catalog Sample: shows readonly table of files with agent-readable fields highlighted, non-readable fields grayed out",
+        "Section 2 - Permission Proof: input for fileId or projectCode, calls permission proof API, displays allowed/denied with reasonCode, reasonText, evidence, traceId",
+        "Section 3 - Agent Visible Fields: displays the field contract (which fields agent can see), masking rules for sensitive fields",
+        "Section 4 - Prohibited Actions: explicit list stating '本批只读 - 以下操作当前禁止: 写库、移动文件、正文抽取、向量化、自动审批、自动删除、模型轻量化', no real action buttons for these",
+        "No auto-approval, auto-delete, auto-fix, write-to-db, or vectorization UI elements anywhere on page",
+        "Routes registered: /data-steward/catalog and /data-steward/agent-preview in router/index.ts",
+        "Menu items added under '数据管家': 资产目录 (FolderOpened icon), Agent预览 (Monitor icon)",
+        "Menu items visible based on existing permission pattern",
+        "Frontend builds: corepack pnpm build"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Create verification script, update README, run builds, write final report",
+      "description": "As a developer, I need a verification script that proves all batch 1 interfaces are read-only and all deliverables are complete.",
+      "acceptanceCriteria": [
+        "New script scripts/dev/check-phase2-batch1-readonly-catalog.sh is executable",
+        "Script checks: backend health, OpenAPI contains catalog+permission-proof paths, admin can query catalog, unauthorized user cannot see restricted projects/files, permission proof returns traceId+reasonCode, project/file/scan-task counts unchanged before/after, no scan tasks created by catalog calls",
+        "Script notes that permission proof audit events are expected lightweight audit behavior",
+        "scripts/README.md updated with entry for check-phase2-batch1-readonly-catalog.sh",
+        "Backend build passes: ./mvnw -pl delivery-app -am -DskipTests package",
+        "Frontend build passes: corepack pnpm build",
+        "handoff/dev-agent/latest-report.md written with: implementation scope, new/modified backend APIs, new/modified frontend pages/routes, permission boundary explanation, audit behavior explanation, explicit list of prohibited items NOT done, self-test commands and results, known risks, changed file list"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

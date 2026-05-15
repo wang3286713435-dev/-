@@ -1,86 +1,283 @@
-# 测试 Agent 最新测试报告
+# 二期批次四正式验收报告：文件预览与下载权限分离最小闭环
 
-## 1. 测试结论
+## 1. 总结论
 
-- 结论：本轮 MVP 前后端闭环独立复核通过，未发现阻塞问题。
-- 前端生产构建通过。
-- 后端 Docker Maven package 通过。
-- 基础设施 `delivery-mysql`、`delivery-redis`、`delivery-minio` 测试前后均在运行。
-- 8080 原本未运行，测试期间通过 `scripts/dev/start-backend.sh` 临时启动 `delivery-backend-dev`；测试结束已停止临时后端，8080 已断开。
-- MVP 主链路脚本通过，回归脚本 `check-minimal-chain.sh` 通过。
-- 本轮未修改源码、`docs/**`、`handoff/dev-agent/**`、`handoff/main-agent/**`；仅写入本报告。
+结论：**不通过**。
 
-## 2. 测试环境
+本轮构建、健康检查、专项脚本、回归脚本、过期票据验证基本都通过，但人工复核发现一个明确 `P0`：
 
-- 执行日期：2026-05-07（Asia/Shanghai）
-- 工作目录：`/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台`
-- 后端临时服务：`delivery-backend-dev`，`http://localhost:8080`
-- 后端构建镜像：`maven:3.9-eclipse-temurin-21`
-- 基础设施容器：
-  - `delivery-mysql`：running / healthy
-  - `delivery-redis`：running
-  - `delivery-minio`：running
+- 普通项目用户在 `/data-steward/catalog` 文件详情中仍能直接看到真实 `NAS` 路径。
 
-## 3. 通过项
+这违反了本轮验收红线：
 
-1. 前端构建通过。
-   - 命令：`corepack pnpm build`
-   - 结果：`vue-tsc --noEmit && vite build` 成功，`1695 modules transformed`，产出 `dist/**`。
+- `接口或页面暴露真实 NAS 路径给普通用户`
 
-2. 后端 Docker Maven package 通过。
-   - 命令：`docker run --rm -v "$HOME/.m2:/root/.m2" -v "$PWD/backend:/workspace" -w /workspace maven:3.9-eclipse-temurin-21 mvn -DskipTests package`
-   - 结果：8 个 Maven 模块全部 `SUCCESS`，`BUILD SUCCESS`；`delivery-app` 完成 Spring Boot repackage。
+因此当前**不能收口二期批次四**。
 
-3. 基础设施和临时后端处理通过。
-   - 命令：`docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}'`
-   - 命令：`curl -fsS -m 3 http://localhost:8080/actuator/health || true`
-   - 命令：`bash scripts/dev/start-backend.sh`
-   - 命令：`docker stop delivery-backend-dev || true`
-   - 结果：测试前 8080 未连接；临时后端启动成功；Flyway 日志显示 `Current version of schema delivery_platform: 6` 且 `Schema delivery_platform is up to date. No migration necessary.`；测试结束后 `delivery-backend-dev` 已停止，8080 不再连接。
+---
 
-4. MVP 主链路通过。
-   - 命令：`bash scripts/dev/check-mvp-chain.sh http://localhost:8080 platform.admin Admin@123 2`
-   - 结果：脚本最终输出 `mvp chain ok`。
-   - 覆盖点：
-     - 登录、切换项目 2。
-     - 菜单包含新增路径：`/data-steward/files`、`/data-steward/models`、`/data-steward/objects`、`/work/document-delivery`、`/work/drawing-delivery`、`/work/dashboard`、`/visualization/workbench`。
-     - 创建工程部位、节点类型并锁定。
-     - 创建交付物定义、交付物类型、属性、目录模板。
-     - 创建文档、图纸、模型文件资源。
-     - 创建并发布模型集成，创建管理对象。
-     - 文档交付视图与图纸交付视图均能查询到本轮绑定数据。
-     - dashboard summary 返回 `publishedModelCount`、`managedObjectCount`、文档/图纸绑定计数。
-     - 可视化上下文返回已发布模型和管理对象，`locate`、`highlight`、`context:inject` 均返回 `READY`。
-     - 审计日志返回 `work.delivery-binding.create` 的 DOCUMENT/DRAWING 记录。
+## 2. P0 / P1 / P2 列表
 
-5. 回归最小链路通过。
-   - 命令：`bash scripts/dev/check-minimal-chain.sh http://localhost:8080 platform.admin Admin@123 2`
-   - 结果：登录、refresh token、当前用户、切换项目、首页 overview 均返回 `code=OK`。
+### P0
 
-## 4. 失败项 / 非阻塞项
+1. **普通项目用户仍可在目录详情和目录详情接口中读取真实 NAS 路径**
+   - 复现用户：
+     - `phase2.viewer / Viewer@123`
+     - `delivery.engineer / Engineer@123`
+   - 复现接口：
+     - `GET /api/data-steward/catalog/files/74846`
+   - 实测返回：
+     - `storagePathVisible = true`
+     - `storagePath = "nas:///tmp/phase2-batch4-ui-1778812442.pdf"`
+     - `storagePathVisibilityReason = "LOCAL_DEV_ADMIN"`
+   - 页面复现：
+     - `http://127.0.0.1:5173/data-steward/catalog`
+     - 以 `phase2.viewer` 登录后打开 `批次四UI验证.pdf` 详情抽屉
+     - 页面直接展示 `存储路径: nas:///tmp/phase2-batch4-ui-1778812442.pdf`
+   - 判定：
+     - 这是普通项目用户真实看到的页面数据，不是仅后台票据 URL。
+     - 直接违反本轮目标“**不暴露真实 NAS 路径给普通用户**”。
 
-- 失败项：无。
-- 非阻塞项：
-  - 前端构建存在 Vite 大 chunk 警告：`Some chunks are larger than 500 kB after minification`，不影响本轮 MVP 闭环通过。
-  - MVP 脚本会向项目 2 写入冒烟数据并锁定节点类型；本轮按要求未并行运行会改变锁定状态的脚本。
-  - 当前仓库数据库已有历史冒烟数据，dashboard 和视图计数大于本轮新增数量，但脚本已校验本轮新增 ID 存在。
+### P1
 
-## 5. 覆盖核对
+无新增 `P1`。
 
-- 新增菜单路径：已由 `check-mvp-chain.sh` 的 `menu includes mvp modules` 覆盖。
-- V6 迁移：已由临时后端启动日志覆盖，Flyway 当前 schema version 为 6。
-- 交付视图：已由 `delivery views` 覆盖 DOCUMENT 与 DRAWING。
-- 可视化上下文：已由 `dashboard and visualization context`、`locate`、`highlight`、`context:inject` 覆盖。
-- 审计日志：已由 `audit logs` 覆盖，返回 work-center 交付绑定创建日志。
+### P2
 
-## 6. 运行过的命令
+1. 前端构建仍有既有 `Vite chunk size warning`。
 
-- `corepack pnpm build`（在 `frontend` 目录）
-- `docker run --rm -v "$HOME/.m2:/root/.m2" -v "$PWD/backend:/workspace" -w /workspace maven:3.9-eclipse-temurin-21 mvn -DskipTests package`
-- `docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}'`
-- `curl -fsS -m 3 http://localhost:8080/actuator/health || true`
-- `bash scripts/dev/start-backend.sh`
-- `bash scripts/dev/check-mvp-chain.sh http://localhost:8080 platform.admin Admin@123 2`
-- `bash scripts/dev/check-minimal-chain.sh http://localhost:8080 platform.admin Admin@123 2`
-- `docker stop delivery-backend-dev || true`
-- `curl -fsS -m 3 http://localhost:8080/actuator/health || true`
+---
+
+## 3. 构建与健康检查结果
+
+### 3.1 已执行
+
+1. `cd backend && ./mvnw -pl delivery-app -am -DskipTests package`
+2. `corepack pnpm --dir frontend build`
+3. `curl -fsS http://localhost:8080/actuator/health`
+4. `git diff --check`
+
+### 3.2 结果
+
+- 后端构建：通过
+- 前端构建：通过
+- 健康检查：通过
+  - 返回：`{"status":"UP"}`
+- `git diff --check`：通过
+
+补充：
+
+- 前端构建仍出现既有 `Vite chunk size warning`，已记为 `P2`。
+
+---
+
+## 4. 专项脚本结果
+
+### 4.1 必跑脚本
+
+1. `bash scripts/dev/check-phase2-batch4-file-access.sh`
+   - 结果：通过
+   - 核心结论：
+     - 管理员可预览
+     - 管理员可下载
+     - 查看者可预览但不可下载
+     - 跨项目用户不可预览/下载
+     - 路径失效文件错误清晰
+     - OpenAPI 包含新增接口
+     - 访问、拒绝、失败动作写审计
+
+2. `bash scripts/dev/check-file-preview-shell.sh`
+   - 结果：通过
+   - 核心结论：
+     - PDF 预览外壳可用
+     - BIM 预览外壳元数据可用
+     - 预览外壳本身不以真实 `storagePath` 作为访问入口
+
+### 4.2 回归脚本
+
+1. `bash scripts/dev/check-phase2-batch1-readonly-catalog.sh`
+   - 结果：通过
+   - `25/25 PASS`
+
+2. `bash scripts/dev/check-phase2-batch2-standard-delivery.sh`
+   - 最终结果：通过
+   - `38/38 PASS`
+
+3. `bash scripts/dev/check-phase2-batch3-review-rectification-report.sh`
+   - 结果：通过
+   - `52/52 PASS`
+
+说明：
+
+- `batch2` 脚本在与 `batch3` 回归并行跑时出现过一次共享样板数据干扰，顺序重跑后通过。
+- 以顺序重跑结果为准，本轮未发现批次一/二/三主链回归。
+
+---
+
+## 5. 页面验收结果
+
+### 5.1 `/data-steward/assets/1`
+
+结果：部分通过
+
+已确认：
+
+- 页面可打开
+- 页面级横向溢出为 `0`
+- 页面正常显示“文件资产 / 扫描任务 / 路径映射”结构
+
+补充说明：
+
+- 当前样板环境下，该页本次打开时显示 `文件总数 0`，所以本页未能完成“真实文件详情抽屉里的预览/下载状态”人工点击验证。
+- 对应的文件访问链路人工验证，本轮主要在 `/data-steward/catalog` 页面完成。
+
+### 5.2 `/data-steward/catalog`
+
+结果：**不通过**
+
+管理员视角已确认：
+
+- 页面可打开
+- 页面级横向溢出为 `0`
+- 文件详情抽屉能展示：
+  - 预览状态
+  - 访问权限
+  - 说明
+  - `打开预览`
+  - `下载文件`
+
+查看者视角已确认：
+
+- 页面可打开
+- 页面级横向溢出为 `0`
+- 文件详情抽屉中：
+  - `打开预览` 可用
+  - `下载文件` 为禁用状态
+  - 访问权限文案为：
+    - `当前账号可预览文件，但没有下载权限。`
+
+但同时复现到 `P0`：
+
+- 同一查看者详情抽屉里直接显示了真实 `storagePath`
+- 页面展示内容：
+  - `存储路径 nas:///tmp/phase2-batch4-ui-1778812442.pdf`
+
+因此页面验收整体判定为：**不通过**
+
+---
+
+## 6. 权限分离验证结果
+
+### 6.1 通过项
+
+1. 预览权限与下载权限已分离
+   - `phase2.viewer` 可预览
+   - `phase2.viewer` 不可下载
+
+2. 跨项目用户不可读取无权文件
+   - 专项脚本通过
+
+3. 访问票据到期后不可继续使用
+   - 我手动创建了预览票据 `ticketId=18`
+   - 将 `data_file_access_tickets.expires_at` 改到过去时间后再次访问
+   - 返回：
+     - HTTP `403`
+     - `code = ASSET_FILE_ACCESS_TICKET_EXPIRED`
+     - `message = 访问票据已过期`
+   - 数据库中该票据状态也变为 `EXPIRED`
+
+4. 路径失效文件不会假成功
+   - 专项脚本已验证
+   - 失效路径文件不能创建访问票据，错误码清晰
+
+### 6.2 未通过项
+
+1. 路径可见性与访问权限没有分离彻底
+   - 虽然查看者不能下载，但仍能直接看到真实 NAS 路径
+   - 这说明“下载受控”已经做到，但“路径隐藏”没有真正做到
+
+---
+
+## 7. NAS 路径隐藏验证结果
+
+结论：**失败**
+
+### 7.1 接口证据
+
+使用 `phase2.viewer` 和 `delivery.engineer` 分别请求：
+
+- `GET /api/data-steward/catalog/files/74846`
+
+两次都返回：
+
+- `storagePathVisible: true`
+- `storagePath: "nas:///tmp/phase2-batch4-ui-1778812442.pdf"`
+- `storagePathVisibilityReason: "LOCAL_DEV_ADMIN"`
+
+说明：
+
+- 当前并不是“管理员可见、普通用户隐藏”
+- 而是“只要有项目权限，普通用户也直接可见”
+
+### 7.2 页面证据
+
+使用 `phase2.viewer` 登录：
+
+- 打开 `http://127.0.0.1:5173/data-steward/catalog`
+- 打开 `批次四UI验证.pdf` 详情抽屉
+
+页面直接显示：
+
+- `存储路径 nas:///tmp/phase2-batch4-ui-1778812442.pdf`
+
+### 7.3 判定
+
+这已满足当前 prompt 中的 `P0` 条件：
+
+- `接口或页面暴露真实 NAS 路径给普通用户`
+
+---
+
+## 8. 审计验证结果
+
+结果：通过
+
+专项脚本已验证以下审计动作存在：
+
+- `asset.file.preview.ticket.create`
+- `asset.file.download.ticket.create`
+- `asset.file.preview.open`
+- `asset.file.download.open`
+- `asset.file.access.denied`
+- `asset.file.access.failed`
+
+我本轮额外 spot check 也确认：
+
+- 新建的 `ticketId=18` 已产生 `asset.file.preview.ticket.create`
+
+当前未发现“预览/下载关键动作无审计”的问题。
+
+---
+
+## 9. 是否可以收口二期批次四
+
+结论：**不可以**。
+
+原因很明确：
+
+- 文件访问票据、预览/下载权限分离、过期失效、审计这几条主链基本已成立；
+- 但“普通用户不应看到真实 NAS 路径”这条红线当前仍然失守；
+- 该问题同时出现在：
+  - 页面详情抽屉
+  - 目录详情接口返回
+
+因此当前不建议主 agent 收口二期批次四。
+
+---
+
+## 10. 附注
+
+1. 本轮人工页面验证使用了两条临时 UI 验证文件记录：
+   - `74846`
+   - `74847`
+2. 测试结束后我已将这两条临时记录软删除，并删除 `/tmp` 下对应临时文件，避免继续污染样板环境。

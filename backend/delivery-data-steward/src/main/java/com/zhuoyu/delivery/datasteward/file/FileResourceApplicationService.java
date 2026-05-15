@@ -4,6 +4,7 @@ import com.zhuoyu.delivery.core.audit.application.AuditLogApplicationService;
 import com.zhuoyu.delivery.datasteward.dto.DataStewardDtos.FileResourceRequest;
 import com.zhuoyu.delivery.datasteward.dto.DataStewardDtos.FileResourceResponse;
 import com.zhuoyu.delivery.datasteward.dto.DataStewardDtos.ProcessFileRequest;
+import com.zhuoyu.delivery.shared.api.PageResponse;
 import com.zhuoyu.delivery.shared.exception.BusinessException;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +54,27 @@ public class FileResourceApplicationService {
         return fileResourceRepository.findByProject(projectId, normalizeNullableFileKind(fileKind));
     }
 
+    public PageResponse<FileResourceResponse> listPage(
+        Long projectId,
+        String fileKind,
+        String keyword,
+        String processStatus,
+        Integer pageNo,
+        Integer pageSize
+    ) {
+        String normalizedKind = normalizeNullableFileKind(fileKind);
+        String normalizedProcessStatus = normalizeNullableProcessStatus(processStatus);
+        String normalizedKeyword = blankToNull(keyword);
+        int safePageNo = pageNo == null ? 1 : Math.max(1, pageNo);
+        int safePageSize = pageSize == null ? 50 : Math.min(Math.max(1, pageSize), 200);
+        int offset = (safePageNo - 1) * safePageSize;
+        List<FileResourceResponse> items = fileResourceRepository.findByProjectPaged(
+            projectId, normalizedKind, normalizedKeyword, normalizedProcessStatus, offset, safePageSize);
+        int total = fileResourceRepository.countByProjectFiltered(
+            projectId, normalizedKind, normalizedKeyword, normalizedProcessStatus);
+        return new PageResponse<>(items, safePageNo, safePageSize, total);
+    }
+
     @Transactional
     public FileResourceResponse process(Long userId, Long projectId, Long fileId, ProcessFileRequest request) {
         requireFile(projectId, fileId);
@@ -86,6 +108,10 @@ public class FileResourceApplicationService {
 
     private String normalizeNullableFileKind(String fileKind) {
         return fileKind == null || fileKind.isBlank() ? null : normalizeFileKind(fileKind);
+    }
+
+    private String normalizeNullableProcessStatus(String processStatus) {
+        return processStatus == null || processStatus.isBlank() ? null : normalizeProcessStatus(processStatus);
     }
 
     private String normalizeFileKind(String fileKind) {

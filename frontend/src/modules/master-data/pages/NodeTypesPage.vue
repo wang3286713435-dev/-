@@ -14,6 +14,21 @@
 
     <StandardStatusPanel :status="standardStatus" />
 
+    <section class="workflow-guide">
+      <div class="workflow-guide__main">
+        <span class="workflow-guide__step">第 2 步</span>
+        <h2>确认哪些部位层级可以承载交付标准</h2>
+        <p>
+          节点类型用于说明部位树里哪些层级会参与交付，例如楼层、系统或机房。锁定后，平台会把这些类型作为后续交付物标准和缺失项计算的稳定依据。
+        </p>
+      </div>
+      <ol class="workflow-guide__steps">
+        <li>先确认名称和适用层级是否符合项目拆分方式。</li>
+        <li>确认无误后锁定。锁定后不建议频繁调整结构，避免影响已配置标准。</li>
+        <li>全部锁定后，进入交付物标准页面，配置要交什么资料。</li>
+      </ol>
+    </section>
+
     <el-alert
       class="node-type-lock"
       :type="lockStatus?.allNodeTypesLocked ? 'success' : 'info'"
@@ -23,6 +38,13 @@
       <template #title>
         节点类型锁定状态：{{ lockStatus?.allNodeTypesLocked ? '全部锁定' : '仍可维护' }}
       </template>
+      <p class="status-helper">
+        {{
+          lockStatus?.allNodeTypesLocked
+            ? '当前节点类型已冻结，可以继续配置交付物标准。'
+            : '锁定前仍可调整。锁定后才能作为交付标准配置的前置条件。'
+        }}
+      </p>
     </el-alert>
 
     <el-table v-loading="loading" :data="nodeTypes" class="master-table" empty-text="暂无节点类型">
@@ -58,6 +80,7 @@
         </el-form-item>
         <el-form-item label="适用层级">
           <el-input-number v-model="form.scopeLevel" :min="1" controls-position="right" />
+          <div class="field-hint">填写它适用于部位树的第几层，例如 1 代表根节点，2 代表根节点下一级。</div>
         </el-form-item>
         <el-form-item label="排序">
           <el-input-number v-model="form.sortOrder" :min="0" controls-position="right" />
@@ -209,11 +232,15 @@ async function handleLock(nodeType: NodeType) {
     return;
   }
   try {
-    await ElMessageBox.confirm(`确认锁定“${nodeType.name}”？`, '锁定节点类型', {
-      type: 'warning',
-      confirmButtonText: '锁定',
-      cancelButtonText: '取消'
-    });
+    await ElMessageBox.confirm(
+      `锁定“${nodeType.name}”后，该类型会作为交付标准配置依据，不建议再频繁修改。确认继续？`,
+      '锁定节点类型',
+      {
+        type: 'warning',
+        confirmButtonText: '锁定',
+        cancelButtonText: '取消'
+      }
+    );
     await lockNodeType(currentProjectId.value, nodeType.id);
     ElMessage.success('节点类型已锁定');
     await loadPage();
@@ -229,11 +256,15 @@ async function handleLockAll() {
     return;
   }
   try {
-    await ElMessageBox.confirm('确认锁定当前项目全部节点类型？', '全部锁定', {
-      type: 'warning',
-      confirmButtonText: '全部锁定',
-      cancelButtonText: '取消'
-    });
+    await ElMessageBox.confirm(
+      '全部锁定后，节点类型将成为交付物标准配置的稳定底座。确认当前结构已核对完成？',
+      '全部锁定',
+      {
+        type: 'warning',
+        confirmButtonText: '全部锁定',
+        cancelButtonText: '取消'
+      }
+    );
     await lockAllNodeTypes(currentProjectId.value);
     ElMessage.success('节点类型已全部锁定');
     await loadPage();

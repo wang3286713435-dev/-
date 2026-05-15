@@ -1,0 +1,200 @@
+{
+  "project": "数字化交付平台-二期批次三人工审核整改闭环与报表导出",
+  "branchName": "ralph/phase2-batch3-review-rectification-report",
+  "description": "人工审核、整改闭环与基础报表导出 - 交付挂接 -> 人工审核 -> 驳回产生整改 -> 整改处理 -> 复审关闭 -> 报表导出 -> 审计留痕",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "数据库迁移：新增 work_review_records 和 work_rectifications 表",
+      "description": "创建 Flyway V19 迁移，新增审核记录表和整改项表，插入新权限。",
+      "acceptanceCriteria": [
+        "work_review_records 包含 id/projectId/bindingId/action/comment/reviewerUserId/createdAt",
+        "work_rectifications 包含 id/projectId/sourceType/sourceId/bindingId/title/description/reason/status/severity/assigneeUserId/dueDate/resolvedAt/closedAt/createdBy/updatedBy/createdAt/updatedAt",
+        "新增权限 WORKCENTER_REVIEW_MANAGE 和 WORKCENTER_RECTIFICATION_MANAGE",
+        "PROJECT_ADMIN 和 DELIVERY_ENGINEER 获得新权限",
+        "PROJECT_VIEWER 只读权限",
+        "迁移不修改 V1-V18 旧迁移",
+        "后端构建通过"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "后端 DTO：新增审核、整改、报表相关 DTO",
+      "description": "在 WorkCenterDtos 中新增 ReviewRecordResponse、RectificationResponse、RectificationRequest 等记录类型。",
+      "acceptanceCriteria": [
+        "ReviewRecordResponse 包含 id/bindingId/action/comment/reviewerUserId/createdAt 等字段",
+        "RectificationResponse 包含 id/projectId/bindingId/title/reason/status/severity/assigneeUserId 等字段",
+        "RectificationRequest 包含 title/description/reason/severity/assigneeUserId/dueDate 等字段",
+        "ResolveRequest 包含 resolutionNote 必填校验",
+        "RejectRequest 包含 reason 必填校验",
+        "类型在 Swagger 中可见",
+        "后端构建通过"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "后端：交付绑定审核接口（submit/approve/reject/records）",
+      "description": "DeliveryApplicationService 新增审核方法，DeliveryController 新增对应端点，Repository 新增审核记录持久化。",
+      "acceptanceCriteria": [
+        "POST .../delivery-bindings/{bindingId}:submit-review 将 reviewStatus 从 DRAFT 置为 PENDING",
+        "POST .../delivery-bindings/{bindingId}:approve 将 reviewStatus 置为 APPROVED",
+        "POST .../delivery-bindings/{bindingId}:reject 要求 reason 必填，置为 REJECTED，自动创建 work_rectifications 记录",
+        "GET .../delivery-bindings/{bindingId}/review-records 返回审核历史",
+        "每次状态变化写 work_review_records 和 core_audit_logs",
+        "只允许项目上下文访问",
+        "接口在 OpenAPI 可见",
+        "后端构建通过"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "后端：整改项接口（列表/详情/更新/resolve/close/reopen）",
+      "description": "新增 RectificationApplicationService 和 RectificationController，实现整改项 CRUD 和状态流转。",
+      "acceptanceCriteria": [
+        "GET /api/work-center/projects/{projectId}/rectifications 分页列表，支持 status 筛选",
+        "GET .../rectifications/{id} 返回详情",
+        "PATCH .../rectifications/{id} 更新可编辑字段",
+        "POST .../rectifications/{id}:resolve 必须填 resolutionNote，状态 OPEN/IN_PROGRESS/REOPENED -> RESOLVED",
+        "POST .../rectifications/{id}:close 状态 RESOLVED -> CLOSED",
+        "POST .../rectifications/{id}:reopen 状态 CLOSED -> REOPENED",
+        "每次关键状态变化写审计",
+        "接口在 OpenAPI 可见",
+        "后端构建通过"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "后端：基础 CSV 报表导出",
+      "description": "新增 ReportController，实现三类 CSV 导出：delivery-completeness.csv、review-summary.csv、rectifications.csv。",
+      "acceptanceCriteria": [
+        "GET .../reports/delivery-completeness.csv 返回 text/csv，包含项目/视图类型/应交/已完成/缺失/完成率",
+        "GET .../reports/review-summary.csv 返回 text/csv，包含绑定/审核状态/审核次数/最近审核时间/最近审核人",
+        "GET .../reports/rectifications.csv 返回 text/csv，包含来源绑定/标题/原因/状态/严重程度/责任人/创建时间/解决时间",
+        "导出校验项目上下文",
+        "导出动作写审计",
+        "不生成 Excel/PDF 或复杂模板",
+        "接口在 OpenAPI 可见",
+        "后端构建通过"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "前端 API 层：新增审核、整改、导出 API 函数和类型",
+      "description": "在 delivery.ts 中新增审核/整改/导出相关 TypeScript 类型和 API 调用函数。",
+      "acceptanceCriteria": [
+        "新增 submitForReview/approveBinding/rejectBinding/fetchReviewRecords 函数",
+        "新增 fetchRectifications/fetchRectification/updateRectification/resolveRectification/closeRectification/reopenRectification 函数",
+        "新增 exportDeliveryCompletenessCsv/exportReviewSummaryCsv/exportRectificationsCsv 函数",
+        "导出函数触发浏览器下载 CSV 文件",
+        "前端构建 typecheck 通过"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "前端：交付面板审核动作（提交/通过/驳回）",
+      "description": "在 DeliveryViewPanel.vue 已挂接列表中增加审核操作按钮和驳回弹窗。",
+      "acceptanceCriteria": [
+        "已挂接表格每行增加「提交审核」「通过」「驳回」按钮",
+        "驳回弹窗必须填写原因才能确认",
+        "通过/驳回后刷新审核状态",
+        "驳回成功后提示已生成整改项",
+        "审核记录可通过详情抽屉查看",
+        "前端构建通过"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "前端：整改中心页面 + 路由 + 菜单",
+      "description": "新增 RectificationsPage.vue，注册路由 /work/rectifications，更新侧边菜单。",
+      "acceptanceCriteria": [
+        "列表展示整改项：来源绑定/标题/原因/状态/责任人/更新时间",
+        "支持按状态筛选（OPEN/IN_PROGRESS/RESOLVED/CLOSED/REOPENED）",
+        "支持标记已处理（resolve）、关闭（close）、重新打开（reopen）",
+        "路由 /work/rectifications 可访问",
+        "侧边菜单显示「整改中心」入口",
+        "不做看板/拖拽/多角色工作流",
+        "前端构建通过"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "前端：CSV 导出按钮",
+      "description": "在交付页面和整改中心顶部放置 CSV 导出按钮。",
+      "acceptanceCriteria": [
+        "交付页面提供「导出交付完整率 CSV」和「导出审核汇总 CSV」按钮",
+        "整改中心提供「导出整改项 CSV」按钮",
+        "点击按钮触发浏览器下载",
+        "前端构建通过"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "专项验收脚本 check-phase2-batch3-review-rectification-report.sh",
+      "description": "创建脚本覆盖全链路验收。",
+      "acceptanceCriteria": [
+        "创建最小标准和文件",
+        "创建交付绑定",
+        "提交审核",
+        "审核通过后状态变化并写审计",
+        "另一条绑定驳回后生成整改项",
+        "整改项标记已处理、关闭、重新打开",
+        "三类 CSV 导出可下载且包含核心字段",
+        "普通用户不能跨项目审核、整改或导出",
+        "OpenAPI 包含新增接口",
+        "测试数据尽量清理",
+        "脚本不修改真实 NAS 文件",
+        "脚本全部断言通过"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "报告：handoff/dev-agent/latest-report.md",
+      "description": "写入开发 Agent 交付报告，覆盖所有改动和结果。",
+      "acceptanceCriteria": [
+        "包含 Ralph story 拆分与完成情况",
+        "包含后端改动点",
+        "包含前端改动点",
+        "包含新增迁移说明",
+        "包含审核状态流转规则",
+        "包含整改状态流转规则",
+        "包含 CSV 导出字段说明",
+        "包含权限与审计说明",
+        "包含自测结果",
+        "包含未完成事项或风险"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

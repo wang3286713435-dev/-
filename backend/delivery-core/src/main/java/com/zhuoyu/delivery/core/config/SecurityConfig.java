@@ -3,9 +3,11 @@ package com.zhuoyu.delivery.core.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhuoyu.delivery.core.auth.infrastructure.JwtAuthenticationFilter;
 import com.zhuoyu.delivery.shared.api.ApiResponse;
+import jakarta.servlet.Filter;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -31,7 +33,11 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final ObjectMapper objectMapper;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, ObjectMapper objectMapper) {
+    @Autowired(required = false)
+    private Filter agentApiKeyFilter;
+
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
+                          ObjectMapper objectMapper) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.objectMapper = objectMapper;
     }
@@ -46,6 +52,7 @@ public class SecurityConfig {
                     "/api/core/auth/login",
                     "/api/core/auth/refresh",
                     "/api/core/system/health",
+                    "/api/data-steward/assets/file-access/**",
                     "/actuator/health",
                     "/swagger-ui.html",
                     "/swagger-ui/**",
@@ -60,6 +67,9 @@ public class SecurityConfig {
                     writeError(response, HttpStatus.FORBIDDEN, "CORE_AUTH_FORBIDDEN", "当前账号无权访问该资源"))
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+        if (agentApiKeyFilter != null) {
+            http.addFilterBefore(agentApiKeyFilter, JwtAuthenticationFilter.class);
+        }
         return http.build();
     }
 

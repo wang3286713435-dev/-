@@ -2,11 +2,17 @@
 
 ## 当前阶段
 
-文档与验收口径已升级为三期路线，下一步业务开发应进入 `一期：内部 BIM 资产管理试点`。
+文档与验收口径已升级为三期路线，当前已完成 `一期：内部 BIM 资产管理试点` 的主线收口。`一期内部试运行可用性与验收完整度短回归` 已通过测试 agent 极短复验，当前无 P0/P1/P2。`二期批次一：只读资产目录与 Agent 对接预览层` 已通过测试 agent 短回归，正式收口。`二期批次二：标准驱动交付闭环最小可用版` 已通过测试 agent 验收，当前无 P0/P1/P2，正式收口。`二期批次三：人工审核、整改闭环与基础报表导出` 已通过测试 agent 正式验收，当前无 P0/P1，仅有不阻塞收口的 Vite chunk size warning P2，正式收口。`标准驱动交付流程新手可用性补丁` 已通过测试 agent 短回归，上一轮 P1 已关闭，正式收口。
 
 ## 当前判断
 
 平台基础工程、`master-data`、数据管家 MVP、工作中心 MVP、智慧大屏和 3D 适配层 mock 已形成可运行闭环。现在项目重点不再是继续扩早期 MVP，而是把公司内部几百个 BIM 项目和约 10TB 模型资产先接入平台，并提前为企业内核级 agent 做数据库检索和接口对接准备。
+
+最新裁决：一期后端数据治理正式收口，一期内部试运行可用性验收收口。前端已补齐资产总览、项目资产详情、扫描任务、非标准资料治理、数据质量、文件详情、人工治理和文件预览状态外壳等一期试运行页面；测试 agent 极短复验确认 DB-2 只读合同、首页项目下拉和扫描脚本自清理均通过，当前无 P0/P1/P2。后续不再继续扩大一期后端治理范围，除非发现 P0/P1 回归。二期批次一只做“前端资产目录、REST 权限证明、只读 catalog API、Agent preview / audit-ready 页面”，不做 Agent 写库、自动修复、自动删除、正文向量化、自动审批或客户生产级权限承诺。
+
+二期批次一最新状态：Claude Code 开发 agent 已完成实现并写入 `handoff/dev-agent/latest-report.md`；主 agent 审计发现并修复过一次无权限 `audit-context` 返回 500 的问题。测试 agent 首轮验收无 P0，但指出 P1：前端资产目录页缺少“按目录浏览 + 版本筛选”的完整页面交互。该 P1 首次补齐后，测试 agent 二次短回归又发现 2 个真实联调 P1：前端分页字段未按真实 `items/pageNo/pageSize/total` 读取，目录接口返回文件路径级记录而非目录聚合。当前这些 P1 已全部修复，并已通过测试 agent 2026-05-13 短回归。最终验证：专项脚本 `scripts/dev/check-phase2-batch1-readonly-catalog.sh` `25/25 PASS`，真实页面不再空表，`catalog/directories` 返回目录聚合，目录浏览和版本筛选可用。收口报告：`handoff/main-agent/phase2-batch1-readonly-catalog-closure.md`。
+
+当前最新状态：`批次 1：数据底座与 NAS 扫描入库`、`批次 1 尾巴：真实 NAS 目录发现、扩展文件分类、低价值文件治理、重扫幂等与历史数据补齐`、`批次 2：异步任务、checksum、统计与事件流`、`批次 3：企业 agent、审批与受控物理删除` 均已通过测试 agent 复验，当前无 P0/P1/P2。真实 NAS 已完成 16 个项目接管，登记文件 `40,935` 份，扫描任务进度、取消、续扫、低价值目录跳过和报告能力已补强并通过专项脚本验证。最新极短复验确认：`check-agent-db2-contract.sh` 通过，首页项目下拉 `18` 个项目且无 `SCANCTRL-*`，`check-scan-task-control.sh` 复跑后不再污染项目下拉。
 
 ## 最新文档基线
 
@@ -17,12 +23,26 @@
 
 ## 一期业务目标
 
-- 项目资产台账：几百个 BIM 项目统一建档，前端可增删改查。
+- 项目资产台账：几百个 BIM 项目统一建档，优先通过后端 API 和批量导入维护。
 - NAS 原地接管：不搬迁大文件，只登记元数据和路径。
-- 模型资源库：记录文件名、格式、大小、版本、专业、checksum、状态、更新时间。
+- 真实 NAS 根路径：`/Volumes/zyzn/卓羽智能项目`，采用只读影子导入，不移动、不改名、不删除原文件。
+- 文件范围：一期扫描 `.rvt`、`.dwg`、`.ifc`、`.nwd`、`.nwc`、`.dxf`、`.pdf`。
+- 模型/图纸资源库：记录文件名、格式、大小、版本、专业、checksum、状态、更新时间和项目归属置信度。
+- 审核队列：高置信自动入库，低置信进入待审核，人工可修正项目归属、文件类型、专业和版本。
+- 异步任务：扫描、checksum、隔离清理、永久删除采用数据库任务表 + 应用内 worker。
 - 搜索与看板：支持按项目、文件名、专业、阶段检索，展示容量统计。
-- 审计：导入、扫描、下载、修改、删除必须留痕。
-- 企业 agent：提供稳定读模型或只读宽表，支持 `元数据 + 路径` 检索。
+- 审计与事件流：导入、扫描、审核、修改、删除申请、agent 行为和任务状态变化必须留痕，并支持事件流增量同步。
+- 企业 agent：提供 MySQL SQL View、REST/OpenAPI、API Key 项目范围授权，支持 `元数据 + 路径` 检索。
+- 删除安全：逻辑删除不碰 NAS 文件；物理删除必须申请、审核、隔离 30 天、支持恢复后再永久删除。
+
+## 一期后端批次
+
+1. 批次 1：数据底座与 NAS 扫描入库。覆盖项目清单、NAS 路径映射、CSV/xlsx 导入、扫描任务、待审核队列、正式资产库和 SQL View 基础。状态：测试 agent 复验通过，无 P0。
+2. 批次 1 尾巴：真实 NAS 目录发现、文件类型扩展、低价值文件治理、重扫幂等与历史 `confidence_level` 补齐。状态：主 agent 审计通过；`check-bim-asset-batch1.sh` 与 `check-bim-asset-batch1-tail.sh` 均已通过。
+3. 批次 2：异步任务、checksum、统计与事件流。覆盖数据库任务表、应用内 worker、checksum 异步补齐、容量统计和审计/事件流增量同步。状态：测试 agent 复验通过，无 P0。
+4. 批次 3：企业 agent、审批与受控物理删除。覆盖 API Key、项目范围授权、agent 提交申请、人工审批、逻辑删除、隔离恢复和受控永久删除。状态：测试 agent 再次验证通过，当前无 P0/P1/P2。
+
+一期后端数据治理收口报告：`handoff/main-agent/phase1-backend-data-governance-closure.md`
 
 ## 二期客户版目标
 
@@ -33,20 +53,171 @@
 - 项目驾驶舱、报表、大屏、移动端查看。
 - 客户私有化部署、备份恢复、日志诊断、健康检查和完整交付文档。
 
+## 二期批次一状态
+
+- 批次名称：`只读资产目录与 Agent 对接预览层`。
+- 规划文档：`handoff/main-agent/phase2-batch1-readonly-catalog-plan.md`。
+- 本批只做：
+  - 前端资产目录。
+  - REST 权限证明。
+  - 只读 catalog API。
+  - Agent preview / audit-ready 页面。
+- 本批不做：
+  - Agent 直接增删改数据库。
+  - Agent 自动移动、删除、修复 NAS 文件。
+  - Agent 自动把 BIM、PDF、Office 或其他文件正文写入向量库。
+  - Agent 自动下结论或自动审批。
+  - 多 Agent 调度真实业务动作。
+  - 面向客户的生产级权限体系承诺。
+- 二期批次一开发 prompt 与测试 prompt 已写入：
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+- 开发 agent 已按 Ralph Loop 完成本批只读目录能力，进度记录：`.claude/ralph/progress.txt`。
+- 开发 agent 报告：`handoff/dev-agent/latest-report.md`。
+- 主 agent 审计结果：通过。已修复无权限 `audit-context` 返回 500 的问题，并在专项脚本中补充回归断言。
+- 测试 agent 首轮验收结果：无 P0，但发现 P1：前端资产目录页未完整实现目录浏览和版本筛选。
+- P1 修复状态：已完成并通过测试 agent 短回归。`/data-steward/catalog` 已支持左侧目录浏览、目录点击过滤和版本筛选；前端文件列表已对齐真实分页字段 `items/pageNo/pageSize/total`；后端目录接口已改为父目录聚合；后端 catalog 文件查询已支持 `directoryPath` 与 `version` 参数；专项脚本已补充断言并 `25/25 PASS`。
+- 收口状态：二期批次一正式收口，当前无 P0/P1/P2。
+- 下一步裁决：用户已确认进入二期批次二规划，但仍不直接进入 selective indexing、正文抽取、Agent workflow、受控写操作、模型轻量化或构件级能力。
+
+## 二期批次二状态
+
+- 批次名称：`标准驱动交付闭环最小可用版`。
+- 规划文档：`handoff/main-agent/phase2-batch2-standard-delivery-plan.md`。
+- 开发 prompt：`handoff/dev-agent/current-prompt.md`。
+- 测试 prompt：`handoff/test-agent/current-prompt.md`。
+- 本批核心链路：`项目上下文 -> 部位树 -> 节点类型锁定 -> 交付物标准 -> 交付物类型 -> 文件资源 -> 文档/图纸挂接 -> 交付完整率 -> 缺失项清单 -> 审计留痕`。
+- 本批只做：交付完整率接口、标准前置缺口提示、文档/图纸缺失项列表、从缺失项发起挂接、文件选择分页/检索、专项验收脚本。
+- 本批不做：模型轻量化、构件级解析、正文抽取、向量库、企业 Agent 写操作、自动审批、完整审核流、真实 NAS 文件移动/删除/改名。
+- 开发 agent 必须使用 Ralph Loop，完成承诺固定为 `<promise>PHASE2_BATCH2_STANDARD_DELIVERY_COMPLETE</promise>`。
+- 当前状态：正式收口。Claude Code 开发 agent 已使用 Ralph Loop 完成本批开发并写入 `handoff/dev-agent/latest-report.md`。主 agent 审计时中断过两次偏移：一次阻止进入 core 项目切换接口，一次恢复专项脚本中节点类型锁定的真实失败断言。主 agent 复核后补回前端 `DashboardSummary` 类型定义，避免前端构建依赖隐式缺失类型。
+- 主 agent 本轮验证：
+  - 后端构建 `./mvnw -pl delivery-app -am -DskipTests package` 通过。
+  - 前端构建 `corepack pnpm --dir frontend build` 通过。
+  - 后端健康检查返回 `UP`。
+  - `scripts/dev/check-phase2-batch2-standard-delivery.sh` 已加固为复跑优先复用已有节点类型，并清理本轮创建的部位节点；脚本通过，`38/38 PASS`。
+  - `git diff --check` 通过。
+- 测试 agent 正式验收通过，当前无 P0/P1/P2。收口报告：`handoff/main-agent/phase2-batch2-standard-delivery-closure.md`。
+- 下一步建议：进入二期批次三规划，优先考虑 `审核流、整改闭环、报表导出`，仍不进入模型轻量化、构件级解析、正文抽取、Agent workflow 或受控写操作。
+
+## 二期批次三状态
+
+- 批次名称：`人工审核、整改闭环与基础报表导出`。
+- 规划文档：`handoff/main-agent/phase2-batch3-review-rectification-report-plan.md`。
+- 开发 prompt：`handoff/dev-agent/current-prompt.md`。
+- 测试 prompt：`handoff/test-agent/current-prompt.md`。
+- 本批核心链路：`交付挂接 -> 人工审核 -> 驳回产生整改 -> 整改处理 -> 复审关闭 -> 报表导出 -> 审计留痕`。
+- 本批只做：交付绑定人工审核、审核记录、驳回原因、整改项、整改状态闭环、基础 CSV 报表导出、权限审计和专项验收脚本。
+- 本批不做：完整 BPM/流程引擎、多级会签、客户生产级权限承诺、Agent 自动审批/自动整改/自动写库、模型轻量化、构件级解析、正文抽取、向量库、真实 NAS 文件移动/删除/改名。
+- 开发 agent 必须使用 Ralph Loop，完成承诺固定为 `<promise>PHASE2_BATCH3_REVIEW_RECTIFICATION_REPORT_COMPLETE</promise>`。
+- 当前状态：正式收口。开发 agent 已使用 Ralph Loop 完成本批开发并写入 `handoff/dev-agent/latest-report.md`；主 agent 已完成代码审计和本地复核，未发现 P0/P1。测试 agent 已完成正式验收并建议收口，当前无 P0/P1，仅有 Vite chunk size warning P2。收口报告：`handoff/main-agent/phase2-batch3-review-rectification-report-closure.md`。
+- 主 agent 本轮验证：
+  - 后端构建 `./mvnw -pl delivery-app -am -DskipTests package` 通过。
+  - 前端构建 `corepack pnpm --dir frontend build` 通过。
+  - 后端健康检查返回 `UP`。
+  - `scripts/dev/check-phase2-batch3-review-rectification-report.sh` 通过，`52/52 PASS`。
+  - `scripts/dev/check-phase2-batch2-standard-delivery.sh` 回归通过，`38/38 PASS`。
+  - `git diff --check` 通过。
+- 测试 agent 正式验收：
+  - 后端构建通过。
+  - 前端构建通过。
+  - 健康检查通过。
+  - `git diff --check` 通过。
+  - 批次三专项脚本 `52/52 PASS`。
+  - 批次二回归 `38/38 PASS`。
+  - 批次一只读目录回归 `25/25 PASS`。
+  - DB-2 只读合同回归通过。
+  - `/work/document-delivery`、`/work/drawing-delivery`、`/work/rectifications` 页面验收通过，页面级横向溢出为 `0`。
+- 当前裁决：二期批次三正式收口。下一步建议进入二期批次四规划，优先考虑 `文件预览与下载权限分离最小闭环`，仍不进入模型轻量化、构件级解析、正文抽取、向量库、Agent workflow 或受控写操作。
+
+## 标准驱动交付流程新手可用性补丁
+
+- 触发原因：测试 agent 报告指出标准驱动交付链路对新手缺少业务解释、顺序引导和修复入口提示，优先级为 P1。
+- 当前状态：正式收口。测试 agent 短回归通过，当前无 P0/P1，仅有既有 Vite chunk size warning P2。
+- 开发报告：`handoff/main-agent/standard-delivery-usability-patch-report.md`。
+- 收口报告：`handoff/main-agent/standard-delivery-usability-patch-closure.md`。
+- 开发报告：`handoff/dev-agent/latest-report.md`。
+- 测试 prompt：`handoff/test-agent/current-prompt.md`。
+- 已处理页面：
+  - `/master-data/sections`
+  - `/master-data/node-types`
+  - `/master-data/deliverable-standard`
+  - `/work/document-delivery`
+  - `/work/drawing-delivery`
+- 修复内容：
+  - 增加第 1、2、3 步业务说明。
+  - `StandardStatusPanel` 增加下一步提示。
+  - 解释部位树、节点类型锁定、交付物标准四块配置关系。
+  - 交付页解释应交项、已挂接和缺失项。
+  - 标准未就绪时增加修复入口。
+  - 将“去挂接”调整为“选择文件补交”。
+  - 补交弹窗增加字段辅助说明。
+- 本轮验证：
+  - 前端构建通过。
+  - 后端健康检查 `UP`。
+  - 五个目标路由均返回 HTTP 200。
+  - `scripts/dev/check-phase2-batch2-standard-delivery.sh`：`38/38 PASS`。
+  - `scripts/dev/check-phase2-batch3-review-rectification-report.sh`：`52/52 PASS`。
+  - `git diff --check` 通过。
+- 测试 agent 短回归：
+  - 五个目标页面逐项通过。
+  - 交付页横向溢出为 `0`。
+  - 文件选择仍为分页远程加载。
+  - `scripts/dev/check-phase2-batch1-readonly-catalog.sh`：`25/25 PASS`。
+- 未做项：
+  - 未清理样板项目历史测试命名数据。
+  - 未补齐样板项目文档类标准数据。
+  - 未做标准配置向导或客户版帮助中心。
+- 用户最新裁决：样板项目仍需用于业务链路测试，暂不清理、暂不重置、暂不隐藏历史测试命名。
+- 下一步建议：恢复二期主线推进，进入 `二期批次四：文件预览与下载权限分离最小闭环` 规划；样板项目整理仅作为后续演示观感优化保留，不作为当前阻塞项。
+
+## 二期批次四状态
+
+- 批次名称：`文件预览与下载权限分离最小闭环`。
+- 规划文档：`handoff/main-agent/phase2-batch4-file-preview-download-permission-plan.md`。
+- 开发 prompt：`handoff/dev-agent/current-prompt.md`。
+- 测试 prompt：`handoff/test-agent/current-prompt.md`。
+- 本批核心链路：`文件详情 -> 判断预览/下载权限 -> 生成短时访问票据 -> 平台受控读取文件 -> 浏览器预览或下载 -> 审计留痕`。
+- 本批只做：PDF/图片浏览器原生预览入口、下载权限与预览权限分离、短时访问票据、NAS 只读流式读取、访问审计和专项验收脚本。
+- 本批不做：样板项目清理、模型轻量化、构件级解析、Office/CAD/BIM 转换、正文抽取、向量库、Agent workflow、自动审批、真实 NAS 写操作或客户生产级权限体系承诺。
+- 开发 agent 必须使用 Ralph Loop，完成承诺固定为 `<promise>PHASE2_BATCH4_FILE_ACCESS_COMPLETE</promise>`。
+- 当前状态：测试 agent 正式验收首轮不通过，发现 1 个 P0：普通项目用户可在 `/data-steward/catalog` 文件详情中看到真实 NAS 路径。主 agent 已完成 P0 返修，当前等待测试 agent 复验后再决定是否正式收口。
+- P0 返修内容：
+  - `catalog/files` 列表和 `catalog/files/{fileId}` 详情按项目角色控制路径可见性。
+  - 仅 `PROJECT_ADMIN` 可见真实 `storagePath`。
+  - `PROJECT_VIEWER`、`DELIVERY_ENGINEER` 等普通项目角色返回 `storagePathVisible=false`、`storagePath=null`、`storagePathVisibilityReason=PATH_HIDDEN_BY_PERMISSION`。
+  - `agentContractView` 在路径隐藏时不再声明 `storagePath` 字段可用。
+  - `scripts/dev/check-phase2-batch4-file-access.sh` 已补充查看者和交付工程师的路径隐藏断言。
+- 主 agent P0 返修验证结果：
+  - 后端构建通过。
+  - 前端构建通过，仅有既有 Vite chunk size warning。
+  - 后端健康检查 `UP`。
+  - `scripts/dev/check-phase2-batch4-file-access.sh`：`PASS=14 FAIL=0`。
+  - `scripts/dev/check-file-preview-shell.sh`：通过。
+  - `scripts/dev/check-phase2-batch1-readonly-catalog.sh`：`25/25 PASS`。
+  - `git diff --check`：通过。
+- 当前裁决：P0 已按主 agent 自测修复，但二期批次四暂不正式收口；需要测试 agent 按 `handoff/test-agent/current-prompt.md` 复验，重点复核普通项目用户路径隐藏。
+
 ## 企业 Agent 对接裁决
 
-- agent 权限高，可以读取数据库。
+- agent 权限高，可以读取稳定 SQL View，但不得直接耦合业务底表。
 - agent 不应直接耦合平台业务底表。
 - 一期必须提供稳定读模型：`ProjectAssetView`、`FileAssetView`、`ModelAssetView`、`AuditEventView`。
+- agent REST/OpenAPI 接入采用 API Key。
+- API Key 按项目范围授权，可授权全部项目或指定项目。
+- agent 可查询、触发扫描/checksum 任务、提交标注或删除申请；正式变更必须人工审核。
 - 平台保留 REST/OpenAPI 作为长期集成边界。
-- 一期落地前主 agent 必须再次确认企业 agent 技术栈、读库方式、索引方式、路径访问方式和增量同步策略。
+- 增量同步采用审计/事件流，不只依赖 `updated_at`。
+- 一期落地前主 agent 必须再次确认企业 agent 技术栈、读库方式、索引方式、路径访问方式和事件流同步策略。
 
 ## 当前协作规则
 
 - 主 agent 维护需求、架构、验收、prompt 和交接文档。
 - 开发 agent 和测试 agent 仍作为长期独立会话运行。
 - 主 agent 不通过创建临时子 agent 代替开发 agent。
+- 后续启动 Claude Code 开发 agent 时默认使用 Claude CLI 可识别的 Pro 型号 `deepseek-v4-pro`；用户口径中的 `deepseek-pro` 按 Pro 能力要求理解，不再使用 `deepseek-chat` 作为正式开发模型。
 - 后续开发 agent prompt 必须引用 `docs/07` 和 `docs/08`，不能只按旧 v1 MVP 口径继续开发。
+- 一期后端批次 1、批次 1 尾巴、批次 2、批次 3 已全部通过测试 agent 复验，一期后端数据治理正式收口。批次 3 已实现 API Key、agent 边界、删除申请审批、逻辑删除、隔离恢复和受控永久删除；后续不得在无新指令情况下继续扩大一期后端范围，不得扩前端、不得做二期 BIM 能力、不得绕过审批直接删除 NAS 原文件。
 
 ## 样板信息
 
@@ -54,18 +225,220 @@
 - 样板密码：`Admin@123`
 - 样板项目：`SAMPLE-MEP-001 / 机电交付样板项目`
 
-## Windows 迁移注意事项
+## 当前机器与迁移注意事项
 
-迁移前必须整理项目基线、数据库迁移说明、启动命令、已实现能力、未实现能力、企业 agent 对接待确认清单，避免跨系统开发断层。
+当前继续在这台 Mac 上开发，上一轮已确认原生 JDK 21、后端构建、后端启动和健康检查可用。后续若迁移到新 Mac 或 Windows，仍需整理项目基线、数据库迁移说明、启动命令、已实现能力、未实现能力、企业 agent 对接待确认清单，避免跨系统开发断层。
 
-## Windows 端交接入口
+## 真实 NAS 试点状态
 
-Windows 端 Codex 请从以下文件开始：
+- 真实 NAS 根路径：`/Volumes/zyzn/卓羽智能项目`。
+- 用户明确要求：只允许读取数据，禁止修改或删除 NAS 数据。
+- 主 agent 已完成第一轮只读发现，报告：`handoff/main-agent/real-nas-pilot-discovery-report.md`。
+- 一级目录共 `27` 个；已发现 `95`、`99` 两组重复项目编号，不能直接按编号全量自动入库。
+- 第一批正式小样本建议：`105-启航华居项目`、`100-深圳市二十八高项目`、`101-C塔`。
+- `99-丰图既有建模项目` 文件量大且含大量临时/转换路径，暂不建议第一批正式写库；应先做 dry-run 和待审核策略验证。
+- 平台 `dryRun=true` 的 NAS 项目发现接口已完成：总目录 `27`，`READY 17`，`CONFLICT 4`，`REFERENCE 3`，`NEEDS_CODE_REVIEW 3`；创建项目数与路径映射数均为 `0`。
+- 第一批真实 NAS 元数据写入已完成，报告：`handoff/main-agent/real-nas-pilot-import-report.md`。
+- 已完成项目：
+  - `105-启航华居项目`：扫描任务 `414`，自动入库 `2927`，待审核 `0`，失败 `0`。
+  - `100-深圳市二十八高项目`：扫描任务 `415`，自动入库 `3668`，待审核 `293`，失败 `0`。
+- `101-C塔` 此前曾暂停导入：当时开发库已有历史测试项目编码 `101`，为避免真实 NAS 数据写入旧测试项目，扫描任务 `416` 已取消，误建路径映射 `683` 已删除，真实 `101` 文件资产写入数为 `0`。
+- `100` 的 `293` 条待审核候选已全部审核通过，待审核清零；审核后保留 `LOW` 置信度和 `REVIEW` 来源。
+- P1 已修复：新增 `V13__model_asset_view_include_nas_files.sql`，`ModelAssetView` 现在覆盖 NAS 扫描登记但尚未进入模型集成流程的模型文件。
+- 验证结果：`ModelAssetView` 可查询 `100` 的 `156` 个模型、`105` 的 `198` 个模型。
+- 本轮报告：`handoff/main-agent/real-nas-review-and-p1-report.md`。
+- 真实 NAS 试点验收已完成并通过，报告：`handoff/main-agent/real-nas-pilot-acceptance-report.md`。
+- 验收结论：`100`、`105` 已满足一期内部试点的核心要求：项目建档、元数据入库、路径追溯、检索统计、权限隔离、审计事件、SQL View 真实数据。
+- 企业 agent 协议尚未确定，agent 联调暂缓。
+- `101-C塔` 已完成清理与真实入库，报告：`handoff/main-agent/real-101-cleanup-and-import-report.md`。
+- 历史测试项目 ID `99` 已归档为 `TEST-101-ARCHIVED-99` 并软删除；真实项目 ID `505` 复用编码 `101`。
+- 真实 `101` 扫描任务 `417` 已成功：扫描 `5666`，自动入库 `5457`，待审核 `0`，失败 `0`。
+- 真实 `101` 当前正式资产：模型 `114`，图纸 `5343`，总容量 `28,486,737,158 bytes`。
+- 真实 `101` 路径抽样 `30/30` 存在且大小一致；`ProjectAssetView`、`FileAssetView`、`ModelAssetView`、`AuditEventView` 均可查询。
+- `delivery.engineer` 当前无法访问 `101` 项目和文件，权限隔离通过。
+- 第二批真实 NAS 小样本已完成，报告：`handoff/main-agent/real-nas-second-batch-import-report.md`。
+- 第二批项目：`93-中建八局国交酒店项目`、`96-深圳市前海蛇口自贸区医院科技大厦三期改造项目`、`104-佛山顺德妇幼医院项目`。
+- 第二批扫描结果：
+  - `93`：扫描 `6305`，自动入库 `5912`，待审核 `0`，失败 `0`，模型 `588`，图纸 `5324`，容量 `77,923,356,233 bytes`。
+  - `96`：扫描 `367`，自动入库 `243`，待审核 `0`，失败 `0`，模型 `23`，图纸 `220`，容量 `3,039,265,913 bytes`。
+  - `104`：扫描 `1780`，自动入库 `1699`，待审核 `0`，失败 `0`，模型 `187`，图纸 `1512`，容量 `30,194,811,835 bytes`。
+- 第二批路径抽样 `60/60` 存在且大小一致；SQL View、权限隔离、审计事件均通过。
+- 当前真实试点已完成 `100`、`101`、`105`、`93`、`96`、`104` 共 `6` 个项目。
+- 扫描任务可控性已补强，报告：`handoff/main-agent/scan-task-control-upgrade-report.md`。
+- 已新增扫描进度、取消、续扫、低价值目录跳过、扫描报告和续扫去重保护；专项脚本 `scripts/dev/check-scan-task-control.sh` 已通过。
+- 用户要求直接使用当前最大的真实 NAS 项目测试，已用 `93-中建八局国交酒店项目` 完成真实扫描控制验证，报告：`handoff/main-agent/real-largest-nas-scan-control-report.md`。
+- 最大项目测试结果：扫描任务 `423` 可见进度、可取消、可续扫，最终 `6305/6305`，失败 `0`，正式资产数量和容量未重复增加。
+- 用户要求暂时跳过 `95` 和 `99` 这类项目，继续导入其他未导入项目；第三批真实 NAS 导入已完成，报告：`handoff/main-agent/real-nas-third-batch-import-report.md`。
+- 第三批新增 `97`、`108`、`109`、`110`、`111`、`112`、`113`、`114`、`115`、`116` 共 `10` 个真实项目，新增正式文件资产 `20736`，其中模型 `1338`、图纸 `19398`，总容量 `101,002,506,275 bytes`。
+- 第三批扫描任务 `424-433` 全部 `SUCCEEDED`，失败 `0`，待审核 `0`；路径抽样 `100/100` 通过，SQL View 和权限隔离通过。
+- 当前真实入库项目累计 `16` 个：`93`、`96`、`97`、`100`、`101`、`104`、`105`、`108`、`109`、`110`、`111`、`112`、`113`、`114`、`115`、`116`。
+- 用户最新裁决：`98`、`95`、`99` 以及投标、参考、未知命名目录先不导入数据库，暂时忽略，不进入正式资产库。
+- 这类非标准数据后续作为平台“Agent 辅助数据治理”能力处理：企业 agent 先做目录识别、文件归类、项目拆分、重复编号建议和风险提示，再由人工确认后导入。
+- 非标准目录在人工确认前不得进入 `ProjectAssetView`、`FileAssetView`、`ModelAssetView`，避免污染正式资产和企业 agent 检索结果。
+- 一期真实资产接管总览已生成，报告：`handoff/main-agent/phase1-real-asset-overview.md`。
+- 当前已接管 `16` 个真实项目，正式登记文件 `40,935`，其中模型 `2,604`、图纸 `38,331`，总容量 `317,849,121,433 bytes`，约 `296.02 GiB`。
+- 前端已新增“资产总览”和“项目资产详情”：
+  - 入口：数据管家 / 资产总览，路由 `/data-steward/assets`。
+  - 默认只展示 `NAS_REAL*` 来源的真实 NAS 接管项目，避免批次验收测试项目污染业务视图。
+  - 项目详情可查看文件资产、扫描任务和路径映射。
+- 后端已增强一期资产查询：
+  - 项目资产和容量统计支持 `assetSource=NAS_REAL*` 来源过滤。
+  - 文件资产新增分页查询 `/api/data-steward/assets/files:page`。
+  - 文件扩展名过滤兼容 `.rvt` 和 `rvt` 两种写法。
+- 企业 Agent DB-2 本机 dev 握手文档已补齐：
+  - 文件：`handoff/main-agent/enterprise-agent-db2-coupling-handoff.md`。
+  - 本机 dev 只读账号 `hermes_agent_ro` 已创建，只能读四个稳定 View，不能读业务底表。
+  - `hermes_agent_ro` 本机密码已轮换，当前密码不写入仓库文档，保存于 macOS 钥匙串 `delivery-platform-hermes-agent-ro-local-dev`。
+  - DB-2 对接裁决矩阵已冻结并同步到 `docs/08-acceptance-and-agent-integration.md`、`handoff/main-agent/enterprise-agent-db2-coupling-handoff.md` 和 `handoff/main-agent/decisions.md`。
+  - 当前明确：Agent 直连 MySQL View；不走同步库/搜索引擎/向量库；事件流由 Agent 按 `AuditEventView.event_id` 拉取；权限缺失默认 `DENIED`。
+  - 当前明确：本机内部联调可临时读取真实项目名、文件名、NAS 路径，但不得进入长期 memory、向量库、搜索库、外部日志或客户材料；一期 DB-2 不读取 PDF/Office 正文。
+  - 最新裁决：企业 Agent 后续会更新到本地 Hermes，并与平台数据库运行在同一台本机环境中；本机 `delivery-mysql` + `hermes_agent_ro` 是一期 DB-2 首轮正式联调路径。
+  - 当前不需要立即获取 shared-dev / staging 账号；只有多人远程协作、持续测试、演示或客户交付前类生产验证时才触发运维开通。
+  - 本机 dev 样例允许内部授权 `LIMIT 30`，但会暴露真实项目名、文件名和 NAS 路径。
+  - shared-dev / staging / 客户环境已固化为默认 `STRUCTURE_ONLY`；未完成平台/运维 DSN 执行单、只读账号安全交付和业务负责人、数据负责人书面确认前，不允许真实样例读取。
+  - shared-dev / staging 后置执行单：`handoff/main-agent/enterprise-agent-db2-staging-shared-dev-ops-request.md`。
+  - Hermes mirror 层在四个 View 缺少稳定权限字段时必须默认 `DENIED`，真实项目名、文件名和 NAS 路径不得外发或写入外部云服务、向量库、搜索库、长期 memory 或外部观测日志。
+- 当前本地验证：
+  - 前端构建通过。
+  - 后端构建通过。
+  - 后端健康检查通过。
+  - 管理员菜单可见资产总览入口。
+  - 真实 NAS 过滤口径返回 `16` 项目、`40,935` 文件、`2,604` 模型、`38,331` 图纸。
+- 下一步建议继续做“扫描任务运维页”或“非标准资料治理清单页”；企业 agent 协议确定前，不推进 agent 联调。
+- 扫描任务运维页已完成：
+  - 入口：数据管家 / 扫描任务，路由 `/data-steward/scans`。
+  - 能力：扫描任务列表、状态筛选、项目筛选、关键字检索、创建任务、运行、取消、续扫、报告查看。
+  - 已通过前端构建、后端构建、后端健康检查、菜单接口抽查和 `scripts/dev/check-scan-task-control.sh`。
+- 扫描任务页显示修复已完成：
+  - 新增 `V16__backfill_scan_task_display_fields.sql` 回填历史成功任务进度和缺失项目编码。
+  - 历史 `SUCCEEDED` 扫描任务不再显示 `0%`，前端和后端均有完成态兜底。
+  - 未绑定项目的历史/全局扫描任务显示为 `全局扫描 / 未绑定具体项目`，不再空白。
+  - 抽查结果：`succeeded_zero_progress=0`、`project_id_without_code=0`、接口返回 `bad_succeeded_progress=0`。
+- 非标准资料治理清单已完成，报告：`handoff/main-agent/nonstandard-directory-governance-report.md`。
+  - 入口：数据管家 / 非标准资料治理，路由 `/data-steward/nonstandard-directories`。
+  - 能力：只读发现暂缓入库、重复编号、投标/参考、临时资料、未知编码等一级 NAS 目录，并记录治理状态、风险类型、Agent 建议和人工结论。
+  - 边界：不创建正式项目、不创建路径映射、不扫描文件、不写入正式文件资产，不污染 `ProjectAssetView`、`FileAssetView`、`ModelAssetView`。
+  - 验证：临时 NAS 目录发现、查询、人工更新、正式资产零泄露、事件和审计均已通过；临时测试治理记录已清理。
+- 真实 NAS 非标准资料治理发现已执行，报告：`handoff/main-agent/real-nas-nonstandard-directory-governance-report.md`。
+  - 根路径：`/Volumes/zyzn/卓羽智能项目`。
+  - 已登记 `11` 个非标准目录：重复编号 `4`、投标/参考 `3`、未知编码 `3`、用户暂缓 `1`。
+  - 重点目录：`95-*`、`99-*`、`98-深圳口岸项目`、投标资料、清华斯维尔围标项目、深城交等。
+  - 防污染校验通过：正式项目数 `519 -> 519`，正式文件资产数 `48842 -> 48842`。
+- 企业 Agent DB-2 只读合同自检脚本已完成，报告：`handoff/main-agent/agent-db2-contract-check-report.md`。
+  - 脚本：`scripts/dev/check-agent-db2-contract.sh`，已写入 `scripts/README.md`。
+  - 本机只读账号 `hermes_agent_ro` 自检通过，只能看到 `ProjectAssetView`、`FileAssetView`、`ModelAssetView`、`AuditEventView` 四个稳定 View。
+  - 当前 View 数量：项目 `519`，文件 `48842`，模型 `10322`，审计事件 `59849`。
+  - 业务底表 `core_projects`、`data_file_resources`、`core_audit_logs` 均不可读。
+  - 默认只验证结构、数量、事件游标和权限，不打印真实项目名、文件名或 NAS 路径。
+- 一期数据质量体检能力已完成，报告：`handoff/main-agent/asset-quality-overview-report.md`。
+  - 新增接口：`GET /api/data-steward/assets/quality/overview`。
+  - 新增页面：数据管家 / 数据质量，路由 `/data-steward/quality`。
+  - 覆盖待审核、失败扫描、缺 checksum、缺置信度、专业待完善、版本缺失、存储路径缺失、零大小文件、非标准资料治理状态、风险项目排行和最近治理事件。
+  - 新增脚本：`scripts/dev/check-asset-quality-overview.sh`，已写入 `scripts/README.md`。
+  - 验证通过：后端构建、前端构建、健康检查、数据质量专项脚本和 DB-2 只读合同复核。
+  - 本轮只读取平台元数据，不读取文件正文，不做模型轻量化，不做构件级解析，不修改或删除 NAS 文件。
+- 一期数据质量治理跳转增强已完成：
+  - 数据质量页的体检项可跳转扫描任务、非标准资料治理或项目资产详情。
+  - 项目资产详情支持按 `qualityIssue` 筛选缺 checksum、缺置信度、专业待完善、版本缺失、路径缺失和零大小文件。
+  - 后端文件列表接口已支持 `qualityIssue` 参数，专项脚本已补充问题筛选断言并通过。
+  - 当前验证结果：`MISSING_CHECKSUM total=40935`、`MISSING_DISCIPLINE total=40935`，其他质量问题当前为 `0`，符合现有真实 NAS 元数据状态。
+- 项目 `512 / 108-福城南产业片区11-20-02宗地` 专业字段补录已完成，报告：`handoff/main-agent/project-512-discipline-backfill-report.md`。
+  - 补录前缺专业 `6751` 条，补录后 `0` 条。
+  - 补录分布：结构 `2344`、建筑 `1473`、电气 `1121`、给排水 `620`、暖通 `493`、智能化 `353`、消防 `225`、综合 `68`、燃气 `54`。
+  - 已为该项目新增项目扩展专业 `GAS / 燃气`。
+  - 前端项目详情页已将专业编码显示为中文标签。
+  - 已修复项目详情页在同组件内切换项目或质量筛选时可能残留上一项目表格数据的问题。
+  - 当前复验：`/data-steward/assets/512` 可显示真实专业标签；`?qualityIssue=MISSING_DISCIPLINE` 为空列表，符合缺专业数量归零。
+  - 本轮只修改平台数据库元数据，不修改 NAS 原文件。
+- 真实 NAS 已导入项目专业字段全量补录已完成，报告：`handoff/main-agent/real-nas-all-discipline-backfill-report.md`。
+  - 除项目 `512` 外，其余 `15` 个真实 NAS 项目补录 `34184` 条文件专业。
+  - 真实 NAS 全量 `40935` 份文件当前专业缺失数为 `0`。
+  - 真实 NAS 全量专业分布：结构 `8882`、电气 `7333`、综合 `7307`、建筑 `5599`、暖通 `4197`、消防 `3267`、给排水 `2880`、智能化 `1284`、燃气 `186`。
+  - 历史脚本/接口测试/遗留文件中剩余 `10338` 条缺专业数据已统一补为 `GENERAL / 综合`，避免全局数据质量页继续误报“专业待完善”。
+  - 全局数据质量接口当前 `missingDisciplineCount = 0`，`qualityIssue=MISSING_DISCIPLINE` 返回 `OK 0 0`。
+  - 专项验证通过：`scripts/dev/check-asset-quality-overview.sh`、`scripts/dev/check-agent-db2-contract.sh`。
+  - 已写入审计与事件流：`manual-real-nas-discipline-backfill-20260511`、`manual-remaining-discipline-general-backfill-20260511`。
+  - 本轮只修改平台数据库元数据，不修改 NAS 原文件。
+- 真实 NAS checksum 小批量试点已完成，报告：`handoff/main-agent/real-nas-checksum-small-batch-report.md`。
+  - 试点项目：`516 / 112-歌剧院项目`。
+  - 执行前：`21` 个文件，约 `246,694,735 bytes`，路径缺失 `0`，大小不一致 `0`，缺 checksum `21`。
+  - 通过平台 API `POST /api/data-steward/assets/checksum-jobs/batch` 创建 `21` 个异步任务。
+  - 执行后：`CHECKSUM_CALC SUCCEEDED = 21`，失败 `0`，有效 SHA-256 `21`，缺 checksum `0`。
+  - 项目级数据质量：`missingChecksumCount = 0`，`qualityIssue=MISSING_CHECKSUM` 返回 `OK 0 0`。
+  - 事件流：`CHECKSUM/checksum.success = 21`、`JOB/job.start = 21`、`JOB/job.success = 21`。
+  - 本轮只读取 NAS 文件内容计算 SHA-256，不修改、不移动、不删除 NAS 原文件。
+  - 下一步建议按容量逐级扩大，优先 `96` 项目 `243` 个文件、约 `2.83 GiB`，不要直接全量跑 10TB。
+- 真实 NAS checksum 中等规模试点已完成，报告：`handoff/main-agent/real-nas-checksum-medium-batch-report.md`。
+  - 试点项目：`507 / 96-深圳市前海蛇口自贸区医院科技大厦三期改造项目`。
+  - 执行前：`243` 个文件，`3,039,265,913 bytes`，路径缺失 `0`，大小不一致 `0`，缺 checksum `243`。
+  - 第一轮创建 `200` 个 checksum 异步任务并全部成功；第二轮创建剩余 `43` 个任务并全部成功。
+  - 执行后：`CHECKSUM_CALC SUCCEEDED = 243`，失败 `0`，有效 SHA-256 `243`，缺 checksum `0`。
+  - 修复批量 checksum 接口问题：原逻辑先取最近更新 `200` 条再过滤缺 checksum，导致第二轮误返回 `0`；已改为直接按 `MISSING_CHECKSUM` 数据库条件查询。
+  - 验证通过：后端构建、后端健康检查、项目级 `missingChecksumCount = 0`、`qualityIssue=MISSING_CHECKSUM` 返回 `OK 0 0`、`scripts/dev/check-asset-quality-overview.sh`。
+  - 当前真实 NAS 全局剩余缺 checksum：`40671`。
+  - 下一步建议继续按容量逐级扩大，优先 `111` 或 `116`，不要直接全量跑 10TB。
+- 真实 NAS checksum 第三轮试点已完成，报告：`handoff/main-agent/real-nas-checksum-third-batch-report.md`。
+  - 试点项目：`515 / 111-蛇口影剧院项目`。
+  - 执行前：`290` 个文件，`1,666,194,107 bytes`，路径缺失 `0`，大小不一致 `0`，缺 checksum `290`。
+  - 通过平台 API 创建 `290` 个 checksum 异步任务。
+  - 执行后：`CHECKSUM_CALC SUCCEEDED = 290`，失败 `0`，有效 SHA-256 `290`，缺 checksum `0`。
+  - 项目级数据质量：`missingChecksumCount = 0`，`qualityIssue=MISSING_CHECKSUM` 返回 `OK 0 0`。
+  - 事件流：`CHECKSUM/checksum.success = 290`、`JOB/job.start = 290`、`JOB/job.success = 290`。
+  - 专项验证通过：后端健康检查、`scripts/dev/check-asset-quality-overview.sh`。
+  - 当前真实 NAS 全局已完成 checksum：`554`，剩余缺 checksum：`40381`，剩余缺 checksum 项目：`13`。
+  - 下一步建议优先 `116-港中文（深圳）医学院智能化`，`487` 个文件、约 `1.50 GiB`。
+- 真实 NAS checksum 第四轮试点已完成，报告：`handoff/main-agent/real-nas-checksum-fourth-batch-report.md`。
+  - 试点项目：`520 / 116-港中文（深圳）医学院智能化`。
+  - 执行前：`487` 个文件，`1,610,199,282 bytes`，路径缺失 `0`，大小不一致 `0`，缺 checksum `487`。
+  - 通过平台 API 创建 `487` 个 checksum 异步任务。
+  - 执行后：`CHECKSUM_CALC SUCCEEDED = 487`，失败 `0`，有效 SHA-256 `487`，缺 checksum `0`。
+  - 项目级数据质量：`missingChecksumCount = 0`，`qualityIssue=MISSING_CHECKSUM` 返回 `OK 0 0`。
+  - 事件流：`CHECKSUM/checksum.success = 487`、`JOB/job.start = 487`、`JOB/job.success = 487`。
+  - 专项验证通过：后端健康检查、`scripts/dev/check-asset-quality-overview.sh`。
+  - 当前真实 NAS 全局已完成 checksum：`1041`，剩余缺 checksum：`39894`，剩余缺 checksum 项目：`12`。
+  - 下一步建议优先 `115-深圳宝安国际机场T2...`，`396` 个文件、约 `5.49 GiB`。
+- 真实 NAS checksum 第五轮试点已完成，报告：`handoff/main-agent/real-nas-checksum-fifth-batch-report.md`。
+  - 试点项目：`519 / 115-深圳宝安国际机场T2航站区及配套设施工程航站区工程施工总承包2标段`。
+  - 执行前：`396` 个文件，`5,897,285,554 bytes`，路径缺失 `0`，大小不一致 `0`，缺 checksum `396`。
+  - 通过平台 API 创建 `396` 个 checksum 异步任务，traceId：`8780ef4a275c40698dffd1a52f3716ab`。
+  - 执行后：`CHECKSUM_CALC SUCCEEDED = 396`，失败 `0`，有效 SHA-256 `396`，缺 checksum `0`。
+  - 项目级数据质量：`missingChecksumCount = 0`，`qualityIssue=MISSING_CHECKSUM` 返回 `OK 0 0`。
+  - 事件流：`CHECKSUM/checksum.success = 396`、`JOB/job.start = 396`、`JOB/job.success = 396`。
+  - 专项验证通过：后端健康检查、`scripts/dev/check-asset-quality-overview.sh`。
+  - 当前真实 NAS 全局已完成 checksum：`1437`，剩余缺 checksum：`39498`，剩余缺 checksum 项目：`11`。
+  - 下一步建议优先 `109-华润三九银湖科创中心项目`，`1457` 个文件、约 `7.11 GiB`；或 `110-龙华区观湖街道观城城市更新单元第一期10地块`，`2614` 个文件、约 `8.08 GiB`。
+- 一期主线验收收口已完成，报告：`handoff/main-agent/phase1-mainline-acceptance-closure.md`。
+  - 裁决：一期不再继续扩功能，当前进入用户验收/内部试运行准备；只修 P0/P1 和必要可用性问题。
+  - 验证通过：后端健康检查、后端构建、前端构建、`check-minimal-chain.sh`、`check-master-data-chain.sh`、`check-deliverable-standard-chain.sh`、`check-mvp-chain.sh`、`check-scan-task-control.sh`、`check-asset-quality-overview.sh`、`check-agent-db2-contract.sh`。
+  - 真实 NAS 当前口径：`16` 个真实项目、`40935` 个文件、模型 `2604`、图纸 `38331`、总容量约 `296.02 GiB`。
+  - 真实 NAS 关键质量字段：缺专业 `0`、缺路径 `0`、零大小或缺大小 `0`、待审核候选 `0`。
+  - 非标准目录：`11` 条仍在治理区，均为 `PENDING_AGENT`，不进入正式资产库。
+  - checksum 裁决：能力已通过五轮试点，剩余 `39498` 个缺 checksum 不阻塞一期上线，后续按后台治理任务分批补齐。
+  - 本轮未重跑 `check-bim-asset-batch1/2/3` 全量批次脚本；这些脚本已由测试 agent 复验通过，且会持续制造大量测试项目。本轮以主线脚本、专项脚本和真实 NAS 数据抽查作为收口依据。
+- 当前项目下拉清理与资产总览排序已完成，报告：`handoff/main-agent/project-dropdown-cleanup-and-asset-sort-report.md`。
+  - 本机 dev 数据库中 `503` 个测试项目已软归档，原始信息保存在 `dev_archived_test_projects_20260511`。
+  - `/api/core/users/me` 当前只返回 `18` 个项目：`2` 个样板项目 + `16` 个真实 NAS 项目。
+  - 保留样板项目是为了不影响主数据、交付标准和 MVP 样板链路演示。
+  - 后端已补强：旧 token 中的当前项目如果被归档，会自动回退到第一个可访问项目。
+  - 资产总览页已新增 `项目ID升序 / 项目ID降序` 选择，默认升序，仅前端本地排序。
+  - 验证通过：后端构建、前端构建、后端健康检查、`/home` 和 `/data-steward/assets` 页面 HTTP 200、真实 NAS 资产接口仍返回 `16` 个项目。
+- 一期内部试运行验收清单已完成：`handoff/main-agent/phase1-internal-trial-acceptance-checklist.md`。
+  - 用于用户按页面试运行验收，不作为二期客户交付验收。
+  - 当前验收口径：下拉 `18` 个项目，真实 NAS `16` 个项目，真实文件 `40935` 份，非标准目录 `11` 条。
+  - 通过标准：真实项目可查、文件元数据可看、路径可复制、专业/路径/大小关键字段不缺失、非标准目录不污染正式库、普通用户不越权、DB-2 稳定 View 准备好。
+  - 阻塞标准：权限泄漏、找不到真实文件、正式资产污染、页面主链路打不开。
 
-- `handoff/windows-agent/project-context.md`
-- `handoff/windows-agent/current-prompt.md`
-- `handoff/windows-agent/migration-checklist.md`
+## 跨机器交接入口
+
+后续迁移时，接手 agent 请从以下文件开始：
+
+- `handoff/main-agent/status.md`
+- `handoff/main-agent/backlog.md`
+- `handoff/main-agent/decisions.md`
+- `handoff/dev-agent/current-prompt.md`
+- `handoff/test-agent/current-prompt.md`
+- `handoff/mac-agent/latest-report.md`
 
 完成后必须回写：
 
-- `handoff/windows-agent/latest-report.md`
+- 对应迁移目录下的 `latest-report.md`

@@ -4,20 +4,23 @@
 
 ## 入口
 
-- [`scripts/dev/bootstrap-infra.sh`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/bootstrap-infra.sh)
-- [`scripts/dev/bootstrap-infra.ps1`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/bootstrap-infra.ps1)
-- [`scripts/dev/start-backend.sh`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/start-backend.sh)
-- [`scripts/dev/start-backend.ps1`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/start-backend.ps1)
-- [`scripts/dev/start-frontend.sh`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/start-frontend.sh)
-- [`scripts/dev/start-frontend.ps1`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/start-frontend.ps1)
-- [`scripts/dev/check-minimal-chain.sh`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/check-minimal-chain.sh)
-- [`scripts/dev/check-minimal-chain.ps1`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/check-minimal-chain.ps1)
-- [`scripts/dev/check-master-data-chain.sh`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/check-master-data-chain.sh)
-- [`scripts/dev/check-master-data-chain.ps1`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/check-master-data-chain.ps1)
-- [`scripts/dev/check-deliverable-standard-chain.sh`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/check-deliverable-standard-chain.sh)
-- [`scripts/dev/check-deliverable-standard-chain.ps1`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/check-deliverable-standard-chain.ps1)
-- [`scripts/dev/check-mvp-chain.sh`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/check-mvp-chain.sh)
-- [`scripts/dev/check-mvp-chain.ps1`](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/scripts/dev/check-mvp-chain.ps1)
+- [`scripts/dev/bootstrap-infra.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/bootstrap-infra.sh)
+- [`scripts/dev/bootstrap-infra.ps1`](/Users/vc/Documents/数字化交付平台/scripts/dev/bootstrap-infra.ps1)
+- [`scripts/dev/start-backend.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/start-backend.sh)
+- [`scripts/dev/start-backend.ps1`](/Users/vc/Documents/数字化交付平台/scripts/dev/start-backend.ps1)
+- [`scripts/dev/start-frontend.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/start-frontend.sh)
+- [`scripts/dev/start-frontend.ps1`](/Users/vc/Documents/数字化交付平台/scripts/dev/start-frontend.ps1)
+- [`scripts/dev/check-minimal-chain.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-minimal-chain.sh)
+- [`scripts/dev/check-minimal-chain.ps1`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-minimal-chain.ps1)
+- [`scripts/dev/check-master-data-chain.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-master-data-chain.sh)
+- [`scripts/dev/check-master-data-chain.ps1`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-master-data-chain.ps1)
+- [`scripts/dev/check-deliverable-standard-chain.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-deliverable-standard-chain.sh)
+- [`scripts/dev/check-deliverable-standard-chain.ps1`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-deliverable-standard-chain.ps1)
+- [`scripts/dev/check-mvp-chain.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-mvp-chain.sh)
+- [`scripts/dev/check-mvp-chain.ps1`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-mvp-chain.ps1)
+- [`scripts/dev/check-agent-db2-contract.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-agent-db2-contract.sh)
+- [`scripts/dev/check-asset-quality-overview.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-asset-quality-overview.sh)
+- [`scripts/dev/check-phase2-batch1-readonly-catalog.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-phase2-batch1-readonly-catalog.sh)
 
 ## 本地启动顺序
 
@@ -128,3 +131,36 @@ Windows PowerShell:
 ```powershell
 .\scripts\dev\check-mvp-chain.ps1 http://localhost:8080 platform.admin Admin@123 2
 ```
+
+### 8. 执行企业 Agent DB-2 只读合同检查
+
+macOS / Linux:
+
+```bash
+bash scripts/dev/check-agent-db2-contract.sh
+```
+
+该脚本会使用 `hermes_agent_ro` 只读账号验证企业 Agent 可接入的四个稳定 View、必要字段、事件游标，以及业务底表不可读。默认只做结构和数量校验，不打印真实项目名、文件名或 NAS 路径。
+
+只读密码默认从 macOS 钥匙串读取：
+
+```text
+service: delivery-platform-hermes-agent-ro-local-dev
+account: hermes_agent_ro
+```
+
+如在临时环境中运行，也可以通过环境变量传入：
+
+```bash
+READONLY_PASSWORD='***' bash scripts/dev/check-agent-db2-contract.sh
+```
+
+### 9. 执行一期数据质量体检检查
+
+macOS / Linux:
+
+```bash
+bash scripts/dev/check-asset-quality-overview.sh http://localhost:8080 platform.admin Admin@123 2
+```
+
+该脚本会验证“数据质量”页面对应的后端接口：真实 NAS 资产体检、项目级体检、菜单入口，以及固定项目的权限隔离。脚本只读取平台元数据，不读取文件正文，也不会修改或删除 NAS 文件。

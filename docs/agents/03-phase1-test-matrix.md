@@ -1,6 +1,8 @@
 # 第一阶段测试矩阵
 
-> 版本说明：本文档保留早期平台基础工程测试矩阵。新的内部 BIM 资产管理试点和企业 agent 对接验收矩阵已经固化在 [08-acceptance-and-agent-integration.md](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/docs/08-acceptance-and-agent-integration.md)。
+> 版本说明：本文档保留早期平台基础工程测试矩阵。新的内部 BIM 资产管理试点和企业 agent 对接验收矩阵已经固化在 [08-acceptance-and-agent-integration.md](/Users/vc/Documents/数字化交付平台/docs/08-acceptance-and-agent-integration.md)。
+
+> 当前裁决：下一轮测试重点应切换到一期后端 Phase A：项目清单、NAS 路径映射、CSV/xlsx 导入、NAS 扫描、待审核队列、自动入库、SQL View 基础、OpenAPI 和审计。前端资产页面暂不作为阻塞项。
 
 本文件用于承接测试 agent 在第一阶段输出的首轮验收矩阵，作为开发 agent 交付后立即执行的测试口径。
 

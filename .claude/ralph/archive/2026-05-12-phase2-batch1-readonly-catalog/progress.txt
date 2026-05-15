@@ -1,0 +1,25 @@
+# Ralph Progress — 二期批次一：只读资产目录与 Agent 对接预览层
+
+Branch: ralph/phase2-batch1-readonly-catalog
+Started: 2026-05-12
+Completed: 2026-05-12
+
+US-001: Add Catalog DTOs and Permission Proof DTOs — completed
+US-002: Add CatalogApplicationService — completed
+US-003: Add CatalogController — completed
+US-004: Add PermissionProof REST endpoints — completed
+US-005: Add frontend Catalog page — completed
+US-006: Add Agent Preview page + routes + menu — completed
+US-007: Verification script + builds + report — completed
+
+## Verification
+- Backend build: BUILD SUCCESS (8 modules)
+- Frontend build: built in 2.65s
+- Health check: UP
+- Verification script: 20/20 PASS
+
+## Main Agent Audit Fix (2026-05-12)
+- Issue: unauthorized user audit-context returned 500 CORE_INTERNAL_ERROR
+- Root cause: queryForObject threw EmptyResultDataAccessException
+- Fix: changed to query() + list isEmpty check + BusinessException 404
+- Verified: admin=200, unauthorized=404, script 20/20 PASS

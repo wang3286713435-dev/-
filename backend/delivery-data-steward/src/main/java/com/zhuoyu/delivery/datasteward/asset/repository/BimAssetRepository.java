@@ -2,11 +2,14 @@ package com.zhuoyu.delivery.datasteward.asset.repository;
 
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.AssetProjectResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CapacityByDiscipline;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CapacityByFileKind;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CapacityByProject;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileAssetResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ModelAssetResponse;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -43,13 +46,13 @@ public class BimAssetRepository {
         if (existingId.isPresent()) {
             jdbcTemplate.update("""
                 UPDATE core_projects
-                SET name = :name,
-                    industry_type = :industryType,
-                    project_stage = :projectStage,
-                    project_manager_name = :projectManagerName,
-                    owner_org_name = :ownerOrgName,
+                SET name = COALESCE(:name, name),
+                    industry_type = COALESCE(:industryType, industry_type),
+                    project_stage = COALESCE(:projectStage, project_stage),
+                    project_manager_name = COALESCE(:projectManagerName, project_manager_name),
+                    owner_org_name = COALESCE(:ownerOrgName, owner_org_name),
                     asset_status = 'ACTIVE',
-                    asset_source = :assetSource,
+                    asset_source = COALESCE(:assetSource, asset_source),
                     updated_by = :operatorId
                 WHERE id = :projectId AND deleted = 0
                 """, new MapSqlParameterSource()
@@ -68,8 +71,10 @@ public class BimAssetRepository {
                 code, name, industry_type, project_stage, project_manager_name,
                 owner_org_name, asset_status, asset_source, created_by, updated_by
             ) VALUES (
-                :code, :name, :industryType, :projectStage, :projectManagerName,
-                :ownerOrgName, 'ACTIVE', :assetSource, :operatorId, :operatorId
+                :code, :name, COALESCE(:industryType, 'OTHER'), COALESCE(:projectStage, 'UNKNOWN'),
+                COALESCE(:projectManagerName, ''),
+                COALESCE(:ownerOrgName, ''),
+                'ACTIVE', COALESCE(:assetSource, 'API'), :operatorId, :operatorId
             )
             """;
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -120,7 +125,15 @@ public class BimAssetRepository {
     }
 
     public List<AssetProjectResponse> listProjects(Long userId, String keyword) {
-        return jdbcTemplate.query("""
+        return listProjects(userId, keyword, null);
+    }
+
+    public List<AssetProjectResponse> listProjects(Long userId, String keyword, String assetSource) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+            .addValue("userId", userId)
+            .addValue("keyword", blankToNull(keyword))
+            .addValue("likeKeyword", likeKeyword(keyword));
+        StringBuilder sql = new StringBuilder("""
             SELECT p.id,
                    p.code,
                    p.name,
@@ -131,7 +144,9 @@ public class BimAssetRepository {
                    p.asset_source,
                    COUNT(f.id) AS model_count,
                    COALESCE(SUM(f.size_bytes), 0) AS total_size_bytes,
-                   MAX(f.updated_at) AS last_model_updated_at
+                   MAX(f.updated_at) AS last_model_updated_at,
+                   MAX(f.last_verified_at) AS last_asset_verified_at,
+                   p.updated_at AS project_updated_at
             FROM core_user_project_roles upr
             JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
             LEFT JOIN data_file_resources f
@@ -146,18 +161,20 @@ public class BimAssetRepository {
                   OR p.name LIKE :likeKeyword
                   OR p.project_manager_name LIKE :likeKeyword
               )
+            """);
+        appendAssetSourceFilter(sql, params, "p", assetSource);
+        sql.append("""
             GROUP BY p.id, p.code, p.name, p.industry_type, p.project_stage,
-                     p.project_manager_name, p.asset_status, p.asset_source
+                     p.project_manager_name, p.asset_status, p.asset_source, p.updated_at
             ORDER BY total_size_bytes DESC, p.id DESC
-            """, new MapSqlParameterSource()
-            .addValue("userId", userId)
-            .addValue("keyword", blankToNull(keyword))
-            .addValue("likeKeyword", likeKeyword(keyword)), PROJECT_ROW_MAPPER);
+            """);
+        return jdbcTemplate.query(sql.toString(), params, PROJECT_ROW_MAPPER);
     }
 
-    public Long insertModelFile(
+    public Long insertFileAsset(
         Long projectId,
         String originalName,
+        String fileKind,
         Long sizeBytes,
         String storageUri,
         String storageProvider,
@@ -166,25 +183,86 @@ public class BimAssetRepository {
         String discipline,
         String versionNo,
         String sourceType,
+        String confidenceLevel,
         Long operatorId
     ) {
+        return upsertFileAsset(projectId, originalName, fileKind, sizeBytes, storageUri,
+            storageProvider, storageKey, digest, discipline, versionNo, sourceType,
+            "APPROVED", confidenceLevel, operatorId);
+    }
+
+    public Long upsertFileAsset(
+        Long projectId,
+        String originalName,
+        String fileKind,
+        Long sizeBytes,
+        String storageUri,
+        String storageProvider,
+        String storageKey,
+        String digest,
+        String discipline,
+        String versionNo,
+        String sourceType,
+        String reviewStatus,
+        String confidenceLevel,
+        Long operatorId
+    ) {
+        Optional<Long> existingId = findFileIdByStorageUri(projectId, storageUri);
+        if (existingId.isPresent()) {
+            jdbcTemplate.update("""
+                UPDATE data_file_resources
+                SET original_name = :originalName,
+                    file_kind = :fileKind,
+                    size_bytes = :sizeBytes,
+                    storage_provider = :storageProvider,
+                    storage_key = :storageKey,
+                    source_path_digest = :digest,
+                    business_tag = :discipline,
+                    discipline = :discipline,
+                    source_type = :sourceType,
+                    version_no = :versionNo,
+                    process_status = 'PROCESSED',
+                    processed_at = CURRENT_TIMESTAMP,
+                    last_verified_at = CURRENT_TIMESTAMP,
+                    review_status = :reviewStatus,
+                    confidence_level = :confidenceLevel,
+                    updated_by = :operatorId
+                WHERE id = :fileId AND deleted = 0
+                """, new MapSqlParameterSource()
+                .addValue("fileId", existingId.get())
+                .addValue("originalName", originalName)
+                .addValue("fileKind", fileKind != null && !fileKind.isBlank() ? fileKind.toUpperCase() : "OTHER")
+                .addValue("sizeBytes", sizeBytes)
+                .addValue("storageProvider", storageProvider)
+                .addValue("storageKey", storageKey)
+                .addValue("digest", digest)
+                .addValue("discipline", discipline)
+                .addValue("sourceType", sourceType)
+                .addValue("versionNo", versionNo)
+                .addValue("reviewStatus", reviewStatus)
+                .addValue("confidenceLevel", confidenceLevel)
+                .addValue("operatorId", operatorId));
+            return existingId.get();
+        }
+        String kind = fileKind != null && !fileKind.isBlank() ? fileKind.toUpperCase() : "OTHER";
         String sql = """
             INSERT INTO data_file_resources (
                 project_id, original_name, file_kind, mime_type, size_bytes, storage_uri,
-                storage_provider, storage_key, source_path_digest, business_tag, discipline,
-                source_type, version_no, process_status, processed_at, last_verified_at,
-                created_by, updated_by
+                storage_provider, storage_key, logical_path, source_path_digest, business_tag,
+                discipline, source_type, version_no, process_status, processed_at,
+                last_verified_at, review_status, confidence_level, created_by, updated_by
             ) VALUES (
-                :projectId, :originalName, 'MODEL', 'application/octet-stream', :sizeBytes, :storageUri,
-                :storageProvider, :storageKey, :digest, :discipline, :discipline,
-                :sourceType, :versionNo, 'PROCESSED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
-                :operatorId, :operatorId
+                :projectId, :originalName, :fileKind, 'application/octet-stream', :sizeBytes, :storageUri,
+                :storageProvider, :storageKey, :storageKey, :digest, :discipline,
+                :discipline, :sourceType, :versionNo, 'PROCESSED', CURRENT_TIMESTAMP,
+                CURRENT_TIMESTAMP, :reviewStatus, :confidenceLevel, :operatorId, :operatorId
             )
             """;
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(sql, new MapSqlParameterSource()
             .addValue("projectId", projectId)
             .addValue("originalName", originalName)
+            .addValue("fileKind", kind)
             .addValue("sizeBytes", sizeBytes)
             .addValue("storageUri", storageUri)
             .addValue("storageProvider", storageProvider)
@@ -193,6 +271,8 @@ public class BimAssetRepository {
             .addValue("discipline", discipline)
             .addValue("sourceType", sourceType)
             .addValue("versionNo", versionNo)
+            .addValue("reviewStatus", reviewStatus)
+            .addValue("confidenceLevel", confidenceLevel)
             .addValue("operatorId", operatorId), keyHolder);
         return Objects.requireNonNull(keyHolder.getKey()).longValue();
     }
@@ -221,6 +301,20 @@ public class BimAssetRepository {
             .addValue("projectId", projectId)
             .addValue("storageUri", storageUri), Integer.class);
         return count != null && count > 0;
+    }
+
+    public Optional<Long> findFileIdByStorageUri(Long projectId, String storageUri) {
+        List<Long> rows = jdbcTemplate.query("""
+            SELECT id
+            FROM data_file_resources
+            WHERE project_id = :projectId
+              AND storage_uri = :storageUri
+              AND deleted = 0
+            LIMIT 1
+            """, new MapSqlParameterSource()
+            .addValue("projectId", projectId)
+            .addValue("storageUri", storageUri), (rs, rowNum) -> rs.getLong("id"));
+        return rows.stream().findFirst();
     }
 
     public List<ModelAssetResponse> listModels(Long userId, String keyword, Long projectId, String discipline) {
@@ -291,89 +385,188 @@ public class BimAssetRepository {
     }
 
     public int countAssetProjects(Long userId) {
-        Integer count = jdbcTemplate.queryForObject("""
+        return countAssetProjects(userId, null, null);
+    }
+
+    public int countAssetProjects(Long userId, Long projectId) {
+        return countAssetProjects(userId, projectId, null);
+    }
+
+    public int countAssetProjects(Long userId, Long projectId, String assetSource) {
+        MapSqlParameterSource params = new MapSqlParameterSource("userId", userId);
+        StringBuilder sql = new StringBuilder("""
             SELECT COUNT(DISTINCT p.id)
             FROM core_user_project_roles upr
             JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
             WHERE upr.user_id = :userId AND upr.deleted = 0
-            """, new MapSqlParameterSource("userId", userId), Integer.class);
+            """);
+        if (projectId != null) {
+            sql.append(" AND p.id = :projectId");
+            params.addValue("projectId", projectId);
+        }
+        appendAssetSourceFilter(sql, params, "p", assetSource);
+        Integer count = jdbcTemplate.queryForObject(sql.toString(), params, Integer.class);
         return count == null ? 0 : count;
     }
 
     public int countModelFiles(Long userId) {
-        Integer count = jdbcTemplate.queryForObject("""
+        return countModelFiles(userId, null, null);
+    }
+
+    public int countModelFiles(Long userId, Long projectId) {
+        return countModelFiles(userId, projectId, null);
+    }
+
+    public int countModelFiles(Long userId, Long projectId, String assetSource) {
+        MapSqlParameterSource params = new MapSqlParameterSource("userId", userId);
+        StringBuilder sql = new StringBuilder("""
             SELECT COUNT(1)
             FROM core_user_project_roles upr
-            JOIN data_file_resources f ON f.project_id = upr.project_id AND f.deleted = 0 AND f.file_kind = 'MODEL'
+            JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
+            JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0 AND f.file_kind = 'MODEL'
             WHERE upr.user_id = :userId AND upr.deleted = 0
-            """, new MapSqlParameterSource("userId", userId), Integer.class);
+            """);
+        if (projectId != null) {
+            sql.append(" AND f.project_id = :projectId");
+            params.addValue("projectId", projectId);
+        }
+        appendAssetSourceFilter(sql, params, "p", assetSource);
+        Integer count = jdbcTemplate.queryForObject(sql.toString(), params, Integer.class);
         return count == null ? 0 : count;
     }
 
-    public long totalModelSize(Long userId) {
-        Long total = jdbcTemplate.queryForObject("""
+    public long totalAllFileSize(Long userId) {
+        return totalAllFileSize(userId, null, null);
+    }
+
+    public long totalAllFileSize(Long userId, Long projectId) {
+        return totalAllFileSize(userId, projectId, null);
+    }
+
+    public long totalAllFileSize(Long userId, Long projectId, String assetSource) {
+        MapSqlParameterSource params = new MapSqlParameterSource("userId", userId);
+        StringBuilder sql = new StringBuilder("""
             SELECT COALESCE(SUM(f.size_bytes), 0)
             FROM core_user_project_roles upr
-            JOIN data_file_resources f ON f.project_id = upr.project_id AND f.deleted = 0 AND f.file_kind = 'MODEL'
+            JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
+            JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0
             WHERE upr.user_id = :userId AND upr.deleted = 0
-            """, new MapSqlParameterSource("userId", userId), Long.class);
+            """);
+        if (projectId != null) {
+            sql.append(" AND f.project_id = :projectId");
+            params.addValue("projectId", projectId);
+        }
+        appendAssetSourceFilter(sql, params, "p", assetSource);
+        Long total = jdbcTemplate.queryForObject(sql.toString(), params, Long.class);
         return total == null ? 0L : total;
     }
 
     public List<CapacityByDiscipline> capacityByDiscipline(Long userId) {
-        return jdbcTemplate.query("""
+        return capacityByDiscipline(userId, null, null);
+    }
+
+    public List<CapacityByDiscipline> capacityByDiscipline(Long userId, Long projectId) {
+        return capacityByDiscipline(userId, projectId, null);
+    }
+
+    public List<CapacityByDiscipline> capacityByDiscipline(Long userId, Long projectId, String assetSource) {
+        MapSqlParameterSource params = new MapSqlParameterSource("userId", userId);
+        StringBuilder sql = new StringBuilder("""
             SELECT COALESCE(f.discipline, '未分类') AS discipline,
-                   COUNT(1) AS model_file_count,
+                   COUNT(1) AS file_count,
                    COALESCE(SUM(f.size_bytes), 0) AS total_size_bytes
             FROM core_user_project_roles upr
-            JOIN data_file_resources f ON f.project_id = upr.project_id AND f.deleted = 0 AND f.file_kind = 'MODEL'
+            JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
+            JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0
             WHERE upr.user_id = :userId AND upr.deleted = 0
-            GROUP BY COALESCE(f.discipline, '未分类')
-            ORDER BY total_size_bytes DESC
-            """, new MapSqlParameterSource("userId", userId), (rs, rowNum) -> new CapacityByDiscipline(
+            """);
+        if (projectId != null) {
+            sql.append(" AND f.project_id = :projectId");
+            params.addValue("projectId", projectId);
+        }
+        appendAssetSourceFilter(sql, params, "p", assetSource);
+        sql.append("""
+             GROUP BY COALESCE(f.discipline, '未分类')
+             ORDER BY total_size_bytes DESC
+            """);
+        return jdbcTemplate.query(sql.toString(), params, (rs, rowNum) -> new CapacityByDiscipline(
             rs.getString("discipline"),
-            rs.getInt("model_file_count"),
+            rs.getInt("file_count"),
             rs.getLong("total_size_bytes")
         ));
     }
 
     public List<CapacityByProject> topProjectCapacity(Long userId) {
-        return jdbcTemplate.query("""
+        return topProjectCapacity(userId, null, null);
+    }
+
+    public List<CapacityByProject> topProjectCapacity(Long userId, Long projectId) {
+        return topProjectCapacity(userId, projectId, null);
+    }
+
+    public List<CapacityByProject> topProjectCapacity(Long userId, Long projectId, String assetSource) {
+        MapSqlParameterSource params = new MapSqlParameterSource("userId", userId);
+        StringBuilder sql = new StringBuilder("""
             SELECT p.id AS project_id,
                    p.code AS project_code,
                    p.name AS project_name,
-                   COUNT(f.id) AS model_file_count,
+                   COUNT(f.id) AS file_count,
                    COALESCE(SUM(f.size_bytes), 0) AS total_size_bytes
             FROM core_user_project_roles upr
             JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
-            JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0 AND f.file_kind = 'MODEL'
+            JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0
             WHERE upr.user_id = :userId AND upr.deleted = 0
-            GROUP BY p.id, p.code, p.name
-            ORDER BY total_size_bytes DESC
-            LIMIT 10
-            """, new MapSqlParameterSource("userId", userId), (rs, rowNum) -> new CapacityByProject(
+            """);
+        if (projectId != null) {
+            sql.append(" AND p.id = :projectId");
+            params.addValue("projectId", projectId);
+        }
+        appendAssetSourceFilter(sql, params, "p", assetSource);
+        sql.append("""
+             GROUP BY p.id, p.code, p.name
+             ORDER BY total_size_bytes DESC
+             LIMIT 10
+            """);
+        return jdbcTemplate.query(sql.toString(), params, (rs, rowNum) -> new CapacityByProject(
             rs.getLong("project_id"),
             rs.getString("project_code"),
             rs.getString("project_name"),
-            rs.getInt("model_file_count"),
+            rs.getInt("file_count"),
             rs.getLong("total_size_bytes")
         ));
     }
 
     private static AssetProjectResponse mapProject(ResultSet rs, int rowNum) throws SQLException {
         Timestamp lastModelUpdatedAt = rs.getTimestamp("last_model_updated_at");
+        Timestamp lastAssetVerifiedAt = rs.getTimestamp("last_asset_verified_at");
+        Timestamp projectUpdatedAt = rs.getTimestamp("project_updated_at");
+        String assetSource = rs.getString("asset_source");
+        String confidentialityLevel = projectConfidentialityLevel(assetSource);
+        String indexEligibility = projectIndexEligibility(assetSource);
+        Instant lastSeenAt = lastAssetVerifiedAt == null
+            ? (lastModelUpdatedAt == null
+                ? (projectUpdatedAt == null ? null : projectUpdatedAt.toInstant())
+                : lastModelUpdatedAt.toInstant())
+            : lastAssetVerifiedAt.toInstant();
+        Long projectId = rs.getLong("id");
         return new AssetProjectResponse(
-            rs.getLong("id"),
+            projectId,
             rs.getString("code"),
             rs.getString("name"),
             rs.getString("industry_type"),
             rs.getString("project_stage"),
             rs.getString("project_manager_name"),
             rs.getString("asset_status"),
-            rs.getString("asset_source"),
+            assetSource,
             rs.getInt("model_count"),
             rs.getLong("total_size_bytes"),
-            lastModelUpdatedAt == null ? null : lastModelUpdatedAt.toInstant()
+            lastModelUpdatedAt == null ? null : lastModelUpdatedAt.toInstant(),
+            permissionTags("ProjectAssetView", "PROJECT", projectId, confidentialityLevel, indexEligibility),
+            null,
+            confidentialityLevel,
+            lastSeenAt,
+            lifecycleStatus(rs.getString("asset_status"), null, null, null),
+            indexEligibility
         );
     }
 
@@ -381,22 +574,492 @@ public class BimAssetRepository {
         Timestamp lastVerifiedAt = rs.getTimestamp("last_verified_at");
         Long projectId = rs.getLong("project_id");
         Long fileId = rs.getLong("file_id");
+        String originalName = rs.getString("original_name");
+        String sourceType = rs.getString("source_type");
+        String confidentialityLevel = fileConfidentialityLevel(sourceType);
+        String indexEligibility = fileIndexEligibility(sourceType, originalName);
         return new ModelAssetResponse(
             fileId,
             projectId,
             rs.getString("project_code"),
             rs.getString("project_name"),
-            rs.getString("original_name"),
+            originalName,
             rs.getLong("size_bytes"),
             rs.getString("version_no"),
             rs.getString("process_status"),
             rs.getString("storage_provider"),
             rs.getString("storage_key"),
             rs.getString("discipline"),
-            rs.getString("source_type"),
+            sourceType,
             lastVerifiedAt == null ? null : lastVerifiedAt.toInstant(),
-            "/api/data-steward/projects/" + projectId + "/asset-files/" + fileId + "/content"
+            "/api/data-steward/projects/" + projectId + "/asset-files/" + fileId + "/content",
+            permissionTags("ModelAssetView", "MODEL", projectId, confidentialityLevel, indexEligibility),
+            null,
+            confidentialityLevel,
+            lastVerifiedAt == null ? null : lastVerifiedAt.toInstant(),
+            lifecycleStatus(null, rs.getString("process_status"), rs.getString("source_type"), lastVerifiedAt),
+            indexEligibility
         );
+    }
+
+    public List<FileAssetResponse> listFileById(Long userId, Long fileId) {
+        return jdbcTemplate.query("""
+            SELECT f.id AS file_id, f.project_id, p.code AS project_code, p.name AS project_name,
+                   f.original_name, f.file_kind, f.discipline, f.version_no, f.size_bytes,
+                   f.checksum, f.storage_provider, f.storage_uri, f.logical_path,
+                   f.source_type, f.process_status, f.review_status, f.confidence_level,
+                   f.created_at, f.updated_at, f.last_verified_at
+            FROM core_user_project_roles upr
+            JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
+            JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0 AND f.id = :fileId
+            WHERE upr.user_id = :userId AND upr.deleted = 0
+            """, new MapSqlParameterSource()
+            .addValue("userId", userId)
+            .addValue("fileId", fileId), (rs, rowNum) -> {
+                Timestamp ca = rs.getTimestamp("created_at");
+                Timestamp ua = rs.getTimestamp("updated_at");
+                Timestamp lastVerifiedAt = rs.getTimestamp("last_verified_at");
+                String originalName = rs.getString("original_name");
+                String sourceType = rs.getString("source_type");
+                String confidentialityLevel = fileConfidentialityLevel(sourceType);
+                String indexEligibility = fileIndexEligibility(sourceType, originalName);
+                Instant lastSeenAt = lastVerifiedAt == null
+                    ? (ua == null ? null : ua.toInstant())
+                    : lastVerifiedAt.toInstant();
+                return new FileAssetResponse(
+                    rs.getLong("file_id"), rs.getLong("project_id"),
+                    rs.getString("project_code"), rs.getString("project_name"),
+                    originalName,
+                    extensionOf(originalName),
+                    rs.getString("file_kind"), rs.getString("discipline"),
+                    rs.getString("version_no"), rs.getLong("size_bytes"),
+                    rs.getString("checksum"), rs.getString("storage_provider"),
+                    rs.getString("storage_uri"), rs.getString("logical_path"),
+                    sourceType, rs.getString("process_status"),
+                    rs.getString("review_status"), rs.getString("confidence_level"),
+                    ca == null ? null : ca.toInstant(),
+                    ua == null ? null : ua.toInstant(),
+                    permissionTags("FileAssetView", "FILE", rs.getLong("project_id"), confidentialityLevel, indexEligibility),
+                    null,
+                    confidentialityLevel,
+                    lastSeenAt,
+                    lifecycleStatus(null, rs.getString("process_status"), sourceType, lastVerifiedAt),
+                    indexEligibility);
+            });
+    }
+
+    public List<FileAssetResponse> listFiles(Long userId, Long projectId, String fileKind,
+                                               String discipline, String fileName, String fileExt,
+                                               String sourceType, String keyword) {
+        return listFiles(userId, projectId, fileKind, discipline, fileName, fileExt,
+            sourceType, keyword, null, null, 0, 200);
+    }
+
+    public List<FileAssetResponse> listFiles(Long userId, Long projectId, String fileKind,
+                                               String discipline, String fileName, String fileExt,
+                                               String sourceType, String keyword, String assetSource,
+                                               String qualityIssue, int offset, int limit) {
+        StringBuilder sb = new StringBuilder("""
+            SELECT f.id AS file_id, f.project_id, p.code AS project_code, p.name AS project_name,
+                   f.original_name, f.file_kind, f.discipline, f.version_no, f.size_bytes,
+                   f.checksum, f.storage_provider, f.storage_uri, f.logical_path,
+                   f.source_type, f.process_status, f.review_status, f.confidence_level,
+                   f.created_at, f.updated_at, f.last_verified_at
+            FROM core_user_project_roles upr
+            JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
+            JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0
+            WHERE upr.user_id = :userId AND upr.deleted = 0
+            """);
+        MapSqlParameterSource params = new MapSqlParameterSource("userId", userId);
+        appendFileFilters(sb, params, projectId, fileKind, discipline, fileName,
+            fileExt, sourceType, keyword, assetSource, qualityIssue);
+        sb.append(" ORDER BY f.updated_at DESC, f.id DESC LIMIT :limit OFFSET :offset");
+        params.addValue("limit", Math.max(1, Math.min(limit, 500)));
+        params.addValue("offset", Math.max(0, offset));
+        return jdbcTemplate.query(sb.toString(), params, (rs, rowNum) -> {
+            Timestamp ca = rs.getTimestamp("created_at");
+            Timestamp ua = rs.getTimestamp("updated_at");
+            Timestamp lastVerifiedAt = rs.getTimestamp("last_verified_at");
+            String originalName = rs.getString("original_name");
+            String rowSourceType = rs.getString("source_type");
+            String confidentialityLevel = fileConfidentialityLevel(rowSourceType);
+            String indexEligibility = fileIndexEligibility(rowSourceType, originalName);
+            Instant lastSeenAt = lastVerifiedAt == null
+                ? (ua == null ? null : ua.toInstant())
+                : lastVerifiedAt.toInstant();
+            return new FileAssetResponse(
+                rs.getLong("file_id"), rs.getLong("project_id"),
+                rs.getString("project_code"), rs.getString("project_name"),
+                originalName,
+                extensionOf(originalName),
+                rs.getString("file_kind"), rs.getString("discipline"),
+                rs.getString("version_no"), rs.getLong("size_bytes"),
+                rs.getString("checksum"), rs.getString("storage_provider"),
+                rs.getString("storage_uri"), rs.getString("logical_path"),
+                rowSourceType, rs.getString("process_status"),
+                rs.getString("review_status"), rs.getString("confidence_level"),
+                ca == null ? null : ca.toInstant(),
+                ua == null ? null : ua.toInstant(),
+                permissionTags("FileAssetView", "FILE", rs.getLong("project_id"), confidentialityLevel, indexEligibility),
+                null,
+                confidentialityLevel,
+                lastSeenAt,
+                lifecycleStatus(null, rs.getString("process_status"), rowSourceType, lastVerifiedAt),
+                indexEligibility);
+        });
+    }
+
+    public long countFiles(Long userId, Long projectId, String fileKind,
+                           String discipline, String fileName, String fileExt,
+                           String sourceType, String keyword, String assetSource,
+                           String qualityIssue) {
+        StringBuilder sb = new StringBuilder("""
+            SELECT COUNT(1)
+            FROM core_user_project_roles upr
+            JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
+            JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0
+            WHERE upr.user_id = :userId AND upr.deleted = 0
+            """);
+        MapSqlParameterSource params = new MapSqlParameterSource("userId", userId);
+        appendFileFilters(sb, params, projectId, fileKind, discipline, fileName,
+            fileExt, sourceType, keyword, assetSource, qualityIssue);
+        Long count = jdbcTemplate.queryForObject(sb.toString(), params, Long.class);
+        return count == null ? 0L : count;
+    }
+
+    public int countAllFiles(Long userId) {
+        return countAllFiles(userId, null, null);
+    }
+
+    public int countAllFiles(Long userId, Long projectId) {
+        return countAllFiles(userId, projectId, null);
+    }
+
+    public int countAllFiles(Long userId, Long projectId, String assetSource) {
+        MapSqlParameterSource params = new MapSqlParameterSource("userId", userId);
+        StringBuilder sql = new StringBuilder("""
+            SELECT COUNT(1)
+            FROM core_user_project_roles upr
+            JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
+            JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0
+            WHERE upr.user_id = :userId AND upr.deleted = 0
+            """);
+        if (projectId != null) {
+            sql.append(" AND f.project_id = :projectId");
+            params.addValue("projectId", projectId);
+        }
+        appendAssetSourceFilter(sql, params, "p", assetSource);
+        Integer count = jdbcTemplate.queryForObject(sql.toString(), params, Integer.class);
+        return count == null ? 0 : count;
+    }
+
+    public int countDrawingFiles(Long userId) {
+        return countDrawingFiles(userId, null, null);
+    }
+
+    public int countDrawingFiles(Long userId, Long projectId) {
+        return countDrawingFiles(userId, projectId, null);
+    }
+
+    public int countDrawingFiles(Long userId, Long projectId, String assetSource) {
+        MapSqlParameterSource params = new MapSqlParameterSource("userId", userId);
+        StringBuilder sql = new StringBuilder("""
+            SELECT COUNT(1)
+            FROM core_user_project_roles upr
+            JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
+            JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0 AND f.file_kind = 'DRAWING'
+            WHERE upr.user_id = :userId AND upr.deleted = 0
+            """);
+        if (projectId != null) {
+            sql.append(" AND f.project_id = :projectId");
+            params.addValue("projectId", projectId);
+        }
+        appendAssetSourceFilter(sql, params, "p", assetSource);
+        Integer count = jdbcTemplate.queryForObject(sql.toString(), params, Integer.class);
+        return count == null ? 0 : count;
+    }
+
+    public List<CapacityByFileKind> capacityByFileKind(Long userId) {
+        return capacityByFileKind(userId, null, null);
+    }
+
+    public List<CapacityByFileKind> capacityByFileKind(Long userId, Long projectId) {
+        return capacityByFileKind(userId, projectId, null);
+    }
+
+    public List<CapacityByFileKind> capacityByFileKind(Long userId, Long projectId, String assetSource) {
+        MapSqlParameterSource params = new MapSqlParameterSource("userId", userId);
+        StringBuilder sql = new StringBuilder("""
+            SELECT COALESCE(f.file_kind, 'OTHER') AS file_kind,
+                   COUNT(1) AS file_count,
+                   COALESCE(SUM(f.size_bytes), 0) AS total_size_bytes
+            FROM core_user_project_roles upr
+            JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
+            JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0
+            WHERE upr.user_id = :userId AND upr.deleted = 0
+            """);
+        if (projectId != null) {
+            sql.append(" AND f.project_id = :projectId");
+            params.addValue("projectId", projectId);
+        }
+        appendAssetSourceFilter(sql, params, "p", assetSource);
+        sql.append("""
+             GROUP BY COALESCE(f.file_kind, 'OTHER')
+             ORDER BY total_size_bytes DESC
+            """);
+        return jdbcTemplate.query(sql.toString(), params, (rs, rowNum) -> new CapacityByFileKind(
+            rs.getString("file_kind"),
+            rs.getInt("file_count"),
+            rs.getLong("total_size_bytes")
+        ));
+    }
+
+    public java.util.Optional<FileAssetResponse> getFileByIdPlain(Long fileId) {
+        List<FileAssetResponse> rows = jdbcTemplate.query("""
+            SELECT f.id AS file_id, f.project_id, '' AS project_code, '' AS project_name,
+                   f.original_name, f.file_kind, f.discipline, f.version_no, f.size_bytes,
+                   f.checksum, f.storage_provider, f.storage_uri, f.logical_path,
+                   f.source_type, f.process_status, f.review_status, f.confidence_level,
+                   f.created_at, f.updated_at, f.last_verified_at
+            FROM data_file_resources f
+            WHERE f.id = :fileId AND f.deleted = 0
+            """, new MapSqlParameterSource("fileId", fileId), (rs, rowNum) -> {
+                Timestamp ca = rs.getTimestamp("created_at");
+                Timestamp ua = rs.getTimestamp("updated_at");
+                Timestamp lastVerifiedAt = rs.getTimestamp("last_verified_at");
+                String originalName = rs.getString("original_name");
+                String sourceType = rs.getString("source_type");
+                String confidentialityLevel = fileConfidentialityLevel(sourceType);
+                String indexEligibility = fileIndexEligibility(sourceType, originalName);
+                Instant lastSeenAt = lastVerifiedAt == null
+                    ? (ua == null ? null : ua.toInstant())
+                    : lastVerifiedAt.toInstant();
+                return new FileAssetResponse(
+                    rs.getLong("file_id"), rs.getLong("project_id"),
+                    rs.getString("project_code"), rs.getString("project_name"),
+                    originalName,
+                    extensionOf(originalName),
+                    rs.getString("file_kind"), rs.getString("discipline"),
+                    rs.getString("version_no"), rs.getLong("size_bytes"),
+                    rs.getString("checksum"), rs.getString("storage_provider"),
+                    rs.getString("storage_uri"), rs.getString("logical_path"),
+                    sourceType, rs.getString("process_status"),
+                    rs.getString("review_status"), rs.getString("confidence_level"),
+                    ca == null ? null : ca.toInstant(),
+                    ua == null ? null : ua.toInstant(),
+                    permissionTags("FileAssetView", "FILE", rs.getLong("project_id"), confidentialityLevel, indexEligibility),
+                    null,
+                    confidentialityLevel,
+                    lastSeenAt,
+                    lifecycleStatus(null, rs.getString("process_status"), sourceType, lastVerifiedAt),
+                    indexEligibility);
+            });
+        return rows.stream().findFirst();
+    }
+
+    public void updateChecksum(Long fileId, String checksum) {
+        jdbcTemplate.update("""
+            UPDATE data_file_resources
+            SET checksum = :checksum, updated_by = 0
+            WHERE id = :fileId AND deleted = 0
+            """, new MapSqlParameterSource()
+            .addValue("fileId", fileId)
+            .addValue("checksum", checksum));
+    }
+
+    public void updateFileMetadata(Long fileId, String fileKind, String discipline, String versionNo,
+                                   String confidenceLevel, String reviewStatus, Long operatorId) {
+        jdbcTemplate.update("""
+            UPDATE data_file_resources
+            SET file_kind = COALESCE(:fileKind, file_kind),
+                discipline = COALESCE(:discipline, discipline),
+                business_tag = COALESCE(:discipline, business_tag),
+                version_no = COALESCE(:versionNo, version_no),
+                confidence_level = COALESCE(:confidenceLevel, confidence_level),
+                review_status = COALESCE(:reviewStatus, review_status),
+                last_verified_at = CURRENT_TIMESTAMP,
+                updated_by = :operatorId
+            WHERE id = :fileId AND deleted = 0
+            """, new MapSqlParameterSource()
+            .addValue("fileId", fileId)
+            .addValue("fileKind", fileKind)
+            .addValue("discipline", discipline)
+            .addValue("versionNo", versionNo)
+            .addValue("confidenceLevel", confidenceLevel)
+            .addValue("reviewStatus", reviewStatus)
+            .addValue("operatorId", operatorId));
+    }
+
+    public Instant findLastUpdated(Long userId) {
+        return findLastUpdated(userId, null, null);
+    }
+
+    public Instant findLastUpdated(Long userId, Long projectId) {
+        return findLastUpdated(userId, projectId, null);
+    }
+
+    public Instant findLastUpdated(Long userId, Long projectId, String assetSource) {
+        MapSqlParameterSource params = new MapSqlParameterSource("userId", userId);
+        StringBuilder sql = new StringBuilder("""
+            SELECT MAX(f.updated_at)
+            FROM core_user_project_roles upr
+            JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
+            JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0
+            WHERE upr.user_id = :userId AND upr.deleted = 0
+            """);
+        if (projectId != null) {
+            sql.append(" AND f.project_id = :projectId");
+            params.addValue("projectId", projectId);
+        }
+        appendAssetSourceFilter(sql, params, "p", assetSource);
+        Timestamp ts = jdbcTemplate.queryForObject(sql.toString(), params, Timestamp.class);
+        return ts == null ? null : ts.toInstant();
+    }
+
+    private void appendIf(StringBuilder sb, MapSqlParameterSource params, String clause, String key, Object value) {
+        if (value != null) {
+            sb.append(' ').append(clause);
+            params.addValue(key, value);
+        }
+    }
+
+    private void appendFileFilters(StringBuilder sb, MapSqlParameterSource params,
+                                   Long projectId, String fileKind, String discipline,
+                                   String fileName, String fileExt, String sourceType,
+                                   String keyword, String assetSource, String qualityIssue) {
+        appendIf(sb, params, "AND p.id = :projectId", "projectId", projectId);
+        appendIf(sb, params, "AND f.file_kind = :fileKind", "fileKind", blankToNull(fileKind));
+        appendIf(sb, params, "AND f.discipline = :discipline", "discipline", blankToNull(discipline));
+        appendIf(sb, params, "AND f.original_name = :fileName", "fileName", blankToNull(fileName));
+        String normalizedExt = normalizeFileExt(fileExt);
+        if (normalizedExt != null) {
+            sb.append(" AND LOWER(SUBSTRING_INDEX(f.original_name, '.', -1)) = :fileExt");
+            params.addValue("fileExt", normalizedExt);
+        }
+        appendIf(sb, params, "AND f.source_type = :sourceType", "sourceType", blankToNull(sourceType));
+        if (keyword != null && !keyword.isBlank()) {
+            sb.append(" AND (p.code LIKE :likeKeyword OR p.name LIKE :likeKeyword OR f.original_name LIKE :likeKeyword OR f.storage_uri LIKE :likeKeyword)");
+            params.addValue("likeKeyword", likeKeyword(keyword));
+        }
+        appendQualityIssueFilter(sb, qualityIssue);
+        appendAssetSourceFilter(sb, params, "p", assetSource);
+    }
+
+    private void appendQualityIssueFilter(StringBuilder sb, String qualityIssue) {
+        String issue = blankToNull(qualityIssue);
+        if (issue == null) {
+            return;
+        }
+        switch (issue.toUpperCase()) {
+            case "MISSING_CHECKSUM" -> sb.append(" AND (f.checksum IS NULL OR f.checksum = '')");
+            case "MISSING_CONFIDENCE" -> sb.append(" AND (f.confidence_level IS NULL OR f.confidence_level = '')");
+            case "MISSING_DISCIPLINE" -> sb.append(" AND (f.discipline IS NULL OR f.discipline = '' OR f.discipline = 'OTHER')");
+            case "MISSING_VERSION" -> sb.append(" AND (f.version_no IS NULL OR f.version_no = '')");
+            case "MISSING_STORAGE_PATH" -> sb.append(" AND (f.storage_uri IS NULL OR f.storage_uri = '')");
+            case "ZERO_SIZE_FILE" -> sb.append(" AND COALESCE(f.size_bytes, 0) <= 0");
+            default -> {
+                // Unknown quality filters are ignored to keep existing file search behavior stable.
+            }
+        }
+    }
+
+    private void appendAssetSourceFilter(StringBuilder sb, MapSqlParameterSource params, String tableAlias, String assetSource) {
+        String source = blankToNull(assetSource);
+        if (source == null) {
+            return;
+        }
+        if (source.endsWith("*")) {
+            sb.append(" AND ").append(tableAlias).append(".asset_source LIKE :assetSourceLike ");
+            params.addValue("assetSourceLike", source.substring(0, source.length() - 1) + "%");
+            return;
+        }
+        sb.append(" AND ").append(tableAlias).append(".asset_source = :assetSource ");
+        params.addValue("assetSource", source);
+    }
+
+    private static String extensionOf(String name) {
+        int dot = name.lastIndexOf('.');
+        return dot >= 0 ? name.substring(dot + 1).toLowerCase() : "";
+    }
+
+    private static String normalizeFileExt(String value) {
+        String ext = blankToNull(value);
+        if (ext == null) {
+            return null;
+        }
+        while (ext.startsWith(".")) {
+            ext = ext.substring(1);
+        }
+        return ext.toLowerCase();
+    }
+
+    private static List<String> permissionTags(String sourceView, String assetKind, Long projectId,
+                                               String confidentialityLevel, String indexEligibility) {
+        return List.of(
+            "SOURCE_SYSTEM:delivery_platform",
+            "SOURCE_VIEW:" + sourceView,
+            "ASSET_KIND:" + assetKind,
+            "PROJECT:" + (projectId == null ? "UNKNOWN" : projectId),
+            "CONFIDENTIALITY:" + confidentialityLevel,
+            "INDEX_ELIGIBILITY:" + indexEligibility
+        );
+    }
+
+    private static String projectConfidentialityLevel(String assetSource) {
+        return "AGENT_TEST".equalsIgnoreCase(blankToNull(assetSource)) ? "INTERNAL" : "UNKNOWN";
+    }
+
+    private static String fileConfidentialityLevel(String sourceType) {
+        return "AGENT_TEST".equalsIgnoreCase(blankToNull(sourceType)) ? "INTERNAL" : "UNKNOWN";
+    }
+
+    private static String projectIndexEligibility(String assetSource) {
+        return "AGENT_TEST".equalsIgnoreCase(blankToNull(assetSource)) ? "preview_allowed" : "catalog_only";
+    }
+
+    private static String fileIndexEligibility(String sourceType, String originalName) {
+        if (!"AGENT_TEST".equalsIgnoreCase(blankToNull(sourceType))) {
+            return "catalog_only";
+        }
+        return switch (extensionOf(originalName)) {
+            case "txt", "pdf", "doc", "docx" -> "full_text_allowed";
+            case "xls", "xlsx" -> "preview_allowed";
+            default -> "preview_allowed";
+        };
+    }
+
+    private static String lifecycleStatus(String assetStatus, String processStatus,
+                                          String sourceType, Timestamp lastVerifiedAt) {
+        String asset = blankToNull(assetStatus);
+        if ("ARCHIVED".equalsIgnoreCase(asset)) {
+            return "archived";
+        }
+
+        String process = blankToNull(processStatus);
+        if (process != null) {
+            String normalized = process.toUpperCase();
+            if ("ARCHIVED".equals(normalized)) {
+                return "archived";
+            }
+            if ("DELETE_REQUESTED".equals(normalized)
+                || "DELETED".equals(normalized)
+                || "PENDING_DELETE".equals(normalized)) {
+                return "deleted_candidate";
+            }
+        }
+
+        if (lastVerifiedAt == null && isManagedNasSource(sourceType)) {
+            return "stale_unverified";
+        }
+        if (asset == null && process == null) {
+            return "unknown";
+        }
+        return "active";
+    }
+
+    private static boolean isManagedNasSource(String sourceType) {
+        String source = blankToNull(sourceType);
+        return "NAS_SCAN".equalsIgnoreCase(source) || "REVIEW".equalsIgnoreCase(source);
     }
 
     private static String blankToNull(String value) {

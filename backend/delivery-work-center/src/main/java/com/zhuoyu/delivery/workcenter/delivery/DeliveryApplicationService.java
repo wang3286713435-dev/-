@@ -1,11 +1,22 @@
 package com.zhuoyu.delivery.workcenter.delivery;
 
 import com.zhuoyu.delivery.core.audit.application.AuditLogApplicationService;
+import com.zhuoyu.delivery.masterdata.deliverable.application.DeliverableDefinitionApplicationService;
+import com.zhuoyu.delivery.masterdata.deliverable.application.DeliverableTypeApplicationService;
+import com.zhuoyu.delivery.masterdata.nodetype.application.NodeTypeApplicationService;
+import com.zhuoyu.delivery.masterdata.section.application.SectionNodeApplicationService;
+import com.zhuoyu.delivery.masterdata.template.application.DirectoryTemplateApplicationService;
 import com.zhuoyu.delivery.shared.exception.BusinessException;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DashboardSummaryResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryBindingRequest;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryBindingResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCompletenessResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCompletenessRow;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryViewResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.RejectRequest;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.ReviewRecordResponse;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -19,13 +30,28 @@ public class DeliveryApplicationService {
 
     private final DeliveryBindingRepository deliveryBindingRepository;
     private final AuditLogApplicationService auditLogApplicationService;
+    private final SectionNodeApplicationService sectionNodeApplicationService;
+    private final NodeTypeApplicationService nodeTypeApplicationService;
+    private final DeliverableDefinitionApplicationService definitionApplicationService;
+    private final DeliverableTypeApplicationService typeApplicationService;
+    private final DirectoryTemplateApplicationService templateApplicationService;
 
     public DeliveryApplicationService(
         DeliveryBindingRepository deliveryBindingRepository,
-        AuditLogApplicationService auditLogApplicationService
+        AuditLogApplicationService auditLogApplicationService,
+        SectionNodeApplicationService sectionNodeApplicationService,
+        NodeTypeApplicationService nodeTypeApplicationService,
+        DeliverableDefinitionApplicationService definitionApplicationService,
+        DeliverableTypeApplicationService typeApplicationService,
+        DirectoryTemplateApplicationService templateApplicationService
     ) {
         this.deliveryBindingRepository = deliveryBindingRepository;
         this.auditLogApplicationService = auditLogApplicationService;
+        this.sectionNodeApplicationService = sectionNodeApplicationService;
+        this.nodeTypeApplicationService = nodeTypeApplicationService;
+        this.definitionApplicationService = definitionApplicationService;
+        this.typeApplicationService = typeApplicationService;
+        this.templateApplicationService = templateApplicationService;
     }
 
     @Transactional
@@ -78,6 +104,162 @@ public class DeliveryApplicationService {
         deliveryBindingRepository.markDeleted(projectId, bindingId, userId);
         auditLogApplicationService.record(projectId, MODULE_CODE, "work.delivery-binding.delete", "DELIVERY_BINDING",
             String.valueOf(bindingId), userId, Map.of());
+    }
+
+    // ---- review ----
+
+    @Transactional
+    public DeliveryBindingResponse submitReview(Long userId, Long projectId, Long bindingId) {
+        var binding = requireBinding(projectId, bindingId);
+        String currentStatus = binding.reviewStatus();
+        if (!"DRAFT".equals(currentStatus) && !"PENDING".equals(currentStatus)) {
+            throw new BusinessException("WORK_REVIEW_INVALID_STATUS",
+                "当前审核状态不允许提交审核: " + currentStatus, HttpStatus.CONFLICT);
+        }
+        String newStatus = "PENDING";
+        deliveryBindingRepository.updateReviewStatus(projectId, bindingId, newStatus);
+        deliveryBindingRepository.insertReviewRecord(projectId, bindingId, "SUBMITTED", "提交审核", userId);
+        auditLogApplicationService.record(projectId, MODULE_CODE, "work.review.submit", "DELIVERY_BINDING",
+            String.valueOf(bindingId), userId, Map.of("from", currentStatus, "to", newStatus));
+        return requireBinding(projectId, bindingId);
+    }
+
+    @Transactional
+    public DeliveryBindingResponse approve(Long userId, Long projectId, Long bindingId) {
+        var binding = requireBinding(projectId, bindingId);
+        String currentStatus = binding.reviewStatus();
+        if (!"PENDING".equals(currentStatus) && !"REJECTED".equals(currentStatus)) {
+            throw new BusinessException("WORK_REVIEW_INVALID_STATUS",
+                "当前审核状态不允许通过: " + currentStatus, HttpStatus.CONFLICT);
+        }
+        String newStatus = "APPROVED";
+        deliveryBindingRepository.updateReviewStatus(projectId, bindingId, newStatus);
+        deliveryBindingRepository.insertReviewRecord(projectId, bindingId, "APPROVED", null, userId);
+        auditLogApplicationService.record(projectId, MODULE_CODE, "work.review.approve", "DELIVERY_BINDING",
+            String.valueOf(bindingId), userId, Map.of("from", currentStatus, "to", newStatus));
+        return requireBinding(projectId, bindingId);
+    }
+
+    @Transactional
+    public DeliveryBindingResponse reject(Long userId, Long projectId, Long bindingId, RejectRequest request) {
+        var binding = requireBinding(projectId, bindingId);
+        String currentStatus = binding.reviewStatus();
+        if (!"PENDING".equals(currentStatus) && !"REJECTED".equals(currentStatus)) {
+            throw new BusinessException("WORK_REVIEW_INVALID_STATUS",
+                "当前审核状态不允许驳回: " + currentStatus, HttpStatus.CONFLICT);
+        }
+        String newStatus = "REJECTED";
+        deliveryBindingRepository.updateReviewStatus(projectId, bindingId, newStatus);
+        deliveryBindingRepository.insertReviewRecord(projectId, bindingId, "REJECTED", request.reason(), userId);
+        // Auto-create rectification item
+        String rectTitle = "交付审核驳回: " + (binding.fileName() != null ? binding.fileName() : "绑定#" + bindingId);
+        Long rectId = deliveryBindingRepository.insertRectification(projectId, bindingId, rectTitle, request.reason(), userId);
+        auditLogApplicationService.record(projectId, MODULE_CODE, "work.review.reject", "DELIVERY_BINDING",
+            String.valueOf(bindingId), userId, Map.of("from", currentStatus, "to", newStatus, "reason", request.reason(), "rectificationId", rectId));
+        return requireBinding(projectId, bindingId);
+    }
+
+    public List<ReviewRecordResponse> getReviewRecords(Long projectId, Long bindingId) {
+        requireBinding(projectId, bindingId);
+        return deliveryBindingRepository.findReviewRecords(projectId, bindingId);
+    }
+
+    public DeliveryCompletenessResponse deliveryCompleteness(Long projectId, String viewType, String targetType, boolean onlyMissing) {
+        String normalizedView = normalizeViewType(viewType);
+        String normalizedTarget = normalizeTargetType(targetType);
+        String fileKind = expectedFileKind(normalizedView);
+
+        // standard readiness
+        int sectionNodeCount = sectionNodeApplicationService.countByProject(projectId);
+        int nodeTypeCount = nodeTypeApplicationService.countByProject(projectId);
+        boolean hasSectionTree = sectionNodeCount > 0;
+        boolean hasNodeTypes = nodeTypeCount > 0;
+        boolean nodeTypesLocked = hasNodeTypes && nodeTypeApplicationService.allNodeTypesLocked(projectId);
+        int definitionCount = definitionApplicationService.countByProject(projectId);
+        boolean hasDefinitions = definitionCount > 0;
+        boolean hasTypesForKind = deliveryBindingRepository.hasDeliverableTypesForKind(projectId, fileKind);
+        int templateCount = templateApplicationService.countByProject(projectId);
+        boolean hasTemplates = templateCount > 0;
+
+        List<String> issues = deliveryBindingRepository.readinessIssues(
+            projectId, hasSectionTree, hasNodeTypes, nodeTypesLocked,
+            hasDefinitions, hasTypesForKind, hasTemplates);
+
+        boolean standardReady = hasSectionTree && nodeTypesLocked && hasDefinitions && hasTypesForKind && hasTemplates;
+
+        if (!standardReady) {
+            return new DeliveryCompletenessResponse(
+                projectId, normalizedView, normalizedTarget,
+                false, issues, 0, 0, 0, 0.0, List.of());
+        }
+
+        // required rows: section/object × deliverable type cross product
+        List<DeliveryCompletenessRow> required = deliveryBindingRepository.findRequiredDeliverables(
+            projectId, fileKind, normalizedTarget, normalizedView);
+
+        if (required.isEmpty()) {
+            return new DeliveryCompletenessResponse(
+                projectId, normalizedView, normalizedTarget,
+                true, List.of(), 0, 0, 0, 1.0, List.of());
+        }
+
+        // completed bindings
+        List<DeliveryCompletenessRow> completed = deliveryBindingRepository.findCompletedBindings(
+            projectId, normalizedView, normalizedTarget);
+
+        // build a map keyed by (targetId, deliverableTypeId) -> best completed binding
+        var completedMap = new LinkedHashMap<String, DeliveryCompletenessRow>();
+        for (var c : completed) {
+            String key = c.targetId() + "_" + c.deliverableTypeId();
+            completedMap.putIfAbsent(key, c);
+        }
+
+        // merge: enrich required rows with completed data
+        List<DeliveryCompletenessRow> rows = new ArrayList<>();
+        int completedCount = 0;
+        for (var req : required) {
+            String key = req.targetId() + "_" + req.deliverableTypeId();
+            var match = completedMap.get(key);
+            if (match != null) {
+                completedCount++;
+                rows.add(new DeliveryCompletenessRow(
+                    req.targetType(), req.targetId(), req.targetCode(), req.targetName(),
+                    req.deliverableDefinitionId(), req.deliverableDefinitionCode(), req.deliverableDefinitionName(),
+                    req.deliverableTypeId(), req.deliverableTypeCode(), req.deliverableTypeName(),
+                    req.fileKind(), true, true,
+                    match.bindingId(), match.fileResourceId(), match.fileName(),
+                    match.versionNo(), match.reviewStatus(), null));
+            } else {
+                rows.add(new DeliveryCompletenessRow(
+                    req.targetType(), req.targetId(), req.targetCode(), req.targetName(),
+                    req.deliverableDefinitionId(), req.deliverableDefinitionCode(), req.deliverableDefinitionName(),
+                    req.deliverableTypeId(), req.deliverableTypeCode(), req.deliverableTypeName(),
+                    req.fileKind(), true, false,
+                    null, null, null, null, null,
+                    "尚未挂接文件"));
+            }
+        }
+
+        int totalRequired = rows.size();
+        int missingCount = totalRequired - completedCount;
+        double rate = totalRequired == 0 ? 1.0 : (double) completedCount / totalRequired;
+
+        List<DeliveryCompletenessRow> result = onlyMissing
+            ? rows.stream().filter(r -> !r.completed()).toList()
+            : rows;
+
+        return new DeliveryCompletenessResponse(
+            projectId, normalizedView, normalizedTarget,
+            true, List.of(), totalRequired, completedCount, missingCount, rate, result);
+    }
+
+    private String normalizeTargetType(String targetType) {
+        if (targetType == null || targetType.isBlank()) return "SECTION";
+        String normalized = targetType.trim().toUpperCase();
+        if (!List.of("SECTION", "OBJECT").contains(normalized)) {
+            throw new BusinessException("WORK_TARGET_TYPE_INVALID", "目标类型只能是 SECTION 或 OBJECT", HttpStatus.BAD_REQUEST);
+        }
+        return normalized;
     }
 
     private DeliveryBindingResponse requireBinding(Long projectId, Long bindingId) {

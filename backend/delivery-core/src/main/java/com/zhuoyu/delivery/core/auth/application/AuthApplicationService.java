@@ -75,10 +75,19 @@ public class AuthApplicationService {
         }
         var user = userAccountRepository.findById(claims.userId())
             .orElseThrow(() -> new BusinessException("CORE_AUTH_UNAUTHORIZED", "当前用户不存在", HttpStatus.UNAUTHORIZED));
-        Long projectId = claims.currentProjectId();
-        if (projectId != null) {
-            projectAccessApplicationService.requireAccessibleProject(user.id(), projectId);
+        List<com.zhuoyu.delivery.core.project.domain.AccessibleProject> projects =
+            projectAccessApplicationService.listAccessibleProjects(user.id());
+        if (projects.isEmpty()) {
+            throw new BusinessException("CORE_PROJECT_NOT_FOUND", "当前账号未绑定任何项目", HttpStatus.FORBIDDEN);
         }
+        Long claimProjectId = claims.currentProjectId();
+        Long projectId = claimProjectId == null
+            ? projects.getFirst().id()
+            : projects.stream()
+                .filter(project -> project.id().equals(claimProjectId))
+                .findFirst()
+                .map(com.zhuoyu.delivery.core.project.domain.AccessibleProject::id)
+                .orElse(projects.getFirst().id());
         return jwtTokenProvider.issueTokens(user.id(), user.username(), projectId);
     }
 

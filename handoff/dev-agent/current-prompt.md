@@ -1,367 +1,253 @@
-# 开发 Agent 当前任务：MVP 一版端到端闭环
+# 开发 Agent 当前任务：二期批次四 - 文件预览与下载权限分离最小闭环
 
-你是数字化交付平台 v1 的长期开发 agent。本轮由主 agent 全权指挥，不需要用户审批。请在当前仓库直接实现一版可运行 MVP，完成后写交付报告到 `handoff/dev-agent/latest-report.md`。
+你是数字化交付平台的开发 agent。工作目录：
 
-## 0. 工作约束
+`/Users/vc/Documents/数字化交付平台`
 
-- 项目目录：`/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台`
-- 不要创建子 agent。
-- 不要修改 `docs/**`、`handoff/main-agent/**`、`handoff/test-agent/**`。
-- 可以修改 `handoff/dev-agent/current-prompt.md` 之外的代码、脚本、`handoff/dev-agent/latest-report.md`。
-- 不要回退其他会话已有改动，不要删除现有功能。
-- 新增数据库迁移只能追加新版本，当前已有 `V1` 到 `V5`，本轮从 `V6__init_mvp_data_steward_work_center.sql` 开始。
-- 保持模块化单体边界：
-  - `core`
-  - `master-data`
-  - `data-steward`
-  - `work-center`
-  - `visualization-adapter`
-- 前端继续使用 `Vue 3 + TypeScript + Element Plus`，保持现有中后台风格。
-- v1 不接真实 BIM 引擎，不做真实大文件上传；MVP 用“文件元数据登记 + 处理状态 + 稳定资源地址”打通闭环。
+本轮任务是二期批次四，不是样板项目清理，也不是模型轻量化。
 
-## 1. 当前已完成能力
+## 0. 必须先阅读
 
-已完成：
+开始前先阅读：
 
-- 登录/刷新/当前用户/项目切换/首页基础。
-- 工程主数据：
-  - 工程管理部位树。
-  - 节点类型创建、编辑、锁定、全量锁定。
-  - 交付物定义、交付物类型、交付物属性、目录模板。
-  - 标准状态接口已含 `deliverableStandardReady`。
-- Phase 2.2 验收脚本：
-  - `scripts/dev/check-deliverable-standard-chain.sh`
+1. `handoff/main-agent/status.md`
+2. `handoff/main-agent/development-log.md`
+3. `handoff/main-agent/phase2-batch4-file-preview-download-permission-plan.md`
+4. `handoff/dev-agent/latest-report.md`
+5. `handoff/test-agent/latest-report.md`
+6. `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
+7. `frontend/src/modules/data-steward/pages/AssetCatalogPage.vue`
+8. `frontend/src/modules/data-steward/api/dataSteward.ts`
+9. `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/controller/AssetController.java`
+10. `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/AssetApplicationService.java`
+11. `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/repository/BimAssetRepository.java`
+12. `scripts/dev/check-file-preview-shell.sh`
 
-本轮必须基于上述能力继续向下游推进。
+## 1. Ralph Loop 要求
 
-## 2. 本轮 MVP 成功标准
+必须使用 Ralph Loop skill 完成本轮任务。
 
-必须跑通完整场景：
+在 Claude Code CLI 中：
 
-`样板项目 -> 部位树 -> 节点类型锁定 -> 交付物标准 -> 文档/图纸/模型文件登记 -> 文件处理完成 -> 模型集成发布 -> 管理对象 -> 文档交付绑定 -> 图纸交付绑定 -> 文档交付视图 -> 图纸交付视图 -> 大屏/3D 上下文入口`
+1. 先用 `/skills` 确认 `ralph` skill 可见。
+2. 激活/调用 `ralph` skill 后再开始拆 story。
+3. 按 Ralph Loop 的方式持续记录 promise、plan、progress、verify 和最终报告。
+4. 本轮完成承诺固定为：
 
-本轮不是最终完美产品，但必须做到：
+`<promise>PHASE2_BATCH4_FILE_ACCESS_COMPLETE</promise>`
 
-- 后端 REST 契约稳定。
-- 前端能在菜单中进入并操作主要页面。
-- 脚本能一键验证主链路。
-- 关键写动作都有审计日志。
-- 项目上下文隔离仍然有效。
+如果 Ralph Loop 需要进度文件，请写入 `.claude/ralph/progress.txt` 或 skill 指定位置。
 
-## 3. 后端实现范围
+## 2. 本轮目标
 
-### 3.1 `data-steward` 模块
+把现有“文件预览状态外壳”升级成最小可用闭环：
 
-新增实体与表：
+`文件详情 -> 判断预览/下载权限 -> 生成短时访问票据 -> 平台受控读取文件 -> 浏览器预览或下载 -> 审计留痕`
 
-#### `FileResource`
+必须做到：
 
-建议表：`datasteward_file_resources`
+1. 预览权限和下载权限分离。
+2. 不暴露真实 NAS 路径。
+3. 文件访问必须经过平台鉴权。
+4. 访问、拒绝和失败必须审计。
+5. 只读读取文件，不改、不移、不删 NAS 文件。
 
-字段至少包含：
+## 3. 后端必须完成
 
-- `id`
-- `project_id`
-- `code`
-- `name`
-- `file_kind`：`DOCUMENT` / `DRAWING` / `MODEL` / `OTHER`
-- `original_file_name`
-- `storage_key`
-- `mime_type`
-- `file_size`
-- `version_no`
-- `category_path`
-- `section_node_id` nullable
-- `deliverable_type_id` nullable
-- `managed_object_id` nullable
-- `process_status`：`PENDING` / `PROCESSING` / `PROCESSED` / `FAILED`
-- `process_message`
-- `resource_url`
-- `status`：`ACTIVE` / `DISABLED`
-- 审计字段、`deleted`、`delete_token`
+### A. 权限
 
-接口：
+追加 Flyway 新迁移，不修改旧迁移。
 
-- `POST /api/data-steward/projects/{projectId}/file-resources`
-- `GET /api/data-steward/projects/{projectId}/file-resources?fileKind=&processStatus=&sectionNodeId=&managedObjectId=`
-- `PATCH /api/data-steward/projects/{projectId}/file-resources/{fileResourceId}`
-- `DELETE /api/data-steward/projects/{projectId}/file-resources/{fileResourceId}`
-- `POST /api/data-steward/projects/{projectId}/file-resources/{fileResourceId}:process`
+新增权限：
 
-要求：
+- `DATA_STEWARD_FILE_PREVIEW`
+- `DATA_STEWARD_FILE_DOWNLOAD`
 
-- 创建时校验项目上下文。
-- 如传入 `sectionNodeId`，必须属于当前项目。
-- 如传入 `deliverableTypeId`，必须属于当前项目。
-- 处理动作将状态推进到 `PROCESSED`，生成/保留 `resourceUrl`。
-- 删除后同编码可复建。
+授权建议：
 
-#### `ModelIntegration`
+- `PROJECT_ADMIN`：预览 + 下载
+- `DELIVERY_ENGINEER`：预览 + 下载
+- `PROJECT_VIEWER`：只预览，不下载
 
-建议表：`datasteward_model_integrations`
+这只是本批最小权限证明，不要扩成客户生产级权限体系。
 
-字段至少包含：
+### B. 访问策略
+
+新增或整理统一的文件访问策略，至少校验：
+
+1. 用户有项目访问权限。
+2. 文件属于可访问项目。
+3. 文件未删除、未隔离、未停用。
+4. 文件有可解析存储路径。
+5. 用户有对应动作权限：
+   - `PREVIEW`
+   - `DOWNLOAD`
+6. 预览格式为浏览器原生可打开格式时才允许实际预览。
+
+### C. 短时访问票据
+
+新增短时访问票据能力，推荐接口：
+
+1. `POST /api/data-steward/assets/files/{fileId}/access-tickets`
+   - 请求体：`{"action":"PREVIEW"}` 或 `{"action":"DOWNLOAD"}`
+   - 响应至少包含：`ticketId/accessUrl/expiresAt/action/fileId/fileName/previewable/downloadable/message`
+2. `GET /api/data-steward/assets/file-access/{ticket}`
+   - 校验票据、动作、过期时间、文件状态。
+   - `PREVIEW` 返回 `inline`。
+   - `DOWNLOAD` 返回 `attachment`。
+
+建议新增表记录票据，字段至少包括：
 
 - `id`
+- `ticket`
+- `file_id`
 - `project_id`
-- `code`
-- `name`
-- `source_file_ids_json`
-- `model_file_count`
-- `total_size`
-- `integration_status`：`DRAFT` / `PROCESSING` / `PUBLISHED` / `FAILED`
-- `published`
-- `published_at`
-- `adapter_context_json`
+- `user_id`
+- `action`
 - `status`
-- 审计字段、`deleted`、`delete_token`
+- `expires_at`
+- `used_at`
+- `created_at`
 
-接口：
+### D. 文件读取
 
-- `POST /api/data-steward/projects/{projectId}/model-integrations`
-- `GET /api/data-steward/projects/{projectId}/model-integrations`
-- `PATCH /api/data-steward/projects/{projectId}/model-integrations/{integrationId}`
-- `DELETE /api/data-steward/projects/{projectId}/model-integrations/{integrationId}`
-- `POST /api/data-steward/projects/{projectId}/model-integrations/{integrationId}:publish`
+本批只实现最小只读流式读取：
 
-要求：
+1. 支持 `nas:///Volumes/...` 和 `nas:///tmp/...`。
+2. 正确把 `nas:///Volumes/a.pdf` 解析为 `/Volumes/a.pdf`。
+3. 文件不存在、不可读、路径解析失败要有明确错误码和错误文案。
+4. `minio://`、对象存储、客户现场存储未接入时可返回 `STORAGE_PROVIDER_UNSUPPORTED`，不得假装成功。
+5. 不要一次性把文件读进内存，必须流式响应。
 
-- 创建时校验所有 source file 都属于当前项目，且至少有一个 `MODEL` 文件。
-- 发布后 `integrationStatus=PUBLISHED`、`published=true`。
-- 记录审计。
+### E. 预览格式
 
-#### `ManagedObject`
+本批实际预览只开放：
 
-建议表：`datasteward_managed_objects`
+- PDF
+- 图片：`png/jpg/jpeg/webp/gif/bmp/svg`
 
-字段至少包含：
+Office、CAD、BIM：
 
-- `id`
-- `project_id`
-- `code`
-- `name`
-- `object_type`
-- `section_node_id`
-- `model_integration_id`
-- `external_id`
-- `status`
-- 审计字段、`deleted`、`delete_token`
+- 继续返回需要转换或暂不支持。
+- 不做正文抽取。
+- 不做模型轻量化。
+- 不做构件级解析。
 
-接口：
+### F. 审计
 
-- `POST /api/data-steward/projects/{projectId}/managed-objects`
-- `GET /api/data-steward/projects/{projectId}/managed-objects?sectionNodeId=&modelIntegrationId=`
-- `PATCH /api/data-steward/projects/{projectId}/managed-objects/{objectId}`
-- `DELETE /api/data-steward/projects/{projectId}/managed-objects/{objectId}`
+必须审计：
 
-要求：
+- 创建预览票据
+- 创建下载票据
+- 打开预览
+- 下载文件
+- 权限拒绝
+- 路径失效或文件不可读
 
-- 校验 `sectionNodeId` 和 `modelIntegrationId` 均属于当前项目。
-- 删除后同编码可复建。
-- 记录审计。
+## 4. 前端必须完成
 
-### 3.2 `work-center` 模块
+优先增强现有页面，不新增大模块：
 
-新增实体与表：
+1. `/data-steward/assets/{projectId}` 项目资产详情页。
+2. `/data-steward/catalog` 资产目录详情抽屉。
 
-#### `DeliveryBinding`
+页面要求：
 
-建议表：`workcenter_delivery_bindings`
+1. 清楚展示是否可预览、是否可下载。
+2. `打开预览` 只有在有预览权限且格式支持时可点。
+3. `下载文件` 只有在有下载权限时可点。
+4. 权限不足、路径失效、文件不可读时展示可理解原因。
+5. 不展示真实 NAS 路径给普通用户。
+6. 页面不能横向撑爆。
 
-字段至少包含：
+实现方式可用访问票据 `accessUrl` 打开预览/下载，避免把 Bearer token 塞进 URL。
 
-- `id`
-- `project_id`
-- `view_type`：`DOCUMENT` / `DRAWING`
-- `section_node_id`
-- `deliverable_definition_id`
-- `deliverable_type_id`
-- `file_resource_id`
-- `managed_object_id` nullable
-- `binding_status`：`DRAFT` / `READY` / `ARCHIVED`
-- `sort_order`
-- `remarks`
-- 审计字段、`deleted`、`delete_token`
-
-接口：
-
-- `POST /api/work-center/projects/{projectId}/delivery-bindings`
-- `GET /api/work-center/projects/{projectId}/delivery-bindings?viewType=&sectionNodeId=&managedObjectId=`
-- `PATCH /api/work-center/projects/{projectId}/delivery-bindings/{bindingId}`
-- `DELETE /api/work-center/projects/{projectId}/delivery-bindings/{bindingId}`
-- `GET /api/work-center/projects/{projectId}/delivery-views/{viewType}?sectionNodeId=`
-
-要求：
-
-- 写入前必须校验标准底座就绪：`hasSectionTree=true`、`nodeTypesLocked=true`、`deliverableStandardReady=true`。
-- `DOCUMENT` 视图只允许绑定 `fileKind=DOCUMENT` 的文件。
-- `DRAWING` 视图只允许绑定 `fileKind=DRAWING` 的文件。
-- 校验部位、交付定义、交付类型、文件资源、管理对象均属于当前项目。
-- 交付视图返回部位、交付物定义/类型、文件资源、管理对象的聚合信息，前端可直接渲染。
-- 记录审计。
-
-#### 项目首页聚合
-
-扩展现有 `HomeOverviewApplicationService`：
-
-- 展示真实资源统计：
-  - 文档数量/大小
-  - 图纸数量/大小
-  - 模型数量/大小
-  - 模型集成数量
-  - 管理对象数量
-  - 文档交付绑定数量
-  - 图纸交付绑定数量
-- 保留现有首页接口路径：`GET /api/work-center/projects/{projectId}/home/overview`
-
-#### 看板/大屏最小接口
-
-- `GET /api/work-center/projects/{projectId}/dashboard/summary`
-
-返回：
-
-- 标准是否就绪
-- 文件资源计数
-- 模型集成计数
-- 管理对象计数
-- 文档/图纸交付绑定计数
-- 最近资源列表或最近绑定列表
-
-### 3.3 `visualization-adapter` 模块
-
-不绑定真实引擎，只实现可插拔上下文接口：
-
-- `GET /api/visualization/projects/{projectId}/context`
-- `POST /api/visualization/projects/{projectId}/model-integrations/{integrationId}:publish`
-- `POST /api/visualization/projects/{projectId}/managed-objects/{objectId}:highlight`
-- `POST /api/visualization/projects/{projectId}/managed-objects/{objectId}:locate`
-
-要求：
-
-- `context` 返回项目、已发布模型集成、管理对象、可用动作列表。
-- `publish` 可以复用/委托 data-steward 发布能力或返回已发布上下文。
-- `highlight/locate` 返回 `OK` 和模拟动作 payload，不接真实 3D 引擎。
-- 校验项目上下文和对象归属。
-
-### 3.4 `core` 菜单与权限
-
-新增权限并在 V6 授权：
-
-- `DATASTEWARD_FILE_READ`
-- `DATASTEWARD_FILE_MANAGE`
-- `DATASTEWARD_MODEL_READ`
-- `DATASTEWARD_MODEL_MANAGE`
-- `DATASTEWARD_OBJECT_READ`
-- `DATASTEWARD_OBJECT_MANAGE`
-- `WORKCENTER_DELIVERY_READ`
-- `WORKCENTER_DELIVERY_MANAGE`
-- `WORKCENTER_DASHBOARD_VIEW`
-- `VISUALIZATION_CONTEXT_VIEW`
-
-菜单要求：
-
-- 新增一级菜单 `数据管家`
-  - `文件资源`
-  - `模型集成`
-  - `管理对象`
-- 新增/扩展工作中心菜单
-  - `文档交付`
-  - `图纸交付`
-  - `智慧看板`
-  - `三维工作台`
-
-## 4. 前端实现范围
-
-新增 API 文件或扩展现有 API：
-
-- `frontend/src/modules/data-steward/api/dataSteward.ts`
-- `frontend/src/modules/work-center/api/delivery.ts`
-- `frontend/src/modules/visualization/api/visualization.ts`
-
-新增页面：
-
-- `frontend/src/modules/data-steward/pages/FileResourcesPage.vue`
-- `frontend/src/modules/data-steward/pages/ModelIntegrationsPage.vue`
-- `frontend/src/modules/data-steward/pages/ManagedObjectsPage.vue`
-- `frontend/src/modules/work-center/pages/DocumentDeliveryPage.vue`
-- `frontend/src/modules/work-center/pages/DrawingDeliveryPage.vue`
-- `frontend/src/modules/work-center/pages/DashboardPage.vue`
-- `frontend/src/modules/visualization/pages/ThreeDWorkbenchPage.vue`
-
-前端要求：
-
-- 保持企业中后台风格，优先表格、筛选、状态 tag、弹窗表单。
-- 不做营销页，不做空洞说明页。
-- 页面必须能实际调用后端接口。
-- 文件资源页支持登记 `DOCUMENT/DRAWING/MODEL` 三类文件元数据、触发处理、查看状态。
-- 模型集成页支持选择模型文件创建集成、发布集成。
-- 管理对象页支持关联部位和模型集成。
-- 文档/图纸交付页支持创建绑定、查询交付视图。
-- 智慧看板展示 dashboard summary。
-- 三维工作台展示 visualization context、模型集成、管理对象，并提供“定位/高亮”按钮调用模拟接口。
-- 页面不要依赖真实文件上传控件；用元数据表单即可。
-
-## 5. 验收脚本
+## 5. 脚本必须完成
 
 新增：
 
-- `scripts/dev/check-mvp-chain.sh`
+`scripts/dev/check-phase2-batch4-file-access.sh`
 
-脚本必须：
+脚本至少覆盖：
 
-1. 登录并切换项目。
-2. 调用 `check-deliverable-standard-chain.sh` 或确保标准底座已就绪。
-3. 创建/处理三类文件：
-   - 文档 `DOCUMENT`
-   - 图纸 `DRAWING`
-   - 模型 `MODEL`
-4. 用模型文件创建模型集成并发布。
-5. 创建管理对象并关联部位/模型集成。
-6. 创建文档交付绑定。
-7. 创建图纸交付绑定。
-8. 查询文档交付视图。
-9. 查询图纸交付视图。
-10. 查询 dashboard summary。
-11. 查询 visualization context。
-12. 调用管理对象定位/高亮模拟接口。
-13. 负向验证：
-    - 项目上下文不匹配返回 `CORE_PROJECT_CONTEXT_MISMATCH`。
-    - 未处理文件不能绑定交付视图，返回稳定业务错误码。
-    - `DOCUMENT` 绑定不能用 `DRAWING` 文件，返回稳定业务错误码。
+1. 创建本机临时小文件并登记为 `nas:///tmp/...` 文件资源。
+2. 管理员可创建预览票据并读取内容。
+3. 管理员可创建下载票据并读取内容。
+4. 查看者只可预览，不可下载。
+5. 跨项目用户不能创建票据。
+6. 文件不存在时返回清晰错误。
+7. 预览、下载、拒绝、失败动作能查到审计。
+8. OpenAPI 包含新增接口。
+9. 旧 `scripts/dev/check-file-preview-shell.sh` 不回归。
+10. 不修改真实 NAS `/Volumes/zyzn/卓羽智能项目`。
 
-脚本最后必须输出：
+## 6. 明确禁止事项
 
-```text
-mvp chain ok
-```
+本轮禁止：
 
-## 6. 必跑验证
+1. 不清理样板项目，不重置样板项目，不隐藏 `PH2B2-*` 测试命名。
+2. 不做模型轻量化。
+3. 不做构件级解析。
+4. 不做 Office/CAD/BIM 转换。
+5. 不做正文抽取、向量库或搜索引擎写入。
+6. 不做 Agent 自动审批、自动整改、自动写库。
+7. 不移动、不删除、不改名、不修改真实 NAS 文件。
+8. 不改 `docs/**`。
+9. 不创建子 agent。
+10. 不大改页面结构或权限体系。
 
-完成后必须运行：
+## 7. 自测要求
 
-```bash
-corepack pnpm build
-docker run --rm -v "$HOME/.m2:/root/.m2" -v "$PWD/backend:/workspace" -w /workspace maven:3.9-eclipse-temurin-21 mvn -DskipTests package
-bash scripts/dev/check-mvp-chain.sh http://localhost:8080 platform.admin Admin@123 2
-```
-
-如本机没有后端在 `8080`，请用：
+完成后至少执行并记录：
 
 ```bash
-bash scripts/dev/start-backend.sh
+cd /Users/vc/Documents/数字化交付平台/backend
+./mvnw -pl delivery-app -am -DskipTests package
+
+cd /Users/vc/Documents/数字化交付平台
+corepack pnpm --dir frontend build
+curl -fsS http://localhost:8080/actuator/health
+bash scripts/dev/check-phase2-batch4-file-access.sh
+bash scripts/dev/check-file-preview-shell.sh
+git diff --check
 ```
 
-完成后停止临时后端，只保留基础设施容器。
+建议回归：
 
-## 7. 交付报告
+```bash
+bash scripts/dev/check-phase2-batch1-readonly-catalog.sh
+bash scripts/dev/check-phase2-batch2-standard-delivery.sh
+bash scripts/dev/check-phase2-batch3-review-rectification-report.sh
+```
 
-完成后写入 `handoff/dev-agent/latest-report.md`，必须包含：
+## 8. 报告要求
 
-- 本轮修改文件列表。
-- 新增表与接口清单。
-- 前端页面清单。
-- 脚本验证结果。
-- 启动命令。
-- 样板账号。
-- 已知非阻塞项。
-- 下一步建议。
+完成后写入：
+
+`handoff/dev-agent/latest-report.md`
+
+报告必须包含：
+
+1. Ralph Loop 使用情况。
+2. 根因/缺口分析。
+3. 后端改动点。
+4. 前端改动点。
+5. 新增接口与权限。
+6. 预览和下载权限如何分离。
+7. 如何保证不暴露 NAS 路径。
+8. 如何保证只读、不修改真实 NAS。
+9. 自测结果。
+10. 已知风险或未做项。
+
+## 9. 完成定义
+
+只有同时满足以下条件，才能标记完成：
+
+1. `<promise>PHASE2_BATCH4_FILE_ACCESS_COMPLETE</promise>` 已兑现。
+2. 预览/下载通过平台受控票据访问。
+3. 预览权限和下载权限可被脚本证明分离。
+4. 无权限、跨项目、路径失效均有清晰错误。
+5. 关键访问动作有审计。
+6. 前后端构建通过。
+7. 专项脚本和旧预览外壳脚本通过。
+8. `handoff/dev-agent/latest-report.md` 已写。

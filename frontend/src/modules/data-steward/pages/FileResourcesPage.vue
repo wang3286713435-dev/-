@@ -6,7 +6,7 @@
         <p>{{ projectLabel }}</p>
       </div>
       <div class="mvp-page__actions">
-        <el-segmented v-model="fileKindFilter" :options="fileKindOptions" @change="loadPage" />
+        <el-segmented v-model="fileKindFilter" :options="fileKindOptions" @change="handleFilterChange" />
         <el-button :icon="Refresh" @click="loadPage">刷新</el-button>
         <el-button type="primary" :icon="Plus" @click="openCreateDialog">登记文件</el-button>
       </div>
@@ -31,6 +31,18 @@
         </template>
       </el-table-column>
     </el-table>
+    <div class="table-pagination">
+      <el-pagination
+        v-model:current-page="pagination.pageNo"
+        v-model:page-size="pagination.pageSize"
+        :page-sizes="[20, 50, 100, 200]"
+        :total="pagination.total"
+        layout="total, sizes, prev, pager, next, jumper"
+        background
+        @size-change="handlePageSizeChange"
+        @current-change="loadPage"
+      />
+    </div>
 
     <el-dialog v-model="dialogVisible" title="登记文件资源" width="560px">
       <el-form label-position="top" class="master-form">
@@ -62,13 +74,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { CircleCheck, Plus, Refresh } from '@element-plus/icons-vue';
 
 import {
   createFileResource,
-  fetchFileResources,
+  fetchFileResourcesPage,
   processFileResource,
   type FileResource
 } from '@/modules/data-steward/api/dataSteward';
@@ -80,6 +92,13 @@ const saving = ref(false);
 const dialogVisible = ref(false);
 const files = ref<FileResource[]>([]);
 const fileKindFilter = ref('ALL');
+const pagination = reactive({
+  pageNo: 1,
+  pageSize: 50,
+  total: 0
+});
+let activeRequestId = 0;
+let activeAbortController: AbortController | null = null;
 
 const form = reactive({
   originalName: '',
@@ -102,18 +121,53 @@ const processStatusOptions = ['PENDING', 'PROCESSING', 'PROCESSED', 'FAILED'];
 const projectId = computed(() => authStore.currentProjectId);
 const projectLabel = computed(() => authStore.currentUser?.currentProject.name ?? '等待项目上下文');
 
-watch(projectId, () => loadPage(), { immediate: true });
+watch(projectId, () => {
+  pagination.pageNo = 1;
+  loadPage();
+}, { immediate: true });
+
+onBeforeUnmount(() => {
+  activeAbortController?.abort();
+  activeRequestId += 1;
+});
 
 async function loadPage() {
   if (!projectId.value) return;
+  activeAbortController?.abort();
+  const requestId = activeRequestId + 1;
+  activeRequestId = requestId;
+  const controller = new AbortController();
+  activeAbortController = controller;
   loading.value = true;
   try {
-    files.value = await fetchFileResources(projectId.value, fileKindFilter.value === 'ALL' ? undefined : fileKindFilter.value);
+    const result = await fetchFileResourcesPage(projectId.value, {
+      fileKind: fileKindFilter.value === 'ALL' ? undefined : fileKindFilter.value,
+      pageNo: pagination.pageNo,
+      pageSize: pagination.pageSize
+    }, controller.signal);
+    if (requestId !== activeRequestId || controller.signal.aborted) return;
+    files.value = result.rows;
+    pagination.pageNo = result.page;
+    pagination.pageSize = result.pageSize;
+    pagination.total = result.total;
   } catch (error) {
+    if (requestId !== activeRequestId || controller.signal.aborted) return;
     ElMessage.error(error instanceof Error ? error.message : '文件资源加载失败');
   } finally {
-    loading.value = false;
+    if (requestId === activeRequestId) {
+      loading.value = false;
+    }
   }
+}
+
+function handleFilterChange() {
+  pagination.pageNo = 1;
+  loadPage();
+}
+
+function handlePageSizeChange() {
+  pagination.pageNo = 1;
+  loadPage();
 }
 
 function openCreateDialog() {
@@ -157,3 +211,11 @@ async function handleProcess(fileId: number) {
   }
 }
 </script>
+
+<style scoped>
+.table-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+</style>

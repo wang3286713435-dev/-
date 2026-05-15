@@ -1,0 +1,114 @@
+{
+  "project": "数字化交付平台-二期批次二标准驱动交付闭环",
+  "branchName": "ralph/phase2-batch2-standard-delivery",
+  "description": "标准驱动交付闭环最小可用版",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "后端：交付完整率计算接口 + DTO + 标准前置状态",
+      "description": "新增 GET /api/work-center/projects/{projectId}/delivery-completeness 接口，返回完整率数据，含标准前置状态检查。",
+      "acceptanceCriteria": [
+        "接口支持viewType=DOCUMENT|DRAWING、targetType=SECTION|OBJECT、onlyMissing参数",
+        "DOCUMENT视图只计算file_kind=DOCUMENT，DRAWING视图只计算file_kind=DRAWING",
+        "bindingStrategy=SECTION_NODE按启用部位生成要求，MANAGED_OBJECT按管理对象生成",
+        "已完成判定：存在未删除BOUND绑定且关联文件未删除、文件类型匹配",
+        "标准未就绪时standardReady=false返回readinessIssues，不返回500",
+        "targetType=OBJECT无数据时返回空结果不500",
+        "接口在Swagger/OpenAPI可见",
+        "后端构建通过"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "后端：绑定接口安全校验加固与审计",
+      "description": "审查并加固现有createBinding接口校验逻辑，确认审计完整。",
+      "acceptanceCriteria": [
+        "createBinding校验交付物类型fileKind与viewType匹配",
+        "校验文件processStatus=PROCESSED",
+        "校验部位/对象属于项目",
+        "创建/删除绑定写入审计日志",
+        "现有检查逻辑不回归",
+        "后端构建通过"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "前端：API层新增完整率接口调用 + 文件分页检索",
+      "description": "delivery.ts新增fetchDeliveryCompleteness接口，DeliveryViewPanel文件选择改用分页加载。",
+      "acceptanceCriteria": [
+        "delivery.ts新增DeliveryCompleteness类型和fetchDeliveryCompleteness函数",
+        "DeliveryViewPanel文件选择改用fetchFileResourcesPage分页(pageSize=20)",
+        "文件搜索支持keyword参数重新请求",
+        "加载中页面仍可切换菜单",
+        "前端构建通过"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "前端：交付页面完整率卡片 + 标准状态提示",
+      "description": "在交付页面增加完整率卡片和标准状态提示。",
+      "acceptanceCriteria": [
+        "文档/图纸交付页显示完整率卡片",
+        "标准未就绪时显示缺口提示",
+        "页面语言清晰易懂",
+        "切换项目时完整率刷新",
+        "前端构建通过"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "前端：缺失项列表 + 去挂接快速入口",
+      "description": "增加缺失项列表，提供快速挂接入口并预填。",
+      "acceptanceCriteria": [
+        "缺失项列表展示部位/对象、交付定义、交付类型、文件类型、缺失原因",
+        "去挂接按钮打开弹窗并预填",
+        "挂接/删除后刷新完整率",
+        "前端构建通过"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "专项验收脚本",
+      "description": "创建scripts/dev/check-phase2-batch2-standard-delivery.sh。",
+      "acceptanceCriteria": [
+        "标准未就绪时接口返回standardReady=false",
+        "准备标准后完整率出现缺失项",
+        "创建绑定后完整率提升，删除后回落",
+        "权限隔离验证",
+        "审计验证",
+        "OpenAPI检查",
+        "脚本可重复运行，使用独立测试编码",
+        "脚本通过所有断言"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "报告：handoff/dev-agent/latest-report.md",
+      "description": "写入完整的开发Agent交付报告。",
+      "acceptanceCriteria": [
+        "包含story执行结果、后端/前端改动点、完整率规则、性能优化、权限审计、自测结果、风险"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

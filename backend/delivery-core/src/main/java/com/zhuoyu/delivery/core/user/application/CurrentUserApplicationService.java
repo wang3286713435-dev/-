@@ -39,7 +39,10 @@ public class CurrentUserApplicationService {
         }
         AccessibleProject currentProject = currentProjectId == null
             ? projects.getFirst()
-            : projectAccessApplicationService.requireAccessibleProject(userId, currentProjectId);
+            : projects.stream()
+                .filter(project -> project.id().equals(currentProjectId))
+                .findFirst()
+                .orElse(projects.getFirst());
         List<String> permissions = permissionApplicationService.listPermissionCodes(userId, currentProject.id());
         List<ProjectSummaryResponse> responses = projects.stream()
             .map(projectAccessApplicationService::toResponse)
@@ -84,11 +87,37 @@ public class CurrentUserApplicationService {
             menus.add(new MenuItemResponse("master-data", "工程主数据", "/master-data/sections", "Files", masterDataChildren));
         }
         if (
-            permissions.contains("DATA_STEWARD_FILE_READ")
+            permissions.contains("DATA_STEWARD_ASSET_READ")
+                || permissions.contains("DATA_STEWARD_FILE_READ")
                 || permissions.contains("DATA_STEWARD_MODEL_READ")
                 || permissions.contains("DATA_STEWARD_OBJECT_READ")
         ) {
             List<MenuItemResponse> dataStewardChildren = new ArrayList<>();
+            if (permissions.contains("DATA_STEWARD_ASSET_READ")) {
+                dataStewardChildren.add(
+                    new MenuItemResponse("data-steward-assets", "资产总览", "/data-steward/assets", "DataBoard")
+                );
+                dataStewardChildren.add(
+                    new MenuItemResponse("data-steward-scans", "扫描任务", "/data-steward/scans", "Search")
+                );
+                dataStewardChildren.add(
+                    new MenuItemResponse("data-steward-quality", "数据质量", "/data-steward/quality", "Warning")
+                );
+                dataStewardChildren.add(
+                    new MenuItemResponse(
+                        "data-steward-nonstandard-directories",
+                        "非标准资料治理",
+                        "/data-steward/nonstandard-directories",
+                        "Warning"
+                    )
+                );
+                dataStewardChildren.add(
+                    new MenuItemResponse("data-steward-catalog", "资产目录", "/data-steward/catalog", "FolderOpened")
+                );
+                dataStewardChildren.add(
+                    new MenuItemResponse("data-steward-agent-preview", "Agent预览", "/data-steward/agent-preview", "Monitor")
+                );
+            }
             if (permissions.contains("DATA_STEWARD_FILE_READ")) {
                 dataStewardChildren.add(
                     new MenuItemResponse("data-steward-files", "文件资源", "/data-steward/files", "FolderOpened")
@@ -104,17 +133,22 @@ public class CurrentUserApplicationService {
                     new MenuItemResponse("data-steward-objects", "管理对象", "/data-steward/objects", "Connection")
                 );
             }
-            menus.add(new MenuItemResponse("data-steward", "数据管家", "/data-steward/files", "FolderOpened", dataStewardChildren));
+            String dataStewardPath = permissions.contains("DATA_STEWARD_ASSET_READ") ? "/data-steward/assets" : "/data-steward/files";
+            menus.add(new MenuItemResponse("data-steward", "数据管家", dataStewardPath, "FolderOpened", dataStewardChildren));
         }
         if (
             permissions.contains("WORKCENTER_DELIVERY_READ")
                 || permissions.contains("WORKCENTER_DASHBOARD_VIEW")
                 || permissions.contains("VISUALIZATION_WORKBENCH_VIEW")
+                || permissions.contains("WORKCENTER_RECTIFICATION_READ")
         ) {
             List<MenuItemResponse> workChildren = new ArrayList<>();
             if (permissions.contains("WORKCENTER_DELIVERY_READ")) {
                 workChildren.add(new MenuItemResponse("work-document-delivery", "文档交付", "/work/document-delivery", "Document"));
                 workChildren.add(new MenuItemResponse("work-drawing-delivery", "图纸交付", "/work/drawing-delivery", "Picture"));
+            }
+            if (permissions.contains("WORKCENTER_RECTIFICATION_READ")) {
+                workChildren.add(new MenuItemResponse("work-rectifications", "整改中心", "/work/rectifications", "Warning"));
             }
             if (permissions.contains("WORKCENTER_DASHBOARD_VIEW")) {
                 workChildren.add(new MenuItemResponse("work-dashboard", "智慧大屏", "/work/dashboard", "DataBoard"));

@@ -14,9 +14,13 @@
 
 - 几百个 BIM 项目统一建档。
 - NAS 原地接管，不搬迁大文件。
-- 模型文件元数据、路径、版本、专业、checksum 可检索。
-- 提供项目资产台账、模型资源库、容量看板。
-- 为企业内核级 agent 提供稳定读模型和 REST/OpenAPI。
+- 通过项目清单和 NAS 路径映射建立项目资产台账。
+- 扫描 `.rvt`、`.dwg`、`.ifc`、`.nwd`、`.nwc`、`.dxf`、`.pdf` 等建模和图纸文件。
+- 高置信文件自动入库，低置信文件进入待审核队列。
+- 模型/图纸文件元数据、路径、版本、专业、checksum 可检索。
+- 提供容量看板、SQL View、事件流和 REST/OpenAPI。
+- 为企业内核级 agent 提供 API Key、项目范围授权和稳定读模型。
+- 物理删除 NAS 文件必须申请、审核、隔离 30 天后再永久删除。
 
 ## 目录说明
 
@@ -29,11 +33,11 @@
 
 ## 关键文档
 
-- 最新 PRD：[docs/07-complete-delivery-prd.md](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/docs/07-complete-delivery-prd.md)
-- 验收与企业 agent 对接：[docs/08-acceptance-and-agent-integration.md](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/docs/08-acceptance-and-agent-integration.md)
-- 架构设计：[docs/03-architecture-and-system-design.md](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/docs/03-architecture-and-system-design.md)
-- Windows 迁移：[docs/09-windows-dev-migration.md](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/docs/09-windows-dev-migration.md)
-- Windows Codex 接手入口：[handoff/windows-agent/current-prompt.md](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/handoff/windows-agent/current-prompt.md)
+- 最新 PRD：[docs/07-complete-delivery-prd.md](/Users/vc/Documents/数字化交付平台/docs/07-complete-delivery-prd.md)
+- 验收与企业 agent 对接：[docs/08-acceptance-and-agent-integration.md](/Users/vc/Documents/数字化交付平台/docs/08-acceptance-and-agent-integration.md)
+- 架构设计：[docs/03-architecture-and-system-design.md](/Users/vc/Documents/数字化交付平台/docs/03-architecture-and-system-design.md)
+- Windows 迁移：[docs/09-windows-dev-migration.md](/Users/vc/Documents/数字化交付平台/docs/09-windows-dev-migration.md)
+- Windows Codex 接手入口：[handoff/windows-agent/current-prompt.md](/Users/vc/Documents/数字化交付平台/handoff/windows-agent/current-prompt.md)
 
 ## 本地启动
 
@@ -65,4 +69,4 @@ Windows PowerShell：
 - 测试 agent：负责按验收口径执行测试、记录缺陷和回归结论。
 - Windows agent：负责接收项目、验证 Windows 环境和回写迁移报告。
 
-Agent 协作细则见 [docs/agents/00-session-governance.md](/Users/Weishengsu/dev/zhuoyusmart/数字化交付平台/docs/agents/00-session-governance.md)。
+Agent 协作细则见 [docs/agents/00-session-governance.md](/Users/vc/Documents/数字化交付平台/docs/agents/00-session-governance.md)。

@@ -140,6 +140,66 @@ public class FileResourceRepository {
         return count == null ? 0 : count;
     }
 
+    public List<FileResourceResponse> findByProjectPaged(
+        Long projectId,
+        String fileKind,
+        String keyword,
+        String processStatus,
+        int offset,
+        int limit
+    ) {
+        String sql = """
+            SELECT id, project_id, original_name, file_kind, mime_type, size_bytes, storage_uri,
+                   checksum, business_tag, version_no, process_status, processed_at
+            FROM data_file_resources
+            WHERE project_id = :projectId
+              AND deleted = 0
+              AND (:fileKind IS NULL OR file_kind = :fileKind)
+              AND (:processStatus IS NULL OR process_status = :processStatus)
+              AND (
+                  :keyword IS NULL
+                  OR original_name LIKE :keywordLike
+                  OR storage_uri LIKE :keywordLike
+                  OR business_tag LIKE :keywordLike
+                  OR version_no LIKE :keywordLike
+              )
+            ORDER BY id DESC
+            LIMIT :limit OFFSET :offset
+            """;
+        return jdbcTemplate.query(sql, new MapSqlParameterSource()
+            .addValue("projectId", projectId)
+            .addValue("fileKind", fileKind)
+            .addValue("processStatus", processStatus)
+            .addValue("keyword", keyword)
+            .addValue("keywordLike", keyword == null ? null : "%" + keyword + "%")
+            .addValue("limit", limit)
+            .addValue("offset", offset), ROW_MAPPER);
+    }
+
+    public int countByProjectFiltered(Long projectId, String fileKind, String keyword, String processStatus) {
+        String sql = """
+            SELECT COUNT(1)
+            FROM data_file_resources
+            WHERE project_id = :projectId AND deleted = 0
+              AND (:fileKind IS NULL OR file_kind = :fileKind)
+              AND (:processStatus IS NULL OR process_status = :processStatus)
+              AND (
+                  :keyword IS NULL
+                  OR original_name LIKE :keywordLike
+                  OR storage_uri LIKE :keywordLike
+                  OR business_tag LIKE :keywordLike
+                  OR version_no LIKE :keywordLike
+              )
+            """;
+        Integer count = jdbcTemplate.queryForObject(sql, new MapSqlParameterSource()
+            .addValue("projectId", projectId)
+            .addValue("fileKind", fileKind)
+            .addValue("processStatus", processStatus)
+            .addValue("keyword", keyword)
+            .addValue("keywordLike", keyword == null ? null : "%" + keyword + "%"), Integer.class);
+        return count == null ? 0 : count;
+    }
+
     private static FileResourceResponse map(ResultSet rs, int rowNum) throws SQLException {
         Timestamp processedAt = rs.getTimestamp("processed_at");
         return new FileResourceResponse(
