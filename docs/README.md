@@ -22,19 +22,21 @@
    三期验收矩阵、企业 agent 对接契约、稳定读模型、缺陷分级和交付文档验收口径。
 9. [09-windows-dev-migration.md](/Users/vc/Documents/数字化交付平台/docs/09-windows-dev-migration.md)
    Windows 原生开发迁移说明，包含源码交接风险、启动命令、验收脚本和 Windows Codex 接手入口。
+10. [10-phase2-development-roadmap.md](/Users/vc/Documents/数字化交付平台/docs/10-phase2-development-roadmap.md)
+   二期客户交付版当前开发路线，明确一期收口后的二期主视角、已完成批次、后续批次、上下文减负规则和近期禁止事项。
 
 ## 当前版本结论
 
 - 产品焦点：`建筑机电/BIM交付`
 - 部署模式：`单客户私有化部署`
-- 一期目标：`后端数据治理优先 + 内部 BIM 资产管理试点 + NAS 原地接管 + 企业 agent 可检索底座`
-- 二期目标：`客户可交付完整版`
+- 一期状态：`已收口，后续仅处理 P0/P1 回归或真实 NAS 数据治理必要修复`
+- 二期当前主线：`客户交付版，优先收口文件访问安全闭环，再补齐数据管家客户版模块、客户项目初始化、文件预览转换、BIM 轻量化、构件级能力和客户部署交付包`
 - 后端架构：`Java + Spring Boot 模块化单体`
 - 存储底座：`StorageProvider 抽象，一期 NAS，二期可扩展对象存储`
 - 一期文件范围：`.rvt`、`.dwg`、`.ifc`、`.nwd`、`.nwc`、`.dxf`、`.pdf`
 - 一期治理链路：`项目清单/路径映射 -> NAS扫描 -> 自动入库/待审核 -> 资产库 -> SQL View -> 事件流`
 - 真实 NAS 试点：`/Volumes/zyzn/卓羽智能项目`，采用只读影子导入，不移动、不改名、不删除原文件
-- 真实 NAS 首批目录：`101-C塔`、`98-深圳口岸项目`、`99-丰图既有建模项目`
+- 真实 NAS 治理裁决：标准项目可入库，`98`、`95`、`99` 等非标准目录暂不自动进入正式资产库
 - agent 接入：`API Key + 项目范围授权 + SQL View + REST/OpenAPI`
 - 删除策略：`逻辑删除不碰 NAS，物理删除需申请审核并隔离 30 天`
 - 三维底座：`可插拔适配层`
@@ -48,3 +50,16 @@
 - Windows 端 Codex 必须先读 `handoff/windows-agent/project-context.md` 和 `handoff/windows-agent/current-prompt.md`。
 - 第一阶段开工前，研发负责人必须先过开发基线和 readiness 清单。
 - 所有需求变更以本目录文档更新为准，不以口头约定或聊天记录替代。
+
+## 二期日常上下文建议
+
+后续二期开发默认先读：
+
+- [07-complete-delivery-prd.md](/Users/vc/Documents/数字化交付平台/docs/07-complete-delivery-prd.md)
+- [08-acceptance-and-agent-integration.md](/Users/vc/Documents/数字化交付平台/docs/08-acceptance-and-agent-integration.md)
+- [03-architecture-and-system-design.md](/Users/vc/Documents/数字化交付平台/docs/03-architecture-and-system-design.md)
+- [10-phase2-development-roadmap.md](/Users/vc/Documents/数字化交付平台/docs/10-phase2-development-roadmap.md)
+- [phase2-current-roadmap.md](/Users/vc/Documents/数字化交付平台/handoff/main-agent/phase2-current-roadmap.md)
+- [hermes-jarvis-coupling-roadmap.md](/Users/vc/Documents/数字化交付平台/handoff/main-agent/hermes-jarvis-coupling-roadmap.md)
+
+`01` 到 `06` 主要作为历史和一期资料保留，除非追溯竞品、早期 MVP 或迁移问题，不再默认加载。
