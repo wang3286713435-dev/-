@@ -201,7 +201,8 @@ public class DeliveryApplicationService {
         if (!standardReady) {
             return new DeliveryCompletenessResponse(
                 projectId, normalizedView, normalizedTarget,
-                false, issues, 0, 0, 0, 0.0, List.of());
+                false, issues, 0, 0, 0, 0, 0, 0, 0, 0,
+                0.0, 0.0, "COMPLETE_STANDARD", "先补齐工程主数据和交付物标准，再生成应交项。", List.of());
         }
 
         // required rows: section/object × deliverable type cross product
@@ -211,7 +212,8 @@ public class DeliveryApplicationService {
         if (required.isEmpty()) {
             return new DeliveryCompletenessResponse(
                 projectId, normalizedView, normalizedTarget,
-                true, List.of(), 0, 0, 0, 1.0, List.of());
+                true, List.of(), 0, 0, 0, 0, 0, 0, 0, 0,
+                1.0, 1.0, "DEFINE_DELIVERABLES", "当前视图没有应交项，请确认交付物标准是否覆盖文档/图纸要求。", List.of());
         }
 
         // completed bindings
@@ -253,7 +255,14 @@ public class DeliveryApplicationService {
 
         int totalRequired = rows.size();
         int missingCount = totalRequired - completedCount;
+        int draftCount = (int) rows.stream().filter(row -> "DRAFT".equals(row.reviewStatus())).count();
+        int pendingReviewCount = (int) rows.stream().filter(row -> "PENDING".equals(row.reviewStatus())).count();
+        int approvedCount = (int) rows.stream().filter(row -> "APPROVED".equals(row.reviewStatus())).count();
+        int rejectedCount = (int) rows.stream().filter(row -> "REJECTED".equals(row.reviewStatus())).count();
+        int reviewReadyCount = approvedCount;
         double rate = totalRequired == 0 ? 1.0 : (double) completedCount / totalRequired;
+        double approvedRate = totalRequired == 0 ? 1.0 : (double) approvedCount / totalRequired;
+        NextAction nextAction = deliveryNextAction(totalRequired, missingCount, draftCount, pendingReviewCount, rejectedCount, approvedCount);
 
         List<DeliveryCompletenessRow> result = onlyMissing
             ? rows.stream().filter(r -> !r.completed()).toList()
@@ -261,7 +270,38 @@ public class DeliveryApplicationService {
 
         return new DeliveryCompletenessResponse(
             projectId, normalizedView, normalizedTarget,
-            true, List.of(), totalRequired, completedCount, missingCount, rate, result);
+            true, List.of(), totalRequired, completedCount, missingCount,
+            draftCount, pendingReviewCount, approvedCount, rejectedCount, reviewReadyCount,
+            rate, approvedRate, nextAction.code(), nextAction.text(), result);
+    }
+
+    private NextAction deliveryNextAction(
+        int totalRequired,
+        int missingCount,
+        int draftCount,
+        int pendingReviewCount,
+        int rejectedCount,
+        int approvedCount
+    ) {
+        if (totalRequired <= 0) {
+            return new NextAction("DEFINE_DELIVERABLES", "当前视图没有应交项，请确认交付物标准是否覆盖文档/图纸要求。");
+        }
+        if (rejectedCount > 0) {
+            return new NextAction("HANDLE_RECTIFICATION", "存在已驳回资料，请处理整改后复审或重新补交。");
+        }
+        if (draftCount > 0) {
+            return new NextAction("SUBMIT_REVIEW", "已有补交文件处于草稿状态，请提交审核。");
+        }
+        if (pendingReviewCount > 0) {
+            return new NextAction("REVIEW_PENDING", "已有资料待审核，请审核通过或驳回并生成整改。");
+        }
+        if (missingCount > 0) {
+            return new NextAction("BIND_MISSING_FILES", "先从缺失项中选择项目资产目录里的文件完成补交。");
+        }
+        if (approvedCount >= totalRequired) {
+            return new NextAction("EXPORT_PRECHECK", "应交项已通过审核，可以执行导出预检查。");
+        }
+        return new NextAction("REVIEW_PENDING", "请继续检查审核状态并刷新交付准备视图。");
     }
 
     // ---- batch binding ----
@@ -378,6 +418,9 @@ public class DeliveryApplicationService {
         int reviewReadyCount = (int) kindRows.stream().filter(r -> "READY".equals(r.readinessStatus())).count();
         return new DeliveryPackageViewSummary(totalRequired, boundCount, missingCount,
             pendingReviewCount, approvedCount, rejectedCount, rate, reviewReadyCount);
+    }
+
+    private record NextAction(String code, String text) {
     }
 
     private String normalizeTargetType(String targetType) {

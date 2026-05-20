@@ -4,7 +4,7 @@
 
     <header class="asset-command-center">
       <div class="asset-command-center__copy">
-        <span>数据管家工作台</span>
+        <span>项目工作台</span>
         <h1>{{ projectTitle }}</h1>
         <p>{{ projectSubTitle }}</p>
       </div>
@@ -15,33 +15,78 @@
         </el-tag>
       </div>
       <div class="asset-command-center__actions">
-        <el-button :icon="View" type="primary" @click="goDocumentDelivery">查看文档交付</el-button>
+        <el-button :icon="View" type="primary" @click="handlePrimaryWorkspaceAction">{{ primaryWorkspaceActionText }}</el-button>
         <el-button @click="goInitialization">初始化主数据</el-button>
-        <el-button :icon="ChatDotRound" @click="hermesDrawerVisible = true">问 Hermes</el-button>
+        <el-button :icon="ChatDotRound" @click="hermesDrawerVisible = true">辅助问 Hermes</el-button>
         <el-button :icon="Refresh" @click="loadPage">刷新</el-button>
       </div>
     </header>
 
     <section class="asset-workstream-strip" aria-label="项目工作区分区说明">
-      <article v-for="item in workstreamCards" :key="item.label">
+      <article
+        v-for="item in workstreamCards"
+        :key="item.label"
+        :class="{ 'is-warning': item.phase === 'WORK_CENTER' && !masterDataReady }"
+      >
+        <small>{{ item.order }}</small>
         <span>{{ item.label }}</span>
         <strong>{{ item.title }}</strong>
         <em>{{ item.description }}</em>
+        <b v-if="item.phase === 'WORK_CENTER'">{{ masterDataReady ? '已开放' : '需先确认工程主数据' }}</b>
       </article>
     </section>
 
-    <section class="asset-module-grid" aria-label="数据管家模块">
-      <button
-        v-for="item in moduleCards"
-        :key="item.name"
-        class="asset-module-card"
-        type="button"
-        @click="openModule(item)"
+    <section v-if="!masterDataReady" class="asset-workspace-gate" aria-label="交付工作中心准入提示">
+      <div>
+        <strong>交付工作中心暂不能作为正常交付流程使用</strong>
+        <p>{{ masterDataGateText }}</p>
+      </div>
+      <div class="asset-workspace-gate__actions">
+        <el-button type="primary" @click="goInitialization">生成 / 确认工程主数据草案</el-button>
+        <el-button @click="openModuleByName('project-master-data-deliverable-standard')">检查交付物标准</el-button>
+      </div>
+    </section>
+
+    <section class="asset-module-sections" aria-label="项目工作台模块">
+      <article
+        v-for="section in moduleSections"
+        :key="section.phase"
+        class="asset-module-section"
+        :class="{ 'is-gated': section.phase === 'WORK_CENTER' && !masterDataReady }"
       >
-        <span>{{ item.group }}</span>
-        <strong>{{ item.label }}</strong>
-        <em>{{ item.description }}</em>
-      </button>
+        <header>
+          <span>{{ section.order }}</span>
+          <div>
+            <strong>{{ section.label }}</strong>
+            <small>{{ section.description }}</small>
+          </div>
+          <el-tag
+            v-if="section.phase === 'WORK_CENTER'"
+            size="small"
+            :type="masterDataReady ? 'success' : 'warning'"
+            effect="plain"
+          >
+            {{ masterDataReady ? '可进入交付' : '先确认主数据' }}
+          </el-tag>
+        </header>
+        <p v-if="section.phase === 'WORK_CENTER' && !masterDataReady">
+          请先完成真实项目接入评估、工程主数据草案确认、部位树、节点类型和交付物标准，再进入文档/图纸交付。
+        </p>
+        <div class="asset-module-grid">
+          <button
+            v-for="item in section.items"
+            :key="item.name ?? item.tab ?? item.label"
+            class="asset-module-card"
+            :class="{ 'is-gated': Boolean(item.requiresMasterData && !masterDataReady) }"
+            type="button"
+            @click="openModule(item)"
+          >
+            <span>{{ item.group }}</span>
+            <strong>{{ item.label }}</strong>
+            <em>{{ item.requiresMasterData && !masterDataReady ? '需先生成 / 确认工程主数据草案' : item.description }}</em>
+          </button>
+        </div>
+      </article>
     </section>
 
     <el-tabs v-model="activeTab" class="asset-tabs">
@@ -615,6 +660,7 @@ import {
   previewStatusLabel
 } from '@/modules/data-steward/utils/previewStatus';
 import ProjectWorkspaceNav from '@/modules/core/components/ProjectWorkspaceNav.vue';
+import { fetchInitializationStatus, type InitializationStatus } from '@/modules/master-data/api/masterData';
 
 const route = useRoute();
 const router = useRouter();
@@ -628,6 +674,7 @@ const qualityOverview = ref<AssetQualityOverview | null>(null);
 const scanTasks = ref<AssetScanTask[]>([]);
 const pathMappings = ref<AssetPathMapping[]>([]);
 const disciplineOptions = ref<AssetDiscipline[]>([]);
+const initializationStatus = ref<InitializationStatus | null>(null);
 const recentFiles = ref<CatalogFile[]>([]);
 const detailDrawerVisible = ref(false);
 const selectedFile = ref<FileAsset | null>(null);
@@ -671,29 +718,67 @@ const metadataFileKindOptions = [
   { label: '其他', value: 'OTHER' }
 ];
 const assetTabs = new Set(['dashboard', 'files', 'scans', 'mappings']);
-const workstreamCards = [
-  { label: '数据管家', title: '先看资产事实', description: '文件资产、目录状态、预览下载权限和治理风险。' },
-  { label: '工程主数据', title: '再补交付底座', description: '部位树、节点类型、交付标准和目录模板。' },
-  { label: '工作中心', title: '最后推进交付', description: '文档/图纸交付、人工审核、整改和导出预检查。' }
-];
-const moduleCards: Array<{
+type WorkspacePhase = 'ASSET' | 'MASTER_DATA' | 'WORK_CENTER';
+type ModuleCard = {
   label: string;
   group: string;
   description: string;
+  phase: WorkspacePhase;
   name?: RouteRecordName;
   tab?: string;
+  requiresMasterData?: boolean;
+};
+
+const workstreamCards: Array<{
+  order: string;
+  label: string;
+  title: string;
+  description: string;
+  phase: WorkspacePhase;
 }> = [
-  { label: '资产驾驶舱', group: '总览', description: '项目资产、容量、治理风险', tab: 'dashboard' },
-  { label: '文件管理', group: '数据管家', description: '目录树、文件表、预览和治理', tab: 'files' },
-  { label: '初始化向导', group: '工程主数据', description: '从目录线索生成主数据草案', name: 'project-master-data-initialization' },
-  { label: '部位树', group: '工程主数据', description: '维护楼栋、楼层、房间和系统部位', name: 'project-master-data-sections' },
-  { label: '交付物标准', group: '工程主数据', description: '配置应交项、类型和验收口径', name: 'project-master-data-deliverable-standard' },
-  { label: '文档交付', group: '工作中心', description: '查看文档应交项、挂接和预检查', name: 'project-work-document-delivery' },
-  { label: '图纸交付', group: '工作中心', description: '查看图纸交付状态和缺失原因', name: 'project-work-drawing-delivery' },
-  { label: '整改闭环', group: '工作中心', description: '跟踪审核驳回、整改和复核', name: 'project-work-rectifications' },
-  { label: '模型集成', group: '数据管家', description: '登记模型集成与发布状态', name: 'project-data-steward-models' },
-  { label: '文件服务', group: '数据管家', description: '预览、下载权限与禁用写操作', name: 'project-data-steward-file-service' }
+  { order: '01', label: '项目资产', title: '先看真实文件', description: '文件目录、文件列表、文件详情和受控预览。', phase: 'ASSET' },
+  { order: '02', label: '工程主数据', title: '再定义交付规则', description: '基于资产线索确认项目结构和交付标准。', phase: 'MASTER_DATA' },
+  { order: '03', label: '交付工作中心', title: '最后按规则交付', description: '文档/图纸补交、人工审核、整改和 dry-run 预检查。', phase: 'WORK_CENTER' }
 ];
+const moduleCards: ModuleCard[] = [
+  { label: '资产驾驶舱', group: '项目资产', description: '项目资产、容量、治理风险', phase: 'ASSET', tab: 'dashboard' },
+  { label: '文件管理', group: '项目资产', description: '目录树、文件表、预览和治理', phase: 'ASSET', tab: 'files' },
+  { label: '模型集成', group: '项目资产', description: '登记模型集成与发布状态', phase: 'ASSET', name: 'project-data-steward-models' },
+  { label: '管理对象', group: '项目资产', description: '对象与模型集成登记', phase: 'ASSET', name: 'project-data-steward-objects' },
+  { label: '文件服务', group: '项目资产', description: '预览、下载权限与禁用写操作', phase: 'ASSET', name: 'project-data-steward-file-service' },
+  { label: '初始化向导', group: '工程主数据', description: '从目录线索生成主数据草案', phase: 'MASTER_DATA', name: 'project-master-data-initialization' },
+  { label: '部位树', group: '工程主数据', description: '维护楼栋、楼层、房间和系统部位', phase: 'MASTER_DATA', name: 'project-master-data-sections' },
+  { label: '节点类型', group: '工程主数据', description: '确认部位层级和锁定规则', phase: 'MASTER_DATA', name: 'project-master-data-node-types' },
+  { label: '交付物标准', group: '工程主数据', description: '配置应交项、类型和验收口径', phase: 'MASTER_DATA', name: 'project-master-data-deliverable-standard' },
+  { label: '交付治理助手', group: '交付工作中心', description: '辅助查看当前交付缺口，不作为必经入口', phase: 'WORK_CENTER', name: 'project-work-agent-governance', requiresMasterData: true },
+  { label: '文档交付', group: '交付工作中心', description: '查看文档应交项、挂接和预检查', phase: 'WORK_CENTER', name: 'project-work-document-delivery', requiresMasterData: true },
+  { label: '图纸交付', group: '交付工作中心', description: '查看图纸交付状态和缺失原因', phase: 'WORK_CENTER', name: 'project-work-drawing-delivery', requiresMasterData: true },
+  { label: '整改闭环', group: '交付工作中心', description: '跟踪审核驳回、整改和复核', phase: 'WORK_CENTER', name: 'project-work-rectifications', requiresMasterData: true },
+  { label: '交付驾驶舱', group: '交付工作中心', description: '查看交付数量、绑定和工作中心状态', phase: 'WORK_CENTER', name: 'project-work-dashboard', requiresMasterData: true }
+];
+const moduleSections = computed(() => [
+  {
+    phase: 'ASSET' as WorkspacePhase,
+    order: '01',
+    label: '项目资产',
+    description: '看真实文件、目录、文件详情和治理风险。',
+    items: moduleCards.filter((item) => item.phase === 'ASSET')
+  },
+  {
+    phase: 'MASTER_DATA' as WorkspacePhase,
+    order: '02',
+    label: '工程主数据',
+    description: '基于资产线索确认项目结构、节点规则和交付标准。',
+    items: moduleCards.filter((item) => item.phase === 'MASTER_DATA')
+  },
+  {
+    phase: 'WORK_CENTER' as WorkspacePhase,
+    order: '03',
+    label: '交付工作中心',
+    description: '工作中心不是工程主数据子页面，它在主数据之后按规则推进交付。',
+    items: moduleCards.filter((item) => item.phase === 'WORK_CENTER')
+  }
+]);
 const projectTitle = computed(() => {
   if (!project.value) return `项目 ${projectId.value}`;
   return `${project.value.code} ${project.value.name}`;
@@ -707,6 +792,17 @@ const projectSubTitle = computed(() => {
     project.value.projectManagerName ? `负责人：${project.value.projectManagerName}` : ''
   ].filter(Boolean).join(' / ') || '资产明细';
 });
+const masterDataReady = computed(() =>
+  Boolean(initializationStatus.value?.ready || initializationStatus.value?.standardStatus?.deliverableStandardReady)
+);
+const masterDataGateText = computed(() => {
+  const blockers = initializationStatus.value?.blockers ?? [];
+  if (blockers.length > 0) {
+    return `请先生成 / 确认工程主数据草案，并处理：${blockers.slice(0, 3).join('、')}。`;
+  }
+  return '请先完成真实项目接入评估、工程主数据草案确认、部位树、节点类型和交付物标准，再进入正常交付。';
+});
+const primaryWorkspaceActionText = computed(() => masterDataReady.value ? '进入文档交付' : '生成 / 确认主数据草案');
 const projectRootLabel = computed(() => project.value?.name ?? `项目 ${projectId.value}`);
 const detailTitle = computed(() => selectedFile.value ? `${selectedFile.value.fileName} - 文件详情` : '文件详情');
 const currentPreview = computed(() => {
@@ -786,7 +882,7 @@ async function loadPage() {
   const requestId = ++pageLoadRequestId;
   loading.value = true;
   try {
-    const [projectsResult, statisticsResult, qualityResult, scansResult, mappingsResult, disciplinesResult, recentFilesResult] =
+    const [projectsResult, statisticsResult, qualityResult, scansResult, mappingsResult, disciplinesResult, recentFilesResult, initStatusResult] =
       await Promise.allSettled([
       fetchAssetProjects(),
       fetchAssetStatistics(projectId.value),
@@ -794,7 +890,8 @@ async function loadPage() {
       fetchAssetScanTasks(),
       fetchAssetPathMappings(projectId.value),
       fetchAssetDisciplines(projectId.value),
-      fetchCatalogFiles({ projectId: projectId.value, page: 1, pageSize: 6 })
+      fetchCatalogFiles({ projectId: projectId.value, page: 1, pageSize: 6 }),
+      fetchInitializationStatus(projectId.value)
     ]);
     if (requestId !== pageLoadRequestId) return;
     if (projectsResult.status === 'rejected' || statisticsResult.status === 'rejected') {
@@ -808,6 +905,7 @@ async function loadPage() {
     pathMappings.value = mappingsResult.status === 'fulfilled' ? mappingsResult.value : [];
     disciplineOptions.value = disciplinesResult.status === 'fulfilled' ? disciplinesResult.value : [];
     recentFiles.value = recentFilesResult.status === 'fulfilled' ? recentFilesResult.value.rows : [];
+    initializationStatus.value = initStatusResult.status === 'fulfilled' ? initStatusResult.value : null;
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '项目资产加载失败');
   } finally {
@@ -824,6 +922,7 @@ function resetProjectData() {
   scanTasks.value = [];
   pathMappings.value = [];
   disciplineOptions.value = [];
+  initializationStatus.value = null;
   recentFiles.value = [];
   selectedFile.value = null;
   selectedPreview.value = null;
@@ -1111,14 +1210,29 @@ function openRiskCard(risk: { tab: string; qualityIssue?: string }) {
   }
 }
 
-function openModule(item: { name?: RouteRecordName; tab?: string }) {
+function openModule(item: ModuleCard) {
   if (item.tab) {
     activeTab.value = item.tab;
     return;
   }
+  if (item.requiresMasterData && !masterDataReady.value) {
+    ElMessage.warning('请先生成 / 确认工程主数据草案；交付工作中心页面会保留阻塞提示。');
+  }
   if (item.name) {
     void router.push({ name: item.name, params: { projectId: projectId.value } });
   }
+}
+
+function openModuleByName(name: RouteRecordName) {
+  void router.push({ name, params: { projectId: projectId.value } });
+}
+
+function handlePrimaryWorkspaceAction() {
+  if (masterDataReady.value) {
+    goDocumentDelivery();
+    return;
+  }
+  goInitialization();
 }
 
 function goDocumentDelivery() {
@@ -1379,6 +1493,18 @@ function scanProgressValue(task: AssetScanTask) {
   background: #ffffff;
 }
 
+.asset-workstream-strip article.is-warning {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: #fffaf0;
+}
+
+.asset-workstream-strip small {
+  display: block;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .asset-workstream-strip span,
 .asset-workstream-strip em {
   display: block;
@@ -1394,6 +1520,17 @@ function scanProgressValue(task: AssetScanTask) {
   font-size: 15px;
 }
 
+.asset-workstream-strip b {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.14);
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .asset-tabs {
   min-width: 0;
   padding: 16px;
@@ -1402,9 +1539,97 @@ function scanProgressValue(task: AssetScanTask) {
   border-radius: 8px;
 }
 
+.asset-workspace-gate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 8px;
+  background: #fffaf0;
+}
+
+.asset-workspace-gate strong {
+  display: block;
+  color: #92400e;
+  line-height: 1.5;
+}
+
+.asset-workspace-gate p {
+  margin: 4px 0 0;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.asset-workspace-gate__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.asset-module-sections {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.asset-module-section {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.asset-module-section.is-gated {
+  border-color: rgba(245, 158, 11, 0.26);
+  background: #fffdf8;
+}
+
+.asset-module-section > header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.asset-module-section > header > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.asset-module-section > header strong {
+  display: block;
+  color: #0f172a;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.asset-module-section > header small,
+.asset-module-section > p {
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.asset-module-section > p {
+  margin: -2px 0 12px;
+}
+
 .asset-module-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 10px;
   min-width: 0;
 }
@@ -1423,6 +1648,11 @@ function scanProgressValue(task: AssetScanTask) {
 .asset-module-card:hover {
   border-color: rgba(37, 99, 235, 0.36);
   background: #f8fbff;
+}
+
+.asset-module-card.is-gated {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: #fffaf0;
 }
 
 .asset-module-card span,
@@ -1765,8 +1995,21 @@ function scanProgressValue(task: AssetScanTask) {
     justify-content: flex-start;
   }
 
+  .asset-workstream-strip,
+  .asset-workspace-gate {
+    align-items: flex-start;
+  }
+
   .asset-workstream-strip {
     grid-template-columns: 1fr;
+  }
+
+  .asset-workspace-gate {
+    flex-direction: column;
+  }
+
+  .asset-workspace-gate__actions {
+    justify-content: flex-start;
   }
 
   .asset-kpi-grid {

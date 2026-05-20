@@ -14,8 +14,9 @@
     <div class="project-workspace-nav__groups">
       <div class="project-workspace-nav__group">
         <div class="project-workspace-nav__group-head">
-          <strong>数据管家</strong>
-          <small>文件资产、预览和治理风险</small>
+          <span>01</span>
+          <strong>项目资产</strong>
+          <small>先看真实文件、目录和资产详情</small>
         </div>
         <el-button
           text
@@ -84,8 +85,9 @@
       </div>
       <div class="project-workspace-nav__group">
         <div class="project-workspace-nav__group-head">
+          <span>02</span>
           <strong>工程主数据</strong>
-          <small>部位、节点类型和交付标准</small>
+          <small>再确认项目结构和交付标准</small>
         </div>
         <el-button
           text
@@ -122,14 +124,21 @@
       </div>
       <div class="project-workspace-nav__group">
         <div class="project-workspace-nav__group-head">
-          <strong>工作中心</strong>
-          <small>文档图纸交付、审核整改和预检查</small>
+          <span>03</span>
+          <strong>交付工作中心</strong>
+          <small>最后按规则补交、审核、整改和预检查</small>
+          <el-tag size="small" :type="masterDataReady ? 'success' : 'warning'" effect="plain">
+            {{ masterDataReady ? '主数据已就绪' : '先确认主数据' }}
+          </el-tag>
         </div>
+        <p v-if="!masterDataReady" class="project-workspace-nav__gate">
+          请先生成 / 确认工程主数据草案，再进入正常交付流程。
+        </p>
         <el-button
           text
           size="small"
           :type="isActive(['project-work-document-delivery']) ? 'primary' : undefined"
-          @click="go('project-work-document-delivery')"
+          @click="goWorkCenter('project-work-document-delivery')"
         >
           文档交付
         </el-button>
@@ -137,7 +146,7 @@
           text
           size="small"
           :type="isActive(['project-work-drawing-delivery']) ? 'primary' : undefined"
-          @click="go('project-work-drawing-delivery')"
+          @click="goWorkCenter('project-work-drawing-delivery')"
         >
           图纸交付
         </el-button>
@@ -145,7 +154,7 @@
           text
           size="small"
           :type="isActive(['project-work-rectifications']) ? 'primary' : undefined"
-          @click="go('project-work-rectifications')"
+          @click="goWorkCenter('project-work-rectifications')"
         >
           整改闭环
         </el-button>
@@ -153,17 +162,17 @@
           text
           size="small"
           :type="isActive(['project-work-agent-governance']) ? 'primary' : undefined"
-          @click="go('project-work-agent-governance')"
+          @click="goWorkCenter('project-work-agent-governance')"
         >
-          交付治理
+          交付治理助手
         </el-button>
         <el-button
           text
           size="small"
           :type="isActive(['project-work-dashboard']) ? 'primary' : undefined"
-          @click="go('project-work-dashboard')"
+          @click="goWorkCenter('project-work-dashboard')"
         >
-          项目驾驶舱
+          交付驾驶舱
         </el-button>
       </div>
     </div>
@@ -171,10 +180,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Back } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
 
+import { fetchInitializationStatus, type InitializationStatus } from '@/modules/master-data/api/masterData';
 import { useAuthStore } from '@/stores/auth';
 
 const props = defineProps<{
@@ -184,6 +195,7 @@ const props = defineProps<{
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const initializationStatus = ref<InitializationStatus | null>(null);
 
 const project = computed(() =>
   authStore.currentUser?.projects.find((item) => item.id === props.projectId)
@@ -191,9 +203,36 @@ const project = computed(() =>
 const projectName = computed(() => project.value?.name ?? `项目 ${props.projectId}`);
 const projectCode = computed(() => project.value?.code ?? '');
 const projectManagerName = computed(() => project.value?.projectManagerName || '待维护');
+const masterDataReady = computed(() =>
+  Boolean(initializationStatus.value?.ready || initializationStatus.value?.standardStatus?.deliverableStandardReady)
+);
+
+watch(
+  () => props.projectId,
+  () => {
+    void loadInitializationStatus();
+  },
+  { immediate: true }
+);
+
+async function loadInitializationStatus() {
+  if (!Number.isFinite(props.projectId)) return;
+  try {
+    initializationStatus.value = await fetchInitializationStatus(props.projectId);
+  } catch {
+    initializationStatus.value = null;
+  }
+}
 
 function go(name: string) {
   router.push({ name, params: { projectId: props.projectId } });
+}
+
+function goWorkCenter(name: string) {
+  if (!masterDataReady.value) {
+    ElMessage.warning('请先生成 / 确认工程主数据草案；工作中心页面会保留阻塞提示。');
+  }
+  go(name);
 }
 
 function goAssetTab(tab: string) {
@@ -279,11 +318,30 @@ function isAssetTab(tab: string) {
   padding-top: 2px;
 }
 
+.project-workspace-nav__group-head > span {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
 .project-workspace-nav__group-head strong {
   color: #303133;
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.project-workspace-nav__gate {
+  flex: 1 1 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: 8px;
+  background: #fff8eb;
+  color: #92400e;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .project-workspace-nav__group-head small {

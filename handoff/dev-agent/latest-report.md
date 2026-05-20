@@ -1,333 +1,302 @@
-# 开发 Agent 报告：M1C 工程主数据真实项目落地
+# 开发 Agent 报告：M1D 标准驱动交付闭环强化
 
 时间：2026-05-20
 
 ## 1. 本轮目标
 
-本轮执行 `M1C：工程主数据真实项目落地`。
+本轮按更新后的 `handoff/dev-agent/current-prompt.md` 继续 M1D，不进入 G4 / Hermes / 8B / 8C / 9A。
 
-目标是把真实项目资产目录接入工程主数据初始化链路：基于 catalog-only 目录证据生成真实项目接入评估与草案预览，并通过人工确认后创建/补齐工程部位、节点类型、交付定义、交付类型、交付属性和目录模板。草案必须明确“模板只是基础骨架，不代表真实工程结构已识别”。
+目标是补齐普通员工能看懂的标准驱动交付闭环信息结构，并并入项目工作台纠偏：
 
-完成标记：`<promise>MAINLINE_M1C_REAL_PROJECT_MASTERDATA_COMPLETE</promise>`
+`项目资产 -> 工程主数据 -> 交付工作中心`
 
-## 2. Git 基线
+工作中心不是工程主数据的子功能，但必须在项目工作台下，并排在工程主数据之后；工程主数据未就绪时，工作中心入口和交付页面必须提示“请先生成 / 确认工程主数据草案”。
 
-- 当前分支：`codex/platform-m1c-real-masterdata`
-- 本轮基线提交：`0e73eae`
-- 本轮未提交 git。
-- 工作区原有/临时未跟踪项仍保留：
-  - `tmp/jar-inspect/`
-  - `tmp/run-logs/backend-m1b-test.pid`
-  - `tmp/run-logs/backend-m1c.pid`
-  - `tmp/run-logs/hermes-gateway.pid`
+完成承诺仍为：
 
-## 3. 读取的关键文档
+`<promise>MAINLINE_M1D_STANDARD_DELIVERY_LOOP_COMPLETE</promise>`
+
+## 2. Git 与边界
+
+- 当前分支：`codex/platform-m1d-delivery-loop`
+- 当前基线提交：`b6bbb14`
+- 当前 active 批次：确认是 `M1D：标准驱动交付闭环强化`
+- G4 / Hermes / 8B / 8C / 9A：确认冻结，未扩展
+- 本轮未提交 git
+- 未修改 `docs/**`
+- 未新增数据库迁移
+- 未读取 PDF / Office / DWG / RVT / IFC 正文
+- 未做 BIM 轻量化、parser、writer、indexing
+- 未触碰真实 NAS 增删改查
+- 未暴露 raw storage_path / storage_uri / NAS 原始路径 / SQL / raw row / token / secret / password
+- 未创建子 agent，未调用 Claude Code
+
+## 3. 已阅读关键材料
 
 - `handoff/dev-agent/current-prompt.md`
 - `handoff/main-agent/status.md`
 - `handoff/main-agent/development-log.md`
 - `handoff/main-agent/phase2-current-roadmap.md`
 - `handoff/main-agent/mainline-git-governance-and-hermes-freeze.md`
-- `handoff/main-agent/m1b-project-workbench-usability-closure.md`
-- `handoff/main-agent/m1c-real-project-masterdata-plan.md`
-- `handoff/dev-agent/latest-report.md`
+- `handoff/main-agent/m1c-real-project-masterdata-closure.md`
+- `handoff/main-agent/m1d-standard-delivery-loop-plan.md`
+- `handoff/main-agent/m1d-workspace-ia-correction.md`
 - `handoff/test-agent/latest-report.md`
 - `docs/07-complete-delivery-prd.md`
 - `docs/08-acceptance-and-agent-integration.md`
 - `docs/10-phase2-development-roadmap.md`
 
-未修改 `docs/**`，未修改共享文档空间。
+## 4. 7 个信息结构补齐点
 
-## 4. 命名与冻结边界
+1. 项目工作台标题从“数据管家工作台”调整为“项目工作台”，首屏明确三段顺序。
+2. 项目工作台工作流卡片改为：`01 项目资产`、`02 工程主数据`、`03 交付工作中心`。
+3. 模块入口按三段重新分组，不再把工作中心视觉上混在数据管家模块里。
+4. 工程主数据未就绪时，工作中心分组和入口显示“需先确认工程主数据 / 先确认主数据”。
+5. 项目内导航同步改为 `项目资产 -> 工程主数据 -> 交付工作中心`，并显示主数据就绪状态。
+6. 文档交付 / 图纸交付页面未就绪状态标题改为“请先生成 / 确认工程主数据草案”。
+7. 交付页面保留可查看状态，但不表现为已经可以正常交付。
 
-- 本轮只做 M1C。
-- 未继续 G4 / Hermes 开发。
-- 未进入 8B / 8C / 9A。
-- 未新增 H1 / R1 等临时批次命名。
-- 未修改 Hermes Gateway、Hermes memory、外部 Hermes 项目或 Agent 自动治理能力。
-- 未硬编码 105 / 503 作为业务逻辑；仅在专项脚本中作为真实项目验收样本。
+## 5. 交付页面流程引导
 
-## 5. 7A/Hermes 以外边界确认
+后端交付完整率接口已补充流程字段：
 
-本轮没有做以下事项：
+- `draftCount`
+- `pendingReviewCount`
+- `approvedCount`
+- `rejectedCount`
+- `reviewReadyCount`
+- `approvedRate`
+- `nextActionCode`
+- `nextActionText`
 
-- 未让 Hermes 裸连 DB。
-- 未让 Agent 生成 SQL。
-- 未做 Agent DB CRUD。
-- 未做 NAS scan。
-- 未启用 parser / writer / indexing。
-- 未做 BIM 轻量化、模型转换、构件解析。
-- 未写 OpenSearch / Qdrant / MinIO / documents / chunks。
-- 未做 production rollout。
+前端文档交付 / 图纸交付页面已补齐：
 
-## 6. 后端改动
+- 标准驱动交付闭环说明
+- 当前下一步动作
+- 应交、已补交、缺失、草稿、待审、已通过、已驳回
+- 补交完整率与审核通过率
+- 缺失项原因业务化说明
+- 文件选择远程分页提示
+- 导出预检查仍作为 dry-run 动作展示
 
-改动文件：
+下一步动作口径：
 
-- `backend/delivery-master-data/src/main/java/com/zhuoyu/delivery/masterdata/initialization/application/ProjectInitializationApplicationService.java`
-- `backend/delivery-master-data/src/main/java/com/zhuoyu/delivery/masterdata/initialization/dto/InitializationDtos.java`
+- `COMPLETE_STANDARD`：生成/确认主数据
+- `DEFINE_DELIVERABLES`：去补标准
+- `BIND_MISSING_FILES`：补交文件
+- `SUBMIT_REVIEW`：提交审核
+- `REVIEW_PENDING`：等待/执行审核
+- `HANDLE_RECTIFICATION`：处理整改
+- `EXPORT_PRECHECK`：导出预检查
 
-主要改动：
+## 6. 工程主数据未就绪行为
 
-- `GET /api/master-data/projects/{projectId}/onboarding/assessment`
-  - 增加 `projectCode`、`projectName`、`assetSource`、`realNasProject`。
-  - `assetSummary` 增加 `scanTaskCount`、`dominantFileExtensions`、`dominantDisciplines`、`directoryClues`。
-  - 评估证据增加项目来源、扩展名、专业、脱敏目录线索、扫描任务记录。
-  - 非 `NAS_REAL*` 项目返回 `REAL_NAS_SOURCE_NOT_CONFIRMED` gap。
-  - 对模型/图纸相关问题保持 Missing Evidence 口径：缺少 `rvt_parse_evidence_missing,dwg_parse_evidence_missing,component_evidence_missing,model_parse_evidence_missing`。
+项目工作台：
 
-- `GET /api/master-data/projects/{projectId}/onboarding/preview`
-  - 增加 `assetCatalogOnly=true`。
-  - `draftItems` 增加 `evidenceMode`、`evidenceSource`、`confidenceLevel`、`riskHint`。
-  - 草案项区分 `EXISTING_PROJECT_MASTERDATA`、`CATALOG_DIRECTORY_CLUE`、`CATALOG_FILE_KIND_CLUE`、`TEMPLATE_SKELETON`。
-  - 草案只做 dry-run，不读文件正文，不触碰 NAS。
+- 顶部主按钮在主数据未就绪时指向“生成 / 确认主数据草案”。
+- 工作中心区块显示“交付工作中心暂不能作为正常交付流程使用”。
+- 工作中心入口卡片显示“需先生成 / 确认工程主数据草案”。
 
-- `POST /api/master-data/projects/{projectId}/onboarding/apply`
-  - 保持 `confirmed=true` 人工确认闸门。
-  - 继续复用既有模板应用逻辑，重复应用只跳过已有项，不覆盖项目已有主数据。
-  - next action 去掉 Agent/G4 指向，改为进入文档交付和图纸交付继续人工复核。
+项目内导航：
 
-- 路径脱敏
-  - `directoryClues` 只返回脱敏后的项目内目录线索。
-  - 过滤 `storage_path`、`storage_uri`、`nas://`、`smb://`、`afp://`、`/Volumes/`、`/Users/`，以及孤立的 `Volumes`、`Users`、`storage`、`nas`、`smb`。
-  - 若无法安全展示目录线索，返回 `项目内目录线索已脱敏`。
+- 交付工作中心分组显示 `先确认主数据`。
+- 点击工作中心入口时提示：`请先生成 / 确认工程主数据草案；工作中心页面会保留阻塞提示。`
 
-## 7. 前端改动
+交付页面：
 
-改动文件：
+- 未就绪 alert 标题为：`请先生成 / 确认工程主数据草案`。
+- 页面提供“生成/确认工程主数据草案”和“去配置交付物标准”入口。
+- 下一步动作的 `COMPLETE_STANDARD` 会回到项目初始化页面。
 
-- `frontend/src/modules/master-data/api/masterData.ts`
-- `frontend/src/modules/master-data/pages/ProjectInitializationPage.vue`
-- `frontend/src/modules/master-data/pages/SectionNodesPage.vue`
-- `frontend/src/modules/master-data/pages/NodeTypesPage.vue`
-- `frontend/src/modules/master-data/pages/DeliverableStandardPage.vue`
+## 7. 后端改动
 
-主要改动：
+后端只触碰 work-center/delivery 范围：
 
-- 初始化页标题统一为 `M1C 真实项目接入`。
-- 接入评估页展示：
-  - 真实 NAS 项目 / 来源待确认。
-  - 项目来源、文件计数、模型/图纸/文档计数、路径映射、扫描记录、最近扫描。
-  - 主要扩展名、主要专业线索、主要目录线索。
-  - 缺口 severity 与 Missing Evidence reason。
-- 草案预览增加“草案证据与风险”表：
-  - 类别、草案项、来源、证据模式、置信度、风险提示、确认状态。
-  - 明确 catalog-only 线索不能替代真实工程结构、正文证据或模型解析证据。
-- 草案应用后的入口增加：
-  - 查看部位树。
-  - 查看节点类型。
-  - 查看交付物标准。
-  - 进入文档交付。
-  - 进入图纸交付。
-- 部位树、节点类型、交付物标准页新增接入草案复核提醒。
+- `DeliveryApplicationService`：计算交付闭环状态计数、审核通过率和下一步动作。
+- `WorkCenterDtos`：扩展 `DeliveryCompletenessResponse` 返回字段。
 
-## 8. 脚本改动
+未新增 migration，未改数据库结构，未接触 Hermes 逻辑。
+
+## 8. 前端改动
+
+- `DeliveryViewPanel.vue`：补齐闭环说明、状态卡、下一步动作、主数据未就绪引导、缺失项解释和 dry-run 预检查入口。
+- `delivery.ts`：同步交付完整率 DTO 字段。
+- `AssetProjectDetailPage.vue`：项目工作台按 `项目资产 -> 工程主数据 -> 交付工作中心` 重组。
+- `ProjectWorkspaceNav.vue`：项目内导航按三段结构重组，并接入工程主数据就绪状态提示。
+
+## 9. 脚本改动
 
 新增：
 
-- `scripts/dev/check-m1c-real-project-masterdata.sh`
+- `scripts/dev/check-m1d-standard-delivery-loop.sh`
 
 脚本覆盖：
 
-- 登录平台。
-- 切换并验证真实项目 `503 / 105`。
-- 切换并验证真实项目 `506 / 93`。
-- 检查 assessment / preview 的 catalog-only 合同。
-- 检查 `assetCatalogOnly=true`、`evidenceMode=catalog_only`、`dryRun=true`、`confirmedRequired=true`、`nasTouched=false`、`contentRead=false`。
-- 检查 `draftItems` 的 evidence source、confidence、risk hint、pending confirmation。
-- 检查未确认时禁止 apply。
-- 创建隔离 smoke 项目，插入目录级测试数据，验证确认应用与重复应用幂等。
-- 检查 `masterdata.initialization.template-apply` 审计事件。
-- 检查响应无 raw path / storage / SQL / secret / token / password 等禁出字段。
+- 标准未就绪
+- 标准就绪
+- 缺失项
+- 批量挂接
+- 提交审核
+- 审核通过
+- 审核驳回
+- 整改生成
+- 导出预检查 dry-run
+- 前端信息结构静态检查
 
-## 9. 数据库与迁移
+本轮已把 M1D 信息结构断言加入脚本，检查页面中存在：
 
-- 未新增数据库迁移。
-- 未修改旧 Flyway migration。
-- M1C 专项脚本创建隔离 smoke 项目与目录级测试数据，仅用于验收。
-- 未创建、移动、删除、重命名、上传真实 NAS 文件。
-- 未读取 PDF / Office / DWG / RVT / IFC 正文。
+- `项目资产`
+- `工程主数据`
+- `交付工作中心`
+- `请先生成 / 确认工程主数据草案`
 
-## 10. 路径与敏感字段自查
+## 10. 浏览器抽查
 
-已自查：
+当前本地服务：
 
-- 未把项目路径、NAS 路径、`storage_path`、`storage_uri` 透传到前端或 Hermes。
-- `directoryClues` 已改为脱敏线索或 `项目内目录线索已脱敏`。
-- 前端可见文本和专项脚本响应扫描均未发现：
-  - raw `storage_path`
-  - `storage_uri`
-  - NAS 原始路径
-  - raw DB row
-  - SQL
-  - secret / token / password
-  - DWG/RVT 内部内容
-  - PDF/Office 正文内容
+- 后端：`127.0.0.1:8080`，screen 会话 `delivery-backend`
+- 前端：`127.0.0.1:5173`，screen 会话 `frontend-m1d-ia`
 
-## 11. 构建与脚本结果
+浏览器已抽查：
 
-- 后端构建：通过。
-  - `./mvnw -pl delivery-app -am -DskipTests package`
-  - `BUILD SUCCESS`
-- 前端构建：通过。
+- `/data-steward/assets/503`：项目工作台可见 `项目资产`、`工程主数据`、`交付工作中心`
+- `/data-steward/assets/503/work/document-delivery`：项目内导航可见三段结构与 `标准驱动交付闭环`
+- `/data-steward/assets/506/work/document-delivery`：工程主数据未就绪时可见 `请先生成 / 确认工程主数据草案`
+- 页面可见文本中未发现 raw path / storage path / NAS path / SQL / secret / token 泄露
+
+## 11. 自测结果
+
+- 后端构建：通过
+  - `cd backend && ./mvnw -pl delivery-app -am -DskipTests package`
+- 前端构建：通过
   - `corepack pnpm --dir frontend build`
-  - 仅保留既有 Vite chunk size warning。
-- 健康检查：通过。
+  - 仅有既存 chunk size warning
+- 健康检查：通过
   - `curl -fsS http://127.0.0.1:8080/actuator/health`
-  - `{"status":"UP"}`
-- M1C 专项脚本：通过。
-  - `bash scripts/dev/check-m1c-real-project-masterdata.sh`
-  - `PASS=14 FAIL=0`
-- 文件访问安全回归：通过。
-  - `bash scripts/dev/check-phase2-batch4-file-access.sh`
+  - 返回 `{"status":"UP"}`
+- M1D 专项脚本：通过
+  - `bash scripts/dev/check-m1d-standard-delivery-loop.sh`
+  - `PASS=29 FAIL=0`
+- Batch2 标准交付回归：通过
+  - 使用隔离 admin/project 执行，避免默认项目历史标准污染未就绪前置条件
+  - `PASS=38 FAIL=0`
+- Batch3 审核整改报表回归：通过
+  - `PASS=52 FAIL=0`
+- Batch4 文件访问回归：通过
   - `PASS=18 FAIL=0`
-- 6A 项目初始化回归：通过。
-  - `bash scripts/dev/check-phase2-batch6a-project-initialization.sh`
-  - `phase2 batch6a project initialization ok`
-- 6B 交付包回归：通过。
-  - `bash scripts/dev/check-phase2-batch6b-delivery-package.sh`
+- Batch6B 交付包回归：通过
   - `PASS=17 FAIL=0`
-- 7A 预览/导出预检查回归：通过。
-  - `bash scripts/dev/check-phase2-batch7a-preview-export-precheck.sh`
+- Batch7A 预览/导出预检查回归：通过
   - `PASS=18 FAIL=0`
-- 8A 只读 Mock 轻量化适配层回归：通过。
-  - `bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh`
+- Batch8A BIM 轻量化 adapter 回归：通过
   - `PASS=11 FAIL=0`
-- `git diff --check`：通过。
+- M1C 真实项目主数据回归：通过
+  - `PASS=14 FAIL=0`
+- `git diff --check`：通过
 
-## 12. 浏览器自测结果
+## 12. 105/503 与 93/506 抽查
 
-已使用新登录会话完成页面自测：
+- 105/503：页面抽查看到三段信息结构，文档交付页可见标准驱动闭环提示。
+- 93/506：页面抽查看到工程主数据未就绪阻塞提示，交付页面提示先生成 / 确认工程主数据草案。
+- 写链路验证使用隔离 smoke 项目和脚本完成，未对真实项目做 NAS 写操作。
 
-- `/data-steward/assets/503/master-data/initialization`
-  - 通过。
-  - 点击“预览草案”后可见 `M1C 真实项目接入`、`真实 NAS 项目`、`草案证据与风险`、`catalog_only`。
-- `/data-steward/assets/506/master-data/initialization`
-  - 通过。
-  - 点击“预览草案”后可见 `M1C 真实项目接入`、`真实 NAS 项目`、`草案证据与风险`、`模板骨架`。
-- `/data-steward/assets/503/master-data/sections`
-  - 通过。
-  - 可见接入草案复核提醒。
-- `/data-steward/assets/503/master-data/node-types`
-  - 通过。
-  - 可见接入草案复核提醒。
-- `/data-steward/assets/503/master-data/deliverable-standard`
-  - 通过。
-  - 可见接入草案复核提醒。
-- `/data-steward/assets/503/work/document-delivery`
-  - 通过。
-- `/data-steward/assets/503/work/drawing-delivery`
-  - 通过。
-- 390px 小屏初始化页检查通过。
-- 页面可见文本未命中 `/Volumes/`、`/Users/`、`nas://`、`smb://`、`storage_path`、`storage_uri`、`storageUri`、`raw_path`、`root_path`、`nas_path`。
+## 13. 修改文件清单
 
-## 13. 真实项目抽查
+- `backend/delivery-work-center/src/main/java/com/zhuoyu/delivery/workcenter/delivery/DeliveryApplicationService.java`
+- `backend/delivery-work-center/src/main/java/com/zhuoyu/delivery/workcenter/dto/WorkCenterDtos.java`
+- `frontend/src/modules/work-center/api/delivery.ts`
+- `frontend/src/modules/work-center/components/DeliveryViewPanel.vue`
+- `frontend/src/modules/core/components/ProjectWorkspaceNav.vue`
+- `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
+- `scripts/dev/check-m1d-standard-delivery-loop.sh`
+- `handoff/dev-agent/latest-report.md`
 
-- `503 / 105 / 启航华居项目`
-  - `assetSource=NAS_REAL_PILOT`
-  - `realNasProject=true`
-  - 文件扩展名线索包含 `DWG / PDF / RVT`
-  - 专业线索包含 `ARCHITECTURE / ELECTRICAL / FIRE_PROTECTION / GAS / GENERAL / HVAC / INTELLIGENT / PLUMBING`
-  - raw `Volumes` 目录片段已脱敏为 `项目内目录线索已脱敏`
-  - 主数据底座已就绪，草案预览为幂等跳过但仍展示证据与风险。
-- `506 / 93 / 中建八局国交酒店项目`
-  - `assetSource=NAS_REAL_PILOT`
-  - `realNasProject=true`
-  - 文件扩展名线索包含 `DWG / IFC / PDF / RVT`
-  - 未确认应用时返回非 OK。
-  - 草案预览同时体现 `TEMPLATE_SKELETON` 与 catalog 资产线索。
+注意：`handoff/test-agent/latest-report.md` 当前也在工作区显示为已修改，但不是本轮开发改动；本轮未覆盖或回退该文件。
 
-## 14. 已知风险与未完成事项
+## 14. P0 / P1 / P2
 
-- M1C 只完成真实项目接入到工程主数据草案/人工确认/交付入口的 MVP，没有进入 8B / 8C / 9A。
-- 真实工程结构仍需项目负责人复核；平台没有识别真实楼栋、楼层、系统和 BIM 构件。
-- catalog metadata 仍不能替代 PDF/Office 正文、DWG 图层/标题栏、RVT Family/Type/构件参数证据。
-- 前端主包体积 warning 为既有 P2，本轮未处理。
-- smoke 脚本会创建隔离测试项目和目录级测试数据，未做自动清理，便于测试 agent 复核。
+P0：
 
-## 15. 是否建议测试 Agent 验收
+- 暂无未关闭 P0。
 
-建议进入测试 Agent 对 M1C 做验收。
+P1：
 
-重点请测试：
+- 真实项目 503 / 506 已做浏览器抽查，但补交、提交审核、审核通过/驳回、整改复审的写链路主要通过隔离脚本验证；测试 agent 应按权限和数据条件决定是否追加 UI 级人工复核。
 
-- 105/503 与 93/506 的 assessment / preview 是否满足 catalog-only 合同。
-- 草案预览是否能清楚表达证据来源、置信度、风险提示和人工确认。
-- 未确认时是否禁止 apply。
-- 确认 apply 后是否幂等且不覆盖已有主数据。
-- 前端是否没有 raw path 残留。
-- 是否保持 G4/Hermes/8B/9A 冻结边界。
+P2：
 
-## 16. 给测试 Agent 的测试 Prompt
+- 工作中心入口当前未强制禁用，而是提示后允许进入页面查看阻塞状态；这符合“页面保留状态可见，但不表现为正常交付”的口径。
+- 前端构建仍有既存 chunk size warning，本轮未处理。
+
+## 15. 安全边界
+
+- 导出预检查仍为 dry-run。
+- 未生成真实 ZIP 或交付包。
+- 未访问、复制、移动、删除、上传、改名 NAS 文件。
+- 未读取文件正文。
+- 未做 DWG / RVT / IFC parser。
+- 未做索引写入。
+- 未做 Hermes 写入或 Hermes 能力扩展。
+- 未把 catalog metadata 当正文 evidence。
+- 未暴露真实路径。
+
+## 16. 给测试 Agent 的补充验收 Prompt
 
 ````md
-# 测试 Agent Prompt：M1C 工程主数据真实项目落地验收
+# 测试 Agent Prompt：M1D 信息结构与标准驱动交付闭环复核
 
-工作目录：`/Users/vc/Documents/数字化交付平台`
+工作目录：/Users/vc/Documents/数字化交付平台
 
-本轮只验收 `M1C：工程主数据真实项目落地`。
+本轮只复核 M1D：标准驱动交付闭环强化。不要进入 G4 / Hermes / 8B / 8C / 9A，不做生产部署。
 
-M1C 是 M1B 后的真实项目接入与工程主数据映射修复 MVP，不代表进入 8B / 8C / 9A，也不代表恢复 G4 / Hermes 开发。不要测试或推进 Hermes 新能力，不测试真实 NAS 写操作、正文解析、BIM 构件解析、parser/writer/indexing 或 production rollout。
+重点验证：
 
-必须先读：
+1. 项目工作台是否清楚呈现：
+   - 项目资产
+   - 工程主数据
+   - 交付工作中心
+   顺序必须是 `项目资产 -> 工程主数据 -> 交付工作中心`。
 
-- `handoff/dev-agent/current-prompt.md`
-- `handoff/dev-agent/latest-report.md`
-- `handoff/test-agent/latest-report.md`
-- `handoff/main-agent/status.md`
-- `handoff/main-agent/development-log.md`
-- `handoff/main-agent/phase2-current-roadmap.md`
-- `handoff/main-agent/mainline-git-governance-and-hermes-freeze.md`
-- `handoff/main-agent/m1b-project-workbench-usability-closure.md`
-- `handoff/main-agent/m1c-real-project-masterdata-plan.md`
-- `docs/07-complete-delivery-prd.md`
-- `docs/08-acceptance-and-agent-integration.md`
-- `docs/10-phase2-development-roadmap.md`
+2. 工作中心是否不是工程主数据子功能，但排在工程主数据之后。
 
-重点验收：
+3. 工程主数据未就绪时，以下位置是否提示：
+   - 项目工作台入口
+   - 项目内导航
+   - 文档交付页
+   - 图纸交付页
+   文案核心必须包含：`请先生成 / 确认工程主数据草案`。
 
-1. 真实项目接入评估接口
-   - `GET /api/master-data/projects/503/onboarding/assessment`
-   - `GET /api/master-data/projects/506/onboarding/assessment`
-   - 应返回 `assetCatalogOnly=true`、`evidenceMode=catalog_only`。
-   - 503 应对应项目编码 105，506 应对应项目编码 93。
-   - 应返回 `assetSource`、`realNasProject=true`、文件数量、路径映射数量、扫描记录数量、主要扩展名、主要专业线索、脱敏目录线索。
-   - 不得返回 raw NAS path、`storage_path`、`storage_uri`、SQL、raw DB row、secret/token/password。
+4. 文档交付 / 图纸交付页面是否能看懂：
+   - 标准底座是否就绪
+   - 应交总数
+   - 已补交
+   - 缺失
+   - 草稿
+   - 待审
+   - 已通过
+   - 已驳回
+   - 补交完整率
+   - 审核通过率
+   - 当前下一步动作
 
-2. 草案预览接口
-   - `GET /api/master-data/projects/503/onboarding/preview?templateCode=MEP_BIM_BASIC`
-   - `GET /api/master-data/projects/506/onboarding/preview?templateCode=MEP_BIM_BASIC`
-   - 应返回 `dryRun=true`、`confirmedRequired=true`、`nasTouched=false`、`contentRead=false`、`assetCatalogOnly=true`、`evidenceMode=catalog_only`。
-   - `draftItems` 每项应包含 `evidenceMode`、`evidenceSource`、`confidenceLevel`、`riskHint`、`pendingConfirmation=true`。
-   - 506 草案应能看到模板骨架和资产目录线索并存。
+5. 缺失项是否说明：
+   - 缺哪个交付定义
+   - 缺哪种文件类型
+   - 目标是部位还是对象
+   - 为什么缺失
+   - 补交文件选择仍是远程分页，不得回退全量加载
 
-3. 人工确认闸门与幂等
-   - `POST /api/master-data/projects/506/onboarding/apply` 传 `confirmed=false` 必须失败。
-   - 使用隔离测试项目验证 `confirmed=true` 后可应用草案。
-   - 重复应用不应覆盖已有主数据，应表现为 created=0、skipped>0。
-   - 应产生 `masterdata.initialization.template-apply` 审计事件。
+6. 审核整改闭环是否仍稳定：
+   - 挂接后可提交审核
+   - 审核通过后完整率刷新
+   - 审核驳回后产生整改项
+   - 整改项可处理 / 关闭 / 重新打开
+   - 重新补交或复审后能回到交付链路
 
-4. 前端验收
-   - 打开 `/data-steward/assets/503/master-data/initialization`。
-   - 点击“预览草案”。
-   - 应看到 `M1C 真实项目接入`、`真实 NAS 项目`、主要扩展名、主要专业线索、脱敏目录线索、`草案证据与风险`、`catalog_only`。
-   - 打开 `/data-steward/assets/506/master-data/initialization` 并点击“预览草案”，应看到模板骨架与风险提示。
-   - 打开：
-     - `/data-steward/assets/503/master-data/sections`
-     - `/data-steward/assets/503/master-data/node-types`
-     - `/data-steward/assets/503/master-data/deliverable-standard`
-   - 这些页面应显示草案复核提醒。
-   - 打开：
-     - `/data-steward/assets/503/work/document-delivery`
-     - `/data-steward/assets/503/work/drawing-delivery`
-   - 页面应正常进入，不应 403/404/500。
-
-5. 安全边界
-   - 前端可见文本和接口响应不得出现 raw `storage_path`、`storage_uri`、真实 NAS 路径、SQL、secret、token、password。
-   - 不允许触发真实 NAS 文件创建、移动、删除、重命名、上传。
-   - 不允许读取 PDF / Office / DWG / RVT / IFC 正文。
-   - 不允许启用 parser / writer / indexing。
-   - 不允许 Hermes 自动审批、自动整改、自动挂接或自动删除。
+7. 导出预检查仍必须是 dry-run：
+   - 不生成真实文件包
+   - 不访问、不复制、不移动 NAS 文件
+   - 不泄露 raw storage_path / storage_uri / NAS path
 
 建议执行：
 
@@ -338,23 +307,37 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-m1c-real-project-masterdata.sh
+bash scripts/dev/check-m1d-standard-delivery-loop.sh
+bash scripts/dev/check-phase2-batch2-standard-delivery.sh
+bash scripts/dev/check-phase2-batch3-review-rectification-report.sh
 bash scripts/dev/check-phase2-batch4-file-access.sh
-bash scripts/dev/check-phase2-batch6a-project-initialization.sh
 bash scripts/dev/check-phase2-batch6b-delivery-package.sh
 bash scripts/dev/check-phase2-batch7a-preview-export-precheck.sh
 bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh
+bash scripts/dev/check-m1c-real-project-masterdata.sh
 git diff --check
 ```
 
-测试报告需明确：
+浏览器抽查至少覆盖：
 
-- M1C 是否通过。
-- 105/503 与 93/506 是否都通过。
-- 是否发现 raw path 或敏感字段残留。
-- 是否发现未确认也能 apply。
-- 是否发现重复应用覆盖已有主数据。
-- 是否发现页面缺失草案证据/风险/复核提醒。
-- 是否发现 G4/Hermes/8B/9A 边界被突破。
-- 是否建议主 agent 判定 M1C 收口。
+- Fresh login -> `/data-steward/assets`
+- `/data-steward/assets/503`
+- `/data-steward/assets/503/work/document-delivery`
+- `/data-steward/assets/503/work/drawing-delivery`
+- `/data-steward/assets/503/work/rectifications`
+- `/data-steward/assets/506/work/document-delivery`
+- `/data-steward/assets/506/work/drawing-delivery`
+
+验收报告请明确：
+
+- 是否存在 raw path / storage_path / storage_uri / NAS path 泄露
+- 是否发生真实 NAS 写操作
+- 是否误进入 Hermes / G4 / 8B / 8C / 9A
+- 是否建议 M1D 进入主 agent 收口判断
 ````
+
+## 17. 是否建议进入 M1D 测试验收
+
+建议进入测试 agent 验收。
+
+本轮开发侧自测已通过，但不自行宣布 M1D 最终收口；最终是否收口由主 agent 和测试 agent 判断。
