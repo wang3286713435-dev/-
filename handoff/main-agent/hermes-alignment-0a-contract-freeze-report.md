@@ -83,3 +83,39 @@
 5. `safe_memory_candidates` 是否由 Hermes 生成、Platform 审核后回传，还是先只展示不写入。
 
 在上述信息明确前，平台侧只允许保留 OpenAI-compatible smoke，不进入正式连续会话开发。
+
+## 7. 8642 OpenAI-compatible 契约补充
+
+Hermes 侧已补充当前本机 8642 只读 Gateway 服务契约。结论如下：
+
+```yaml
+contract_name: hermes_local_8642_readonly_gateway_contract
+contract_version: hermes.local.openai_compatible.v0.1
+base_url: http://127.0.0.1:8642
+mode: openai_compatible
+model: hermes-agent
+```
+
+当前可用 endpoint：
+
+- `GET /health`：无需 Bearer token，返回 `status` 与 `platform`。
+- `POST /v1/chat/completions`：需要 `Authorization: Bearer <HERMES_AGENT_GATEWAY_SERVICE_TOKEN>`，响应为 OpenAI-compatible shape。
+- `/v1/models`：未带 key 时返回 `Invalid API key`，说明 `/v1/*` 受 Bearer token 保护。
+
+关键裁决：
+
+- 当前 8642 仍不是 Hermes native endpoint。
+- 当前 `platform_context` 位于 `messages[0].content` system prompt 内，是 embedded JSON text，不是顶层 `platform_context` 字段。
+- 8642 原生只保证 `choices[0].message.content` 自然语言回答。
+- `catalog_only`、`missingEvidence`、`citations`、`trace` 等结构化字段当前不由 8642 原生保证，必须由 Platform Gateway 包装或 fail-closed 兜底。
+- 平台侧配置已存在 `HERMES_AGENT_GATEWAY_CONTRACT_VERSION=delivery_platform.asset_views.v1.1` 口径，契约文档已补入该配置名。
+- `HERMES_AGENT_GATEWAY_SERVICE_TOKEN` 是服务间凭据，不是平台登录 token，也不是 project-scoped token，必须由 operator 安全注入，不得进入前端、日志、共享文档或聊天记录。
+
+已补齐共享契约文档：
+
+- `integration-contracts/hermes_native_gateway_contract.md`
+- `integration-contracts/platform_to_hermes_contract.md`
+- `integration-contracts/gateway_response_contract.md`
+- `docs/01_capability_matrix.md`
+
+本补充不改变 0A 裁决：Platform runtime 仍处于 `Pause`，OpenAI-compatible 只允许作为受控 smoke，不得作为 architecture aligned 的正式 Hermes 内核接入。
