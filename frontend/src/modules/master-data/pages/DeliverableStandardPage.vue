@@ -15,6 +15,14 @@
 
     <StandardStatusPanel :status="standardStatus" />
 
+    <el-alert
+      class="masterdata-review-alert"
+      type="info"
+      :closable="false"
+      show-icon
+      title="如果交付物标准来自接入草案，它只代表基础交付骨架，仍需项目负责人复核必交项、文件类型、属性和目录模板。"
+    />
+
     <section class="workflow-guide">
       <div class="workflow-guide__main">
         <span class="workflow-guide__step">第 3 步</span>

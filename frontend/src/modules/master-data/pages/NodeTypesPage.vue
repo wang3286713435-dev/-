@@ -14,6 +14,14 @@
 
     <StandardStatusPanel :status="standardStatus" />
 
+    <el-alert
+      class="masterdata-review-alert"
+      type="info"
+      :closable="false"
+      show-icon
+      title="如果节点类型来自接入草案，它只是标准配置建议。锁定前请确认这些类型确实适用于当前真实项目。"
+    />
+
     <section class="workflow-guide">
       <div class="workflow-guide__main">
         <span class="workflow-guide__step">第 2 步</span>

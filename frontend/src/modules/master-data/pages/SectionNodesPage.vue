@@ -13,6 +13,14 @@
 
     <StandardStatusPanel :status="standardStatus" />
 
+    <el-alert
+      class="masterdata-review-alert"
+      type="info"
+      :closable="false"
+      show-icon
+      title="如果部位树来自接入草案，它只是建筑机电/BIM交付基础骨架，仍需项目负责人按真实楼栋、楼层、系统和专业范围复核。"
+    />
+
     <section class="workflow-guide">
       <div class="workflow-guide__main">
         <span class="workflow-guide__step">第 1 步</span>

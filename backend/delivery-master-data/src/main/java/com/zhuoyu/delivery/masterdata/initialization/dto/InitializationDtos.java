@@ -109,6 +109,10 @@ public final class InitializationDtos {
 
     public record OnboardingAssessmentResponse(
         Long projectId,
+        String projectCode,
+        String projectName,
+        String assetSource,
+        Boolean realNasProject,
         Boolean assetCatalogOnly,
         String evidenceMode,
         String onboardingStatus,
@@ -126,7 +130,11 @@ public final class InitializationDtos {
         Integer drawingFileCount,
         Integer documentFileCount,
         Integer pathMappingCount,
+        Integer scanTaskCount,
         List<String> dominantFileKinds,
+        List<String> dominantFileExtensions,
+        List<String> dominantDisciplines,
+        List<String> directoryClues,
         Instant lastAssetSeenAt,
         Instant lastScanAt
     ) {
@@ -155,6 +163,7 @@ public final class InitializationDtos {
         Boolean confirmedRequired,
         Boolean nasTouched,
         Boolean contentRead,
+        Boolean assetCatalogOnly,
         String evidenceMode,
         String templateCode,
         String templateName,
@@ -169,6 +178,10 @@ public final class InitializationDtos {
         String category,
         String name,
         String reason,
+        String evidenceMode,
+        String evidenceSource,
+        String confidenceLevel,
+        String riskHint,
         Boolean fromRealAssetClue,
         Boolean fromTemplateSkeleton,
         Boolean pendingConfirmation

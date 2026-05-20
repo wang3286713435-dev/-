@@ -148,7 +148,11 @@ export interface OnboardingAssetSummary {
   drawingFileCount: number;
   documentFileCount: number;
   pathMappingCount: number;
+  scanTaskCount: number;
   dominantFileKinds: string[];
+  dominantFileExtensions: string[];
+  dominantDisciplines: string[];
+  directoryClues: string[];
   lastAssetSeenAt: string | null;
   lastScanAt: string | null;
 }
@@ -170,6 +174,10 @@ export interface OnboardingGap {
 
 export interface OnboardingAssessment {
   projectId: number;
+  projectCode: string | null;
+  projectName: string | null;
+  assetSource: string | null;
+  realNasProject: boolean;
   assetCatalogOnly: boolean;
   evidenceMode: string;
   onboardingStatus: string;
@@ -184,6 +192,10 @@ export interface OnboardingDraftItem {
   category: string;
   name: string;
   reason: string;
+  evidenceMode: string;
+  evidenceSource: string;
+  confidenceLevel: string;
+  riskHint: string;
   fromRealAssetClue: boolean;
   fromTemplateSkeleton: boolean;
   pendingConfirmation: boolean;
@@ -195,6 +207,7 @@ export interface OnboardingDraftPreview {
   confirmedRequired: boolean;
   nasTouched: boolean;
   contentRead: boolean;
+  assetCatalogOnly: boolean;
   evidenceMode: string;
   templateCode: string;
   templateName: string;

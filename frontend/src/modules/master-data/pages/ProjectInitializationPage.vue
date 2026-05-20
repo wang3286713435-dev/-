@@ -10,10 +10,10 @@
 
     <section class="initialization-hero">
       <div>
-        <span class="initialization-hero__eyebrow">G2 真实项目接入</span>
-        <h2>先评估真实项目目录，再生成待确认主数据草案</h2>
+        <span class="initialization-hero__eyebrow">M1C 真实项目接入</span>
+        <h2>用目录证据生成草案，再由项目负责人确认</h2>
         <p>
-          接入向导只读取项目目录元数据和受控路径映射状态，不读取文件正文，不访问或复制 NAS 文件。模板内容只是草案，应用前需要人工确认。
+          接入向导只读取 catalog metadata、项目来源、扫描记录和受控路径映射状态，不读取文件正文，不解析 BIM 构件，不访问或复制 NAS 文件。模板内容只是基础骨架，应用后仍需人工复核。
         </p>
       </div>
       <el-tag size="large" :type="status?.ready ? 'success' : 'warning'">
@@ -51,9 +51,14 @@
       <div class="initialization-panel__header">
         <div>
           <h2>接入评估</h2>
-          <p>基于 catalog-only 证据判断真实项目是否已有路径映射、资产目录和主数据底座。</p>
+          <p>基于 catalog-only 证据判断真实项目是否已有路径映射、资产目录、扫描记录和主数据底座。</p>
         </div>
-        <el-tag size="large" type="info">{{ onboardingStatusText(assessment?.onboardingStatus) }}</el-tag>
+        <div class="initialization-panel__tags">
+          <el-tag size="large" :type="assessment?.realNasProject ? 'success' : 'warning'">
+            {{ assessment?.realNasProject ? '真实 NAS 项目' : '来源待确认' }}
+          </el-tag>
+          <el-tag size="large" type="info">{{ onboardingStatusText(assessment?.onboardingStatus) }}</el-tag>
+        </div>
       </div>
 
       <div class="onboarding-summary">
@@ -61,6 +66,19 @@
           <span>{{ item.label }}</span>
           <strong>{{ item.value }}</strong>
           <small>{{ item.unit }}</small>
+        </article>
+      </div>
+
+      <div class="onboarding-clue-grid">
+        <article v-for="group in assetClueGroups" :key="group.label">
+          <span>{{ group.label }}</span>
+          <div v-if="group.values.length" class="onboarding-tags">
+            <el-tag v-for="value in group.values" :key="`${group.label}-${value}`" size="small" type="info">
+              {{ value }}
+            </el-tag>
+          </div>
+          <strong v-else>暂无</strong>
+          <small>{{ group.helper }}</small>
         </article>
       </div>
 
@@ -80,7 +98,10 @@
           <el-empty v-if="!assessment?.gaps?.length" description="暂无明显缺口" />
           <ul v-else class="onboarding-list">
             <li v-for="gap in assessment.gaps" :key="gap.code">
-              <strong>{{ gap.description }}</strong>
+              <strong>
+                <el-tag size="small" :type="gapSeverityType(gap.severity)">{{ gap.severity }}</el-tag>
+                {{ gap.description }}
+              </strong>
               <span>{{ gap.missingEvidenceReason }}</span>
             </li>
           </ul>
@@ -172,6 +193,47 @@
         <div v-if="onboardingPreview?.warnings?.length" class="preview-warnings">
           <el-tag v-for="warning in onboardingPreview.warnings" :key="warning" type="info">{{ warning }}</el-tag>
         </div>
+        <div v-if="onboardingPreview?.draftItems?.length" class="draft-evidence">
+          <div class="draft-evidence__header">
+            <h3>草案证据与风险</h3>
+            <p>每一项都标注来源、证据模式和复核风险。catalog-only 线索只能辅助判断，不能替代真实工程结构。</p>
+          </div>
+          <el-table :data="onboardingPreview.draftItems" class="initialization-table" max-height="320">
+            <el-table-column label="类别" width="150">
+              <template #default="{ row }">{{ categoryLabel(row.category) }}</template>
+            </el-table-column>
+            <el-table-column prop="name" label="草案项" min-width="140" />
+            <el-table-column label="来源" min-width="180">
+              <template #default="{ row }">
+                <div class="evidence-source-cell">
+                  <el-tag v-if="row.fromTemplateSkeleton" size="small" type="info">模板骨架</el-tag>
+                  <el-tag v-if="row.fromRealAssetClue" size="small" type="success">资产线索</el-tag>
+                  <span>{{ evidenceSourceLabel(row.evidenceSource) }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="证据模式" width="130">
+              <template #default="{ row }">
+                <el-tag size="small" type="warning">{{ row.evidenceMode }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="置信度" width="110">
+              <template #default="{ row }">
+                <el-tag size="small" :type="confidenceType(row.confidenceLevel)">
+                  {{ confidenceLabel(row.confidenceLevel) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="riskHint" label="风险提示" min-width="260" show-overflow-tooltip />
+            <el-table-column label="确认" width="100">
+              <template #default="{ row }">
+                <el-tag size="small" :type="row.pendingConfirmation ? 'warning' : 'success'">
+                  {{ row.pendingConfirmation ? '需复核' : '已确认' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
         <el-alert v-if="preview.blockReasons.length" type="error" :closable="false" show-icon>
           <template #title>模板暂不能应用</template>
           <ul>
@@ -202,13 +264,19 @@
     <section v-if="applyResult" class="initialization-result">
       <div>
         <h2>接入草案已应用</h2>
-        <p>本次创建 {{ totalTemplateItems(applyResult.created) }} 项，跳过 {{ totalTemplateItems(applyResult.skipped) }} 项。</p>
+        <p>
+          本次创建 {{ totalTemplateItems(applyResult.created) }} 项，跳过 {{ totalTemplateItems(applyResult.skipped) }} 项。
+          草案已生成，但仍需项目负责人复核部位树、节点类型和交付物标准。
+        </p>
       </div>
       <div class="initialization-result__actions">
         <el-button @click="router.push({ name: 'project-master-data-sections', params: { projectId } })">查看部位树</el-button>
+        <el-button @click="router.push({ name: 'project-master-data-node-types', params: { projectId } })">查看节点类型</el-button>
         <el-button @click="router.push({ name: 'project-master-data-deliverable-standard', params: { projectId } })">
           查看交付物标准
         </el-button>
+        <el-button @click="router.push({ name: 'project-work-document-delivery', params: { projectId } })">进入文档交付</el-button>
+        <el-button @click="router.push({ name: 'project-work-drawing-delivery', params: { projectId } })">进入图纸交付</el-button>
       </div>
     </section>
   </section>
@@ -278,12 +346,35 @@ const statusCards = computed(() => {
 const onboardingCards = computed(() => {
   const summary = assessment.value?.assetSummary;
   return [
+    { label: '项目来源', value: assessment.value?.realNasProject ? '真实 NAS' : '待确认', unit: assessment.value?.assetSource || '-' },
     { label: '目录文件', value: formatCount(summary?.fileCount), unit: '已登记' },
     { label: '模型文件', value: formatCount(summary?.modelFileCount), unit: 'catalog-only' },
     { label: '图纸文件', value: formatCount(summary?.drawingFileCount), unit: 'catalog-only' },
     { label: '文档文件', value: formatCount(summary?.documentFileCount), unit: 'catalog-only' },
     { label: '路径映射', value: formatCount(summary?.pathMappingCount), unit: '不展示原始路径' },
+    { label: '扫描记录', value: formatCount(summary?.scanTaskCount), unit: '只读任务' },
     { label: '最近扫描', value: formatDate(summary?.lastScanAt || summary?.lastAssetSeenAt), unit: '只读记录' }
+  ];
+});
+
+const assetClueGroups = computed(() => {
+  const summary = assessment.value?.assetSummary;
+  return [
+    {
+      label: '主要扩展名',
+      values: summary?.dominantFileExtensions ?? [],
+      helper: '来自文件名元数据，只能辅助判断资料类型。'
+    },
+    {
+      label: '主要专业线索',
+      values: summary?.dominantDisciplines ?? [],
+      helper: '来自目录入库或人工治理字段，需要负责人复核。'
+    },
+    {
+      label: '主要目录线索',
+      values: summary?.directoryClues ?? [],
+      helper: '仅展示脱敏后的项目内目录线索，不代表真实工程结构。'
+    }
   ];
 });
 
@@ -417,6 +508,49 @@ function onboardingStatusText(value?: string | null) {
   return labels[value || ''] ?? '待评估';
 }
 
+function categoryLabel(value: string) {
+  const labels: Record<string, string> = {
+    SECTION_NODE: '部位节点',
+    NODE_TYPE: '节点类型',
+    DELIVERABLE_DEFINITION: '交付定义',
+    DELIVERABLE_TYPE: '交付类型',
+    DELIVERABLE_ATTRIBUTE: '交付属性',
+    DIRECTORY_TEMPLATE: '目录模板'
+  };
+  return labels[value] ?? value;
+}
+
+function evidenceSourceLabel(value: string) {
+  const labels: Record<string, string> = {
+    EXISTING_PROJECT_MASTERDATA: '项目中已有同编码/同名项',
+    CATALOG_DIRECTORY_CLUE: '目录线索支持',
+    CATALOG_FILE_KIND_CLUE: '文件类型线索支持',
+    TEMPLATE_SKELETON: '模板默认骨架'
+  };
+  return labels[value] ?? value;
+}
+
+function confidenceLabel(value: string) {
+  const labels: Record<string, string> = {
+    EXISTING: '已有',
+    MEDIUM: '中',
+    LOW: '低'
+  };
+  return labels[value] ?? value;
+}
+
+function confidenceType(value: string) {
+  if (value === 'EXISTING') return 'success';
+  if (value === 'MEDIUM') return 'warning';
+  return 'info';
+}
+
+function gapSeverityType(value: string) {
+  if (value === 'error') return 'danger';
+  if (value === 'warning') return 'warning';
+  return 'info';
+}
+
 function formatCount(value: number | null | undefined) {
   return Number(value ?? 0).toLocaleString('zh-CN');
 }
@@ -447,6 +581,13 @@ function formatDate(value: string | null | undefined) {
   justify-content: space-between;
   gap: 16px;
   min-width: 0;
+}
+
+.initialization-panel__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .initialization-page__header h1,
@@ -551,6 +692,52 @@ function formatDate(value: string | null | undefined) {
 .onboarding-summary__card strong {
   color: #0f172a;
   font-size: 18px;
+}
+
+.onboarding-clue-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+  min-width: 0;
+}
+
+.onboarding-clue-grid article {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.onboarding-clue-grid span,
+.onboarding-clue-grid small {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.onboarding-clue-grid strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.onboarding-tags,
+.evidence-source-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.evidence-source-cell span {
+  flex: 1 1 100%;
+  min-width: 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .onboarding-columns {
@@ -691,6 +878,25 @@ function formatDate(value: string | null | undefined) {
   white-space: normal;
 }
 
+.draft-evidence {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.draft-evidence__header h3 {
+  margin: 0;
+  color: #1f2937;
+  font-size: 15px;
+}
+
+.draft-evidence__header p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .initialization-result__actions {
   display: flex;
   flex-wrap: wrap;
@@ -699,8 +905,17 @@ function formatDate(value: string | null | undefined) {
 
 @media (max-width: 1120px) {
   .initialization-grid,
-  .onboarding-columns {
+  .onboarding-columns,
+  .onboarding-clue-grid {
     grid-template-columns: 1fr;
+  }
+
+  .initialization-panel__header {
+    flex-direction: column;
+  }
+
+  .initialization-panel__tags {
+    justify-content: flex-start;
   }
 }
 </style>

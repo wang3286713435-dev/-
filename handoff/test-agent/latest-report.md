@@ -1,20 +1,21 @@
-# M1B 项目工作台与数据管家可用性验收报告
+# M1C 工程主数据真实项目落地验收报告
 
-生成时间：2026-05-20 15:32 CST
+生成时间：2026-05-20 16:42 CST
 
 ## 1. 测试结论
 
 结论：通过。
 
-本轮只验收 `M1B：项目工作台与数据管家可用性收口`。M1A 已收口，G4 / Hermes 冻结；本轮未测试或推进 Hermes 新能力，未进入 8B / 8C / 9A，未触发真实 NAS 写操作、正文解析、BIM 构件解析、parser / writer / indexing 或 production rollout。
+本轮只验收 `M1C：工程主数据真实项目落地`。M1C 作为 M1B 后的平台本体稳定批次，重点验证真实 NAS 项目的接入评估、草案预览、人工确认闸门、幂等应用和工程主数据页面落地体验。
 
-建议：未发现 P0 / P1 / P2，建议主 agent 判定 M1B 收口。
+当前未发现 P0 / P1 / P2。建议主 agent 判定 M1C 收口。
 
-## 2. 当前分支与提交
+## 2. 当前分支与工作区
 
-- 当前分支：`codex/platform-m1b-usability`
-- 当前提交：`cf53ad1`
-- 工作区状态：存在开发 agent 本轮未提交前端改动与临时目录；测试 agent 未修改业务代码，未修改 `docs/**`，仅更新本测试报告。
+- 当前分支：`codex/platform-m1c-real-masterdata`
+- 当前提交：`0e73eae`
+- 工作区状态：存在开发 agent 本轮未提交改动和临时运行文件；测试 agent 未修改业务代码，未修改 `docs/**`，仅更新本测试报告。
+- 新增脚本：`scripts/dev/check-m1c-real-project-masterdata.sh` 已存在并通过验收。
 
 ## 3. 必读文件
 
@@ -27,103 +28,112 @@
 - `handoff/main-agent/development-log.md`
 - `handoff/main-agent/phase2-current-roadmap.md`
 - `handoff/main-agent/mainline-git-governance-and-hermes-freeze.md`
-- `handoff/main-agent/m1a-platform-baseline-closure.md`
-- `handoff/main-agent/m1b-project-workbench-usability-plan.md`
+- `handoff/main-agent/m1b-project-workbench-usability-closure.md`
+- `handoff/main-agent/m1c-real-project-masterdata-plan.md`
 - `docs/07-complete-delivery-prd.md`
 - `docs/08-acceptance-and-agent-integration.md`
 - `docs/10-phase2-development-roadmap.md`
 
-## 4. P0 / P1 / P2
-
-P0：未发现。
-
-P1：未发现。
-
-P2：未发现。
-
-非阻塞观察：
-
-- 前端构建仍有既有 Vite chunk size warning，不影响构建通过。
-- 浏览器验收期间，本地后端进程曾因测试会话结束触发正常 shutdown，重启后页面与脚本均恢复正常；判断为本地测试进程保活问题，不是产品缺陷。
-
-## 5. 必跑命令结果
+## 4. 必跑命令结果
 
 - 后端构建：`cd backend && ./mvnw -pl delivery-app -am -DskipTests package`，通过，`BUILD SUCCESS`。
-- 前端构建：`corepack pnpm --dir frontend build`，通过，仅有既有 chunk size warning。
+- 前端构建：`corepack pnpm --dir frontend build`，通过，仅有既有 Vite chunk size warning。
 - 后端健康检查：`curl -fsS http://127.0.0.1:8080/actuator/health`，通过，返回 `{"status":"UP"}`。
-- 文件访问安全回归：`bash scripts/dev/check-phase2-batch4-file-access.sh`，通过，`PASS=18 FAIL=0`，输出 `phase2 batch4 file access check ok`。
-- 项目初始化回归：`bash scripts/dev/check-phase2-batch6a-project-initialization.sh`，通过，输出 `phase2 batch6a project initialization ok`。
-- 交付包回归：`bash scripts/dev/check-phase2-batch6b-delivery-package.sh`，通过，`PASS=17 FAIL=0`，输出 `ALL PASS`。
+- M1C 专项脚本：`bash scripts/dev/check-m1c-real-project-masterdata.sh`，通过，`PASS=14 FAIL=0`。
+- 文件访问安全回归：`bash scripts/dev/check-phase2-batch4-file-access.sh`，通过，`PASS=18 FAIL=0`。
+- 6A 项目初始化回归：`bash scripts/dev/check-phase2-batch6a-project-initialization.sh`，通过，输出 `phase2 batch6a project initialization ok`。
+- 6B 交付包回归：`bash scripts/dev/check-phase2-batch6b-delivery-package.sh`，通过，`PASS=17 FAIL=0`。
+- 7A 预览 / 导出预检查回归：`bash scripts/dev/check-phase2-batch7a-preview-export-precheck.sh`，通过，`PASS=18 FAIL=0`。
+- 8A BIM 轻量化 Mock 适配层回归：`bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh`，通过，`PASS=11 FAIL=0`。
 - 空白字符检查：`git diff --check`，通过。
 
-## 6. 资产总览默认视图
+## 5. API 合同抽查
 
 结果：通过。
 
-浏览器 fresh login 后进入 `/data-steward/assets`，默认筛选为真实项目视图，页面 Hero 区已明确表达：
+`GET /api/master-data/projects/503/onboarding/assessment`：
 
-- 平台入口是“先选真实项目，再进入数字化交付工作区”。
-- 工作顺序是进入真实项目、查看接入评估、完善工程主数据、进入文档交付。
-- 风险提醒明确说明只展示目录级治理线索，不读取文件正文，也不触碰 NAS 文件。
-- 页面文案明确普通员工不需要先问 Hermes。
+- 项目编码：`105`。
+- `assetSource=NAS_REAL_PILOT`。
+- `realNasProject=true`。
+- `assetCatalogOnly=true`。
+- `evidenceMode=catalog_only`。
+- 文件数量：`2927`。
+- 路径映射数量：`1`。
+- 扫描记录数量：`1`。
+- 主要扩展名：`DWG / PDF / RVT`。
+- 主要专业线索包含：`ARCHITECTURE / ELECTRICAL / FIRE_PROTECTION / GAS / GENERAL / HVAC / INTELLIGENT / PLUMBING`。
+- 目录线索已脱敏为 `项目内目录线索已脱敏`。
 
-真实项目统计已加载，未再全部为 0：
+`GET /api/master-data/projects/506/onboarding/assessment`：
 
-- 项目：`16`
-- 已登记文件：`40,935`
-- 模型文件：`2,604`
-- 图纸文件：`38,331`
-- 登记容量：`296 GB`
-- 主数据已建：`2/16`
-- 待补底座：`15`
-- 有文件项目：`16`
+- 项目编码：`93`。
+- `assetSource=NAS_REAL_PILOT`。
+- `realNasProject=true`。
+- `assetCatalogOnly=true`。
+- `evidenceMode=catalog_only`。
+- 文件数量：`5912`。
+- 路径映射数量：`1`。
+- 扫描记录数量：`2`。
+- 主要扩展名：`DWG / IFC / PDF / RVT`。
+- 主要专业线索包含：`ARCHITECTURE / ELECTRICAL / FIRE_PROTECTION / GAS / GENERAL / HVAC / INTELLIGENT / PLUMBING`。
+- 目录线索已脱敏为 `项目内目录线索已脱敏`。
 
-默认项目列表可见真实 NAS 项目，例如 `105 启航华居项目`、`100 深圳市二十八高项目`、`101 C塔`、`93 中建八局国交酒店项目`。未发现默认视图混入明显测试 / 样例 / 归档项目。
+草案预览接口：
 
-## 7. 项目详情可用性
+- 503 与 506 的 preview 均返回 `dryRun=true`、`confirmedRequired=true`、`nasTouched=false`、`contentRead=false`、`assetCatalogOnly=true`、`evidenceMode=catalog_only`。
+- `draftItems` 均包含 `evidenceMode`、`evidenceSource`、`confidenceLevel`、`riskHint`、`pendingConfirmation=true`。
+- 506 草案同时包含 `TEMPLATE_SKELETON`、`CATALOG_FILE_KIND_CLUE`、`CATALOG_DIRECTORY_CLUE`，满足“模板骨架 + 资产目录线索并存”要求。
+
+人工确认闸门：
+
+- `POST /api/master-data/projects/506/onboarding/apply` 传 `confirmed=false` 返回 HTTP 400，错误码 `REAL_PROJECT_ONBOARDING_CONFIRM_REQUIRED`。
+- M1C 专项脚本使用隔离 smoke 项目验证了 `confirmed=true` 后可应用草案，重复应用表现为跳过已有项，不覆盖已有主数据，并产生 `masterdata.initialization.template-apply` 审计事件。
+
+## 6. 105/503 与 93/506 验收
 
 结果：通过。
 
-已抽查：
+- `105 / 503 / 启航华居项目`：接入评估、草案预览、目录线索脱敏、catalog-only 证据和风险字段均通过。
+- `93 / 506 / 中建八局国交酒店项目`：接入评估、草案预览、模板骨架与资产目录线索并存、未确认 apply 拒绝均通过。
 
-- `/data-steward/assets/503`：业务编码 `105`，项目名 `启航华居项目`。
-- `/data-steward/assets/506`：业务编码 `93`，项目名 `中建八局国交酒店项目`。
+未发现为 `105 / 503` 写死导致 `93 / 506` 不适用的问题。
 
-两个项目均能看到统一项目工作台结构，三组入口清晰可见：
-
-- 数据管家：文件资产、预览和治理风险。
-- 工程主数据：部位、节点类型和交付标准。
-- 工作中心：文档图纸交付、审核整改和预检查。
-
-顶部主按钮优先指向 `查看文档交付` 和 `初始化主数据`。Hermes 仅作为辅助入口，未发现页面主路径错误引导到 Hermes / G4。
-
-## 8. 工作区导航
+## 7. 前端页面验收
 
 结果：通过。
 
-已在 503 项目下抽查：
+浏览器已验证：
 
 - `/data-steward/assets/503/master-data/initialization`
+  - 点击 `预览草案` 后可见 `M1C 真实项目接入`、`真实 NAS 项目`、主要扩展名、主要专业线索、主要目录线索、`草案证据与风险`、`catalog_only`。
+- `/data-steward/assets/506/master-data/initialization`
+  - 点击 `预览草案` 后可见 `M1C 真实项目接入`、`真实 NAS 项目`、`模板骨架`、`草案证据与风险`、`catalog_only`、风险提示和待人工确认。
+- `/data-steward/assets/503/master-data/sections`
+  - 页面正常进入，可见“如果部位树来自接入草案”的复核提醒，提示项目负责人按真实楼栋、楼层、系统和专业范围复核。
+- `/data-steward/assets/503/master-data/node-types`
+  - 页面正常进入，可见“如果节点类型来自接入草案，它只是标准配置建议。锁定前请确认这些类型确实适用于当前真实项目。”提醒。
+- `/data-steward/assets/503/master-data/deliverable-standard`
+  - 页面正常进入，可见“如果交付物标准来自接入草案”的复核提醒。
 - `/data-steward/assets/503/work/document-delivery`
+  - 页面正常进入，显示 `文档交付` 与 `启航华居项目`。
 - `/data-steward/assets/503/work/drawing-delivery`
+  - 页面正常进入，显示 `图纸交付` 与 `启航华居项目`。
 
-验证结果：
+上述页面未出现 403 / 404 / 500。
 
-- 三个页面均保留项目工作台顶部导航。
-- 项目上下文持续显示为 `启航华居项目 / 105`。
-- 页面说明保持可见，能解释当前页面用途和推荐操作顺序。
-- 未出现 403 / 404 / 500。
-- 桌面浏览器视口下未发现页面级横向撑爆或明显文字遮挡。
-
-## 9. 安全边界
+## 8. 安全边界
 
 结果：通过。
 
-本轮页面与脚本抽查未发现：
+API 响应和前端可见文本未发现：
 
 - raw `storage_path`
 - `storage_uri`
+- `storageUri`
+- 真实 NAS 路径
 - `/Volumes`
+- `/Users`
 - `smb://`
 - `nas://`
 - SQL
@@ -132,18 +142,22 @@ P2：未发现。
 
 本轮未触发：
 
-- 真实 NAS 文件创建、移动、删除、重命名或上传。
-- PDF / Office / DWG / RVT 正文读取。
+- 真实 NAS 文件创建、移动、删除、重命名、上传。
+- PDF / Office / DWG / RVT / IFC 正文读取。
 - parser / writer / indexing。
 - Hermes 自动审批、自动整改、自动挂接或自动删除。
+- G4 / Hermes 新能力开发。
+- 8B / 8C / 9A 能力推进。
 
-说明：506 项目导出页可见的是项目内相对路径提示，不是 raw NAS 绝对路径；未作为 raw path 泄露。
+说明：M1C 专项脚本和 6A 回归脚本会创建隔离 smoke 项目和目录级测试数据，用于验证确认应用与幂等性；本轮未触碰真实 NAS 文件。
 
-## 10. 回答验收问题
+## 9. 回答验收问题
 
-- M1B 是否通过：通过。
-- 是否发现 raw path 残留：未发现。
-- 是否发现页面主路径仍错误指向 Hermes / G4：未发现。
-- 是否发现 503 / 506 路由或页面加载失败：未发现；本地后端测试进程短暂退出后重启恢复，未判定为产品路由问题。
-- 是否发现构建或回归脚本失败：未发现。
-- 是否建议主 agent 判定 M1B 收口：建议收口。
+- M1C 是否通过：通过。
+- 105/503 与 93/506 是否都通过：都通过。
+- 是否发现 raw path 或敏感字段残留：未发现。
+- 是否发现未确认也能 apply：未发现；`confirmed=false` 已被拒绝。
+- 是否发现重复应用覆盖已有主数据：未发现；专项脚本验证重复应用跳过已有项。
+- 是否发现页面缺失草案证据 / 风险 / 复核提醒：未发现阻塞缺失。节点类型页提醒文案不使用“复核”二字，但已明确“草案只是建议，锁定前确认是否适用于当前真实项目”，判定满足要求。
+- 是否发现 G4 / Hermes / 8B / 9A 边界被突破：未发现。
+- 是否建议主 agent 判定 M1C 收口：建议收口。
