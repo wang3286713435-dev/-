@@ -1,5 +1,17 @@
 # 主 Agent 项目状态
 
+## 2026-05-20 M1D 启动
+
+- 用户确认进入 `M1D：标准驱动交付闭环强化`。
+- 当前 active 批次：`M1D`。
+- M1D 目标：把工程主数据、文档交付、图纸交付、批量挂接、审核、整改、复审、完整率刷新和导出预检查串成普通员工可执行的完整闭环。
+- M1D 主链路：`工程主数据就绪 -> 文档/图纸应交项 -> 缺失项 -> 补交文件 -> 提交审核 -> 审核通过/驳回 -> 整改处理 -> 复审或重新补交 -> 完整率刷新 -> 导出预检查`。
+- 105 项目只作为样本之一；能力必须同样适用于 93/506 或其他真实 NAS 项目，不允许为 105/503 写死逻辑。
+- M1D 禁止：新增 Hermes 能力、继续 G4、进入 8B / 8C / 9A、真实 NAS 增删改查、正文抽取、真实 BIM 轻量化、Agent 自动治理。
+- 开发 prompt：`handoff/dev-agent/current-prompt.md`。
+- 测试 prompt：`handoff/test-agent/current-prompt.md`。
+- 主 agent 计划：`handoff/main-agent/m1d-standard-delivery-loop-plan.md`。
+
 ## 2026-05-20 M1C 收口
 
 - `M1C：工程主数据真实项目落地` 已通过测试 agent 验收并正式收口。
