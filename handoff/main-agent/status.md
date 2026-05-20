@@ -1,5 +1,19 @@
 # 主 Agent 项目状态
 
+## 2026-05-20 G4 路线裁决
+
+- G3 已收口并完成 Git checkpoint。
+- 当前不进入 8B / 8C / 9A。
+- 8B BIM 轻量化任务编排继续后置。
+- 当前下一批固定为 `G4：真实项目交付闭环试运行与问题修补`。
+- G4 定位：不是继续增加平台内容，而是用 105 和至少另一个真实 NAS 项目跑通现有数字化交付闭环，发现并修复阻塞真实员工使用的 P0/P1/P2。
+- G4 主链路：真实项目资产入口 -> 项目工作台 -> Hermes 工程主数据计划 -> Hermes 交付缺失项推荐 -> 人工确认推荐挂接 -> 文档/图纸交付状态刷新 -> 审核/整改 -> 导出预检查 dry-run -> 审计留痕。
+- G4 允许修补：项目上下文、真实项目入口、页面刷新、交互提示、空状态、权限/Missing Evidence 解释、专项脚本和小范围只读聚合。
+- G4 禁止：真实 BIM 轻量化、构件级解析、正文抽取、selective indexing、真实 NAS 增删改查、Hermes memory / 向量库写入、Agent 未确认自动治理、为 105 写死逻辑。
+- G4 主 agent 规划：`handoff/main-agent/phase2-g4-real-project-delivery-trial-plan.md`。
+- G4 开发 prompt：`handoff/dev-agent/current-prompt.md`。
+- G4 测试 prompt：`handoff/test-agent/current-prompt.md`。
+
 ## 2026-05-20 G3 路线裁决
 
 - G2 已收口并完成 Git checkpoint。
@@ -72,19 +86,14 @@
 当前插入批次：
 
 1. 插入批次 G1 已正式收口。
-2. G1-P2 `测试数据自清理 / 隔离测试项目` 原为非阻塞小修复；因用户提出更高优先级产品契约问题，当前暂停，不作为主线入口。
-3. 当前主线切到 `G2：真实项目接入与工程主数据映射修复 MVP`。
-4. 本轮只修真实 NAS 项目识别、项目分类、真实项目接入向导、模板草案语义、交付治理助手 Hermes 权限/Missing Evidence/诊断编号表达。
-5. 命名已冻结：`G2 = 真实项目接入与工程主数据映射修复 MVP`。
-6. G2 是 G1 后的真实项目接入纠偏批次，不代表 9A 已完成，也不代表进入了 9A 后续治理。
-7. 8B、8C、9A 均尚未正式进入。
-8. 不再新增 `H1` / `R1` 等临时命名；后续所有 prompt、报告、脚本、状态文档必须统一使用 `G2`。
-9. 本轮仍不进入 8B / 8C / 9A，不开放真实 NAS 增删改查，不做真实 BIM 轻量化，不做正文抽取，不做 selective indexing，不允许 Agent 自动治理。
-10. 后续是否恢复 G1-P2、进入 8B / 8C / 9A、NAS 受控增删改查、构件级能力、Hermes selective indexing、正文抽取和受控写操作，均需用户再次明确确认。
-11. G2-A 已通过测试 agent 验收，当前无 P0/P1，仅剩不阻塞 P2。
-12. 当前进入 `G2-B：既有真实项目治理可用性补丁`。105 项目仅作为样本，能力必须适用于所有已接管真实 NAS 项目。
-13. G2-B 通过后，整个 G2 应收口并进入 Git checkpoint，再由用户决定是否恢复 8B / 8C / 9A。
-14. Hermes 后续接入按 `Catalog Layer -> Evidence Layer -> Memory Layer -> Orchestration Layer` 推进。G2-B 只强化 Catalog Layer 和常驻入口，不进入 Evidence / Memory / Orchestration 实现。
+2. G2 已正式收口并完成 Git checkpoint。
+3. G3 已正式收口并完成 Git checkpoint。
+4. 当前进入 `G4：真实项目交付闭环试运行与问题修补`。
+5. G4 是 G3 后的真实项目试运行纠偏批次，不代表 8B / 8C / 9A 已开始。
+6. 105 项目仅作为主样本，能力必须适用于所有已接管真实 NAS 项目。
+7. 本轮仍不进入 8B / 8C / 9A，不开放真实 NAS 增删改查，不做真实 BIM 轻量化，不做正文抽取，不做 selective indexing，不允许 Agent 自动治理。
+8. 后续是否进入 8B / 8C / 9A、NAS 受控增删改查、构件级能力、Hermes selective indexing、正文抽取和受控写操作，均需用户再次明确确认。
+9. Hermes 后续接入按 `Catalog Layer -> Evidence Layer -> Memory Layer -> Orchestration Layer` 推进。G4 只验证并修补当前 catalog-only + 受控平台动作闭环，不进入正文证据、长期记忆或多 Agent 编排实现。
 
 后续日常开发默认读取 `docs/07`、`docs/08`、`docs/03`、`docs/10`、`handoff/main-agent/phase2-current-roadmap.md`、`handoff/main-agent/hermes-jarvis-coupling-roadmap.md`、`handoff/dev-agent/latest-report.md`、`handoff/test-agent/latest-report.md`。`docs/01` 到 `docs/06` 和大量一期 handoff 报告默认作为历史资料，不再反复加载。
 

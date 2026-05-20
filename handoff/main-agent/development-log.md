@@ -1,5 +1,39 @@
 # 主 Agent 开发监控日志
 
+## 2026-05-20：G4 真实项目交付闭环试运行启动
+
+- 前置裁决：
+  - G3 已通过测试 agent 验收并完成 Git checkpoint。
+  - 当前不自动进入 8B / 8C / 9A。
+  - 8B BIM 轻量化任务编排继续后置。
+- 用户确认：
+  - 下一步进入真实项目交付闭环试运行。
+  - 当前不继续扩大平台内容，优先验证真实员工能否把既有项目跑入数字化交付闭环。
+- 主 agent 裁决：
+  - 当前进入 `G4：真实项目交付闭环试运行与问题修补`。
+  - G4 不是新功能扩张批次，而是真实项目试运行纠偏批次。
+  - 105 项目作为主样本，但必须至少抽查另一个真实 NAS 项目，不允许为 105 写死逻辑。
+- G4 主链路：
+  - 真实项目资产入口。
+  - 项目工作台。
+  - Hermes 工程主数据补齐计划。
+  - Hermes 交付缺失项补交 / 文件挂接推荐方案。
+  - 人工确认推荐挂接。
+  - 文档 / 图纸交付状态刷新。
+  - 审核 / 整改。
+  - 导出预检查 dry-run。
+  - 审计留痕。
+- G4 允许修补：
+  - 项目上下文、真实项目入口、页面刷新、交互提示、空状态、权限/Missing Evidence 解释、专项脚本和小范围只读聚合。
+- G4 禁止：
+  - 真实 BIM 轻量化、真实模型转换、构件级解析、正文抽取、selective indexing、真实 NAS 增删改查、Hermes memory / 向量库写入、Agent 未确认自动治理、为 105 写死逻辑。
+- 已写入：
+  - G4 规划：`handoff/main-agent/phase2-g4-real-project-delivery-trial-plan.md`
+  - 开发 agent prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 agent prompt：`handoff/test-agent/current-prompt.md`
+  - 路线状态：`handoff/main-agent/phase2-current-roadmap.md`
+  - 主状态：`handoff/main-agent/status.md`
+
 ## 2026-05-18：文件管理页目录树超时修复任务收束
 
 - 用户反馈项目详情 `文件管理` 中目录结构与右侧文件对应关系异常，并出现 `timeout of 10000ms exceeded`。
