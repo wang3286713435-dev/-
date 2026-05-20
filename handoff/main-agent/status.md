@@ -13,6 +13,19 @@
 - G3 测试 prompt：`handoff/test-agent/current-prompt.md`。
 - G3 主 agent 规划：`handoff/main-agent/phase2-g3-hermes-masterdata-delivery-guidance-plan.md`。
 
+## 2026-05-20 G3 收口裁决
+
+- G3 已通过测试 agent 验收。
+- 当前无 P0 / P1。
+- 仅保留既有前端 Vite chunk size warning，不阻塞。
+- G3 已实现 Hermes Action Center，包含回答、操作草案、待人工确认和执行结果。
+- Hermes 可生成工程主数据补齐计划、交付缺失项补交 / 文件挂接推荐方案。
+- 未人工确认时不能执行写动作；人工确认后通过平台既有推荐挂接能力执行。
+- 执行链路保留平台权限校验和审计。
+- Missing Evidence 边界保持：正文 / DWG / RVT / BIM 构件类问题不编造。
+- 未进入 8B / 8C / 9A，未做真实 BIM 轻量化、正文抽取、NAS 增删改查、Hermes memory 或向量库写入。
+- 主 agent 裁决：G3 可以收口；下一阶段不自动进入 8B / 8C / 9A，需用户另行确认。
+
 ## 2026-05-20 G2-B 收口裁决
 
 - `G2-B：既有真实项目治理可用性补丁` 已通过测试 agent 短回归。

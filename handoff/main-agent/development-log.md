@@ -2579,3 +2579,31 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - `handoff/test-agent/current-prompt.md`
   - `handoff/main-agent/status.md`
   - `handoff/main-agent/phase2-current-roadmap.md`
+
+## 2026-05-20：G3 Hermes 平台工作型 Agent MVP 验收通过
+
+- 测试报告：
+  - `handoff/test-agent/latest-report.md`
+- 结论：
+  - G3 验收通过。
+  - 当前无 P0 / P1。
+  - 仅有既有前端 Vite chunk size warning，不阻塞。
+- 已确认能力：
+  - Hermes 面板新增 Action Center。
+  - Action Center 区分回答、操作草案、待人工确认、执行结果。
+  - 可生成工程主数据补齐计划。
+  - 可生成交付缺失项补交 / 文件挂接推荐方案。
+  - 未人工确认时不能执行写动作。
+  - 人工确认后通过平台既有推荐挂接能力执行。
+  - 执行结果展示创建、跳过、失败。
+  - 审计日志包含 apply 记录。
+- 边界确认：
+  - 未进入 8B / 8C / 9A。
+  - 未做真实 NAS 写操作。
+  - 未读取 PDF / Office / DWG / RVT / IFC 正文。
+  - 未做 BIM 构件级解析。
+  - 未写 Hermes memory、OpenSearch、Qdrant、MinIO documents/chunks。
+  - 未发现真实 NAS 路径、raw storage 字段、raw row、SQL、secret / token / password 泄露。
+- 主 agent 裁决：
+  - G3 可以收口。
+  - 下一阶段不自动进入 8B / 8C / 9A，需用户另行确认。
