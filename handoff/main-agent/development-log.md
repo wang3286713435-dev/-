@@ -2550,3 +2550,32 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - selective indexing。
   - NAS 增删改查。
   - Agent 自动写库、自动挂接、自动审批、自动整改。
+
+## 2026-05-20：G3 重新定义为 Hermes 平台工作型 Agent MVP
+
+- 用户进一步裁决：
+  - Hermes 不能一直只是平台问答 AI。
+  - Hermes 必须作为平台内嵌 Agent，真实替员工完成数字化交付工作。
+  - 当前重点开发 Hermes 功能，不能一直停留在 catalog-only 问答阶段。
+- 主 agent 修正：
+  - G3 名称调整为 `G3：Hermes 平台工作型 Agent MVP`。
+  - G3 不再只是“问答引导增强”，而是建立受控 Agent 工作能力。
+  - Hermes 可以通过平台已有 API 做事，但不能绕过平台做事。
+- G3 当前允许：
+  - 读取项目状态、工程主数据状态、交付缺失项和候选文件。
+  - 生成工程主数据补齐计划。
+  - 生成缺失项补交 / 文件挂接推荐方案。
+  - 用户人工确认后，调用平台已有推荐挂接能力执行。
+  - 展示执行结果并留审计。
+- G3 仍禁止：
+  - 直接写数据库。
+  - 未确认自动挂接、自动审批、自动整改。
+  - 真实 NAS 增删改查。
+  - 文件正文抽取、DWG/RVT/BIM 内容理解。
+  - Hermes memory、OpenSearch、Qdrant、MinIO documents/chunks 写入。
+- 已更新：
+  - `handoff/main-agent/phase2-g3-hermes-masterdata-delivery-guidance-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+  - `handoff/main-agent/status.md`
+  - `handoff/main-agent/phase2-current-roadmap.md`

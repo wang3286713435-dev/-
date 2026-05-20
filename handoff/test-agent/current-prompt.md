@@ -1,4 +1,4 @@
-# 测试 Agent 当前任务：G3 Hermes 工程主数据交付路径完善 MVP 验收
+# 测试 Agent 当前任务：G3 Hermes 平台工作型 Agent MVP 验收
 
 你是数字化交付平台测试 agent。工作目录：
 
@@ -6,7 +6,7 @@
 
 本轮只验收：
 
-`G3：Hermes 工程主数据交付路径完善 MVP`
+`G3：Hermes 平台工作型 Agent MVP`
 
 注意：
 
@@ -14,7 +14,7 @@
 - 本轮不进入 8B / 8C / 9A。
 - 不测试真实 BIM 轻量化。
 - 不测试真实 NAS 增删改查。
-- 不测试正文抽取、selective indexing 或 Agent 自动治理。
+- 不测试正文抽取、selective indexing 或 Hermes memory。
 - 105 只是验收样本，不能作为硬编码能力。
 
 ## 0. 必须先阅读
@@ -34,13 +34,14 @@
 
 ## 1. 验收目标
 
-确认 G3 是否真正解决：
+确认 G3 是否真正让 Hermes 从问答框升级为平台工作型 Agent：
 
-1. 用户不知道工程主数据页面怎么用。
-2. 用户不知道部位树、节点类型、交付物标准和交付闭环的关系。
-3. Hermes 对平台使用问题不应再错误返回正文 Missing Evidence。
-4. Hermes 必须仍然拒绝正文 / DWG / RVT / BIM 构件类伪回答。
-5. Hermes 必须适用于 105 和其他真实 NAS 项目。
+1. Hermes 能生成工程主数据补齐计划。
+2. Hermes 能生成交付缺失项补交 / 文件挂接推荐方案。
+3. 用户未确认时不能执行写动作。
+4. 用户确认后能通过平台既有能力执行推荐挂接。
+5. 执行结果和审计可查。
+6. Hermes 仍不能编造正文 / DWG / RVT / BIM 构件内容。
 
 ## 2. 必跑命令
 
@@ -63,12 +64,12 @@ git diff --check
 如果新增了 G3 专项脚本，必须执行：
 
 ```bash
-bash scripts/dev/check-phase2-insert-g3-hermes-masterdata-guidance.sh
+bash scripts/dev/check-phase2-insert-g3-hermes-working-agent.sh
 ```
 
 ## 3. 页面验收
 
-至少打开并验收以下页面：
+至少打开并验收：
 
 - `/data-steward/assets`
 - `/data-steward/assets/503`
@@ -87,36 +88,62 @@ bash scripts/dev/check-phase2-insert-g3-hermes-masterdata-guidance.sh
 - Hermes 常驻入口可见。
 - Hermes 面板能打开。
 - 当前项目上下文正确。
-- 当前页面标题 / 页面类型 / 当前路由上下文正确。
 - 页面无白屏、无 500、无横向撑爆。
 
-## 4. Hermes 问答验收
+## 4. 工作型 Agent 验收
 
-在不同页面提问：
+### A. Action Center
 
-### A. 平台使用 / 工程主数据问题
+确认 Hermes 面板中存在清晰的工作区，至少能区分：
 
-这些问题应基于平台上下文回答，不应返回正文 Missing Evidence：
+- 回答。
+- 操作草案。
+- 待人工确认。
+- 执行结果。
 
-- `这个页面是干什么的？`
-- `我下一步应该做什么？`
-- `这个项目现在处于哪一步？`
-- `部位树有什么用？`
-- `节点类型为什么要锁定？`
-- `交付物标准和文档图纸交付有什么关系？`
-- `为什么模板只是草案？`
-- `当前项目离交付完成还差什么？`
+### B. 工程主数据补齐计划
+
+提问或点击快捷入口：
+
+- `帮我检查工程主数据还缺什么`
+- `帮我生成这个项目的工程主数据补齐计划`
 
 期望：
 
-- 回答与当前页面相关。
-- 回答与当前项目相关。
-- 回答能解释下一步动作。
-- 回答不堆技术字段。
-- 不误报权限拒绝。
+- 能说明是否有部位树。
+- 能说明节点类型是否存在 / 是否锁定。
+- 能说明交付物标准是否完整。
+- 能说明下一步去哪个页面处理。
 - 不误报正文 Missing Evidence。
+- 不自动创建工程主数据。
 
-### B. 文件正文 / 模型内部内容问题
+### C. 交付缺失项补交方案
+
+提问或点击快捷入口：
+
+- `帮我推荐哪些文件可以补交`
+- `帮我生成一批挂接方案`
+
+期望：
+
+- 能列出缺失项。
+- 能列出推荐文件。
+- 能说明推荐理由、置信度、风险。
+- 能提示是否需要先治理元数据。
+- 不自动挂接。
+
+### D. 人工确认执行
+
+必须验证：
+
+- 用户未确认时，不能执行推荐挂接。
+- 用户确认后，才可以调用平台已有能力执行推荐挂接。
+- 请求必须有 `confirmed=true` 或等价确认。
+- 后端重新校验项目权限。
+- 执行结果展示创建、跳过、失败和失败原因。
+- 审计记录可查。
+
+## 5. Missing Evidence 与安全边界
 
 这些问题必须返回 Missing Evidence 或缺少正文证据：
 
@@ -128,10 +155,8 @@ bash scripts/dev/check-phase2-insert-g3-hermes-masterdata-guidance.sh
 期望：
 
 - 不编造正文、图层、构件、参数、模型内部信息。
-- 明确说明当前仅 catalog-only。
+- 明确说明当前没有正文证据。
 - 不泄露真实 NAS 路径。
-
-## 5. 安全与禁止项
 
 必须确认没有：
 
@@ -143,11 +168,8 @@ bash scripts/dev/check-phase2-insert-g3-hermes-masterdata-guidance.sh
 - selective indexing。
 - 写 Hermes memory。
 - 写 OpenSearch / Qdrant / MinIO documents/chunks。
-- Agent 自动写库。
-- Agent 自动创建部位树、节点类型或交付物标准。
-- Agent 自动审批。
-- Agent 自动整改。
-- Agent 自动挂接。
+- Hermes 直接写数据库。
+- Hermes 未确认自动挂接、自动审批、自动整改。
 - 前端直连 Hermes。
 - 为 105 写死特殊逻辑。
 
@@ -168,19 +190,20 @@ bash scripts/dev/check-phase2-insert-g3-hermes-masterdata-guidance.sh
 
 P0：
 
-- Hermes 对有权限项目误报权限拒绝。
-- Hermes 对平台使用问题仍只返回正文 Missing Evidence。
+- Hermes 无法生成任何操作草案，仍只是问答框。
+- 用户未确认也能执行写动作。
+- Hermes 自动挂接、自动审批或自动整改。
 - Hermes 编造文件正文、DWG/RVT/BIM 内容。
 - 前端直连 Hermes。
 - 泄露真实 NAS 路径、raw row、SQL、token。
-- Agent 自动写库或自动治理。
 
 P1：
 
-- 工程主数据页面没有明确 Hermes 引导。
-- Hermes 回答无法说明当前页面下一步动作。
+- 工程主数据补齐计划不可用。
+- 缺失项补交方案不可用。
+- 执行结果没有展示创建 / 跳过 / 失败。
+- 审计不可查。
 - 只对 105 有效，其他真实项目不可用。
-- 用户仍无法理解部位树、节点类型、交付物标准与交付闭环的关系。
 
 ## 7. 报告要求
 
@@ -195,7 +218,9 @@ P1：
 3. 必跑命令结果。
 4. 页面验收结果。
 5. 105 和另一个真实 NAS 项目的验证结果。
-6. 平台使用 / 工程主数据问题问答结果。
-7. 正文 / DWG / RVT / BIM 问题 Missing Evidence 结果。
-8. 安全与禁止项检查。
-9. 是否建议收口 G3。
+6. Action Center 验收结果。
+7. 工程主数据补齐计划验收结果。
+8. 缺失项补交方案验收结果。
+9. 人工确认执行验收结果。
+10. Missing Evidence 和安全边界检查。
+11. 是否建议收口 G3。

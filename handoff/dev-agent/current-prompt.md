@@ -1,4 +1,4 @@
-# 开发 Agent 当前任务：G3 Hermes 工程主数据交付路径完善 MVP
+# 开发 Agent 当前任务：G3 Hermes 平台工作型 Agent MVP
 
 你是数字化交付平台二期开发 agent。工作目录：
 
@@ -6,21 +6,21 @@
 
 当前开发方式：独立开发 Codex 会话主导开发。禁止创建子 agent，禁止调用 Claude Code。
 
-本轮是 G2 收口后的主线可用性修复批次：
+本轮是 G2 收口后的 Hermes 主线强化批次：
 
-`G3：Hermes 工程主数据交付路径完善 MVP`
+`G3：Hermes 平台工作型 Agent MVP`
 
-## 0. 命名与路线冻结
+## 0. 路线冻结
 
 - G2 已收口并完成 Git checkpoint。
 - 当前进入 `G3`。
 - 不进入 `8B / 8C / 9A`。
-- 8B BIM 轻量化任务编排已后置。
-- 本轮目标不是增加平台大功能，而是把已有工程主数据、真实项目接入、交付治理和 Hermes 串成可用路径。
+- 8B BIM 轻量化任务编排继续后置。
+- 本轮重点不是继续增加平台页面，而是让 Hermes 从“平台问答 AI”升级为“能通过平台受控能力替员工做事的 Agent”。
 
 完成承诺固定为：
 
-`<promise>PHASE2_G3_HERMES_MASTERDATA_GUIDANCE_COMPLETE</promise>`
+`<promise>PHASE2_G3_HERMES_WORKING_AGENT_COMPLETE</promise>`
 
 ## 1. 必须先阅读
 
@@ -44,158 +44,129 @@
 2. `frontend/src/modules/data-steward/components/DataStewardAnswerCard.vue`
 3. `frontend/src/modules/data-steward/api/dataSteward.ts`
 4. `frontend/src/modules/core/layout/AppLayout.vue`
-5. `frontend/src/modules/core/composables/useProjectWorkspaceContext.ts`
-6. `frontend/src/modules/master-data/pages/ProjectInitializationPage.vue`
-7. `frontend/src/modules/master-data/pages/SectionNodesPage.vue`
-8. `frontend/src/modules/master-data/pages/NodeTypesPage.vue`
-9. `frontend/src/modules/master-data/pages/DeliverableStandardPage.vue`
-10. `frontend/src/modules/work-center/pages/AgentDeliveryGovernancePage.vue`
-11. `frontend/src/modules/work-center/components/DeliveryViewPanel.vue`
-12. `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/hermes/*`
-13. `backend/delivery-work-center/src/main/java/com/zhuoyu/delivery/workcenter/agentgovernance/*`
-14. `backend/delivery-master-data/src/main/java/com/zhuoyu/delivery/masterdata/initialization/*`
+5. `frontend/src/modules/work-center/pages/AgentDeliveryGovernancePage.vue`
+6. `frontend/src/modules/work-center/api/delivery.ts`
+7. `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/hermes/*`
+8. `backend/delivery-work-center/src/main/java/com/zhuoyu/delivery/workcenter/agentgovernance/*`
+9. `backend/delivery-work-center/src/main/java/com/zhuoyu/delivery/workcenter/delivery/*`
+10. `backend/delivery-master-data/src/main/java/com/zhuoyu/delivery/masterdata/initialization/*`
 
 如实际文件位置不同，用 `rg` 定位，禁止凭空重复造模块。
 
-## 2. 背景
+## 2. 核心产品判断
 
-当前平台已经有：
+Hermes 不能只是问答框。它必须能在平台内完成受控工作：
 
-- 真实 NAS 项目资产目录。
-- 项目工作台。
-- 真实项目接入向导。
-- 工程主数据：部位树、节点类型、交付物标准。
-- 交付治理助手。
-- 文档 / 图纸交付。
-- 批量挂接、审核、整改、导出预检查。
-- Hermes 常驻入口和真实外部 Hermes catalog-only 回答。
+- 读当前项目状态。
+- 看工程主数据缺口。
+- 生成补齐计划。
+- 生成交付缺失项补交方案。
+- 推荐候选文件。
+- 在用户人工确认后调用平台已有能力执行。
+- 执行后给出结果并留审计。
 
-但用户仍然不容易理解：
+关键原则：
 
-- 当前页面有什么用。
-- 工程主数据为什么要配置。
-- 部位树、节点类型、交付物标准之间是什么关系。
-- 当前项目离交付闭环还差什么。
-- 下一步应该点哪里。
+`Hermes 可以通过平台做事，但不能绕过平台做事。`
 
-本轮不是继续做新模块，而是让 Hermes 成为平台内“懂当前项目、懂当前页面、懂工程主数据交付路径”的常驻引导者。
+## 3. 本轮必须完成
 
-## 3. 本轮核心目标
+### A. Hermes Action Center
 
-让用户进入 105 或其他真实 NAS 项目后，即使不看说明书，也可以通过 Hermes 理解：
+在 Hermes 面板中增加清晰的 Agent 工作区。
 
-- 当前项目处于真实接入 / 工程主数据 / 交付治理哪一步。
-- 当前页面是干什么的。
-- 当前页面下一步应该做什么。
-- 工程主数据缺什么。
-- 为什么模板只是草案。
-- 为什么要建部位树。
-- 为什么节点类型要锁定。
-- 交付物标准如何服务文档 / 图纸交付。
-- 哪些问题只能目录级回答，哪些问题缺少正文证据。
+至少区分：
 
-## 4. 必须完成
+- `回答`
+- `操作草案`
+- `待人工确认`
+- `执行结果`
 
-### A. Hermes 问题分类修正
+用户要能一眼看出：
 
-Hermes 必须区分两类问题：
+- Hermes 现在只是解释。
+- Hermes 生成了一个可执行方案。
+- 这个方案还没执行。
+- 用户确认后才会执行。
+- 执行成功 / 跳过 / 失败多少条。
 
-1. 平台使用 / 当前项目流程问题
-   - 例如：
-     - `这个页面是干什么的？`
-     - `我下一步应该做什么？`
-     - `部位树有什么用？`
-     - `节点类型为什么要锁定？`
-     - `交付物标准和图纸交付是什么关系？`
-   - 这些问题可以基于平台上下文、项目状态、工程主数据状态回答。
-   - 不应因为没有文件正文而返回 Missing Evidence。
+### B. 受控工具模型
 
-2. 文件正文 / 图纸 / 模型内部内容问题
-   - 例如：
-     - `这个 PDF 第三页写了什么？`
-     - `这个 DWG 里面有哪些设备？`
-     - `这个 RVT 里面有哪些构件参数？`
-   - 当前必须返回 Missing Evidence。
-   - 不得编造正文、图层、构件、参数或模型内部内容。
+后端 Gateway 或业务服务中建立受控工具口径。可以是最小实现，不必做复杂插件系统。
 
-### B. 页面级 Hermes 上下文
+至少提供这些逻辑能力：
 
-至少覆盖以下页面：
+1. Read Tool：读取项目交付状态。
+2. Read Tool：读取工程主数据状态。
+3. Read Tool：读取交付缺失项。
+4. Plan Tool：生成工程主数据补齐计划。
+5. Plan Tool：生成缺失项补交 / 文件挂接推荐方案。
+6. Action Tool：人工确认后应用推荐挂接。
 
-- `/data-steward/assets`
-- `/data-steward/assets/:projectId`
-- `/data-steward/assets/:projectId/master-data/initialization`
-- `/data-steward/assets/:projectId/master-data/sections`
-- `/data-steward/assets/:projectId/master-data/node-types`
-- `/data-steward/assets/:projectId/master-data/deliverable-standard`
-- `/data-steward/assets/:projectId/work/agent-governance`
-- `/data-steward/assets/:projectId/work/document-delivery`
-- `/data-steward/assets/:projectId/work/drawing-delivery`
-- `/data-steward/assets/:projectId?tab=files`
+可以复用已有 G1 接口：
 
-Hermes 请求必须带：
+- `GET /api/work-center/projects/{projectId}/agent-governance/overview`
+- `GET /api/work-center/projects/{projectId}/agent-governance/missing-items`
+- `POST /api/work-center/projects/{projectId}/agent-governance/recommend-bindings`
+- `POST /api/work-center/projects/{projectId}/agent-governance/recommendations:apply`
 
-- 当前路由。
-- 页面类型。
-- 页面标题。
-- 项目 ID。
-- 项目编码 / 名称。
-- 当前页面业务用途。
-- 当前页面下一步建议。
+如新增接口，必须仍在平台后端，不允许前端直连 Hermes。
 
-前端仍只能请求平台后端 `/api/data-steward/chat`，禁止直连外部 Hermes。
+### C. 工程主数据 Agent Plan
 
-### C. 工程主数据交付路径引导
+Hermes 必须能生成工程主数据补齐计划。
 
-Hermes 必须能解释以下路径：
+计划内容至少包含：
 
-`真实项目资产 -> 接入评估 -> 主数据草案 -> 部位树确认 -> 节点类型锁定 -> 交付物标准确认 -> 文档/图纸缺失项 -> 候选文件推荐 -> 人工确认挂接 -> 审核/整改 -> 导出预检查`
+- 当前项目是否完成真实接入。
+- 是否存在部位树。
+- 节点类型是否存在、是否锁定。
+- 交付物标准是否存在。
+- 文档 / 图纸交付是否可以进入治理。
+- 下一步建议。
+- 对应页面入口。
 
-回答必须面向业务用户，不堆技术字段。
+注意：
 
-### D. 只读项目状态摘要
+- 本轮不允许 Hermes 自动创建部位树、节点类型或交付物标准。
+- 只能生成计划和跳转建议。
 
-如 Hermes 需要项目状态，请优先复用已有只读接口或服务：
+### D. 交付缺失项 Agent Plan
 
-- 真实项目接入 assessment / preview。
-- G1 交付治理 overview / missing-items。
-- 文档 / 图纸交付完整率。
-- 交付包导出预检查。
-- catalog-only 文件目录摘要。
+Hermes 必须能基于现有交付治理能力生成缺失项补交方案。
 
-如确实需要新增后端聚合，只能新增只读、脱敏、项目权限校验后的上下文摘要；不得新增数据库结构。
+方案内容至少包含：
 
-### E.  route-aware 快捷问题
+- 缺失项。
+- 推荐文件。
+- 推荐理由。
+- 置信度。
+- 风险。
+- 是否需要先治理元数据。
 
-Hermes 面板快捷问题应根据当前页面变化。
+### E. 人工确认后执行推荐挂接
 
-示例：
+用户必须明确确认后才能执行。
 
-- 接入向导页：
-  - `这个项目接入到哪一步了？`
-  - `为什么这里显示草案？`
-  - `我现在能不能应用模板？`
-- 部位树页：
-  - `部位树有什么用？`
-  - `这个项目部位树还缺什么？`
-  - `下一步是不是节点类型？`
-- 节点类型页：
-  - `节点类型为什么要锁定？`
-  - `没锁定会影响什么？`
-- 交付物标准页：
-  - `交付物标准和文档图纸交付有什么关系？`
-  - `标准不完整会影响哪里？`
-- 交付治理助手页：
-  - `当前项目离交付完成还差什么？`
-  - `哪些文件可能可以补交？`
+要求：
 
-### F. 通用真实项目
+- 前端展示执行前摘要。
+- 用户必须勾选或点击确认。
+- 请求必须带 `confirmed=true` 或等价确认字段。
+- 后端必须重新校验项目权限和项目上下文。
+- 执行结果展示创建、跳过、失败和失败原因。
+- 审计必须可追踪。
 
-105 只是验收样本，不允许硬编码。
+可以优先复用 G1 已有推荐挂接应用能力，不重复造一套挂接逻辑。
 
-至少保证另一个真实 NAS 项目也能使用同一套 Hermes 引导能力。
+### F. 问题分类仍要正确
 
-## 5. 禁止事项
+Hermes 必须区分：
+
+- 平台流程 / 工程主数据 / 交付治理问题：可以回答并生成计划。
+- 文件正文 / DWG / RVT / BIM 构件问题：必须 Missing Evidence，不得编造。
+
+## 4. 禁止事项
 
 本轮严禁：
 
@@ -208,28 +179,29 @@ Hermes 面板快捷问题应根据当前页面变化。
 7. 不写 Hermes memory。
 8. 不写 OpenSearch / Qdrant / MinIO documents/chunks。
 9. 不做真实 NAS 增删改查。
-10. 不让 Agent 自动写库。
-11. 不让 Agent 自动创建部位树、节点类型或交付物标准。
-12. 不让 Agent 自动挂接、自动审批、自动整改。
-13. 不新增大量页面。
-14. 不把 catalog metadata 冒充正文 evidence。
-15. 不返回真实 NAS 路径、raw row、SQL、token、secret、password。
+10. 不让 Hermes 直接写数据库。
+11. 不让 Hermes 绕过平台权限。
+12. 不让 Hermes 未经确认自动挂接、自动审批、自动整改。
+13. 不把 catalog metadata 冒充正文 evidence。
+14. 不返回真实 NAS 路径、raw row、SQL、token、secret、password。
+15. 不为 105 写死特殊逻辑。
 
-## 6. 验收标准
+## 5. 验收标准
 
 至少满足：
 
-1. Hermes 在工程主数据、接入向导、交付治理、文档/图纸交付页面均可用。
-2. 问 `这个页面是干什么的？` 能得到当前页面相关回答。
-3. 问 `我下一步应该做什么？` 能给出符合当前页面和当前项目状态的建议。
-4. 问 `部位树有什么用？`、`节点类型为什么要锁定？`、`交付物标准有什么用？` 能得到业务化解释。
-5. 问当前项目交付缺口时，能基于现有项目状态给出 catalog-only / platform-context 回答。
-6. 问 PDF / DWG / RVT / BIM 构件正文类问题，仍返回 Missing Evidence。
-7. 不泄露真实 NAS 路径、raw row、SQL、token。
+1. Hermes 面板中存在可执行建议 / 操作草案 / 人工确认执行区域。
+2. Hermes 能生成工程主数据补齐计划。
+3. Hermes 能生成交付缺失项补交 / 文件挂接推荐方案。
+4. 用户未确认时，任何写动作都不能执行。
+5. 用户确认后，可以通过平台既有能力执行推荐挂接。
+6. 执行结果能展示创建、跳过、失败及失败原因。
+7. 执行动作有审计。
 8. 105 和另一个真实 NAS 项目均可用。
-9. G2 / G1 / 8A 回归不破坏。
+9. 正文 / DWG / RVT / BIM 构件类问题仍返回 Missing Evidence。
+10. G2 / G1 / 8A 回归不破坏。
 
-## 7. 自测要求
+## 6. 自测要求
 
 至少执行：
 
@@ -247,11 +219,19 @@ bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh
 git diff --check
 ```
 
-如果新增 G3 专项脚本，命名建议：
+建议新增 G3 专项脚本：
 
-`scripts/dev/check-phase2-insert-g3-hermes-masterdata-guidance.sh`
+`scripts/dev/check-phase2-insert-g3-hermes-working-agent.sh`
 
-## 8. 报告要求
+专项脚本至少覆盖：
+
+- 未确认不能执行。
+- 确认后可应用推荐挂接。
+- 响应不泄露敏感字段。
+- 正文类问题 Missing Evidence。
+- 105 和另一个真实项目均可生成计划。
+
+## 7. 报告要求
 
 完成后写入：
 
@@ -260,14 +240,15 @@ git diff --check
 报告必须包含：
 
 1. 修改了哪些文件。
-2. Hermes 如何区分平台流程问题和正文证据问题。
-3. 页面上下文如何传递。
-4. 工程主数据路径如何解释。
-5. 105 和另一个真实项目的验证结果。
-6. 是否新增只读聚合接口。
-7. 是否有任何 Missing Evidence 边界变化。
-8. 自测命令结果。
-9. 未完成事项和风险。
-10. 完成承诺：
+2. Hermes Action Center 如何工作。
+3. 工程主数据补齐计划如何生成。
+4. 缺失项补交方案如何生成。
+5. 人工确认后执行调用了哪个既有平台能力。
+6. 审计如何留痕。
+7. 105 和另一个真实项目的验证结果。
+8. Missing Evidence 边界是否保持。
+9. 自测命令结果。
+10. 未完成事项和风险。
+11. 完成承诺：
 
-`<promise>PHASE2_G3_HERMES_MASTERDATA_GUIDANCE_COMPLETE</promise>`
+`<promise>PHASE2_G3_HERMES_WORKING_AGENT_COMPLETE</promise>`

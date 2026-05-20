@@ -5,10 +5,10 @@
 - G2 已收口并完成 Git checkpoint。
 - 当前不进入 8B / 8C / 9A。
 - 8B BIM 轻量化任务编排后置。
-- 用户裁决：当前不应继续增加平台内容，避免平台越来越大而空。
-- 当前下一批固定为 `G3：Hermes 工程主数据交付路径完善 MVP`。
-- G3 目标：完善 Hermes 对工程主数据、真实项目接入、交付治理、文档/图纸交付路径的引导能力。
-- G3 不是新功能扩张批次；不得做 BIM 轻量化、真实模型转换、构件级解析、正文抽取、selective indexing、NAS 增删改查或 Agent 自动治理。
+- 用户裁决：Hermes 不能长期只是平台问答 AI，必须作为嵌入平台的 Agent，真实帮助员工完成数字化交付工作。
+- 当前下一批固定为 `G3：Hermes 平台工作型 Agent MVP`。
+- G3 目标：让 Hermes 能读取项目状态、生成工程主数据补齐计划、生成交付缺失项补交方案，并在人工确认后调用平台已有能力执行受控动作。
+- G3 不是新平台模块扩张批次；不得做 BIM 轻量化、真实模型转换、构件级解析、正文抽取、selective indexing、NAS 增删改查、Hermes memory 写入或未确认自动治理。
 - G3 开发 prompt：`handoff/dev-agent/current-prompt.md`。
 - G3 测试 prompt：`handoff/test-agent/current-prompt.md`。
 - G3 主 agent 规划：`handoff/main-agent/phase2-g3-hermes-masterdata-delivery-guidance-plan.md`。
