@@ -1,5 +1,42 @@
 # 主 Agent 开发监控日志
 
+## 2026-05-20：M1A 平台主线功能基线审计正式收口
+
+- 测试 agent 已完成 M1A 登录超时修复后极短复验。
+- 结论：通过，当前无 P0 / P1。
+- 已关闭：
+  - `P1-M1A-LOGIN-TIMEOUT`。
+  - Catalog 详情路径脱敏 P1。
+  - 旧文件资源路径脱敏 P1。
+- 验证通过：
+  - Fresh login 可进入 `/data-steward/assets`。
+  - 503 / 105 项目页面抽查通过。
+  - 506 / 93 项目页面抽查通过。
+  - 文件访问安全脚本 `PASS=18 FAIL=0`。
+  - 前端构建、健康检查、`git diff --check` 通过。
+- 主 agent 裁决：
+  - M1A 可以收口。
+  - 主线健康度从 `黄灯可控` 调整为 `绿灯可继续主线开发`。
+  - 这不代表进入 9A，也不代表客户交付准备完成。
+  - 下一批建议为 `M1B：项目工作台与数据管家可用性收口`，需用户确认后再启动。
+- 收口报告：`handoff/main-agent/m1a-platform-baseline-closure.md`。
+
+## 2026-05-20：M1A 登录超时 P1 修复
+
+- 测试 agent 首轮 M1A 验收不通过，阻塞项为 `P1-M1A-LOGIN-TIMEOUT`。
+- 主 agent 复现：
+  - 命令行登录接口请求很快。
+  - 浏览器 fresh login 会卡住并出现 `timeout of 10000ms exceeded`。
+  - 带 `Origin: http://127.0.0.1:5173` 的请求在旧后端运行态下无响应。
+- 修复动作：
+  - 将 Vite 本地代理目标从 `http://localhost:8080` 固定为 `http://127.0.0.1:8080`。
+  - 重启后端后，带 Origin 请求恢复正常。
+- 验证结果：
+  - Fresh login 约 1.6 秒进入 `/data-steward/assets`。
+  - `POST /api/core/auth/login` 与 `GET /api/core/users/me` 均返回 200。
+- 报告文件：`handoff/main-agent/m1a-login-timeout-fix-report.md`。
+- 测试 agent 当前 prompt 已改为 M1A 极短复验，重点复验 fresh login、503/506 页面和路径脱敏。
+
 ## 2026-05-20：M 系列主线健康恢复正式启动
 
 - 用户确认：现在开始进入 M 系列，目标是将主线健康度从 `黄灯可控` 提升为 `绿灯`。

@@ -1,188 +1,152 @@
-# 开发 Agent 报告：G3 Hermes 平台工作型 Agent MVP
+# 开发 Agent 报告：M1A 平台主线功能基线审计与交付闭环缺口收束
 
 时间：2026-05-20
 
 ## 1. 本轮目标
 
-本轮按 `G3：Hermes 平台工作型 Agent MVP` 开发。目标是让前端 Hermes 不只停留在问答，而是在 `catalog-only / read-only / permission-aware / Missing Evidence` 边界内，具备平台受控的“计划、人工确认、执行结果”工作区。
+本轮执行 `M1A：平台主线功能基线审计与交付闭环缺口收束`。
 
-命名保持 `G3`。未进入 8B / 8C / 9A，未新增 H1/R1 等临时命名。
+目标是暂停 G4 / Hermes 扩展开发后，回到平台主线，对真实 NAS 项目的资产总览、项目工作台、文件管理、工程主数据、交付页、整改闭环、导出预检查、BIM Mock 安全入口、权限/审计/路径脱敏做基线审计，并只修复 P0/P1 或很小的 P2 缺口。
 
-## 2. 读取的关键文档
+完成标记：`<promise>MAINLINE_M1A_PLATFORM_BASELINE_AUDIT_COMPLETE</promise>`
+
+## 2. Git 基线
+
+- 当前分支：`codex/platform-m1a-baseline-fixes`
+- 本轮主线基线提交：`0c97419 docs: start m-series mainline stabilization`
+- 主 agent 迁移说明：开发 agent 首次执行时误在 `codex/hermes-alignment-0a-contract-freeze` 分支完成本轮改动；主 agent 已将本轮代码改动和报告迁移到从 `main` 拉出的平台分支 `codex/platform-m1a-baseline-fixes`，避免继续污染 Hermes 冻结线。
+- 本轮未提交 git。
+- 工作区原有未跟踪项仍保留：
+  - `tmp/jar-inspect/`
+  - `tmp/run-logs/hermes-gateway.pid`
+
+## 3. 读取的关键文档
 
 - `handoff/dev-agent/current-prompt.md`
 - `handoff/main-agent/status.md`
 - `handoff/main-agent/development-log.md`
 - `handoff/main-agent/phase2-current-roadmap.md`
-- `handoff/main-agent/phase2-g3-hermes-masterdata-delivery-guidance-plan.md`
-- `handoff/main-agent/hermes-layered-integration-decision.md`
+- `handoff/main-agent/mainline-git-governance-and-hermes-freeze.md`
 - `handoff/dev-agent/latest-report.md`
 - `handoff/test-agent/latest-report.md`
-- 共享文档：
-  - `agent-briefings/hermes_capability_handoff.md`
-  - `integration-contracts/platform_to_hermes_contract.md`
-  - `integration-contracts/gateway_response_contract.md`
-  - `integration-contracts/missing_evidence_policy.md`
+- `docs/07-complete-delivery-prd.md`
+- `docs/08-acceptance-and-agent-integration.md`
+- `docs/10-phase2-development-roadmap.md`
 
-未修改共享文档空间，未修改 `docs/**`。
+未修改 `docs/**`，未修改共享文档空间。
 
-## 3. 修改文件
+## 4. G4 / Hermes 冻结确认
 
-- `frontend/src/modules/data-steward/components/DataStewardPanel.vue`
-- `scripts/dev/check-phase2-insert-g3-hermes-working-agent.sh`
-- `handoff/dev-agent/latest-report.md`
+- 已确认当前主线要求：G4 暂停，Hermes 冻结。
+- 本轮没有修改 `AgentGatewayApplicationService`、Hermes Gateway、Hermes Chat、Hermes memory 或外部 Hermes 项目。
+- 没有新增 Hermes 能力，没有进入 8B / 8C / 9A。
 
-未修改后端源码，未新增数据库迁移，未修改旧 Flyway migration。
+## 5. 审计页面与接口
 
-当前 worktree 仍有非本轮产生的既有改动：
+页面抽查：
 
-- `.claude/ralph-loop.local.md`
-- `.claude/ralph/progress.txt`
-- `tmp/run-logs/backend.pid`
-- `tmp/run-logs/frontend.pid`
-- `tmp/jar-inspect/`
-- `tmp/run-logs/hermes-gateway.pid`
+- `/data-steward/assets`
+- `/data-steward/assets/503`
+- `/data-steward/assets/503` 的“文件管理”页签
+- `/data-steward/assets/503/master-data/initialization`
+- `/data-steward/assets/503/master-data/sections`
+- `/data-steward/assets/503/master-data/node-types`
+- `/data-steward/assets/503/master-data/deliverable-standard`
+- `/data-steward/assets/503/work/document-delivery`
+- `/data-steward/assets/503/work/drawing-delivery`
+- `/data-steward/assets/503/work/rectifications`
+- `/data-steward/assets/503/data-steward/models`
+- `/data-steward/assets/506`
+- `/data-steward/assets/506/master-data/initialization`
+- `/data-steward/assets/506/work/document-delivery`
+- `/data-steward/assets/506/work/drawing-delivery`
+- `/data-steward/files`
 
-本轮未回退这些既有改动。
+接口抽查：
 
-## 4. Action Center
-
-`DataStewardPanel.vue` 新增 `Hermes Action Center`，清晰区分：
-
-- `回答`：继续保留自然语言问答，仍按 catalog-only / Missing Evidence 边界。
-- `操作草案`：生成工程主数据补齐计划、缺失交付补交方案。
-- `待人工确认`：展示推荐挂接项、风险、置信度和人工确认复选框。
-- `执行结果`：展示平台挂接执行后的创建、跳过、失败结果。
-
-页面明确文案：
-
-- 计划只通过平台受控接口生成。
-- 不创建主数据。
-- 不读取文件正文。
-- 不自动挂接。
-- 必须人工勾选确认后才调用平台能力。
-
-## 5. 工程主数据计划
-
-Action Center 复用只读接口：
-
+- `GET /api/core/users/me`
+- `POST /api/core/projects/{projectId}:switch`
 - `GET /api/master-data/projects/{projectId}/onboarding/assessment`
-- `GET /api/work-center/projects/{projectId}/agent-governance/overview`
+- `GET /api/work-center/projects/{projectId}/delivery-package/export-precheck`
+- `GET /api/work-center/projects/{projectId}/delivery-completeness`
+- `GET /api/work-center/projects/{projectId}/rectifications`
+- `GET /api/data-steward/catalog/directories`
+- `GET /api/data-steward/catalog/files`
+- `GET /api/data-steward/catalog/files/{fileId}`
+- `GET /api/data-steward/projects/{projectId}/file-resources`
 
-前端生成的主数据计划包含：
+## 6. 真实项目抽查结果
 
-- 接入状态。
-- 部位树状态和节点数量。
-- 节点类型是否存在、是否锁定。
-- 交付标准状态、交付定义和交付类型数量。
-- 文档 / 图纸准备度。
-- 下一步建议。
-- 页面入口：真实项目接入向导、部位树、节点类型、交付物标准、文档交付、图纸交付。
+抽查项目：
 
-未调用 `onboarding/apply`，未自动创建主数据。
+- `503 / 105 / 启航华居项目`
+- `506 / 93 / 中建八局国交酒店项目`
 
-## 6. 缺失交付计划
+结果：
 
-Action Center 复用 G1 已收口接口：
+- 两个项目均可通过平台项目切换接口进入当前项目上下文。
+- 主数据初始化评估、交付完整性、导出预检查、整改列表、目录树、目录文件列表均返回 200。
+- 105 项目导出预检查已有图纸侧数据；93 项目当前交付侧为空数据但接口正常。
+- 前端页面均能打开，无 403/500/加载失败提示。
+- 项目文件管理页签可见只读/受控预览下载类文案。
+- 前端可见文本未命中 `nas://`、`smb://`、`/Volumes/`、`/Users/`、`storage_path/storage_uri` 等底层路径痕迹。
 
-- `GET /api/work-center/projects/{projectId}/agent-governance/missing-items`
-- `POST /api/work-center/projects/{projectId}/agent-governance/recommend-bindings`
+## 7. P0 / P1 / P2
 
-前端展示：
+P0：
 
-- 缺失项数量。
-- 推荐文件数量。
-- 缺失目标、交付类型、解释。
-- 推荐文件、版本、推荐原因。
-- 置信度。
-- 风险提示。
-- 是否建议先治理元数据。
+- 未发现 P0。
 
-推荐仍只看当前项目目录元数据，不读取 PDF / Office / DWG / RVT / IFC 正文，不把 catalog metadata 当正文 evidence。
+P1：
 
-## 7. 人工确认与执行
+- 发现 catalog 文件详情对项目管理员仍可返回底层存储路径。已修复为 catalog-only 场景一律不返回真实 `storagePath`，并返回 `PATH_NOT_EXPOSABLE_CATALOG_ONLY`。
+- 发现旧“文件资源”页面列表会展示存储地址。已修复为前端只显示“底层路径已隐藏”，后端文件资源列表/创建/处理响应清空 `storageUri` 值。
 
-Action Center 的执行动作复用 G1 已收口接口：
+P2：
 
-- `POST /api/work-center/projects/{projectId}/agent-governance/recommendations:apply`
+- 前端构建仍有既有 Vite chunk size warning，未在本轮处理。
 
-执行要求：
+## 8. 改动文件
 
-- 前端必须选择推荐项。
-- 前端必须勾选人工确认。
-- 请求体显式带 `confirmed=true`。
-- 后端 `AgentGovernanceController` 继续通过 `requireCurrentProject` 校验项目上下文。
-- 后端 `AgentGovernanceApplicationService.applyRecommendations` 继续拒绝 `confirmed=false`。
-- 后端继续复用批量挂接能力，并记录 `work.agent-governance.apply` 审计。
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/CatalogApplicationService.java`
+  - 移除项目管理员可见 raw catalog storage path 的分支。
+  - catalog 详情统一返回 `storagePath=null`、`storagePathVisible=false`、`storagePathVisibilityReason=PATH_NOT_EXPOSABLE_CATALOG_ONLY`。
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/file/FileResourceApplicationService.java`
+  - 对文件资源接口响应做输出脱敏，`storageUri` 值不再返回给前端。
+  - 内部 `requireFile` 保持原有能力，避免影响文件预览、下载、模型集成等内部校验。
+- `frontend/src/modules/data-steward/api/dataSteward.ts`
+  - `FileResource.storageUri` 类型允许为空。
+- `frontend/src/modules/data-steward/pages/FileResourcesPage.vue`
+  - 列表不再展示存储地址，改为显示“底层路径已隐藏”。
+- `handoff/dev-agent/latest-report.md`
+  - 写入本轮报告。
 
-本轮没有绕过平台权限，没有让 Hermes 直接写 DB，没有让 Hermes 自动挂接。
-
-## 8. 后端与审计
-
-本轮未新增后端接口，原因是 G1 已经提供了符合 G3 最小受控工具模型的后端能力：
-
-- 读取项目交付治理状态。
-- 读取缺失交付项。
-- 生成推荐挂接方案。
-- 人工确认后应用推荐。
-- 权限校验。
-- 审计记录。
-
-G3 前端 Action Center 只把这些受控平台能力组合成 Hermes 工作区。审计链路通过既有 `work.agent-governance.recommend` 与 `work.agent-governance.apply` 保持。
+未新增数据库迁移，未修改旧 Flyway migration。
 
 ## 9. 安全边界
 
 确认保持：
 
-- 未让 Hermes 裸连 DB。
-- 未让 Agent 生成 SQL。
-- 未做 Agent DB CRUD。
-- 未做 NAS scan。
-- 未做 parser / writer / indexing。
-- 未写 Hermes memory。
-- 未写 OpenSearch / Qdrant / MinIO。
-- 未做 BIM 轻量化、模型转换或构件解析。
-- 未读取 PDF / Office / DWG / RVT / IFC 正文。
 - 未触碰真实 NAS 文件。
-- 未创建、移动、删除、重命名或上传 NAS 文件。
-- 未暴露 raw `storage_path` / `storage_uri` / NAS 原始路径。
-- 未暴露 raw DB row、SQL、secret、token、password。
-- 未做 production rollout。
+- 未创建、移动、删除、重命名、上传真实 NAS 文件。
+- 未读取 PDF / Office / DWG / RVT / IFC 正文。
+- 未做真实 BIM 轻量化、模型转换或构件解析。
+- 未启用 parser / writer / indexing。
+- 未写 OpenSearch / Qdrant / MinIO documents / chunks。
+- 未让 Agent 自动审批、自动整改、自动挂接或自动删除。
+- 未暴露 raw NAS path、raw DB row、SQL、secret、token、password。
+- Hermes / Agent 边界保持冻结，未新增 Hermes 能力。
 
-## 10. 新增 G3 Smoke
+## 10. 路径脱敏复核
 
-新增：
+最终复扫：
 
-`scripts/dev/check-phase2-insert-g3-hermes-working-agent.sh`
+- 105 catalog list/detail：未发现 raw path；详情 `storagePath=null`，`storagePathVisible=false`。
+- 93 catalog list/detail：未发现 raw path；详情 `storagePath=null`，`storagePathVisible=false`。
+- 105 / 93 file-resources API：`storageUri` 值均为 `null`，未发现 raw path。
+- `/data-steward/files` 页面：未发现 raw path，可见“底层路径已隐藏”。
 
-覆盖：
-
-- Hermes 面板包含 Action Center、操作草案、待人工确认、执行结果。
-- 105 项目和另一个真实项目都能读取主数据计划输入。
-- 105 项目和另一个真实项目都能读取交付治理状态、缺失项、文档 / 图纸推荐方案。
-- RVT / DWG / BIM / 构件内容类问题返回 Missing Evidence。
-- 未人工确认时拒绝执行挂接。
-- 人工确认后才调用平台挂接能力。
-- 审计日志包含 apply 记录。
-- 响应未发现 raw path、storage 字段、SQL、密钥痕迹。
-
-执行结果：
-
-- `bash scripts/dev/check-phase2-insert-g3-hermes-working-agent.sh`
-- `PASS=21 FAIL=0`
-
-## 11. 浏览器回归
-
-通过浏览器短回归验证：
-
-- 页面：`/data-steward/assets/503/work/agent-governance`
-- Hermes 抽屉可打开。
-- `Hermes Action Center` 可见。
-- `操作草案` 可生成工程主数据补齐计划。
-- `待人工确认` 区展示“不会自动挂接，必须勾选推荐、勾选人工确认，再由平台后端二次校验后执行”。
-- Hermes 面板文本未发现 `storage_path / storage_uri / storagePath / storageUri / nas:// / smb:// / /Volumes/`。
-
-## 12. 验证结果
+## 11. 验证结果
 
 - 后端构建：通过。
   - `./mvnw -pl delivery-app -am -DskipTests package`
@@ -192,39 +156,48 @@ G3 前端 Action Center 只把这些受控平台能力组合成 Hermes 工作区
 - 健康检查：通过。
   - `curl -fsS http://127.0.0.1:8080/actuator/health`
   - `{"status":"UP"}`
-- Hermes Gateway 回归：通过。
-  - `EXPECT_HERMES_AGENT_AVAILABLE=true bash scripts/dev/check-hermes-jarvis-gateway.sh`
-  - `PASS=13 FAIL=0`
-- G3 专项：通过。
-  - `bash scripts/dev/check-phase2-insert-g3-hermes-working-agent.sh`
-  - `PASS=21 FAIL=0`
-- G2 回归：通过。
-  - `bash scripts/dev/check-phase2-insert-g2-real-project-onboarding.sh`
-  - `PASS=11 FAIL=0`
-- G1 回归：通过。
-  - `bash scripts/dev/check-phase2-insert-g1-agent-delivery-governance.sh`
-  - `PASS=34 FAIL=0`
+- 文件访问安全回归：通过。
+  - `bash scripts/dev/check-phase2-batch4-file-access.sh`
+  - `PASS=18 FAIL=0`
+- 6A 回归：通过。
+  - `bash scripts/dev/check-phase2-batch6a-project-initialization.sh`
+- 6B 回归：通过。
+  - `bash scripts/dev/check-phase2-batch6b-delivery-package.sh`
+  - `PASS=17 FAIL=0`
+- 7A 回归：通过。
+  - `bash scripts/dev/check-phase2-batch7a-preview-export-precheck.sh`
+  - `PASS=18 FAIL=0`
 - 8A 回归：通过。
   - `bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh`
   - `PASS=11 FAIL=0`
 - `git diff --check`：通过。
 
-## 13. 已知风险与未完成事项
+## 12. 已知风险与未完成事项
 
-- 当前 G3 是平台受控工作区 MVP，不是 Hermes 自主多工具编排，也不是 production rollout。
-- Action Center 的执行动作仍是用户点选按钮触发，不是让 Hermes 自动决定并执行治理。
-- 推荐依据仍为目录元数据和平台已有规则，置信度不足或元数据缺失时仍需要人工判断。
-- 如果当前项目没有候选文件，待人工确认区会为空，需要先治理文件元数据。
-- 后续若要让 Hermes 侧继续深度对接，建议先定义 Hermes 返回的 action intent / draft action schema，但执行仍必须落到平台 Gateway 和人工确认链路。
+- M1A 只做主线基线审计和小修，未重做前端信息架构。
+- 105/93 的交付数据密度不同，93 项目当前多个交付接口为空结果但接口和页面状态正常。
+- 旧文件资源登记弹窗仍允许输入存储地址用于登记文件资源；本轮只收束输出侧展示和 API 响应，不扩大到重构文件登记模型。
+- 前端主包体积 warning 仍是既有 P2。
+
+## 13. 是否建议进入下一步主线开发
+
+建议进入下一步主线平台开发，但不建议进入 Hermes/G4 扩展。
+
+建议下一步仍围绕平台主线做：
+
+- 真实项目主数据映射质量补齐。
+- 交付标准与真实项目目录的映射体验优化。
+- 文件管理只读状态和受控预览/下载入口继续打磨。
+- 针对 105/93 等真实项目补更细的验收脚本。
 
 ## 14. 给测试 Agent 的测试 Prompt
 
-````md
-# 测试 Agent Prompt：G3 Hermes 平台工作型 Agent MVP 验收
+```md
+# 测试 Agent Prompt：M1A 平台主线功能基线审计验收
 
 工作目录：`/Users/vc/Documents/数字化交付平台`
 
-本轮只验收 `G3：Hermes 平台工作型 Agent MVP`。G3 是 G2 之后的平台受控工作区能力，不代表进入 8B / 8C / 9A，不测试生产发布，不测试真实 NAS 写操作，不测试正文解析、BIM 构件解析、selective indexing 或 Hermes memory 写入。
+本轮只验收 `M1A：平台主线功能基线审计与交付闭环缺口收束`。G4 / Hermes 已暂停，不测试新增 Hermes 能力，不进入 8B / 8C / 9A，不测试真实 NAS 写操作、正文解析、BIM 构件解析、parser/writer/indexing 或 production rollout。
 
 必须先读：
 
@@ -234,60 +207,49 @@ G3 前端 Action Center 只把这些受控平台能力组合成 Hermes 工作区
 - `handoff/main-agent/status.md`
 - `handoff/main-agent/development-log.md`
 - `handoff/main-agent/phase2-current-roadmap.md`
-- `handoff/main-agent/phase2-g3-hermes-masterdata-delivery-guidance-plan.md`
-- `handoff/main-agent/hermes-layered-integration-decision.md`
-- 共享文档中的 Hermes capability handoff、platform_to_hermes_contract、gateway_response_contract、missing_evidence_policy
+- `handoff/main-agent/mainline-git-governance-and-hermes-freeze.md`
+- `docs/07-complete-delivery-prd.md`
+- `docs/08-acceptance-and-agent-integration.md`
+- `docs/10-phase2-development-roadmap.md`
 
 重点验收：
 
-1. Hermes 面板
-   - `/data-steward/assets/503/work/agent-governance` 打开 Hermes。
-   - 可见 `Hermes Action Center`。
-   - 明确区分 `回答 / 操作草案 / 待人工确认 / 执行结果`。
-2. 操作草案
-   - 生成主数据补齐计划。
-   - 计划包含接入状态、部位树、节点类型、交付标准、文档/图纸准备度、下一步和页面入口。
-   - 不得自动创建主数据。
-   - 生成文档 / 图纸缺失交付方案。
-   - 方案包含缺失项、推荐文件、原因、置信度、风险、是否需要元数据治理。
-3. 人工确认
-   - 未勾选推荐和人工确认时不能执行。
-   - 请求必须带 `confirmed=true` 后才可调用平台挂接。
-   - 后端必须继续校验项目权限和上下文。
-   - 执行结果必须展示创建、跳过、失败和原因。
-   - 审计日志必须有 recommend / apply 记录。
-4. Hermes 边界
-   - 正文 / DWG / RVT / BIM / 构件问题必须 Missing Evidence。
-   - 不得编造模型内容、图层、构件参数、PDF/Office 正文。
-   - 不得出现 raw `storage_path`、`storage_uri`、NAS 原始路径、raw DB row、SQL、secret/token/password。
-5. 回归
-   - G2、G1、8A 仍通过。
+1. G4 / Hermes 冻结
+   - 确认本轮未新增 Hermes 能力。
+   - 确认未修改 Hermes Gateway / memory / external Hermes 项目。
+2. 真实项目页面
+   - 抽查 105 项目：`/data-steward/assets/503`、文件管理页签、初始化、部位、节点类型、交付物标准、文档交付、图纸交付、整改、BIM Mock。
+   - 抽查 93 项目：`/data-steward/assets/506`、初始化、文档交付、图纸交付。
+   - 页面不能出现 403/500/加载失败。
+3. 真实项目接口
+   - 对 503/506 分别通过 `/api/core/projects/{projectId}:switch` 切换上下文。
+   - 验证 onboarding assessment、delivery completeness、export precheck、rectifications、catalog directories/files 均可用。
+4. 路径脱敏
+   - catalog list/detail 不得暴露 `nas://`、`smb://`、`/Volumes/`、`/Users/`、`storage_path/storage_uri` 真值。
+   - catalog detail 应返回 `storagePath=null`、`storagePathVisible=false`。
+   - `/data-steward/files` 列表应显示“底层路径已隐藏”，不得展示真实存储地址。
+5. 只读与安全边界
+   - 不得触碰真实 NAS 文件。
+   - 不得读取 PDF/Office/DWG/RVT/IFC 正文。
+   - 不得启用 parser/writer/indexing。
+   - 不得做真实 BIM 轻量化或模型转换。
+6. 回归脚本
+   - `./mvnw -pl delivery-app -am -DskipTests package`
+   - `corepack pnpm --dir frontend build`
+   - `curl -fsS http://127.0.0.1:8080/actuator/health`
+   - `bash scripts/dev/check-phase2-batch4-file-access.sh`
+   - `bash scripts/dev/check-phase2-batch6a-project-initialization.sh`
+   - `bash scripts/dev/check-phase2-batch6b-delivery-package.sh`
+   - `bash scripts/dev/check-phase2-batch7a-preview-export-precheck.sh`
+   - `bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh`
+   - `git diff --check`
 
-必须执行：
+通过标准：
 
-```bash
-cd /Users/vc/Documents/数字化交付平台/backend
-./mvnw -pl delivery-app -am -DskipTests package
-
-cd /Users/vc/Documents/数字化交付平台
-corepack pnpm --dir frontend build
-curl -fsS http://127.0.0.1:8080/actuator/health
-EXPECT_HERMES_AGENT_AVAILABLE=true bash scripts/dev/check-hermes-jarvis-gateway.sh
-bash scripts/dev/check-phase2-insert-g3-hermes-working-agent.sh
-bash scripts/dev/check-phase2-insert-g2-real-project-onboarding.sh
-bash scripts/dev/check-phase2-insert-g1-agent-delivery-governance.sh
-bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh
-git diff --check
+- 构建、健康检查、脚本均通过。
+- 105/93 页面和接口可用。
+- 没有 raw NAS path / raw storage path / SQL / secret/token/password 泄露。
+- 没有真实 NAS 写操作。
+- 没有 Hermes/G4 扩展开发。
+- 报告事实完整，不宣布最终收口。
 ```
-
-浏览器建议：
-
-- 打开 `/data-steward/assets/503/work/agent-governance`。
-- 打开 Hermes。
-- 点击 `操作草案`，生成主数据计划。
-- 切换文档 / 图纸，生成缺失交付方案。
-- 进入 `待人工确认`，检查必须勾选后才可确认执行。
-- 提问：`这个 RVT 里面有哪些构件参数、DWG 图层和模型内容？`，必须 Missing Evidence。
-````
-
-<promise>PHASE2_G3_HERMES_WORKING_AGENT_COMPLETE</promise>

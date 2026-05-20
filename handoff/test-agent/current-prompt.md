@@ -1,12 +1,14 @@
-# 测试 Agent 当前任务：M1A 平台主线功能基线审计验收
+# 测试 Agent 当前任务：M1A 登录超时修复后极短复验
 
 你是数字化交付平台测试 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
-本轮只验收：
+本轮只做 M1A 极短复验，重点验证上一轮阻塞项：
 
-`M1A：平台主线功能基线审计与交付闭环缺口收束`
+`P1-M1A-LOGIN-TIMEOUT`
+
+以及 M1A 已修复的两个路径脱敏 P1。
 
 注意：
 
@@ -27,55 +29,62 @@
 4. `handoff/main-agent/status.md`
 5. `handoff/main-agent/phase2-current-roadmap.md`
 6. `handoff/main-agent/mainline-git-governance-and-hermes-freeze.md`
-7. `docs/07-complete-delivery-prd.md`
-8. `docs/08-acceptance-and-agent-integration.md`
-9. `docs/10-phase2-development-roadmap.md`
+7. `handoff/main-agent/m1a-dev-report-audit.md`
+8. `handoff/main-agent/m1a-login-timeout-fix-report.md`
+9. `docs/07-complete-delivery-prd.md`
+10. `docs/08-acceptance-and-agent-integration.md`
+11. `docs/10-phase2-development-roadmap.md`
 
-## 1. 验收目标
+## 1. 复验目标
 
-确认平台已经回到主线功能基线，而不是继续被 Hermes / G4 带偏：
+确认：
 
-1. 当前分支应为 `main` 或从 `main` 拉出的平台主线分支。
-2. G4 不再继续开发。
-3. Hermes 未新增能力。
-4. 平台主线页面和接口可用。
-5. 真实项目交付闭环的基础链路没有 P0/P1。
+1. 当前分支应为 `codex/platform-m1a-baseline-fixes`，这是从 `main` 拉出的平台主线修复分支。
+2. Fresh login 不再出现 `timeout of 10000ms exceeded`。
+3. 登录后能进入 `/data-steward/assets`。
+4. G4 不再继续开发。
+5. Hermes 未新增能力。
+6. 平台主线关键页面可用。
+7. 重点复验两个已修复的路径脱敏 P1：
+   - catalog 文件详情不得因为项目管理员权限返回真实底层路径。
+   - 旧文件资源列表不得展示或返回真实 `storageUri`。
 
 ## 2. 必跑命令
 
 执行：
 
 ```bash
-cd /Users/vc/Documents/数字化交付平台/backend
-./mvnw -pl delivery-app -am -DskipTests package
-
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-phase2-batch6a-project-initialization.sh
-bash scripts/dev/check-phase2-batch6b-delivery-package.sh
-bash scripts/dev/check-phase2-batch7a-preview-export-precheck.sh
-bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh
+bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
 
-如开发 agent 新增主线 smoke，必须执行并记录。
+如果本机前后端未启动，请按项目已有方式启动后再测。
+
+本轮是极短复验，不要求重复完整跑 6A / 6B / 7A / 8A；上一轮已通过。若发现可疑回归，可自行补跑。
 
 ## 3. 页面验收
 
-至少打开并验收：
+必须使用 fresh browser context / 清空本地登录态后验证：
+
+1. 打开 `/login`。
+2. 使用样板账号登录。
+3. 确认不再出现 `timeout of 10000ms exceeded`。
+4. 确认能进入 `/data-steward/assets`。
+
+然后至少打开：
 
 - `/data-steward/assets`
-- `/data-steward/assets/105`
-- `/data-steward/assets/105/master-data/initialization`
-- `/data-steward/assets/105/master-data/sections`
-- `/data-steward/assets/105/master-data/node-types`
-- `/data-steward/assets/105/master-data/deliverable-standard`
-- `/data-steward/assets/105/work/document-delivery`
-- `/data-steward/assets/105/work/drawing-delivery`
-- `/data-steward/assets/105/work/rectifications`
+- `/data-steward/assets/503`
+- `/data-steward/assets/503/master-data/initialization`
+- `/data-steward/assets/503/master-data/sections`
+- `/data-steward/assets/503/work/document-delivery`
+- `/data-steward/assets/503/work/drawing-delivery`
+- `/data-steward/assets/506`
 
-并再选至少一个非 105 的真实 NAS 项目重复抽查，实际以本机数据库项目为准。
+说明：业务编码 `105` 对应内部项目 ID `503`。
 
 每个关键页面检查：
 
@@ -96,6 +105,9 @@ git diff --check
 - 文件管理目录树和文件表对应正常。
 - 文件表分页、详情、预览、治理、补 checksum 等入口不回归。
 - 不泄露真实 NAS 绝对路径。
+- `GET /api/data-steward/catalog/files/{fileId}` 返回中 `storagePath` 必须为 `null`，`storagePathVisible=false`，不能因项目管理员身份变为可见。
+- `GET /api/data-steward/projects/{projectId}/file-resources` 和分页版本返回中 `storageUri` 必须为空或不展示真实值。
+- `/data-steward/files` 页面应显示“底层路径已隐藏”，不能出现真实存储地址。
 
 ### B. 工程主数据
 
@@ -185,8 +197,8 @@ P2：
 3. 是否确认 G4 暂停、Hermes 冻结。
 4. P0 / P1 / P2 列表。
 5. 必跑命令结果。
-6. 页面验收结果。
-7. 105 项目结果。
-8. 另一个真实 NAS 项目抽查结果。
+6. Fresh login 复验结果。
+7. 503 / 506 页面抽查结果。
+8. 两个路径脱敏 P1 复验结果。
 9. Hermes 冻结检查结果。
-10. 是否建议进入下一轮主线平台功能开发。
+10. 是否建议收口 M1A。

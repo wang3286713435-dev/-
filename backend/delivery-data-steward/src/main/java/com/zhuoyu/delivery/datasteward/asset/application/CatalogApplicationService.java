@@ -859,28 +859,7 @@ public class CatalogApplicationService {
         if (storageUri == null || storageUri.isBlank()) {
             return new PathVisibility(false, "PATH_EMPTY");
         }
-        if (isProjectAdmin(userId, projectId)) {
-            return new PathVisibility(true, "PROJECT_ADMIN");
-        }
-        return new PathVisibility(false, "PATH_HIDDEN_BY_PERMISSION");
-    }
-
-    private boolean isProjectAdmin(Long userId, Long projectId) {
-        if (userId == null || projectId == null) {
-            return false;
-        }
-        Integer count = jdbcTemplate.queryForObject("""
-            SELECT COUNT(1)
-            FROM core_user_project_roles upr
-            JOIN core_roles r ON r.id = upr.role_id AND r.deleted = 0
-            WHERE upr.user_id = :userId
-              AND upr.project_id = :projectId
-              AND upr.deleted = 0
-              AND r.code = 'PROJECT_ADMIN'
-            """, new MapSqlParameterSource()
-            .addValue("userId", userId)
-            .addValue("projectId", projectId), Integer.class);
-        return count != null && count > 0;
+        return new PathVisibility(false, "PATH_NOT_EXPOSABLE_CATALOG_ONLY");
     }
 
     private String safeCatalogLogicalPath(

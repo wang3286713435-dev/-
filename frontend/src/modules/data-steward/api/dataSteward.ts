@@ -8,7 +8,7 @@ export interface FileResource {
   fileKind: string;
   mimeType: string | null;
   sizeBytes: number;
-  storageUri: string;
+  storageUri: string | null;
   checksum: string | null;
   businessTag: string | null;
   versionNo: string;
