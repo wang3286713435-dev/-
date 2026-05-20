@@ -13,7 +13,10 @@
 
     <div class="project-workspace-nav__groups">
       <div class="project-workspace-nav__group">
-        <span>数据管家</span>
+        <div class="project-workspace-nav__group-head">
+          <strong>数据管家</strong>
+          <small>文件资产、预览和治理风险</small>
+        </div>
         <el-button
           text
           size="small"
@@ -80,7 +83,10 @@
         </el-button>
       </div>
       <div class="project-workspace-nav__group">
-        <span>工程主数据</span>
+        <div class="project-workspace-nav__group-head">
+          <strong>工程主数据</strong>
+          <small>部位、节点类型和交付标准</small>
+        </div>
         <el-button
           text
           size="small"
@@ -115,7 +121,10 @@
         </el-button>
       </div>
       <div class="project-workspace-nav__group">
-        <span>工作中心</span>
+        <div class="project-workspace-nav__group-head">
+          <strong>工作中心</strong>
+          <small>文档图纸交付、审核整改和预检查</small>
+        </div>
         <el-button
           text
           size="small"
@@ -146,7 +155,7 @@
           :type="isActive(['project-work-agent-governance']) ? 'primary' : undefined"
           @click="go('project-work-agent-governance')"
         >
-          交付治理助手
+          交付治理
         </el-button>
         <el-button
           text
@@ -243,25 +252,70 @@ function isAssetTab(tab: string) {
 }
 
 .project-workspace-nav__groups {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 20px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
   min-width: 0;
 }
 
 .project-workspace-nav__group {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 5px;
   min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  background: #f8fafc;
 }
 
-.project-workspace-nav__group > span {
-  margin-right: 2px;
+.project-workspace-nav__group-head {
+  display: flex;
+  flex: 0 0 128px;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.project-workspace-nav__group-head strong {
   color: #303133;
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.project-workspace-nav__group-head small {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+@media (max-width: 1180px) {
+  .project-workspace-nav__groups {
+    grid-template-columns: 1fr;
+  }
+
+  .project-workspace-nav__group-head {
+    flex-basis: 160px;
+  }
+}
+
+@media (max-width: 720px) {
+  .project-workspace-nav__summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .project-workspace-nav__project {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .project-workspace-nav__group-head {
+    flex-basis: 100%;
+  }
 }
 </style>

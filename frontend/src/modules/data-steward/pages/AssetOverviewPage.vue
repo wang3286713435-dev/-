@@ -26,17 +26,17 @@
 
     <section class="asset-governance-hero">
       <div class="asset-governance-hero__intro">
-        <span>G2 真实项目治理入口</span>
-        <h2>从真实 NAS 资产进入数字化交付</h2>
+        <span>M1B 项目资产入口</span>
+        <h2>先选真实项目，再进入数字化交付工作区</h2>
         <p>
-          这里先识别真实项目，再按资产目录、接入评估、主数据草案和交付治理助手推进。页面只展示目录级治理线索，不读取文件正文，也不触碰 NAS 文件。
+          默认只看已经接管的真实 NAS 项目。先确认项目资产是否已登记，再进入接入评估、工程主数据、文档/图纸交付和整改闭环；平台只展示目录级治理线索，不读取文件正文，也不触碰 NAS 文件。
         </p>
       </div>
 
       <div class="asset-governance-layer">
         <header>
-          <strong>平台目标</strong>
-          <span>把既有项目从“文件已接管”推进到“可解释、可复核、可交付”。</span>
+          <strong>工作顺序</strong>
+          <span>普通员工可按这条路径推进，不需要先问 Hermes。</span>
         </header>
         <div class="asset-objective-track">
           <article v-for="item in objectiveSteps" :key="item.label">
@@ -48,8 +48,8 @@
 
       <div class="asset-governance-layer">
         <header>
-          <strong>项目状态</strong>
-          <span>按当前已接管真实 NAS 项目统计，不把 smoke / 测试项目混入默认视图。</span>
+          <strong>当前视图统计</strong>
+          <span>{{ statusScopeText }}</span>
         </header>
         <div class="asset-status-grid">
           <article v-for="item in statusCards" :key="item.label">
@@ -63,7 +63,7 @@
       <div class="asset-governance-layer">
         <header>
           <strong>下一步动作</strong>
-          <span>选择一个真实项目后，按治理路径继续处理。</span>
+          <span>默认使用列表里的第一个真实项目；也可以在下方项目行里直接点下一步。</span>
         </header>
         <div class="asset-action-grid">
           <button
@@ -126,7 +126,7 @@
       </el-table-column>
       <el-table-column prop="projectStage" label="阶段" width="120" show-overflow-tooltip />
       <el-table-column prop="projectManagerName" label="负责人" width="130" show-overflow-tooltip />
-      <el-table-column label="治理路径" min-width="300">
+      <el-table-column label="下一步动作" min-width="320">
         <template #default="{ row }">
           <div class="asset-governance-cell">
             <div class="asset-governance-trail">
@@ -203,8 +203,10 @@ import { ArrowRight, Refresh, Search } from '@element-plus/icons-vue';
 import {
   fetchAssetProjects,
   fetchAssetQualityOverview,
+  fetchAssetStatistics,
   type AssetProject,
-  type AssetQualityOverview
+  type AssetQualityOverview,
+  type AssetStatistics
 } from '@/modules/data-steward/api/dataSteward';
 
 const router = useRouter();
@@ -213,6 +215,7 @@ const keyword = ref('');
 const sourceFilter = ref('REAL_NAS');
 const projectSortOrder = ref<'ASC' | 'DESC'>('ASC');
 const projects = ref<AssetProject[]>([]);
+const statistics = ref<AssetStatistics | null>(null);
 const qualityOverview = ref<AssetQualityOverview | null>(null);
 const sourceOptions = [
   { label: '真实项目', value: 'REAL_NAS' },
@@ -224,9 +227,9 @@ const sourceOptions = [
 ];
 
 const objectiveSteps = [
-  { label: '真实项目接入', description: '先把已接管 NAS 项目识别清楚，区分测试、样例和归档。' },
-  { label: '工程主数据准备', description: '用目录和文件元数据形成接入评估，再生成待确认草案。' },
-  { label: '交付治理闭环', description: '进入助手解释缺失项，由人工确认后再挂接文件。' }
+  { label: '1. 看资产', description: '确认项目、目录、文件数量和最近扫描状态。' },
+  { label: '2. 补底座', description: '维护部位树、节点类型、交付标准和目录模板。' },
+  { label: '3. 做交付', description: '进入文档/图纸交付，处理审核、整改和预检查。' }
 ];
 
 const realNasProjects = computed(() => projects.value.filter(isRealNasProject));
@@ -236,25 +239,42 @@ const primaryActionProject = computed(() => {
 });
 
 const statusCards = computed(() => {
-  const rows = realNasProjects.value;
+  const rows = visibleProjects.value;
+  const stats = sourceFilter.value === 'REAL_NAS' ? statistics.value : null;
   const registered = rows.filter((item) => Number(item.fileCount ?? 0) > 0).length;
   const masterData = rows.filter((item) => Boolean(item.hasMasterData)).length;
-  const governance = rows.filter((item) => Boolean(item.governanceReady) || item.onboardingStatus === 'GOVERNANCE_READY').length;
   const pending = rows.filter((item) => !Boolean(item.hasMasterData) || !Boolean(item.hasDeliveryStandard)).length;
+  const fileCount = stats?.fileCount ?? rows.reduce((sum, item) => sum + Number(item.fileCount ?? 0), 0);
+  const modelCount = stats?.modelFileCount ?? rows.reduce((sum, item) => sum + Number(item.modelCount ?? 0), 0);
+  const drawingCount = stats?.drawingFileCount ?? 0;
+  const totalSize = stats?.totalSizeBytes ?? rows.reduce((sum, item) => sum + Number(item.totalSizeBytes ?? 0), 0);
   return [
-    { label: '真实 NAS 项目', value: formatCount(rows.length), unit: '个' },
-    { label: '已登记资产', value: formatCount(registered), unit: '个项目' },
-    { label: '已初始化主数据', value: formatCount(masterData), unit: '个项目' },
-    { label: '已进入交付治理', value: formatCount(governance), unit: '个项目' },
-    { label: '待接入 / 待治理', value: formatCount(pending), unit: '需处理' }
+    { label: '项目', value: formatCount(stats?.projectCount ?? rows.length), unit: '个' },
+    { label: '已登记文件', value: formatCount(fileCount), unit: '份' },
+    { label: '模型文件', value: formatCount(modelCount), unit: '份' },
+    { label: '图纸文件', value: formatCount(drawingCount), unit: '份' },
+    { label: '登记容量', value: formatBytes(totalSize), unit: '目录级' },
+    { label: '主数据已建', value: formatCount(masterData), unit: `/${formatCount(rows.length)} 个项目` },
+    { label: '待补底座', value: formatCount(pending), unit: '需处理' },
+    { label: '有文件项目', value: formatCount(registered), unit: '个项目' }
   ];
+});
+
+const statusScopeText = computed(() => {
+  if (sourceFilter.value === 'REAL_NAS') {
+    return '来自真实 NAS 项目统计接口，不混入 smoke、测试或样例项目。';
+  }
+  if (sourceFilter.value === 'ALL') {
+    return '当前显示全部可访问项目，包含样例、测试和历史项目。';
+  }
+  return '当前统计按列表筛选结果计算，用于快速判断这一类项目的接入情况。';
 });
 
 const actionItems = [
   { key: 'enter', label: '进入真实项目', description: '打开项目工作台，先看资产目录、容量和治理风险。' },
   { key: 'assessment', label: '查看接入评估', description: '查看目录线索和主数据缺口，确认模板只是草案。' },
   { key: 'master-data', label: '完善工程主数据', description: '补齐部位树、节点类型、交付定义和目录模板。' },
-  { key: 'governance', label: '进入交付治理助手', description: '解释缺失项，生成候选文件，等待人工确认挂接。' }
+  { key: 'delivery', label: '进入文档交付', description: '查看应交项、已挂接文件、审核状态和导出预检查。' }
 ] as const;
 
 const riskSummaryCards = computed(() => {
@@ -292,11 +312,13 @@ async function loadPage() {
   loading.value = true;
   try {
     const assetSource = sourceFilter.value === 'REAL_NAS' ? 'NAS_REAL*' : undefined;
-    const [nextProjects, nextQualityOverview] = await Promise.all([
+    const [nextProjects, nextStatistics, nextQualityOverview] = await Promise.all([
       fetchAssetProjects(keyword.value.trim() || undefined, assetSource),
+      fetchAssetStatistics(undefined, assetSource),
       fetchAssetQualityOverview(undefined, assetSource)
     ]);
     projects.value = nextProjects;
+    statistics.value = nextStatistics;
     qualityOverview.value = nextQualityOverview;
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '资产总览加载失败');
@@ -324,7 +346,7 @@ function openHeroAction(action: typeof actionItems[number]['key']) {
     router.push({ name: 'project-master-data-deliverable-standard', params: { projectId: project.projectId } });
     return;
   }
-  router.push({ name: 'project-work-agent-governance', params: { projectId: project.projectId } });
+  router.push({ name: 'project-work-document-delivery', params: { projectId: project.projectId } });
 }
 
 function openGovernanceNext(row: AssetProject) {
@@ -341,17 +363,17 @@ function governanceStage(row: AssetProject) {
   if (status === 'GOVERNANCE_READY') {
     return {
       index: 4,
-      actionLabel: '看缺失解释',
-      hint: '底座已具备，下一步进入交付治理助手解释缺项并人工确认挂接。',
-      routeName: 'project-work-agent-governance'
+      actionLabel: '看交付状态',
+      hint: '底座已具备，下一步在文档/图纸交付页查看缺项、审核和预检查。',
+      routeName: 'project-work-document-delivery'
     } as const;
   }
   if (status === 'MASTERDATA_INITIALIZED') {
     return {
       index: 3,
-      actionLabel: '进入治理助手',
-      hint: '主数据已初始化，下一步用交付治理助手检查文档和图纸缺口。',
-      routeName: 'project-work-agent-governance'
+      actionLabel: '进入文档交付',
+      hint: '主数据已初始化，下一步查看文档/图纸应交项和缺失项。',
+      routeName: 'project-work-document-delivery'
     } as const;
   }
   if (status === 'ASSETS_REGISTERED') {
@@ -383,10 +405,10 @@ function governanceTrail(row: AssetProject) {
   const labels = [
     ['catalog', '资产目录'],
     ['assessment', '接入评估'],
-    ['draft', '主数据草案'],
-    ['governance', '交付治理'],
-    ['missing', '缺失解释'],
-    ['binding', '人工挂接']
+    ['master-data', '工程主数据'],
+    ['standard', '交付标准'],
+    ['delivery', '文档/图纸交付'],
+    ['review', '审核整改']
   ] as const;
   return labels.map(([key, label], index) => ({
     key,

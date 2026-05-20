@@ -1,35 +1,37 @@
-# M1A 登录超时修复后极短复验报告
+# M1B 项目工作台与数据管家可用性验收报告
 
-生成时间：2026-05-20 14:22 CST
+生成时间：2026-05-20 15:32 CST
 
 ## 1. 测试结论
 
 结论：通过。
 
-本轮只复验 `M1A：登录超时修复后极短回归`，重点检查上一轮阻塞项 `P1-M1A-LOGIN-TIMEOUT` 和两项路径脱敏 P1。真实浏览器 fresh login 已可进入 `/data-steward/assets`，未再出现 `timeout of 10000ms exceeded`；503 / 506 项目页面、工程主数据和工作中心抽查未见白屏、500 或明显横向撑爆；Catalog 和旧文件资源路径脱敏通过。
+本轮只验收 `M1B：项目工作台与数据管家可用性收口`。M1A 已收口，G4 / Hermes 冻结；本轮未测试或推进 Hermes 新能力，未进入 8B / 8C / 9A，未触发真实 NAS 写操作、正文解析、BIM 构件解析、parser / writer / indexing 或 production rollout。
 
-建议：M1A 登录超时 P1 可关闭，当前可建议主 agent 收口 M1A。仍不建议在本轮进入 G4 / 8B / 8C / 9A；Hermes 继续冻结。
+建议：未发现 P0 / P1 / P2，建议主 agent 判定 M1B 收口。
 
 ## 2. 当前分支与提交
 
-- 当前分支：`codex/platform-m1a-baseline-fixes`
-- 当前提交：`0c97419`
-- 工作区状态：存在开发 agent / 主 agent 本轮未提交改动和临时目录；测试 agent 未修改业务代码，未回退任何改动。
+- 当前分支：`codex/platform-m1b-usability`
+- 当前提交：`cf53ad1`
+- 工作区状态：存在开发 agent 本轮未提交前端改动与临时目录；测试 agent 未修改业务代码，未修改 `docs/**`，仅更新本测试报告。
 
-## 3. G4 暂停与 Hermes 冻结
+## 3. 必读文件
 
-结果：通过。
+已阅读并按要求参考：
 
-已按 prompt 阅读 M1A 相关 handoff、roadmap、Hermes freeze 文档。文档状态仍明确：G4 暂停，Hermes 冻结，本轮不进入 8B / 8C / 9A，不新增 Hermes Evidence / Memory / Orchestration 能力。
-
-本轮测试未发现：
-
-- 新增 Hermes 写入能力。
-- 写 Hermes memory。
-- 真实 BIM 轻量化。
-- selective indexing。
-- 真实 NAS 写操作。
-- 文件正文抽取。
+- `handoff/dev-agent/current-prompt.md`
+- `handoff/dev-agent/latest-report.md`
+- `handoff/test-agent/latest-report.md`
+- `handoff/main-agent/status.md`
+- `handoff/main-agent/development-log.md`
+- `handoff/main-agent/phase2-current-roadmap.md`
+- `handoff/main-agent/mainline-git-governance-and-hermes-freeze.md`
+- `handoff/main-agent/m1a-platform-baseline-closure.md`
+- `handoff/main-agent/m1b-project-workbench-usability-plan.md`
+- `docs/07-complete-delivery-prd.md`
+- `docs/08-acceptance-and-agent-integration.md`
+- `docs/10-phase2-development-roadmap.md`
 
 ## 4. P0 / P1 / P2
 
@@ -37,108 +39,111 @@ P0：未发现。
 
 P1：未发现。
 
-- `P1-M1A-LOGIN-TIMEOUT`：已关闭。Chrome fresh login 从 `/login` 点击登录后约 2 秒进入 `/data-steward/assets`，未出现 `timeout of 10000ms exceeded`、白屏或 500。
-- Catalog 详情路径脱敏 P1：已关闭。503 / 506 样本文件详情均为 `storagePath=null`、`storagePathVisible=false`。
-- 旧文件资源路径脱敏 P1：已关闭。503 / 506 旧文件资源接口 `storageUri` 非空数量为 0；`/data-steward/files` 页面显示 `底层路径已隐藏`。
+P2：未发现。
 
-P2：
+非阻塞观察：
 
 - 前端构建仍有既有 Vite chunk size warning，不影响构建通过。
-- 浏览器抽查中 `/data-steward/assets` 默认真实项目统计显示为 0，但本轮目标是登录超时与路径脱敏极短复验，未作为本轮阻塞项展开。
+- 浏览器验收期间，本地后端进程曾因测试会话结束触发正常 shutdown，重启后页面与脚本均恢复正常；判断为本地测试进程保活问题，不是产品缺陷。
 
 ## 5. 必跑命令结果
 
+- 后端构建：`cd backend && ./mvnw -pl delivery-app -am -DskipTests package`，通过，`BUILD SUCCESS`。
 - 前端构建：`corepack pnpm --dir frontend build`，通过，仅有既有 chunk size warning。
 - 后端健康检查：`curl -fsS http://127.0.0.1:8080/actuator/health`，通过，返回 `{"status":"UP"}`。
-- 文件访问安全脚本：`bash scripts/dev/check-phase2-batch4-file-access.sh`，通过，`PASS=18 FAIL=0`，输出 `phase2 batch4 file access check ok`。
-- 格式检查：`git diff --check`，通过。
+- 文件访问安全回归：`bash scripts/dev/check-phase2-batch4-file-access.sh`，通过，`PASS=18 FAIL=0`，输出 `phase2 batch4 file access check ok`。
+- 项目初始化回归：`bash scripts/dev/check-phase2-batch6a-project-initialization.sh`，通过，输出 `phase2 batch6a project initialization ok`。
+- 交付包回归：`bash scripts/dev/check-phase2-batch6b-delivery-package.sh`，通过，`PASS=17 FAIL=0`，输出 `ALL PASS`。
+- 空白字符检查：`git diff --check`，通过。
 
-环境说明：
-
-- 首次健康检查前后端服务不完整：后端 8080 和前端 5173 均曾未监听。
-- 已按项目现有方式启动后端 `scripts/dev/start-backend.sh`，再启动前端 dev server `corepack pnpm --dir frontend dev --host 127.0.0.1` 后继续复验。
-
-## 6. Fresh Login 复验
+## 6. 资产总览默认视图
 
 结果：通过。
 
-浏览器：Google Chrome。
+浏览器 fresh login 后进入 `/data-steward/assets`，默认筛选为真实项目视图，页面 Hero 区已明确表达：
 
-步骤与结果：
+- 平台入口是“先选真实项目，再进入数字化交付工作区”。
+- 工作顺序是进入真实项目、查看接入评估、完善工程主数据、进入文档交付。
+- 风险提醒明确说明只展示目录级治理线索，不读取文件正文，也不触碰 NAS 文件。
+- 页面文案明确普通员工不需要先问 Hermes。
 
-- 打开 `/login`，页面正常展示登录表单。
-- 使用 `platform.admin / Admin@123` 登录。
-- 点击登录后跳转到 `/data-steward/assets`，页面显示资产总览、左侧 `数据管家` 菜单、当前用户 `platform.admin`。
-- 未出现 `timeout of 10000ms exceeded`。
-- 未出现白屏、500 或页面卡死。
+真实项目统计已加载，未再全部为 0：
 
-## 7. 503 页面抽查结果
+- 项目：`16`
+- 已登记文件：`40,935`
+- 模型文件：`2,604`
+- 图纸文件：`38,331`
+- 登记容量：`296 GB`
+- 主数据已建：`2/16`
+- 待补底座：`15`
+- 有文件项目：`16`
 
-样本：内部项目 ID `503`，业务编码 `105`，项目名 `启航华居项目`。
+默认项目列表可见真实 NAS 项目，例如 `105 启航华居项目`、`100 深圳市二十八高项目`、`101 C塔`、`93 中建八局国交酒店项目`。未发现默认视图混入明显测试 / 样例 / 归档项目。
+
+## 7. 项目详情可用性
 
 结果：通过。
 
 已抽查：
 
-- `/data-steward/assets/503`：项目工作台可打开，顶部项目工作台导航存在，显示 `启航华居项目 / 105`。
-- `/data-steward/assets/503/master-data/initialization`：真实项目接入向导可打开，显示 catalog-only 评估、草案/待确认文案，不读取正文、不触碰 NAS 的说明存在。
-- `/data-steward/assets/503/master-data/sections`：部位树页面可打开，项目导航持续存在，前置条件说明和操作顺序可见。
-- `/data-steward/assets/503/work/document-delivery`：文档交付页面可打开，项目导航持续存在，说明、缺失项/已挂接入口可见。
-- `/data-steward/assets/503/work/drawing-delivery`：图纸交付页面可打开，项目导航持续存在，说明、缺失项/已挂接入口可见。
+- `/data-steward/assets/503`：业务编码 `105`，项目名 `启航华居项目`。
+- `/data-steward/assets/506`：业务编码 `93`，项目名 `中建八局国交酒店项目`。
 
-未发现白屏、500、明显横向撑爆或项目上下文丢失。
+两个项目均能看到统一项目工作台结构，三组入口清晰可见：
 
-## 8. 506 页面抽查结果
+- 数据管家：文件资产、预览和治理风险。
+- 工程主数据：部位、节点类型和交付标准。
+- 工作中心：文档图纸交付、审核整改和预检查。
 
-样本：内部项目 ID `506`，业务编码 `93`，项目名 `中建八局国交酒店项目`。
+顶部主按钮优先指向 `查看文档交付` 和 `初始化主数据`。Hermes 仅作为辅助入口，未发现页面主路径错误引导到 Hermes / G4。
 
-结果：通过。
-
-已抽查 `/data-steward/assets/506`，页面进入 506 项目工作台子页，顶部项目工作台导航持续存在，显示 `中建八局国交酒店项目 / 93`，页面正常展示项目内导出/文件元数据视图，未见白屏、500 或项目上下文丢失。
-
-## 9. 路径脱敏专项
+## 8. 工作区导航
 
 结果：通过。
 
-Catalog 文件详情：
+已在 503 项目下抽查：
 
-- 503 样本 `fileId=3767`：`storagePath=null`、`storagePathVisible=false`。
-- 506 样本 `fileId=24560`：`storagePath=null`、`storagePathVisible=false`。
+- `/data-steward/assets/503/master-data/initialization`
+- `/data-steward/assets/503/work/document-delivery`
+- `/data-steward/assets/503/work/drawing-delivery`
 
-旧文件资源接口：
+验证结果：
 
-- 503：`GET /api/data-steward/projects/503/file-resources?pageNo=1&pageSize=5` 返回 200，前 5 条 `storageUri` 非空数量为 0。
-- 506：`GET /api/data-steward/projects/506/file-resources?pageNo=1&pageSize=5` 返回 200，前 5 条 `storageUri` 非空数量为 0。
+- 三个页面均保留项目工作台顶部导航。
+- 项目上下文持续显示为 `启航华居项目 / 105`。
+- 页面说明保持可见，能解释当前页面用途和推荐操作顺序。
+- 未出现 403 / 404 / 500。
+- 桌面浏览器视口下未发现页面级横向撑爆或明显文字遮挡。
 
-旧文件资源页面：
-
-- `/data-steward/files` 页面可见文件列表，路径状态列显示 `底层路径已隐藏`。
-
-敏感字段检查：
-
-- Catalog 列表和详情未发现 `/Volumes`、`smb://`、`nas://`、`storage_path`、`storage_uri`、raw DB row、SQL、secret、password 泄露。
-
-## 10. 禁止项检查
+## 9. 安全边界
 
 结果：通过。
 
-本轮未发现：
+本轮页面与脚本抽查未发现：
 
-- 真实 NAS 增删改查。
-- 文件移动、删除、重命名或上传。
-- PDF / Office / DWG / RVT / IFC 正文读取。
-- BIM 构件级解析。
-- selective indexing。
-- Hermes memory 写入。
-- OpenSearch / Qdrant / MinIO documents/chunks 写入。
-- Agent 自动审批、自动整改或自动创建真实交付结论。
+- raw `storage_path`
+- `storage_uri`
+- `/Volumes`
+- `smb://`
+- `nas://`
+- SQL
+- raw DB row
+- secret / token / password
 
-## 11. 未解决问题与建议
+本轮未触发：
 
-未解决阻塞问题：无。
+- 真实 NAS 文件创建、移动、删除、重命名或上传。
+- PDF / Office / DWG / RVT 正文读取。
+- parser / writer / indexing。
+- Hermes 自动审批、自动整改、自动挂接或自动删除。
 
-建议：
+说明：506 项目导出页可见的是项目内相对路径提示，不是 raw NAS 绝对路径；未作为 raw path 泄露。
 
-- `P1-M1A-LOGIN-TIMEOUT` 可关闭。
-- M1A 可建议主 agent 收口。
-- 可进入下一步 Git checkpoint / 主线平台开发判断，但仍应遵守 Hermes 冻结，不在本轮进入 G4 / 8B / 8C / 9A。
+## 10. 回答验收问题
+
+- M1B 是否通过：通过。
+- 是否发现 raw path 残留：未发现。
+- 是否发现页面主路径仍错误指向 Hermes / G4：未发现。
+- 是否发现 503 / 506 路由或页面加载失败：未发现；本地后端测试进程短暂退出后重启恢复，未判定为产品路由问题。
+- 是否发现构建或回归脚本失败：未发现。
+- 是否建议主 agent 判定 M1B 收口：建议收口。

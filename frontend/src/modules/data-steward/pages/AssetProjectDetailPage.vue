@@ -15,11 +15,20 @@
         </el-tag>
       </div>
       <div class="asset-command-center__actions">
-        <el-button :icon="View" type="success" @click="goAgentGovernance">开始交付治理</el-button>
-        <el-button :icon="ChatDotRound" type="primary" @click="hermesDrawerVisible = true">问 Hermes</el-button>
+        <el-button :icon="View" type="primary" @click="goDocumentDelivery">查看文档交付</el-button>
+        <el-button @click="goInitialization">初始化主数据</el-button>
+        <el-button :icon="ChatDotRound" @click="hermesDrawerVisible = true">问 Hermes</el-button>
         <el-button :icon="Refresh" @click="loadPage">刷新</el-button>
       </div>
     </header>
+
+    <section class="asset-workstream-strip" aria-label="项目工作区分区说明">
+      <article v-for="item in workstreamCards" :key="item.label">
+        <span>{{ item.label }}</span>
+        <strong>{{ item.title }}</strong>
+        <em>{{ item.description }}</em>
+      </article>
+    </section>
 
     <section class="asset-module-grid" aria-label="数据管家模块">
       <button
@@ -662,6 +671,11 @@ const metadataFileKindOptions = [
   { label: '其他', value: 'OTHER' }
 ];
 const assetTabs = new Set(['dashboard', 'files', 'scans', 'mappings']);
+const workstreamCards = [
+  { label: '数据管家', title: '先看资产事实', description: '文件资产、目录状态、预览下载权限和治理风险。' },
+  { label: '工程主数据', title: '再补交付底座', description: '部位树、节点类型、交付标准和目录模板。' },
+  { label: '工作中心', title: '最后推进交付', description: '文档/图纸交付、人工审核、整改和导出预检查。' }
+];
 const moduleCards: Array<{
   label: string;
   group: string;
@@ -670,14 +684,15 @@ const moduleCards: Array<{
   tab?: string;
 }> = [
   { label: '资产驾驶舱', group: '总览', description: '项目资产、容量、治理风险', tab: 'dashboard' },
-  { label: '文件管理', group: '文件', description: '目录树、文件表、预览和治理', tab: 'files' },
-  { label: '模型集成', group: '模型', description: '登记模型集成与发布状态', name: 'project-data-steward-models' },
-  { label: '管理对象', group: '对象', description: '设备、系统和构件台账', name: 'project-data-steward-objects' },
-  { label: '交付治理助手', group: '交付', description: '体检、缺失解释和人工确认补交', name: 'project-work-agent-governance' },
-  { label: '事项列表', group: '治理', description: '缺项、低置信和失败扫描', name: 'project-data-steward-issues' },
-  { label: '任务列表', group: '任务', description: '扫描、checksum 等后台任务', name: 'project-data-steward-tasks' },
-  { label: '导出列表', group: '交付', description: '文件清单和报表导出', name: 'project-data-steward-exports' },
-  { label: '文件服务', group: '服务', description: '预览、下载、权限与禁用写操作', name: 'project-data-steward-file-service' }
+  { label: '文件管理', group: '数据管家', description: '目录树、文件表、预览和治理', tab: 'files' },
+  { label: '初始化向导', group: '工程主数据', description: '从目录线索生成主数据草案', name: 'project-master-data-initialization' },
+  { label: '部位树', group: '工程主数据', description: '维护楼栋、楼层、房间和系统部位', name: 'project-master-data-sections' },
+  { label: '交付物标准', group: '工程主数据', description: '配置应交项、类型和验收口径', name: 'project-master-data-deliverable-standard' },
+  { label: '文档交付', group: '工作中心', description: '查看文档应交项、挂接和预检查', name: 'project-work-document-delivery' },
+  { label: '图纸交付', group: '工作中心', description: '查看图纸交付状态和缺失原因', name: 'project-work-drawing-delivery' },
+  { label: '整改闭环', group: '工作中心', description: '跟踪审核驳回、整改和复核', name: 'project-work-rectifications' },
+  { label: '模型集成', group: '数据管家', description: '登记模型集成与发布状态', name: 'project-data-steward-models' },
+  { label: '文件服务', group: '数据管家', description: '预览、下载权限与禁用写操作', name: 'project-data-steward-file-service' }
 ];
 const projectTitle = computed(() => {
   if (!project.value) return `项目 ${projectId.value}`;
@@ -685,7 +700,12 @@ const projectTitle = computed(() => {
 });
 const projectSubTitle = computed(() => {
   if (!project.value) return '资产明细';
-  return [project.value.projectStage, project.value.projectManagerName].filter(Boolean).join(' / ') || '资产明细';
+  return [
+    projectSourceLabel(project.value),
+    onboardingStatusLabel(project.value.onboardingStatus),
+    project.value.projectStage,
+    project.value.projectManagerName ? `负责人：${project.value.projectManagerName}` : ''
+  ].filter(Boolean).join(' / ') || '资产明细';
 });
 const projectRootLabel = computed(() => project.value?.name ?? `项目 ${projectId.value}`);
 const detailTitle = computed(() => selectedFile.value ? `${selectedFile.value.fileName} - 文件详情` : '文件详情');
@@ -1101,8 +1121,12 @@ function openModule(item: { name?: RouteRecordName; tab?: string }) {
   }
 }
 
-function goAgentGovernance() {
-  void router.push({ name: 'project-work-agent-governance', params: { projectId: projectId.value } });
+function goDocumentDelivery() {
+  void router.push({ name: 'project-work-document-delivery', params: { projectId: projectId.value } });
+}
+
+function goInitialization() {
+  void router.push({ name: 'project-master-data-initialization', params: { projectId: projectId.value } });
 }
 
 function openHermesForFile(fileId: number) {
@@ -1158,6 +1182,24 @@ function qualityFlagLabel(value: string) {
 function queryString(value: unknown) {
   if (Array.isArray(value)) return value[0] ? String(value[0]) : undefined;
   return value ? String(value) : undefined;
+}
+
+function projectSourceLabel(row: AssetProject) {
+  if (row.projectCategory === 'REAL_NAS_PROJECT' || row.projectSource === 'REAL_NAS') return '真实 NAS 项目';
+  if (row.projectCategory === 'TEST_PROJECT') return '测试项目';
+  if (row.projectCategory === 'SAMPLE_TEMPLATE') return '样例/模板项目';
+  if (row.projectCategory === 'ARCHIVED_HISTORY') return '归档项目';
+  return row.assetSource || row.projectSource || '内部资产';
+}
+
+function onboardingStatusLabel(value: string | null | undefined) {
+  const labels: Record<string, string> = {
+    PATH_MAPPED: '已映射路径',
+    ASSETS_REGISTERED: '资产已登记',
+    MASTERDATA_INITIALIZED: '主数据已初始化',
+    GOVERNANCE_READY: '交付治理就绪'
+  };
+  return value ? (labels[value] ?? value) : '接入状态待维护';
 }
 
 function refreshFileBrowser() {
@@ -1320,6 +1362,36 @@ function scanProgressValue(task: AssetScanTask) {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.asset-workstream-strip {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1.15fr;
+  gap: 10px;
+  min-width: 0;
+}
+
+.asset-workstream-strip article {
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.asset-workstream-strip span,
+.asset-workstream-strip em {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.asset-workstream-strip strong {
+  display: block;
+  margin: 5px 0 3px;
+  color: #0f172a;
+  font-size: 15px;
 }
 
 .asset-tabs {
@@ -1691,6 +1763,10 @@ function scanProgressValue(task: AssetScanTask) {
   .asset-command-center__meta,
   .asset-command-center__actions {
     justify-content: flex-start;
+  }
+
+  .asset-workstream-strip {
+    grid-template-columns: 1fr;
   }
 
   .asset-kpi-grid {
