@@ -1,5 +1,16 @@
 # 主 Agent 项目状态
 
+## 2026-05-20 M1E 启动
+
+- 用户确认进入 `M1E：文件管理连续工作体验与后台任务可追踪性收口`。
+- 当前 active 批次：`M1E`。
+- M1E 目标：让文件管理按项目记住目录、筛选、分页和最近文件上下文，并让 checksum 后台任务在项目内可见、可理解、可重试。
+- M1E 不是 M2A，不新增大模块，不开放真实 NAS 写操作。
+- M1E 禁止：新增 Hermes 能力、继续 G4、进入 8B / 8C / 9A、真实 NAS 增删改查、正文抽取、真实 BIM 轻量化、Agent 自动治理。
+- 开发 prompt：`handoff/dev-agent/current-prompt.md`。
+- 测试 prompt：`handoff/test-agent/current-prompt.md`。
+- 主 agent 计划：`handoff/main-agent/m1e-file-task-continuity-plan.md`。
+
 ## 2026-05-20 M1D 收口
 
 - `M1D：标准驱动交付闭环强化` 已通过测试 agent 复核并正式收口。

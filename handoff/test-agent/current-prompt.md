@@ -1,4 +1,4 @@
-# 测试 Agent 当前任务：M1D 标准驱动交付闭环强化验收
+# 测试 Agent 当前任务：M1E 文件管理连续工作体验与后台任务可追踪性验收
 
 你是数字化交付平台测试 agent。工作目录：
 
@@ -6,11 +6,11 @@
 
 本轮只验收：
 
-`M1D：标准驱动交付闭环强化`
+`M1E：文件管理连续工作体验与后台任务可追踪性收口`
 
 注意：
 
-- M1A/M1B/M1C 已收口。
+- M1A/M1B/M1C/M1D 已收口。
 - G4 已暂停。
 - Hermes 定位已冻结。
 - 本轮不进入 8B / 8C / 9A。
@@ -28,28 +28,24 @@
 4. `handoff/main-agent/status.md`
 5. `handoff/main-agent/phase2-current-roadmap.md`
 6. `handoff/main-agent/mainline-git-governance-and-hermes-freeze.md`
-7. `handoff/main-agent/m1c-real-project-masterdata-closure.md`
-8. `handoff/main-agent/m1d-standard-delivery-loop-plan.md`
-9. `handoff/main-agent/m1d-workspace-ia-correction.md`
-10. `docs/07-complete-delivery-prd.md`
-11. `docs/08-acceptance-and-agent-integration.md`
-12. `docs/10-phase2-development-roadmap.md`
+7. `handoff/main-agent/m1d-standard-delivery-loop-closure.md`
+8. `handoff/main-agent/m1e-file-task-continuity-plan.md`
+9. `docs/07-complete-delivery-prd.md`
+10. `docs/08-acceptance-and-agent-integration.md`
+11. `docs/10-phase2-development-roadmap.md`
 
 ## 1. 验收目标
 
-确认 M1D 把标准驱动交付能力串成完整员工可用闭环：
+确认 M1E 解决真实文件管理连续工作和后台任务追踪问题：
 
-1. 项目工作台能清楚表达 `项目资产 -> 工程主数据 -> 交付工作中心`。
-2. 工作中心不是工程主数据的子功能，但必须属于项目工作台，并排在工程主数据之后。
-3. 工程主数据未就绪时，工作中心提示先生成 / 确认工程主数据草案。
-4. 工程主数据已就绪时，文档交付和图纸交付能清楚展示标准状态、应交项、缺失项、待审、驳回、完整率和下一步动作。
-5. 缺失项可以解释为什么缺、缺什么类型文件、目标是什么。
-6. 补交文件仍使用分页远程选择。
-7. 挂接、提交审核、审核通过、审核驳回、整改处理、关闭、重开、复审或重新补交链路可验证。
-8. 关键动作后完整率和状态刷新稳定。
-9. 导出预检查仍是 dry-run，不生成包、不触碰 NAS、不泄露路径。
-10. 105 与至少另一个真实 NAS 项目都可打开并理解页面。
-11. 不依赖 Hermes，也不新增 Hermes 能力。
+1. 文件管理能按项目恢复当前目录、筛选、分页和最近文件上下文。
+2. 用户可重置文件管理视图。
+3. 文件 ID、项目内部 ID、checksum 任务 ID 文案业务化。
+4. 点击补 checksum 后，平台内能看到任务状态和对应文件。
+5. 失败任务能显示脱敏失败原因，并可重试。
+6. 任务列表 / 详情按项目权限过滤。
+7. 105/503 与 93/506 文件管理页面可用。
+8. 不泄露真实 NAS 路径，不触碰真实 NAS 文件。
 
 ## 2. 必跑命令
 
@@ -62,44 +58,16 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-phase2-batch2-standard-delivery.sh
-bash scripts/dev/check-phase2-batch3-review-rectification-report.sh
 bash scripts/dev/check-phase2-batch4-file-access.sh
-bash scripts/dev/check-phase2-batch6b-delivery-package.sh
-bash scripts/dev/check-phase2-batch7a-preview-export-precheck.sh
-bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh
+bash scripts/dev/check-phase2-batch5b-data-steward-modules.sh
 bash scripts/dev/check-m1c-real-project-masterdata.sh
+bash scripts/dev/check-m1d-standard-delivery-loop.sh
 git diff --check
 ```
 
-如开发 agent 新增 M1D 专项脚本，例如 `scripts/dev/check-m1d-standard-delivery-loop.sh`，必须执行并记录。
+如开发 agent 新增 M1E 专项脚本，例如 `scripts/dev/check-m1e-file-task-continuity.sh`，必须执行并记录。
 
-## 3. API 验收
-
-至少抽查项目：
-
-- 105 对应内部项目 ID `503`。
-- 93 对应内部项目 ID `506`，或当前环境另一个真实 NAS 项目。
-
-检查：
-
-1. 文档交付完整率 / 缺失项。
-2. 图纸交付完整率 / 缺失项。
-3. 批量挂接接口。
-4. 提交审核 / 审核通过 / 审核驳回。
-5. 整改列表、处理、关闭、重开。
-6. 交付包 summary。
-7. 交付包 export-precheck。
-
-要求：
-
-- 响应包含统一结构和 `traceId`。
-- 权限按项目校验。
-- 状态变更后完整率和缺失项可刷新。
-- export-precheck 返回 `dryRun=true`、`packageGenerated=false`。
-- 不返回真实 NAS 路径或底层存储字段。
-
-## 4. 页面验收
+## 3. 页面验收
 
 必须使用 fresh browser context / 清空本地登录态后验证：
 
@@ -109,24 +77,36 @@ git diff --check
 
 然后至少打开：
 
-- `/data-steward/assets/503/work/document-delivery`
-- `/data-steward/assets/503/work/drawing-delivery`
-- `/data-steward/assets/503/work/rectifications`
-- `/data-steward/assets/506/work/document-delivery`
-- `/data-steward/assets/506/work/drawing-delivery`
+- `/data-steward/assets/503?tab=files`
+- `/data-steward/assets/506?tab=files`
 
-页面检查：
+检查：
 
-- 项目工作台能看出三段顺序：项目资产、工程主数据、交付工作中心。
-- 工作中心入口排在工程主数据之后，而不是工程主数据的子功能。
-- 如果工程主数据未就绪，工作中心提示先生成 / 确认工程主数据草案。
-- 能看到标准状态、完整率、缺失、待审、驳回和下一步动作。
-- 缺失项说明清楚。
-- 补交弹窗可打开，文件选择仍为分页远程查询。
-- 审核、整改、记录和导出预检查入口仍可用。
-- 导出预检查文案明确 dry-run，不生成包，不触碰 NAS。
-- 项目工作台导航不丢失。
+- 进入多层目录后离开页面，再回来能恢复目录位置。
+- 设置关键词、文件类型、专业、扩展名、质量问题、分页后，离开再回来能恢复关键状态。
+- 点击重置视图后，目录、筛选、分页恢复默认。
+- 打开文件详情，能看到“平台文件ID”与文件名、扩展名、大小、更新时间一起展示。
+- 项目标题优先展示业务项目编码和项目名称；如出现数字 ID，应标注为“平台内部ID”。
+- 点击补 checksum 后，能看到任务状态、后台任务编号、文件名、平台文件 ID、进度、创建/更新时间。
+- 失败任务能看到脱敏失败原因，并可重试。
 - 页面无白屏、500、横向撑爆。
+
+## 4. API 验收
+
+检查：
+
+1. `POST /api/data-steward/assets/checksum-jobs`
+2. `GET /api/data-steward/assets/jobs?projectId=...&jobType=CHECKSUM_CALC`
+3. `GET /api/data-steward/assets/jobs/{jobId}`
+4. `POST /api/data-steward/assets/jobs/{jobId}:retry`
+
+要求：
+
+- 响应包含统一结构和 `traceId`。
+- 任务能关联到项目和文件。
+- 普通用户不能跨项目读取任务。
+- 失败原因脱敏。
+- 不返回真实 NAS 路径或底层存储字段。
 
 ## 5. 安全边界
 
@@ -156,27 +136,23 @@ git diff --check
 P0：
 
 - Fresh login 失败。
-- 文档交付或图纸交付无法打开。
-- 挂接、提交审核、审核通过/驳回、整改链路主流程不可用。
-- 未确认或未授权可以跨项目操作。
+- 文件管理无法打开。
+- checksum 任务创建后完全不可见。
+- 普通用户可跨项目读取任务。
 - 泄露真实 NAS 路径、raw row、SQL、token。
 - 本轮继续新增 Hermes 或继续 G4。
 
 P1：
 
-- 项目工作台仍把项目资产、工程主数据、工作中心、Hermes 等入口做成无顺序并列，用户看不出先后关系。
-- 工作中心被表现成工程主数据子功能，或没有归属当前项目工作台。
-- 工程主数据未就绪时，工作中心仍表现为可正常交付，缺少“先生成 / 确认工程主数据草案”的提示。
-- 交付页面仍看不懂应交、缺失、待审、驳回和下一步动作。
-- 缺失项解释缺失或误导。
-- 补交文件选择回退成全量加载。
-- 审核/整改后完整率或状态不刷新。
-- 导出预检查不能反映阻塞原因。
+- 离开再回来无法恢复目录或筛选状态。
+- 没有重置视图能力。
+- 文件 ID / 任务 ID 仍是孤立数字，未绑定文件名和业务上下文。
+- 失败任务看不到失败原因或无法重试。
 - 只对 503 / 105 有效，其他真实项目不可用。
 
 P2：
 
-- 文案、间距、视觉层级仍有粗糙感，但不阻塞标准交付闭环使用。
+- 文件管理视图仍偏表格化、图标和布局还可继续优化，但不阻塞连续工作和任务追踪。
 
 ## 7. 报告要求
 
@@ -188,16 +164,14 @@ P2：
 
 1. 测试结论。
 2. 当前分支和 commit。
-3. 是否确认 M1D 当前 active。
+3. 是否确认 M1E 当前 active。
 4. 是否确认 G4 暂停、Hermes 冻结。
 5. P0 / P1 / P2 列表。
 6. 必跑命令结果。
-7. API 验收结果。
-8. Fresh login 结果。
-9. 项目工作台信息结构验收结果。
-10. 工程主数据未就绪 / 已就绪时工作中心准入提示验收结果。
-11. 503 / 506 页面抽查结果。
-12. 挂接、审核、整改、完整率刷新验证结果。
-13. 导出预检查 dry-run 验证结果。
-14. 安全边界检查结果。
-15. 是否建议收口 M1D。
+7. Fresh login 结果。
+8. 503 / 506 页面抽查结果。
+9. 文件管理状态恢复和重置视图验收结果。
+10. checksum 任务状态、失败原因和重试验收结果。
+11. API 验收结果。
+12. 安全边界检查结果。
+13. 是否建议收口 M1E。

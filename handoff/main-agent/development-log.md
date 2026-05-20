@@ -1,5 +1,19 @@
 # 主 Agent 开发监控日志
 
+## 2026-05-20：M1E 文件管理连续工作体验与后台任务可追踪性启动
+
+- 用户选择 M1E。
+- 主 agent 裁决：
+  - M1E 是 M1 平台本体稳定期的连续工作体验收口批次，不是 M2A。
+  - 本批目标是让文件管理按项目记住目录、筛选、分页和最近文件上下文，并让 checksum 后台任务在项目内可见、可理解、可重试。
+  - M1E 不新增大模块，不开放真实 NAS 写操作。
+- 当前禁止：
+  - Hermes 新能力、G4、8B / 8C / 9A、真实 NAS 写操作、正文抽取、真实 BIM 轻量化、Agent 自动治理。
+- 已写入：
+  - M1E 计划：`handoff/main-agent/m1e-file-task-continuity-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
 ## 2026-05-20：M1D 标准驱动交付闭环强化收口
 
 - 测试 agent 已完成 M1D 复核。
