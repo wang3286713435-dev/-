@@ -1,7 +1,25 @@
 # 主 Agent 项目状态
 
+## 2026-05-20 Git 主线治理与 Hermes 冻结裁决
+
+- 用户裁决：暂停 G4 开发。
+- 用户裁决：Hermes 定位已经出现偏移，必须立刻冻结；后续 Hermes 重新对齐后，通过独立分支继续完善。
+- 用户裁决：主线不能继续卡死在 Hermes，必须恢复平台功能本身的完善。
+- Git 治理已执行：
+  - 创建冻结分支 `codex/hermes-g3-g4-freeze`，保留当前 Hermes/G3/G4 状态。
+  - 将 `main` 快进到当前平台成果点。
+  - `codex/nas-real-project-import-pr` 保留为历史开发分支，不再作为主线继续推进。
+- 当前 active 主线不再是 G4；G4 计划仅保留为历史方案。
+- 当前建议主线进入 `M1A：平台主线功能基线审计与交付闭环缺口收束`。
+- M1A 重点：项目工作台、资产总览、文件管理、工程主数据、标准驱动交付、文档/图纸交付、审核整改、导出预检查、权限审计和路径脱敏。
+- M1A 禁止：新增 Hermes 能力、进入 8B / 8C / 9A、真实 NAS 增删改查、正文抽取、BIM 真实轻量化、Agent 自动治理。
+- 主线治理说明：`handoff/main-agent/mainline-git-governance-and-hermes-freeze.md`。
+- 当前开发 prompt：`handoff/dev-agent/current-prompt.md`。
+- 当前测试 prompt：`handoff/test-agent/current-prompt.md`。
+
 ## 2026-05-20 G4 路线裁决
 
+- 状态：已暂停。以下为历史记录，不再作为当前 active 开发批次。
 - G3 已收口并完成 Git checkpoint。
 - 当前不进入 8B / 8C / 9A。
 - 8B BIM 轻量化任务编排继续后置。
@@ -88,9 +106,9 @@
 1. 插入批次 G1 已正式收口。
 2. G2 已正式收口并完成 Git checkpoint。
 3. G3 已正式收口并完成 Git checkpoint。
-4. 当前进入 `G4：真实项目交付闭环试运行与问题修补`。
-5. G4 是 G3 后的真实项目试运行纠偏批次，不代表 8B / 8C / 9A 已开始。
-6. 105 项目仅作为主样本，能力必须适用于所有已接管真实 NAS 项目。
+4. G4 已暂停，计划仅作为历史方案保留。
+5. 当前 active 主线为 `M1A：平台主线功能基线审计与交付闭环缺口收束`。
+6. 105 项目仅作为抽查样本之一，能力必须适用于所有已接管真实 NAS 项目。
 7. 本轮仍不进入 8B / 8C / 9A，不开放真实 NAS 增删改查，不做真实 BIM 轻量化，不做正文抽取，不做 selective indexing，不允许 Agent 自动治理。
 8. 后续是否进入 8B / 8C / 9A、NAS 受控增删改查、构件级能力、Hermes selective indexing、正文抽取和受控写操作，均需用户再次明确确认。
 9. Hermes 后续接入按 `Catalog Layer -> Evidence Layer -> Memory Layer -> Orchestration Layer` 推进。G4 只验证并修补当前 catalog-only + 受控平台动作闭环，不进入正文证据、长期记忆或多 Agent 编排实现。

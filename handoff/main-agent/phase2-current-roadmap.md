@@ -2,7 +2,52 @@
 
 更新时间：2026-05-20
 
+## 2026-05-20 路线更新：暂停 G4，冻结 Hermes，恢复平台主线
+
+用户裁决：
+
+- G4 暂停开发。
+- Hermes 定位已经出现偏移，必须立刻冻结。
+- 后续 Hermes 重新对齐后，通过独立分支继续完善。
+- 主线不能继续卡死在 Hermes，必须恢复平台功能本身的完善。
+
+Git 治理结果：
+
+- 已创建冻结分支 `codex/hermes-g3-g4-freeze`。
+- 已将 `main` 快进到当前平台成果点。
+- `codex/nas-real-project-import-pr` 保留为历史开发分支，不再作为主线继续推进。
+
+当前 active 主线建议：
+
+`M1A：平台主线功能基线审计与交付闭环缺口收束`
+
+M1A 目标不是继续增加大模块，而是检查和修补平台自身能力：
+
+- 项目工作台是否清晰。
+- 资产总览和文件管理是否适合真实项目使用。
+- 工程主数据是否能被普通员工理解和维护。
+- 标准驱动交付链路是否能跑通。
+- 文档 / 图纸交付、审核、整改、导出预检查是否稳定。
+- BIM Mock 入口是否只是安全占位。
+- 权限、审计、路径脱敏是否没有回归。
+
+当前禁止：
+
+- 继续 G4。
+- 新增 Hermes 能力。
+- 进入 8B / 8C / 9A。
+- 开放真实 NAS 增删改查。
+- 读取 PDF / Office / DWG / RVT / IFC 正文。
+- 写 Hermes memory、OpenSearch、Qdrant、MinIO documents/chunks。
+- Agent 自动审批、自动整改、自动挂接。
+
+主线治理说明：
+
+- `handoff/main-agent/mainline-git-governance-and-hermes-freeze.md`
+
 ## 2026-05-20 路线更新：进入 G4，8B 继续后置
+
+状态：已暂停。以下为历史记录，不再作为当前 active 开发批次。
 
 G3 已完成收口与 Git checkpoint。用户确认当前不自动进入 8B / 8C / 9A。
 
