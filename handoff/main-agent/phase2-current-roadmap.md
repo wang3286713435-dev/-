@@ -2,6 +2,35 @@
 
 更新时间：2026-05-19
 
+## 2026-05-20 路线更新：进入 G3，8B 后置
+
+G2 已完成收口与 Git checkpoint。用户明确要求当前不要继续增加平台内容，避免平台越来越大而空。
+
+当前下一批固定为：
+
+`G3：Hermes 工程主数据交付路径完善 MVP`
+
+G3 目标是完善已有 Hermes、工程主数据、真实项目接入、交付治理之间的可用路径，让员工可以通过 Hermes 理解当前项目怎么走数字化交付流程。
+
+G3 不进入：
+
+- `8B / 8C / 9A`
+- BIM 轻量化引擎
+- 真实模型转换
+- 构件级解析
+- 正文抽取
+- selective indexing
+- NAS 增删改查
+- Agent 自动写库、自动挂接、自动审批、自动整改
+
+8B 当前后置，待 G3 以及后续真实项目交付闭环试运行稳定后再评估。
+
+G3 交接文件：
+
+- `handoff/main-agent/phase2-g3-hermes-masterdata-delivery-guidance-plan.md`
+- `handoff/dev-agent/current-prompt.md`
+- `handoff/test-agent/current-prompt.md`
+
 ## 当前结论
 
 一期已收口。后续主视角切到 `二期客户交付版`。

@@ -1,4 +1,4 @@
-# 开发 Agent 当前任务：G2-B 既有真实项目治理可用性补丁
+# 开发 Agent 当前任务：G3 Hermes 工程主数据交付路径完善 MVP
 
 你是数字化交付平台二期开发 agent。工作目录：
 
@@ -6,272 +6,230 @@
 
 当前开发方式：独立开发 Codex 会话主导开发。禁止创建子 agent，禁止调用 Claude Code。
 
-本轮是 G2 的收尾补丁：
+本轮是 G2 收口后的主线可用性修复批次：
 
-`G2-B：既有真实项目治理可用性补丁`
+`G3：Hermes 工程主数据交付路径完善 MVP`
 
-命名冻结：
+## 0. 命名与路线冻结
 
-- 仍属于 `G2`。
-- 不新增 `H1 / R1 / A9 / 9A` 等临时命名。
-- 不进入 8B / 8C / 9A。
-- G2-B 通过后，整个 G2 应收口，后续再由用户决定是否恢复 8B / 8C / 9A。
+- G2 已收口并完成 Git checkpoint。
+- 当前进入 `G3`。
+- 不进入 `8B / 8C / 9A`。
+- 8B BIM 轻量化任务编排已后置。
+- 本轮目标不是增加平台大功能，而是把已有工程主数据、真实项目接入、交付治理和 Hermes 串成可用路径。
 
-## 0. 必须先阅读
+完成承诺固定为：
+
+`<promise>PHASE2_G3_HERMES_MASTERDATA_GUIDANCE_COMPLETE</promise>`
+
+## 1. 必须先阅读
 
 开始前先阅读：
 
 1. `handoff/main-agent/status.md`
 2. `handoff/main-agent/development-log.md`
 3. `handoff/main-agent/phase2-current-roadmap.md`
-4. `handoff/main-agent/phase2-g2-naming-freeze.md`
-5. `handoff/main-agent/phase2-insert-g2-real-project-onboarding-masterdata-mapping-plan.md`
-6. `handoff/main-agent/phase2-g2b-existing-project-governance-usability-plan.md`
-7. `handoff/main-agent/hermes-layered-integration-decision.md`
+4. `handoff/main-agent/phase2-g3-hermes-masterdata-delivery-guidance-plan.md`
+5. `handoff/main-agent/hermes-layered-integration-decision.md`
+6. `handoff/dev-agent/latest-report.md`
+7. `handoff/test-agent/latest-report.md`
 8. `/Users/vc/Library/Mobile Documents/com~apple~CloudDocs/数字化交付平台/DigitalDeliveryProject/agent-briefings/hermes_capability_handoff.md`
 9. `/Users/vc/Library/Mobile Documents/com~apple~CloudDocs/数字化交付平台/DigitalDeliveryProject/integration-contracts/platform_to_hermes_contract.md`
 10. `/Users/vc/Library/Mobile Documents/com~apple~CloudDocs/数字化交付平台/DigitalDeliveryProject/integration-contracts/gateway_response_contract.md`
 11. `/Users/vc/Library/Mobile Documents/com~apple~CloudDocs/数字化交付平台/DigitalDeliveryProject/integration-contracts/missing_evidence_policy.md`
-12. `handoff/dev-agent/latest-report.md`
-13. `handoff/test-agent/latest-report.md`
 
 重点检查：
 
-1. `frontend/src/modules/data-steward/pages/AssetOverviewPage.vue`
-2. `frontend/src/modules/data-steward/components/DataStewardPanel.vue`
-3. `frontend/src/modules/data-steward/components/DataStewardAnswerCard.vue`
-4. `frontend/src/modules/data-steward/api/dataSteward.ts`
-5. `frontend/src/modules/core/layout/AppLayout.vue`
-6. `frontend/src/router/index.ts`
-7. `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/hermes/*`
-8. `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/AssetApplicationService.java`
-9. `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/dto/AssetDtos.java`
+1. `frontend/src/modules/data-steward/components/DataStewardPanel.vue`
+2. `frontend/src/modules/data-steward/components/DataStewardAnswerCard.vue`
+3. `frontend/src/modules/data-steward/api/dataSteward.ts`
+4. `frontend/src/modules/core/layout/AppLayout.vue`
+5. `frontend/src/modules/core/composables/useProjectWorkspaceContext.ts`
+6. `frontend/src/modules/master-data/pages/ProjectInitializationPage.vue`
+7. `frontend/src/modules/master-data/pages/SectionNodesPage.vue`
+8. `frontend/src/modules/master-data/pages/NodeTypesPage.vue`
+9. `frontend/src/modules/master-data/pages/DeliverableStandardPage.vue`
+10. `frontend/src/modules/work-center/pages/AgentDeliveryGovernancePage.vue`
+11. `frontend/src/modules/work-center/components/DeliveryViewPanel.vue`
+12. `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/hermes/*`
+13. `backend/delivery-work-center/src/main/java/com/zhuoyu/delivery/workcenter/agentgovernance/*`
+14. `backend/delivery-master-data/src/main/java/com/zhuoyu/delivery/masterdata/initialization/*`
 
 如实际文件位置不同，用 `rg` 定位，禁止凭空重复造模块。
 
-## 1. 背景
+## 2. 背景
 
-G2-A 已通过测试 agent 验收，当前无 P0/P1。
+当前平台已经有：
 
-G2-A 已解决：
-
-- 真实 NAS 项目分类。
+- 真实 NAS 项目资产目录。
+- 项目工作台。
 - 真实项目接入向导。
-- 模板草案 / 待确认语义。
-- 105 项目识别为真实 NAS 项目。
-- Hermes project-level 问答、Missing Evidence 和路径脱敏。
+- 工程主数据：部位树、节点类型、交付物标准。
+- 交付治理助手。
+- 文档 / 图纸交付。
+- 批量挂接、审核、整改、导出预检查。
+- Hermes 常驻入口和真实外部 Hermes catalog-only 回答。
 
-但资产总览 Hero 区和入口结构仍不够清楚，普通员工无法快速理解：
+但用户仍然不容易理解：
 
-- 平台现在管理什么。
-- 当前真实项目处于什么状态。
-- 下一步该点哪里。
-- 每个入口有什么用。
+- 当前页面有什么用。
+- 工程主数据为什么要配置。
+- 部位树、节点类型、交付物标准之间是什么关系。
+- 当前项目离交付闭环还差什么。
+- 下一步应该点哪里。
 
-本轮不是新增大功能，而是把既有真实项目治理路径讲清楚、组织清楚、入口清楚。
+本轮不是继续做新模块，而是让 Hermes 成为平台内“懂当前项目、懂当前页面、懂工程主数据交付路径”的常驻引导者。
 
-## 2. 核心原则
+## 3. 本轮核心目标
 
-105 项目只是验收样本，不允许硬编码。
+让用户进入 105 或其他真实 NAS 项目后，即使不看说明书，也可以通过 Hermes 理解：
 
-所有能力必须适用于已接管的真实 NAS 项目，包括但不限于：
+- 当前项目处于真实接入 / 工程主数据 / 交付治理哪一步。
+- 当前页面是干什么的。
+- 当前页面下一步应该做什么。
+- 工程主数据缺什么。
+- 为什么模板只是草案。
+- 为什么要建部位树。
+- 为什么节点类型要锁定。
+- 交付物标准如何服务文档 / 图纸交付。
+- 哪些问题只能目录级回答，哪些问题缺少正文证据。
 
-- `93`
-- `96`
-- `97`
-- `100`
-- `101`
-- `104`
-- `105`
-- `108`
-- `109`
-- `110`
-- `111`
-- `112`
-- `113`
-- `114`
-- `115`
-- `116`
+## 4. 必须完成
 
-禁止在前端或后端写死：
+### A. Hermes 问题分类修正
 
-- `105`
-- `503`
-- `启航华居项目`
+Hermes 必须区分两类问题：
 
-如需测试样本，只能在脚本或测试报告中使用，不能作为业务逻辑条件。
+1. 平台使用 / 当前项目流程问题
+   - 例如：
+     - `这个页面是干什么的？`
+     - `我下一步应该做什么？`
+     - `部位树有什么用？`
+     - `节点类型为什么要锁定？`
+     - `交付物标准和图纸交付是什么关系？`
+   - 这些问题可以基于平台上下文、项目状态、工程主数据状态回答。
+   - 不应因为没有文件正文而返回 Missing Evidence。
 
-## 3. 本轮必须完成
+2. 文件正文 / 图纸 / 模型内部内容问题
+   - 例如：
+     - `这个 PDF 第三页写了什么？`
+     - `这个 DWG 里面有哪些设备？`
+     - `这个 RVT 里面有哪些构件参数？`
+   - 当前必须返回 Missing Evidence。
+   - 不得编造正文、图层、构件、参数或模型内部内容。
 
-### Hermes 分层接入边界
+### B. 页面级 Hermes 上下文
 
-本轮必须按共享文档的四层模型理解 Hermes：
+至少覆盖以下页面：
 
-`Catalog Layer -> Evidence Layer -> Memory Layer -> Orchestration Layer`
+- `/data-steward/assets`
+- `/data-steward/assets/:projectId`
+- `/data-steward/assets/:projectId/master-data/initialization`
+- `/data-steward/assets/:projectId/master-data/sections`
+- `/data-steward/assets/:projectId/master-data/node-types`
+- `/data-steward/assets/:projectId/master-data/deliverable-standard`
+- `/data-steward/assets/:projectId/work/agent-governance`
+- `/data-steward/assets/:projectId/work/document-delivery`
+- `/data-steward/assets/:projectId/work/drawing-delivery`
+- `/data-steward/assets/:projectId?tab=files`
 
-G2-B 只做 Catalog Layer 强化：
-
-- 常驻入口。
-- 当前项目 / 当前页面上下文。
-- catalog-only 问答。
-- 页面用途和下一步动作解释。
-- Missing Evidence 解释。
-
-G2-B 不做：
-
-- Evidence Layer 的 `document_evidence_search`。
-- PDF / Office 正文问答。
-- DWG / RVT / BIM 内容理解。
-- BIM 构件参数检索。
-- Memory Layer 的长期记忆写入。
-- Orchestration Layer 的多 Agent 编排或自动治理。
-
-如需要做低敏 feedback / related_file_ids 展示，只能作为 UI 预留或复用已有合规接口；不得把 raw path、raw catalog row、文件正文或客户敏感内容写入 Hermes memory。
-
-### A. 资产总览 Hero 区重排
-
-重排 `/data-steward/assets` 的 Hero / 顶部概览区。
-
-目标是让用户一眼看懂：
-
-1. 这里是做真实 NAS 项目数字化交付治理的入口。
-2. 现在有多少真实项目。
-3. 哪些项目已登记资产。
-4. 哪些项目已初始化主数据。
-5. 哪些项目已进入交付治理。
-6. 哪些项目还有风险。
-7. 下一步应该做什么。
-
-Hero 区建议形成四层结构：
-
-第一层：平台目标
-
-- 真实项目接入。
-- 工程主数据准备。
-- 交付治理闭环。
-
-第二层：项目状态
-
-- 真实 NAS 项目。
-- 已登记资产。
-- 已初始化主数据。
-- 已进入交付治理。
-- 待接入 / 待治理。
-
-第三层：下一步动作
-
-- 进入真实项目。
-- 查看接入评估。
-- 完善工程主数据。
-- 进入交付治理助手。
-
-第四层：风险提醒
-
-- 缺工程主数据。
-- 缺交付标准。
-- 待审核。
-- 缺 checksum。
-- 低置信度。
-
-要求：
-
-- 不做营销页。
-- 不做复杂大屏。
-- 不堆技术字段。
-- 入口文案必须说明“这个功能有什么用”。
-- 父子结构必须比现在清晰。
-- 页面不能横向撑爆。
-
-### B. 真实项目治理路径
-
-在资产总览和项目卡片 / 表格中强化通用治理路径：
-
-`资产目录 -> 接入评估 -> 工程主数据草案 -> 交付治理助手 -> 缺失项解释 -> 人工确认挂接`
-
-对每个真实 NAS 项目，用户应能看懂：
-
-- 当前在哪一步。
-- 下一步是什么。
-- 为什么要做。
-- 缺什么。
-
-不能只为 105 展示。至少另一个真实 NAS 项目也必须看到同样结构。
-
-### C. Hermes 常驻入口 MVP
-
-Hermes 从局部页面组件升级为平台常驻入口 MVP。
-
-要求：
-
-- 在核心工作区提供常驻入口，例如右下角浮窗或全局按钮。
-- 至少覆盖：
-  - 资产总览。
-  - 项目工作台。
-  - 真实项目接入向导。
-  - 交付治理助手。
-- 常驻入口可打开 Hermes 面板。
-- Hermes 请求仍走平台后端 Gateway。
-- 前端不直连 Hermes。
-
-Hermes 提问时必须带当前上下文：
+Hermes 请求必须带：
 
 - 当前路由。
-- 当前项目 ID。
-- 当前项目编码 / 名称。
-- 当前页面类型。
+- 页面类型。
+- 页面标题。
+- 项目 ID。
+- 项目编码 / 名称。
+- 当前页面业务用途。
+- 当前页面下一步建议。
 
-Hermes 至少能回答或引导：
+前端仍只能请求平台后端 `/api/data-steward/chat`，禁止直连外部 Hermes。
 
-- 这个页面是干什么的？
-- 我下一步应该做什么？
-- 当前项目处于哪一步？
-- 为什么模板只是草案？
-- 工程主数据缺什么？
-- 交付治理助手能做什么？
-- 哪些资料还缺证据？
+### C. 工程主数据交付路径引导
 
-如果 Hermes 外部服务不可用，必须安全降级，不白屏、不 500。
+Hermes 必须能解释以下路径：
 
-### D. 修正历史 smoke 项目分类
+`真实项目资产 -> 接入评估 -> 主数据草案 -> 部位树确认 -> 节点类型锁定 -> 交付物标准确认 -> 文档/图纸缺失项 -> 候选文件推荐 -> 人工确认挂接 -> 审核/整改 -> 导出预检查`
 
-测试报告指出：
+回答必须面向业务用户，不堆技术字段。
 
-- “全部”筛选中历史 `B6A-SMOKE-*` 项目仍显示为“手工/API”而不是“测试”分类。
+### D. 只读项目状态摘要
 
-本轮应修复分类规则：
+如 Hermes 需要项目状态，请优先复用已有只读接口或服务：
 
-- `B6A-SMOKE-*`
-- `PHASE2-*`
-- `PH2*`
-- `SMOKE`
-- `TEST`
-- `测试`
+- 真实项目接入 assessment / preview。
+- G1 交付治理 overview / missing-items。
+- 文档 / 图纸交付完整率。
+- 交付包导出预检查。
+- catalog-only 文件目录摘要。
 
-这类项目在全部视图中应归为测试项目。
+如确实需要新增后端聚合，只能新增只读、脱敏、项目权限校验后的上下文摘要；不得新增数据库结构。
 
-默认真实项目视图不得混入这些项目。
+### E.  route-aware 快捷问题
 
-## 4. 明确禁止
+Hermes 面板快捷问题应根据当前页面变化。
 
-本轮禁止：
+示例：
 
-1. 修改 `docs/**`。
-2. 进入 8B / 8C / 9A。
-3. 真实 NAS 增删改查。
-4. 文件移动、删除、重命名、上传。
-5. 读取 PDF / Office / DWG / RVT / IFC 正文。
-6. BIM 构件级解析。
-7. selective indexing。
-8. 写 Hermes memory。
-9. 写 OpenSearch / Qdrant / MinIO documents/chunks。
-10. Agent 自动审批。
-11. Agent 自动整改。
-12. Agent 自动创建真实交付结论。
-13. 前端直连 Hermes。
-14. 为 105 写死特殊逻辑。
-15. 实现或伪实现 Evidence Layer / Memory Layer / Orchestration Layer。
+- 接入向导页：
+  - `这个项目接入到哪一步了？`
+  - `为什么这里显示草案？`
+  - `我现在能不能应用模板？`
+- 部位树页：
+  - `部位树有什么用？`
+  - `这个项目部位树还缺什么？`
+  - `下一步是不是节点类型？`
+- 节点类型页：
+  - `节点类型为什么要锁定？`
+  - `没锁定会影响什么？`
+- 交付物标准页：
+  - `交付物标准和文档图纸交付有什么关系？`
+  - `标准不完整会影响哪里？`
+- 交付治理助手页：
+  - `当前项目离交付完成还差什么？`
+  - `哪些文件可能可以补交？`
 
-## 5. 必做验证
+### F. 通用真实项目
+
+105 只是验收样本，不允许硬编码。
+
+至少保证另一个真实 NAS 项目也能使用同一套 Hermes 引导能力。
+
+## 5. 禁止事项
+
+本轮严禁：
+
+1. 不进入 8B / 8C / 9A。
+2. 不做 BIM 轻量化引擎。
+3. 不做真实模型转换。
+4. 不做构件级解析。
+5. 不读取 PDF / Office / DWG / RVT / IFC 正文。
+6. 不做 selective indexing。
+7. 不写 Hermes memory。
+8. 不写 OpenSearch / Qdrant / MinIO documents/chunks。
+9. 不做真实 NAS 增删改查。
+10. 不让 Agent 自动写库。
+11. 不让 Agent 自动创建部位树、节点类型或交付物标准。
+12. 不让 Agent 自动挂接、自动审批、自动整改。
+13. 不新增大量页面。
+14. 不把 catalog metadata 冒充正文 evidence。
+15. 不返回真实 NAS 路径、raw row、SQL、token、secret、password。
+
+## 6. 验收标准
+
+至少满足：
+
+1. Hermes 在工程主数据、接入向导、交付治理、文档/图纸交付页面均可用。
+2. 问 `这个页面是干什么的？` 能得到当前页面相关回答。
+3. 问 `我下一步应该做什么？` 能给出符合当前页面和当前项目状态的建议。
+4. 问 `部位树有什么用？`、`节点类型为什么要锁定？`、`交付物标准有什么用？` 能得到业务化解释。
+5. 问当前项目交付缺口时，能基于现有项目状态给出 catalog-only / platform-context 回答。
+6. 问 PDF / DWG / RVT / BIM 构件正文类问题，仍返回 Missing Evidence。
+7. 不泄露真实 NAS 路径、raw row、SQL、token。
+8. 105 和另一个真实 NAS 项目均可用。
+9. G2 / G1 / 8A 回归不破坏。
+
+## 7. 自测要求
 
 至少执行：
 
@@ -282,43 +240,18 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
+EXPECT_HERMES_AGENT_AVAILABLE=true bash scripts/dev/check-hermes-jarvis-gateway.sh
 bash scripts/dev/check-phase2-insert-g2-real-project-onboarding.sh
-bash scripts/dev/check-hermes-jarvis-gateway.sh
 bash scripts/dev/check-phase2-insert-g1-agent-delivery-governance.sh
 bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh
 git diff --check
 ```
 
-如修改了 G2 脚本，应增强它覆盖：
+如果新增 G3 专项脚本，命名建议：
 
-- Hero 区核心文案或 API 支撑字段。
-- smoke 项目分类。
-- 至少两个真实 NAS 项目治理入口。
-- Hermes 常驻入口对应的前端结构或 API 上下文。
+`scripts/dev/check-phase2-insert-g3-hermes-masterdata-guidance.sh`
 
-## 6. 手动回归
-
-至少用浏览器验证：
-
-1. `/data-steward/assets`
-   - Hero 区父子结构清晰。
-   - 用户能看懂平台目标、项目状态、下一步动作和风险提醒。
-   - 默认真实项目视图不混入测试项目。
-2. 105 项目
-   - 可以作为样本进入治理路径。
-   - 不出现 105 专属硬编码痕迹。
-3. 另一个真实 NAS 项目
-   - 也能看到同样的治理路径和入口。
-4. Hermes 常驻入口
-   - 资产总览可打开。
-   - 项目工作台可打开。
-   - 接入向导可打开。
-   - 交付治理助手可打开。
-   - 能带当前项目和页面上下文。
-5. smoke 项目分类
-   - “全部”视图里 `B6A-SMOKE-*` 归为测试项目。
-
-## 7. 报告要求
+## 8. 报告要求
 
 完成后写入：
 
@@ -326,35 +259,15 @@ git diff --check
 
 报告必须包含：
 
-1. 修改文件。
-2. Hero 区如何重排。
-3. 父子结构如何表达。
-4. 通用真实项目治理路径如何体现。
-5. 105 是否只是样本，有无硬编码。
-6. 另一个真实 NAS 项目验证结果。
-7. Hermes 常驻入口实现方式。
-8. Hermes 如何携带当前项目 / 当前页面上下文。
-9. 本轮如何保持 Catalog Layer 边界。
-10. 是否触碰 Evidence / Memory / Orchestration，答案必须为否。
-11. smoke 项目分类修复。
-12. 自测命令结果。
-13. 禁止项确认。
-14. 未完成事项。
+1. 修改了哪些文件。
+2. Hermes 如何区分平台流程问题和正文证据问题。
+3. 页面上下文如何传递。
+4. 工程主数据路径如何解释。
+5. 105 和另一个真实项目的验证结果。
+6. 是否新增只读聚合接口。
+7. 是否有任何 Missing Evidence 边界变化。
+8. 自测命令结果。
+9. 未完成事项和风险。
+10. 完成承诺：
 
-## 8. 完成定义
-
-只有同时满足以下条件，才能标记完成：
-
-- 资产总览 Hero 区看得懂。
-- 真实项目治理路径对所有真实 NAS 项目通用。
-- 105 只是样本，没有被硬编码。
-- 至少另一个真实项目也可走同样入口。
-- Hermes 常驻入口可用。
-- Hermes 不直连、不写库、不自动治理。
-- smoke 项目分类修复。
-- 构建和回归脚本通过。
-- `handoff/dev-agent/latest-report.md` 已写。
-
-完成承诺：
-
-`<promise>PHASE2_G2B_EXISTING_PROJECT_GOVERNANCE_USABILITY_COMPLETE</promise>`
+`<promise>PHASE2_G3_HERMES_MASTERDATA_GUIDANCE_COMPLETE</promise>`

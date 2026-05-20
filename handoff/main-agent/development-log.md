@@ -2523,3 +2523,30 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - G2-B 可以收口。
   - 建议进入 G2 整体收口与 Git checkpoint 前的变更分组审计。
   - 由于当前工作区存在较多历史未提交改动和未跟踪文件，Git checkpoint 不应直接全量提交；需要先按 G2、Hermes、历史批次、运行态临时文件分组确认。
+
+## 2026-05-20：G3 Hermes 工程主数据交付路径完善 MVP 启动
+
+- 用户裁决：
+  - 当前不应继续增加平台内容，避免平台越来越大而空。
+  - 当前首要任务是完善 Hermes 已有功能，让 Hermes 接入真实项目交付路径，尤其是工程主数据相关数字化交付功能。
+  - 8B BIM 轻量化任务编排后置。
+- 主 agent 裁决：
+  - 当前进入 `G3：Hermes 工程主数据交付路径完善 MVP`。
+  - G3 是已有功能可用性修复，不是新模块扩张。
+  - G3 不进入 `8B / 8C / 9A`。
+- 已写入：
+  - G3 规划：`handoff/main-agent/phase2-g3-hermes-masterdata-delivery-guidance-plan.md`
+  - 开发 agent prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 agent prompt：`handoff/test-agent/current-prompt.md`
+  - 路线状态：`handoff/main-agent/phase2-current-roadmap.md`
+  - 主状态：`handoff/main-agent/status.md`
+- G3 核心验收：
+  - 一个普通员工进入 105 或其他真实 NAS 项目后，只问 Hermes，也能知道工程主数据怎么配置、交付缺什么、下一步该点哪里。
+- G3 禁止：
+  - BIM 轻量化引擎。
+  - 真实模型转换。
+  - 构件级解析。
+  - 文件正文抽取。
+  - selective indexing。
+  - NAS 增删改查。
+  - Agent 自动写库、自动挂接、自动审批、自动整改。
