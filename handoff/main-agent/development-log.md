@@ -1,5 +1,25 @@
 # 主 Agent 开发监控日志
 
+## 2026-05-20：M1B 项目工作台与数据管家可用性收口启动
+
+- 用户确认进入 M1B。
+- 主 agent 裁决：
+  - M1B 不是新功能扩张批次，而是可用性收口批次。
+  - 目标是让普通员工能理解资产总览、项目状态、项目工作台入口和下一步动作。
+  - M1B 优先处理 M1A 测试报告中记录的 `/data-steward/assets` 默认真实项目统计显示为 0 等可用性问题。
+- 当前范围：
+  - 资产总览 Hero 区。
+  - 项目卡片 / 列表状态。
+  - 项目工作台顶部说明。
+  - 数据管家 / 工程主数据 / 工作中心入口解释。
+  - 空状态、提示文案、下一步按钮。
+- 当前禁止：
+  - Hermes 新能力、G4、8B / 8C / 9A、真实 NAS 写操作、正文抽取、真实 BIM 轻量化、Agent 自动治理。
+- 已写入：
+  - M1B 计划：`handoff/main-agent/m1b-project-workbench-usability-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
 ## 2026-05-20：M1A 平台主线功能基线审计正式收口
 
 - 测试 agent 已完成 M1A 登录超时修复后极短复验。

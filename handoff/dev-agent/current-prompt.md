@@ -1,4 +1,4 @@
-# 开发 Agent 当前任务：M1A 平台主线功能基线审计与交付闭环缺口收束
+# 开发 Agent 当前任务：M1B 项目工作台与数据管家可用性收口
 
 你是数字化交付平台二期开发 agent。工作目录：
 
@@ -6,23 +6,17 @@
 
 当前开发方式：独立开发 Codex 会话主导开发。禁止创建子 agent，禁止调用 Claude Code。
 
-## 0. 路线冻结
+## 0. 当前路线
 
-当前用户裁决：
+M1A 已通过测试 agent 复验并收口，主线健康度已从 `黄灯可控` 调整为 `绿灯可继续主线开发`。
 
-- G4 暂停开发。
-- Hermes 定位冻结。
-- 后续 Hermes 必须重新对齐后，通过独立分支继续完善。
-- 主线不能继续卡死在 Hermes 功能中。
-- 当前主线恢复到平台功能本身的完善。
+当前 active 批次：
 
-当前 active 主线：
-
-`M1A：平台主线功能基线审计与交付闭环缺口收束`
+`M1B：项目工作台与数据管家可用性收口`
 
 完成承诺固定为：
 
-`<promise>MAINLINE_M1A_PLATFORM_BASELINE_AUDIT_COMPLETE</promise>`
+`<promise>MAINLINE_M1B_WORKBENCH_USABILITY_COMPLETE</promise>`
 
 ## 1. 必须先阅读
 
@@ -32,69 +26,74 @@
 2. `handoff/main-agent/development-log.md`
 3. `handoff/main-agent/phase2-current-roadmap.md`
 4. `handoff/main-agent/mainline-git-governance-and-hermes-freeze.md`
-5. `handoff/dev-agent/latest-report.md`
-6. `handoff/test-agent/latest-report.md`
-7. `docs/07-complete-delivery-prd.md`
-8. `docs/08-acceptance-and-agent-integration.md`
-9. `docs/10-phase2-development-roadmap.md`
+5. `handoff/main-agent/m1a-platform-baseline-closure.md`
+6. `handoff/main-agent/m1b-project-workbench-usability-plan.md`
+7. `handoff/dev-agent/latest-report.md`
+8. `handoff/test-agent/latest-report.md`
+9. `docs/07-complete-delivery-prd.md`
+10. `docs/08-acceptance-and-agent-integration.md`
+11. `docs/10-phase2-development-roadmap.md`
 
 重点检查：
 
-1. 项目工作台：
+1. 资产总览：
    - `frontend/src/modules/data-steward/pages/AssetOverviewPage.vue`
+2. 项目工作台：
    - `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
    - `frontend/src/modules/core/components/ProjectWorkspaceNav.vue`
-2. 文件管理：
+3. 文件管理：
    - `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
    - `frontend/src/modules/data-steward/pages/AssetCatalogPage.vue`
-3. 工程主数据：
+4. 工程主数据入口：
    - `frontend/src/modules/master-data/pages/ProjectInitializationPage.vue`
    - `frontend/src/modules/master-data/pages/SectionNodesPage.vue`
    - `frontend/src/modules/master-data/pages/NodeTypesPage.vue`
    - `frontend/src/modules/master-data/pages/DeliverableStandardPage.vue`
-4. 工作中心：
+5. 工作中心入口：
    - `frontend/src/modules/work-center/components/DeliveryViewPanel.vue`
    - `frontend/src/modules/work-center/pages/RectificationsPage.vue`
-5. 后端相关：
-   - `backend/delivery-master-data/src/main/java/com/zhuoyu/delivery/masterdata/**`
-   - `backend/delivery-work-center/src/main/java/com/zhuoyu/delivery/workcenter/**`
+6. 数据管家后端聚合或统计口径：
    - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/**`
 
 如实际文件位置不同，用 `rg` 定位，禁止凭空重复造模块。
 
 ## 2. 本轮目标
 
-本轮不是继续开发 Hermes，也不是继续 G4。
+本轮不是继续开发 Hermes，也不是继续 G4，不进入 8B / 8C / 9A。
 
-本轮目标是回到平台主线，做一次平台功能基线审计，找出阻塞真实项目交付闭环的缺口，并只做小范围修补。
+目标是解决一个产品可用性问题：
 
-重点关注：
+平台能力已经很多，但普通员工进入页面后仍不容易理解“当前项目在哪里、每个入口有什么用、下一步应该做什么”。
 
-1. 项目工作台是否清晰。
-2. 资产总览和文件管理是否适合真实项目使用。
-3. 工程主数据是否能被普通员工理解和维护。
-4. 标准驱动交付链路是否能跑通。
-5. 文档 / 图纸交付、审核、整改、导出预检查是否稳定。
-6. BIM Mock 入口是否只是安全占位，未误导成真实轻量化。
-7. 权限、审计、路径脱敏是否没有回归。
+重点完成：
 
-## 3. 本轮允许做什么
+1. 资产总览 Hero 区更清晰。
+2. 项目卡片 / 列表能解释项目来源、接入状态、主数据状态、交付状态和下一步动作。
+3. 修复 `/data-steward/assets` 默认真实项目统计显示明显不准的问题。
+4. 项目工作台顶部能解释三类能力：
+   - 数据管家：看项目文件资产。
+   - 工程主数据：维护部位、节点类型和交付标准。
+   - 工作中心：做文档 / 图纸交付、审核、整改和预检查。
+5. 空状态、提示文案和按钮文案更适合业务用户。
+6. 不依赖 Hermes，用户也能知道基础操作路径。
+
+## 3. 允许做什么
 
 允许：
 
-- 修复项目工作台、文件管理、工程主数据、交付页面中的 P0/P1/P2。
-- 修复页面跳转、项目上下文、刷新、空状态、错误提示。
-- 修复真实项目使用中明显不清楚的文案和入口。
-- 修复主线平台功能脚本或补最小 smoke。
-- 修复不影响底层模型的小型只读接口问题。
-- 修复权限、审计、路径脱敏回归。
+- 前端可用性和信息层级调整。
+- 资产总览 / 项目工作台 / 文件管理 / 项目内导航文案优化。
+- 修复真实项目统计或接入状态展示问题。
+- 增加轻量状态标签、说明、下一步按钮。
+- 小范围只读接口或统计口径修复。
+- 补充最小 smoke 脚本，如果能稳定覆盖本轮页面。
 
-## 4. 本轮禁止做什么
+## 4. 禁止做什么
 
 禁止：
 
-1. 继续 G4。
-2. 新增 Hermes 能力。
+1. 新增 Hermes 能力。
+2. 继续 G4。
 3. 进入 8B / 8C / 9A。
 4. 做真实 BIM 轻量化。
 5. 做构件级解析。
@@ -106,31 +105,19 @@
 11. Agent 自动审批、自动整改、自动挂接。
 12. 把 catalog metadata 冒充正文 evidence。
 13. 返回真实 NAS 路径、raw row、SQL、token、secret、password。
-14. 为 105 写死特殊逻辑。
+14. 为 105 / 503 写死特殊逻辑。
 15. 修改 `docs/**`，除非主 agent 单独授权。
-
-如发现 Hermes 现有能力阻塞主线，只允许做 P0/P1 修复，不允许借修复继续扩 Hermes。
 
 ## 5. 建议执行方式
 
-先做审计，再决定是否小修：
+先审计现状，再做小范围收口：
 
-1. 跑一遍当前平台主线 smoke。
-2. 用 105 和另一个真实 NAS 项目抽查：
-   - 资产总览。
-   - 项目工作台。
-   - 文件管理。
-   - 初始化向导。
-   - 部位树。
-   - 节点类型。
-   - 交付物标准。
-   - 文档交付。
-   - 图纸交付。
-   - 审核 / 整改。
-   - 导出预检查。
-3. 列出 P0 / P1 / P2。
-4. 只修 P0/P1 和非常小的 P2。
-5. 不新增大模块。
+1. 打开资产总览，确认真实项目统计、项目列表、筛选和项目卡片文案。
+2. 抽查 503 / 105 和 506 / 93 两个真实 NAS 项目。
+3. 记录用户看不懂的入口、空状态、状态词和下一步按钮。
+4. 修复统计明显不准或状态误导。
+5. 优化页面结构和文案，不大改路由，不新增大模块。
+6. 确认文件管理、工程主数据、文档交付、图纸交付入口不回归。
 
 ## 6. 自测要求
 
@@ -143,14 +130,21 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-phase2-batch4-file-access.sh
 bash scripts/dev/check-phase2-batch6a-project-initialization.sh
 bash scripts/dev/check-phase2-batch6b-delivery-package.sh
-bash scripts/dev/check-phase2-batch7a-preview-export-precheck.sh
-bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh
 git diff --check
 ```
 
-如果补了新的主线 smoke，报告中说明脚本名和覆盖范围。
+浏览器自测至少覆盖：
+
+- Fresh login -> `/data-steward/assets`
+- `/data-steward/assets`
+- `/data-steward/assets/503`
+- `/data-steward/assets/506`
+- `/data-steward/assets/503/master-data/initialization`
+- `/data-steward/assets/503/work/document-delivery`
+- `/data-steward/assets/503/work/drawing-delivery`
 
 ## 7. 报告要求
 
@@ -161,11 +155,13 @@ git diff --check
 报告必须包含：
 
 1. 当前 Git 分支和基线 commit。
-2. 是否确认 G4 暂停、Hermes 冻结。
-3. 审计了哪些平台主线页面和接口。
-4. 105 与另一个真实 NAS 项目抽查结果。
-5. P0 / P1 / P2 列表。
-6. 修复了哪些文件。
-7. 是否触碰 Hermes，若触碰，说明是否仅为 P0/P1 修复。
-8. 自测命令结果。
-9. 是否建议进入下一轮主线平台功能开发。
+2. 是否确认 M1A 已收口、M1B 当前 active。
+3. 是否确认 G4 / Hermes / 8B / 9A 冻结。
+4. 修复或优化了哪些可用性问题。
+5. 是否修复真实项目统计显示问题。
+6. 503 与 506 抽查结果。
+7. 修改文件清单。
+8. 是否触碰后端；如果触碰，说明是否仅为只读统计或展示口径。
+9. 自测命令结果。
+10. P0 / P1 / P2 列表。
+11. 是否建议进入 M1B 测试验收。

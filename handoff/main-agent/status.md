@@ -1,5 +1,20 @@
 # 主 Agent 项目状态
 
+## 2026-05-20 M1B 启动
+
+- 用户确认进入 M1B。
+- 当前 active 批次：`M1B：项目工作台与数据管家可用性收口`。
+- M1B 目标：让普通员工能看懂资产总览、项目状态、项目工作台入口和下一步动作。
+- M1B 重点：
+  - 资产总览 Hero 区和项目状态表达。
+  - 真实项目统计显示问题。
+  - 项目来源、接入状态、主数据状态、交付状态和下一步动作。
+  - 项目工作台内数据管家 / 工程主数据 / 工作中心用途说明。
+- M1B 禁止：新增 Hermes 能力、继续 G4、进入 8B / 8C / 9A、真实 NAS 增删改查、正文抽取、真实 BIM 轻量化、Agent 自动治理。
+- 开发 prompt：`handoff/dev-agent/current-prompt.md`。
+- 测试 prompt：`handoff/test-agent/current-prompt.md`。
+- 主 agent 计划：`handoff/main-agent/m1b-project-workbench-usability-plan.md`。
+
 ## 2026-05-20 M1A 收口与主线健康恢复
 
 - `M1A：平台主线功能基线审计与交付闭环缺口收束` 已通过测试 agent 复验并正式收口。
