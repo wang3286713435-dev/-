@@ -7,11 +7,13 @@
   - M1D 是 M1 平台本体稳定期的闭环强化批次，不是 Hermes/G4 分支。
   - 本批目标是让员工不依赖 Hermes，也能跑通“应交项 -> 缺失项 -> 补交 -> 审核 -> 整改 -> 复审/重新补交 -> 完整率刷新 -> 导出预检查”。
   - M1D 不新增大模块，优先收束现有文档交付、图纸交付、批量挂接、审核整改和导出预检查能力。
+  - M1D 补充吸收用户提出的信息结构纠偏：项目工作台必须呈现 `项目资产 -> 工程主数据 -> 交付工作中心`，工作中心不是工程主数据子功能，但必须在工程主数据之后；工程主数据未就绪时，工作中心提示先生成 / 确认工程主数据草案。
   - 105 项目仅作为样本之一，不能写死；必须至少抽查另一个真实 NAS 项目。
 - 当前禁止：
   - Hermes 新能力、G4、8B / 8C / 9A、真实 NAS 写操作、正文抽取、真实 BIM 轻量化、Agent 自动治理。
 - 已写入：
   - M1D 计划：`handoff/main-agent/m1d-standard-delivery-loop-plan.md`
+  - M1D 信息结构补充裁决：`handoff/main-agent/m1d-workspace-ia-correction.md`
   - 开发 prompt：`handoff/dev-agent/current-prompt.md`
   - 测试 prompt：`handoff/test-agent/current-prompt.md`
 
