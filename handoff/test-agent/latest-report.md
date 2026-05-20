@@ -1,283 +1,99 @@
-# 二期批次四正式验收报告：文件预览与下载权限分离最小闭环
+# G2-B Hermes 问答超时修复短回归报告
 
-## 1. 总结论
+生成时间：2026-05-20 05:42 CST
 
-结论：**不通过**。
+## 1. 测试结论
 
-本轮构建、健康检查、专项脚本、回归脚本、过期票据验证基本都通过，但人工复核发现一个明确 `P0`：
+结论：通过。
 
-- 普通项目用户在 `/data-steward/catalog` 文件详情中仍能直接看到真实 `NAS` 路径。
+Hermes 前端问答超时 P1：已关闭。
 
-这违反了本轮验收红线：
+是否建议收口 G2-B：建议收口。
 
-- `接口或页面暴露真实 NAS 路径给普通用户`
+是否建议进入 G2 整体收口和 Git checkpoint：建议主 agent 复核本报告与开发报告一致后，进入 G2 整体收口和 Git checkpoint。
 
-因此当前**不能收口二期批次四**。
+## 2. P0 / P1 / P2
 
----
+P0：无。
 
-## 2. P0 / P1 / P2 列表
+P1：无。上一轮发现的 `timeout of 10000ms exceeded` 已修复，浏览器实测 10 秒以上真实 Hermes 回答不再被前端 10 秒全局超时截断。
 
-### P0
+P2：无新增。
 
-1. **普通项目用户仍可在目录详情和目录详情接口中读取真实 NAS 路径**
-   - 复现用户：
-     - `phase2.viewer / Viewer@123`
-     - `delivery.engineer / Engineer@123`
-   - 复现接口：
-     - `GET /api/data-steward/catalog/files/74846`
-   - 实测返回：
-     - `storagePathVisible = true`
-     - `storagePath = "nas:///tmp/phase2-batch4-ui-1778812442.pdf"`
-     - `storagePathVisibilityReason = "LOCAL_DEV_ADMIN"`
-   - 页面复现：
-     - `http://127.0.0.1:5173/data-steward/catalog`
-     - 以 `phase2.viewer` 登录后打开 `批次四UI验证.pdf` 详情抽屉
-     - 页面直接展示 `存储路径: nas:///tmp/phase2-batch4-ui-1778812442.pdf`
-   - 判定：
-     - 这是普通项目用户真实看到的页面数据，不是仅后台票据 URL。
-     - 直接违反本轮目标“**不暴露真实 NAS 路径给普通用户**”。
+## 3. 静态检查
 
-### P1
+结果：通过。
 
-无新增 `P1`。
+- 全局 Axios 超时仍为 `10000ms`，位置：`frontend/src/app/http.ts`。
+- `askHermes()` 单独配置 `timeout: HERMES_CHAT_TIMEOUT_MS`。
+- `HERMES_CHAT_TIMEOUT_MS = 45_000`，位置：`frontend/src/modules/data-steward/api/dataSteward.ts`。
+- 页面存在等待提示：`真实 Hermes 正在组织回答，可能需要 10-30 秒。平台未执行任何写操作。`
+- 页面存在友好超时文案：`真实 Hermes 回答超时，请稍后重试；平台未执行任何写操作。`
+- 前端未发现直连 Hermes 外部服务地址；前端仍通过平台后端 `/api/data-steward/chat`。
 
-### P2
+## 4. 必跑命令结果
 
-1. 前端构建仍有既有 `Vite chunk size warning`。
+- `corepack pnpm --dir frontend build`：通过，仅有既有 Vite chunk size warning。
+- `curl -fsS http://127.0.0.1:8080/actuator/health`：通过，返回 `{"status":"UP"}`。
+- `EXPECT_HERMES_AGENT_AVAILABLE=true bash scripts/dev/check-hermes-jarvis-gateway.sh`：通过，`PASS=13 FAIL=0`。
+- `bash scripts/dev/check-phase2-insert-g2-real-project-onboarding.sh`：通过，`PASS=11 FAIL=0`。
+- `git diff --check`：通过。
 
----
+## 5. 浏览器短回归
 
-## 3. 构建与健康检查结果
+页面：`/data-steward/assets/503/work/agent-governance`
 
-### 3.1 已执行
+结果：通过。
 
-1. `cd backend && ./mvnw -pl delivery-app -am -DskipTests package`
-2. `corepack pnpm --dir frontend build`
-3. `curl -fsS http://localhost:8080/actuator/health`
-4. `git diff --check`
+已验证问题：
 
-### 3.2 结果
+- `你好`：正常返回真实 Hermes 回答，无 `timeout of 10000ms exceeded`。
+- `这个页面是干什么的？`：约 `10.9s` 返回，正常展示真实 Hermes 回答，无超时。
+- `我下一步应该做什么？`：约 `16.2s` 返回，正常展示真实 Hermes 回答，无超时。
+- `这个项目有哪些已登记文件？`：约 `9.9s` 返回，正常展示真实 Hermes 回答，无超时。
 
-- 后端构建：通过
-- 前端构建：通过
-- 健康检查：通过
-  - 返回：`{"status":"UP"}`
-- `git diff --check`：通过
+交互状态：
 
-补充：
+- 提交后页面显示等待提示：`真实 Hermes 正在组织回答，可能需要 10-30 秒。平台未执行任何写操作。`
+- 等待期间输入框禁用。
+- 等待期间 `问 Hermes` 提交按钮禁用。
+- 页面未白屏。
+- 页面未出现 500。
+- 页面未出现 `timeout of 10000ms exceeded`。
 
-- 前端构建仍出现既有 `Vite chunk size warning`，已记为 `P2`。
+回答来源：
 
----
+- 页面显示 `Hermes真实回答 已接入`。
+- 回答卡片显示真实 Hermes 回答。
+- 未发现把平台本地兜底伪装成真实 Hermes 回答。
 
-## 4. 专项脚本结果
+## 6. Missing Evidence 与安全边界
 
-### 4.1 必跑脚本
+结果：通过。
 
-1. `bash scripts/dev/check-phase2-batch4-file-access.sh`
-   - 结果：通过
-   - 核心结论：
-     - 管理员可预览
-     - 管理员可下载
-     - 查看者可预览但不可下载
-     - 跨项目用户不可预览/下载
-     - 路径失效文件错误清晰
-     - OpenAPI 包含新增接口
-     - 访问、拒绝、失败动作写审计
+补充提问：`请读取这个 RVT 模型里的构件参数、图层、正文和 BIM 构件信息`
 
-2. `bash scripts/dev/check-file-preview-shell.sh`
-   - 结果：通过
-   - 核心结论：
-     - PDF 预览外壳可用
-     - BIM 预览外壳元数据可用
-     - 预览外壳本身不以真实 `storagePath` 作为访问入口
+实测结果：
 
-### 4.2 回归脚本
+- 正文 / DWG / RVT / BIM / 构件类问题返回 Missing Evidence / 缺少证据。
+- 未编造正文、图层、构件参数或模型内部内容。
+- 响应仍声明 catalog-only。
+- 响应仍提示平台未执行写操作。
 
-1. `bash scripts/dev/check-phase2-batch1-readonly-catalog.sh`
-   - 结果：通过
-   - `25/25 PASS`
+敏感信息检查：
 
-2. `bash scripts/dev/check-phase2-batch2-standard-delivery.sh`
-   - 最终结果：通过
-   - `38/38 PASS`
+- 未出现 `/Volumes`。
+- 未出现 `smb://`。
+- 未出现 `nas://`。
+- 未出现 `storage_path` / `storage_uri`。
+- 未出现 SQL。
+- 未出现 raw row。
+- 未出现 token / secret / password。
 
-3. `bash scripts/dev/check-phase2-batch3-review-rectification-report.sh`
-   - 结果：通过
-   - `52/52 PASS`
+## 7. 收口建议
 
-说明：
+上一轮 Hermes 前端超时 P1 已关闭。
 
-- `batch2` 脚本在与 `batch3` 回归并行跑时出现过一次共享样板数据干扰，顺序重跑后通过。
-- 以顺序重跑结果为准，本轮未发现批次一/二/三主链回归。
+建议主 agent 收口 G2-B。
 
----
-
-## 5. 页面验收结果
-
-### 5.1 `/data-steward/assets/1`
-
-结果：部分通过
-
-已确认：
-
-- 页面可打开
-- 页面级横向溢出为 `0`
-- 页面正常显示“文件资产 / 扫描任务 / 路径映射”结构
-
-补充说明：
-
-- 当前样板环境下，该页本次打开时显示 `文件总数 0`，所以本页未能完成“真实文件详情抽屉里的预览/下载状态”人工点击验证。
-- 对应的文件访问链路人工验证，本轮主要在 `/data-steward/catalog` 页面完成。
-
-### 5.2 `/data-steward/catalog`
-
-结果：**不通过**
-
-管理员视角已确认：
-
-- 页面可打开
-- 页面级横向溢出为 `0`
-- 文件详情抽屉能展示：
-  - 预览状态
-  - 访问权限
-  - 说明
-  - `打开预览`
-  - `下载文件`
-
-查看者视角已确认：
-
-- 页面可打开
-- 页面级横向溢出为 `0`
-- 文件详情抽屉中：
-  - `打开预览` 可用
-  - `下载文件` 为禁用状态
-  - 访问权限文案为：
-    - `当前账号可预览文件，但没有下载权限。`
-
-但同时复现到 `P0`：
-
-- 同一查看者详情抽屉里直接显示了真实 `storagePath`
-- 页面展示内容：
-  - `存储路径 nas:///tmp/phase2-batch4-ui-1778812442.pdf`
-
-因此页面验收整体判定为：**不通过**
-
----
-
-## 6. 权限分离验证结果
-
-### 6.1 通过项
-
-1. 预览权限与下载权限已分离
-   - `phase2.viewer` 可预览
-   - `phase2.viewer` 不可下载
-
-2. 跨项目用户不可读取无权文件
-   - 专项脚本通过
-
-3. 访问票据到期后不可继续使用
-   - 我手动创建了预览票据 `ticketId=18`
-   - 将 `data_file_access_tickets.expires_at` 改到过去时间后再次访问
-   - 返回：
-     - HTTP `403`
-     - `code = ASSET_FILE_ACCESS_TICKET_EXPIRED`
-     - `message = 访问票据已过期`
-   - 数据库中该票据状态也变为 `EXPIRED`
-
-4. 路径失效文件不会假成功
-   - 专项脚本已验证
-   - 失效路径文件不能创建访问票据，错误码清晰
-
-### 6.2 未通过项
-
-1. 路径可见性与访问权限没有分离彻底
-   - 虽然查看者不能下载，但仍能直接看到真实 NAS 路径
-   - 这说明“下载受控”已经做到，但“路径隐藏”没有真正做到
-
----
-
-## 7. NAS 路径隐藏验证结果
-
-结论：**失败**
-
-### 7.1 接口证据
-
-使用 `phase2.viewer` 和 `delivery.engineer` 分别请求：
-
-- `GET /api/data-steward/catalog/files/74846`
-
-两次都返回：
-
-- `storagePathVisible: true`
-- `storagePath: "nas:///tmp/phase2-batch4-ui-1778812442.pdf"`
-- `storagePathVisibilityReason: "LOCAL_DEV_ADMIN"`
-
-说明：
-
-- 当前并不是“管理员可见、普通用户隐藏”
-- 而是“只要有项目权限，普通用户也直接可见”
-
-### 7.2 页面证据
-
-使用 `phase2.viewer` 登录：
-
-- 打开 `http://127.0.0.1:5173/data-steward/catalog`
-- 打开 `批次四UI验证.pdf` 详情抽屉
-
-页面直接显示：
-
-- `存储路径 nas:///tmp/phase2-batch4-ui-1778812442.pdf`
-
-### 7.3 判定
-
-这已满足当前 prompt 中的 `P0` 条件：
-
-- `接口或页面暴露真实 NAS 路径给普通用户`
-
----
-
-## 8. 审计验证结果
-
-结果：通过
-
-专项脚本已验证以下审计动作存在：
-
-- `asset.file.preview.ticket.create`
-- `asset.file.download.ticket.create`
-- `asset.file.preview.open`
-- `asset.file.download.open`
-- `asset.file.access.denied`
-- `asset.file.access.failed`
-
-我本轮额外 spot check 也确认：
-
-- 新建的 `ticketId=18` 已产生 `asset.file.preview.ticket.create`
-
-当前未发现“预览/下载关键动作无审计”的问题。
-
----
-
-## 9. 是否可以收口二期批次四
-
-结论：**不可以**。
-
-原因很明确：
-
-- 文件访问票据、预览/下载权限分离、过期失效、审计这几条主链基本已成立；
-- 但“普通用户不应看到真实 NAS 路径”这条红线当前仍然失守；
-- 该问题同时出现在：
-  - 页面详情抽屉
-  - 目录详情接口返回
-
-因此当前不建议主 agent 收口二期批次四。
-
----
-
-## 10. 附注
-
-1. 本轮人工页面验证使用了两条临时 UI 验证文件记录：
-   - `74846`
-   - `74847`
-2. 测试结束后我已将这两条临时记录软删除，并删除 `/tmp` 下对应临时文件，避免继续污染样板环境。
+建议主 agent 在确认无其他未合并问题后，进入 G2 整体收口和 Git checkpoint。

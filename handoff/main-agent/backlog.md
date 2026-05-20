@@ -28,6 +28,32 @@
 5. 后续出现分页接口后补分页响应契约测试
 6. 逐步补后端集成测试、前端冒烟测试和 CI 前置
 
+## Catalog-only / Jarvis 契约补强项
+
+状态：进入 backlog，不阻塞当前 `批次 6A`。
+
+来源：
+
+- `handoff/main-agent/catalog-only-architecture-suggestion-review.md`
+
+补强项：
+
+1. 文档化 `file_id` 为后续跨模块、Jarvis 查询结果、用户反馈、预览和未来索引回指的主关联键，避免使用 `storage_path` 作为关联键。
+2. 后续补 `display_path / path_hint / masked_storage_path` 或 API 层 `include_sensitive_path=false`，客户环境默认不暴露真实 NAS 路径。
+3. 后续补 `source_modified_at / file_modified_at`，避免把资产记录 `updated_at` 误说成文件本体 mtime。
+4. 后续补 `checksum_status`，区分 `pending / available / failed / skipped`。
+5. 后续补文件能力标记：`catalog_search / preview_available / full_text_search / semantic_search / component_search`。
+6. 后续补 catalog query feedback 模型，记录 query、返回文件、用户选择和反馈，但不得写长期 memory、向量库、搜索库或外部日志。
+7. 未来进入 selective indexing / semantic index 阶段时，再单独设计 `semantic_index_status / semantic_index_version / semantic_indexed_at / embedding_model`。
+8. 前端和客户材料统一文案口径：当前只能称“资产目录助手 / 项目文件资产检索”，不得宣称已具备图纸理解、模型理解、BIM 构件问答或 NAS 全文智能问答。
+
+当前禁止继续保持：
+
+- 不把 DWG/RVT 当普通文本 chunk。
+- 不把 catalog metadata 伪装成正文 evidence。
+- 不写 OpenSearch、Qdrant、长期 memory 或生产级 NAS 向量库。
+- 不让 Jarvis/Hermes 自动执行 DB CRUD、NAS CRUD、审批、删除、修复或扫描。
+
 ## 下一阶段
 
 ## 当前裁决：一期后端数据治理已收口

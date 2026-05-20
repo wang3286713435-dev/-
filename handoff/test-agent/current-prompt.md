@@ -1,34 +1,52 @@
-# 测试 Agent 当前任务：二期批次四验收 - 文件预览与下载权限分离最小闭环
+# 测试 Agent 当前任务：G2-B 既有真实项目治理可用性补丁验收
 
-你是数字化交付平台的测试 agent。工作目录：
+你是数字化交付平台测试 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
-本轮只验收二期批次四，不清理样板项目，不验证模型轻量化。
+本轮只验收：
+
+`G2-B：既有真实项目治理可用性补丁`
+
+注意：
+
+- 仍属于 G2。
+- 不进入 8B / 8C / 9A。
+- 不测试真实 BIM 轻量化。
+- 不测试真实 NAS 增删改查。
+- 不测试正文抽取、selective indexing 或 Agent 自动治理。
+- 105 只是验收样本，不能作为硬编码能力。
 
 ## 0. 必须先阅读
 
-开始前先阅读：
+先阅读：
 
-1. `handoff/main-agent/status.md`
-2. `handoff/main-agent/phase2-batch4-file-preview-download-permission-plan.md`
-3. `handoff/dev-agent/latest-report.md`
-4. `scripts/dev/check-phase2-batch4-file-access.sh`
-5. `scripts/dev/check-file-preview-shell.sh`
+1. `handoff/dev-agent/latest-report.md`
+2. `handoff/dev-agent/current-prompt.md`
+3. `handoff/test-agent/latest-report.md`
+4. `handoff/main-agent/phase2-g2b-existing-project-governance-usability-plan.md`
+5. `handoff/main-agent/phase2-g2-naming-freeze.md`
+6. `handoff/main-agent/hermes-layered-integration-decision.md`
+7. `/Users/vc/Library/Mobile Documents/com~apple~CloudDocs/数字化交付平台/DigitalDeliveryProject/agent-briefings/hermes_capability_handoff.md`
+8. `/Users/vc/Library/Mobile Documents/com~apple~CloudDocs/数字化交付平台/DigitalDeliveryProject/integration-contracts/platform_to_hermes_contract.md`
+9. `/Users/vc/Library/Mobile Documents/com~apple~CloudDocs/数字化交付平台/DigitalDeliveryProject/integration-contracts/missing_evidence_policy.md`
+10. `handoff/main-agent/status.md`
+11. `handoff/main-agent/phase2-current-roadmap.md`
 
 ## 1. 验收目标
 
-验证本轮是否真正做到：
+确认 G2-B 是否真正解决：
 
-`文件详情 -> 判断预览/下载权限 -> 生成短时访问票据 -> 平台受控读取文件 -> 浏览器预览或下载 -> 审计留痕`
+1. 资产总览 Hero 区父子结构不清晰。
+2. 用户不知道各功能有什么用。
+3. 真实项目治理路径不够明确。
+4. Hermes 还不是平台常驻式助手。
+5. 105 只是样本，能力必须适用于其他真实 NAS 项目。
+6. Hermes 接入仍停留在 Catalog Layer，未偷跑 Evidence / Memory / Orchestration。
 
-重点不是“页面看起来有按钮”，而是权限、路径隐藏、只读访问和审计都成立。
+## 2. 必跑命令
 
-## 2. 必测项
-
-### A. 构建与健康
-
-必须执行：
+执行：
 
 ```bash
 cd /Users/vc/Documents/数字化交付平台/backend
@@ -36,98 +54,156 @@ cd /Users/vc/Documents/数字化交付平台/backend
 
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
-curl -fsS http://localhost:8080/actuator/health
+curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-phase2-insert-g2-real-project-onboarding.sh
+bash scripts/dev/check-hermes-jarvis-gateway.sh
+bash scripts/dev/check-phase2-insert-g1-agent-delivery-governance.sh
+bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh
 git diff --check
 ```
 
-### B. 专项脚本
+如果外部 Hermes token 未注入，额外 Hermes 真服务检查失败可记录为环境 P2；本地 Gateway 降级链路必须通过。
 
-必须执行：
+## 3. 页面验收
 
-```bash
-bash scripts/dev/check-phase2-batch4-file-access.sh
-bash scripts/dev/check-file-preview-shell.sh
-```
+### A. 资产总览 Hero 区
 
-专项脚本至少应证明：
+打开：
 
-1. 管理员可预览。
-2. 管理员可下载。
-3. 查看者可预览但不可下载。
-4. 跨项目用户不可预览或下载。
-5. 文件不存在或不可读时错误清晰。
-6. OpenAPI 包含新增接口。
-7. 访问、拒绝、失败动作写审计。
+`http://127.0.0.1:5173/data-steward/assets`
 
-### C. 页面验收
+必须确认：
 
-至少手动打开：
+- Hero 区说明平台目标：真实项目接入、工程主数据准备、交付治理闭环。
+- Hero 区能区分项目状态：
+  - 真实 NAS 项目。
+  - 已登记资产。
+  - 已初始化主数据。
+  - 已进入交付治理。
+  - 待接入 / 待治理。
+- Hero 区提供下一步动作：
+  - 进入真实项目。
+  - 查看接入评估。
+  - 完善工程主数据。
+  - 进入交付治理助手。
+- Hero 区展示风险提醒：
+  - 缺工程主数据。
+  - 缺交付标准。
+  - 待审核。
+  - 缺 checksum。
+  - 低置信度。
+- 文案能说明“这个功能有什么用”。
+- 页面无横向撑爆。
 
-1. `http://localhost:5173/data-steward/assets/1`
-2. `http://localhost:5173/data-steward/catalog`
+### B. 通用真实项目治理路径
 
-验证：
+验证 105 项目，同时再选至少 1 个其他真实 NAS 项目，例如 `100 / 104 / 108 / 109` 中任意一个。
 
-1. 文件详情能看到预览/下载状态。
-2. 可预览文件可以打开预览。
-3. 可下载文件可以触发下载。
-4. 无下载权限时下载按钮不可用或被明确拒绝。
-5. 权限不足、路径失效、文件不可读时文案清楚。
-6. 页面不横向撑爆。
-7. 不直接显示真实 NAS 路径给普通用户。
+必须确认两个项目都能看到通用治理路径：
 
-### D. 回归
+`资产目录 -> 接入评估 -> 工程主数据草案 -> 交付治理助手 -> 缺失项解释 -> 人工确认挂接`
 
-建议执行：
+确认：
 
-```bash
-bash scripts/dev/check-phase2-batch1-readonly-catalog.sh
-bash scripts/dev/check-phase2-batch2-standard-delivery.sh
-bash scripts/dev/check-phase2-batch3-review-rectification-report.sh
-```
+- 当前项目在哪一步可读。
+- 下一步动作可读。
+- 为什么要做这一步可读。
+- 不存在 105 专属硬编码痕迹。
 
-重点确认：
+### C. Hermes 常驻入口
 
-1. 只读目录不回归。
-2. 交付完整率不回归。
-3. 审核整改不回归。
-4. 旧 `Agent preview / permission proof` 不回归。
+必须在以下页面检查 Hermes 常驻入口：
 
-## 3. P0 判定
+- `/data-steward/assets`
+- 任一真实项目工作台。
+- 真实项目接入向导。
+- 交付治理助手。
 
-出现任一项即 P0，不允许收口：
+确认：
 
-1. 无项目权限用户可预览或下载文件。
-2. 只有预览权限的用户可以下载。
-3. 接口或页面暴露真实 NAS 路径给普通用户。
-4. 访问票据绕过权限或过期仍可使用。
-5. 真实 NAS 文件被移动、删除、改名或修改。
-6. 文件不存在却返回成功。
-7. 预览/下载关键动作无审计。
-8. OpenAPI 不可访问或新增接口缺失。
+- 常驻入口可见。
+- 可打开 Hermes 面板。
+- 提问时带当前页面上下文。
+- 在项目页提问时带当前项目上下文。
+- Hermes 能回答或引导：
+  - 这个页面是干什么的？
+  - 我下一步应该做什么？
+  - 当前项目处于哪一步？
+  - 为什么模板只是草案？
+  - 工程主数据缺什么？
+  - 交付治理助手能做什么？
+- Hermes 外部不可用时安全降级，不白屏、不 500。
 
-## 4. P1 判定
+同时确认 Hermes 分层边界：
 
-以下问题为 P1，原则上不建议收口：
+- 当前只做 Catalog Layer。
+- 正文 / DWG / RVT / BIM / 构件类问题仍 Missing Evidence。
+- 没有 `document_evidence_search`。
+- 没有 PDF / Office 正文问答。
+- 没有 DWG / RVT / BIM 内容理解。
+- 没有 Hermes long-term memory 写入 raw path、raw row、catalog row 或文件正文。
+- 没有多 Agent 编排或自动治理。
 
-1. 页面按钮状态和后端权限不一致。
-2. 错误文案无法让用户判断是无权限、路径失效还是格式不支持。
-3. 预览或下载需要用户手动复制底层路径。
-4. PDF/图片原生预览不可用，但后端声明可用。
-5. 下载大文件时后端一次性读入内存。
+### D. smoke 项目分类
 
-## 5. 明确不测
+在“全部”筛选中检查历史 smoke 项目：
 
-本轮不要求：
+- `B6A-SMOKE-*`
+- `PHASE2-*`
+- `PH2*`
+- 包含 `SMOKE`
+- 包含 `TEST`
+- 包含 `测试`
 
-1. 模型轻量化。
-2. 构件级解析。
-3. Office/CAD/BIM 在线转换。
-4. 正文抽取。
-5. 向量库。
-6. Agent 自动审批或自动写库。
-7. 客户生产级权限体系。
-8. 样板项目数据清理。
+必须确认这些项目归类为测试项目，而不是手工/API 或真实项目。
+
+默认真实项目视图不得混入这些项目。
+
+## 4. 禁止项检查
+
+必须确认没有：
+
+- 进入 8B / 8C / 9A。
+- 真实 NAS 增删改查。
+- 文件移动、删除、重命名、上传。
+- 读取 PDF / Office / DWG / RVT / IFC 正文。
+- BIM 构件级解析。
+- selective indexing。
+- 写 Hermes memory。
+- 写 OpenSearch / Qdrant / MinIO documents/chunks。
+- Agent 自动审批。
+- Agent 自动整改。
+- Agent 自动创建真实交付结论。
+- 前端直连 Hermes。
+- 为 105 写死特殊逻辑。
+- 实现或伪实现 Evidence Layer / Memory Layer / Orchestration Layer。
+
+## 5. P0 / P1 / P2 判定
+
+P0：
+
+- 真实项目默认视图混入测试 / 样例项目。
+- 105 之外的真实项目无法看到治理路径。
+- Hermes 常驻入口导致页面白屏或 500。
+- Hermes 前端直连外部服务或泄露 token。
+- 暴露真实 NAS 路径、raw row、SQL、token、cookie、password。
+- Agent 自动写库、自动审批、自动整改或触碰 NAS。
+
+P1：
+
+- Hero 区仍看不懂，用户无法判断各入口作用。
+- 父子结构仍不清楚。
+- Hermes 常驻入口只在单页出现，不覆盖核心页面。
+- Hermes 不携带当前项目 / 当前页面上下文。
+- Hermes 对正文 / BIM / 构件问题未返回 Missing Evidence。
+- smoke 项目仍被归类为手工/API 或真实项目。
+- 发现 105 硬编码。
+
+P2：
+
+- 文案仍可润色，但不影响用户理解。
+- 既有 Vite chunk size warning。
+- 外部 Hermes token 未注入，但本地 Gateway 降级链路可用。
 
 ## 6. 报告要求
 
@@ -137,12 +213,16 @@ bash scripts/dev/check-phase2-batch3-review-rectification-report.sh
 
 报告必须包含：
 
-1. 总结论：通过/不通过。
-2. P0/P1/P2 列表。
-3. 构建与健康检查结果。
-4. 专项脚本结果。
-5. 页面验收结果。
-6. 权限分离验证结果。
-7. NAS 路径隐藏验证结果。
-8. 审计验证结果。
-9. 是否可以收口二期批次四。
+1. 测试结论。
+2. P0 / P1 / P2 列表。
+3. 必跑命令结果。
+4. Hero 区验收结果。
+5. 105 项目治理路径验收结果。
+6. 另一个真实 NAS 项目治理路径验收结果。
+7. Hermes 常驻入口验收结果。
+8. Hermes 当前页面 / 当前项目上下文验收结果。
+9. Hermes 分层边界验收结果。
+10. smoke 项目分类验收结果。
+11. 禁止项检查结果。
+12. 是否建议主 agent 收口 G2-B。
+13. 是否建议整个 G2 收口并进入 Git checkpoint。

@@ -1,10 +1,21 @@
-# 开发 Agent 当前任务：二期批次四 - 文件预览与下载权限分离最小闭环
+# 开发 Agent 当前任务：G2-B 既有真实项目治理可用性补丁
 
-你是数字化交付平台的开发 agent。工作目录：
+你是数字化交付平台二期开发 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
-本轮任务是二期批次四，不是样板项目清理，也不是模型轻量化。
+当前开发方式：独立开发 Codex 会话主导开发。禁止创建子 agent，禁止调用 Claude Code。
+
+本轮是 G2 的收尾补丁：
+
+`G2-B：既有真实项目治理可用性补丁`
+
+命名冻结：
+
+- 仍属于 `G2`。
+- 不新增 `H1 / R1 / A9 / 9A` 等临时命名。
+- 不进入 8B / 8C / 9A。
+- G2-B 通过后，整个 G2 应收口，后续再由用户决定是否恢复 8B / 8C / 9A。
 
 ## 0. 必须先阅读
 
@@ -12,193 +23,257 @@
 
 1. `handoff/main-agent/status.md`
 2. `handoff/main-agent/development-log.md`
-3. `handoff/main-agent/phase2-batch4-file-preview-download-permission-plan.md`
-4. `handoff/dev-agent/latest-report.md`
-5. `handoff/test-agent/latest-report.md`
-6. `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
-7. `frontend/src/modules/data-steward/pages/AssetCatalogPage.vue`
-8. `frontend/src/modules/data-steward/api/dataSteward.ts`
-9. `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/controller/AssetController.java`
-10. `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/AssetApplicationService.java`
-11. `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/repository/BimAssetRepository.java`
-12. `scripts/dev/check-file-preview-shell.sh`
+3. `handoff/main-agent/phase2-current-roadmap.md`
+4. `handoff/main-agent/phase2-g2-naming-freeze.md`
+5. `handoff/main-agent/phase2-insert-g2-real-project-onboarding-masterdata-mapping-plan.md`
+6. `handoff/main-agent/phase2-g2b-existing-project-governance-usability-plan.md`
+7. `handoff/main-agent/hermes-layered-integration-decision.md`
+8. `/Users/vc/Library/Mobile Documents/com~apple~CloudDocs/数字化交付平台/DigitalDeliveryProject/agent-briefings/hermes_capability_handoff.md`
+9. `/Users/vc/Library/Mobile Documents/com~apple~CloudDocs/数字化交付平台/DigitalDeliveryProject/integration-contracts/platform_to_hermes_contract.md`
+10. `/Users/vc/Library/Mobile Documents/com~apple~CloudDocs/数字化交付平台/DigitalDeliveryProject/integration-contracts/gateway_response_contract.md`
+11. `/Users/vc/Library/Mobile Documents/com~apple~CloudDocs/数字化交付平台/DigitalDeliveryProject/integration-contracts/missing_evidence_policy.md`
+12. `handoff/dev-agent/latest-report.md`
+13. `handoff/test-agent/latest-report.md`
 
-## 1. Ralph Loop 要求
+重点检查：
 
-必须使用 Ralph Loop skill 完成本轮任务。
+1. `frontend/src/modules/data-steward/pages/AssetOverviewPage.vue`
+2. `frontend/src/modules/data-steward/components/DataStewardPanel.vue`
+3. `frontend/src/modules/data-steward/components/DataStewardAnswerCard.vue`
+4. `frontend/src/modules/data-steward/api/dataSteward.ts`
+5. `frontend/src/modules/core/layout/AppLayout.vue`
+6. `frontend/src/router/index.ts`
+7. `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/hermes/*`
+8. `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/AssetApplicationService.java`
+9. `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/dto/AssetDtos.java`
 
-在 Claude Code CLI 中：
+如实际文件位置不同，用 `rg` 定位，禁止凭空重复造模块。
 
-1. 先用 `/skills` 确认 `ralph` skill 可见。
-2. 激活/调用 `ralph` skill 后再开始拆 story。
-3. 按 Ralph Loop 的方式持续记录 promise、plan、progress、verify 和最终报告。
-4. 本轮完成承诺固定为：
+## 1. 背景
 
-`<promise>PHASE2_BATCH4_FILE_ACCESS_COMPLETE</promise>`
+G2-A 已通过测试 agent 验收，当前无 P0/P1。
 
-如果 Ralph Loop 需要进度文件，请写入 `.claude/ralph/progress.txt` 或 skill 指定位置。
+G2-A 已解决：
 
-## 2. 本轮目标
+- 真实 NAS 项目分类。
+- 真实项目接入向导。
+- 模板草案 / 待确认语义。
+- 105 项目识别为真实 NAS 项目。
+- Hermes project-level 问答、Missing Evidence 和路径脱敏。
 
-把现有“文件预览状态外壳”升级成最小可用闭环：
+但资产总览 Hero 区和入口结构仍不够清楚，普通员工无法快速理解：
 
-`文件详情 -> 判断预览/下载权限 -> 生成短时访问票据 -> 平台受控读取文件 -> 浏览器预览或下载 -> 审计留痕`
+- 平台现在管理什么。
+- 当前真实项目处于什么状态。
+- 下一步该点哪里。
+- 每个入口有什么用。
 
-必须做到：
+本轮不是新增大功能，而是把既有真实项目治理路径讲清楚、组织清楚、入口清楚。
 
-1. 预览权限和下载权限分离。
-2. 不暴露真实 NAS 路径。
-3. 文件访问必须经过平台鉴权。
-4. 访问、拒绝和失败必须审计。
-5. 只读读取文件，不改、不移、不删 NAS 文件。
+## 2. 核心原则
 
-## 3. 后端必须完成
+105 项目只是验收样本，不允许硬编码。
 
-### A. 权限
+所有能力必须适用于已接管的真实 NAS 项目，包括但不限于：
 
-追加 Flyway 新迁移，不修改旧迁移。
+- `93`
+- `96`
+- `97`
+- `100`
+- `101`
+- `104`
+- `105`
+- `108`
+- `109`
+- `110`
+- `111`
+- `112`
+- `113`
+- `114`
+- `115`
+- `116`
 
-新增权限：
+禁止在前端或后端写死：
 
-- `DATA_STEWARD_FILE_PREVIEW`
-- `DATA_STEWARD_FILE_DOWNLOAD`
+- `105`
+- `503`
+- `启航华居项目`
 
-授权建议：
+如需测试样本，只能在脚本或测试报告中使用，不能作为业务逻辑条件。
 
-- `PROJECT_ADMIN`：预览 + 下载
-- `DELIVERY_ENGINEER`：预览 + 下载
-- `PROJECT_VIEWER`：只预览，不下载
+## 3. 本轮必须完成
 
-这只是本批最小权限证明，不要扩成客户生产级权限体系。
+### Hermes 分层接入边界
 
-### B. 访问策略
+本轮必须按共享文档的四层模型理解 Hermes：
 
-新增或整理统一的文件访问策略，至少校验：
+`Catalog Layer -> Evidence Layer -> Memory Layer -> Orchestration Layer`
 
-1. 用户有项目访问权限。
-2. 文件属于可访问项目。
-3. 文件未删除、未隔离、未停用。
-4. 文件有可解析存储路径。
-5. 用户有对应动作权限：
-   - `PREVIEW`
-   - `DOWNLOAD`
-6. 预览格式为浏览器原生可打开格式时才允许实际预览。
+G2-B 只做 Catalog Layer 强化：
 
-### C. 短时访问票据
+- 常驻入口。
+- 当前项目 / 当前页面上下文。
+- catalog-only 问答。
+- 页面用途和下一步动作解释。
+- Missing Evidence 解释。
 
-新增短时访问票据能力，推荐接口：
+G2-B 不做：
 
-1. `POST /api/data-steward/assets/files/{fileId}/access-tickets`
-   - 请求体：`{"action":"PREVIEW"}` 或 `{"action":"DOWNLOAD"}`
-   - 响应至少包含：`ticketId/accessUrl/expiresAt/action/fileId/fileName/previewable/downloadable/message`
-2. `GET /api/data-steward/assets/file-access/{ticket}`
-   - 校验票据、动作、过期时间、文件状态。
-   - `PREVIEW` 返回 `inline`。
-   - `DOWNLOAD` 返回 `attachment`。
+- Evidence Layer 的 `document_evidence_search`。
+- PDF / Office 正文问答。
+- DWG / RVT / BIM 内容理解。
+- BIM 构件参数检索。
+- Memory Layer 的长期记忆写入。
+- Orchestration Layer 的多 Agent 编排或自动治理。
 
-建议新增表记录票据，字段至少包括：
+如需要做低敏 feedback / related_file_ids 展示，只能作为 UI 预留或复用已有合规接口；不得把 raw path、raw catalog row、文件正文或客户敏感内容写入 Hermes memory。
 
-- `id`
-- `ticket`
-- `file_id`
-- `project_id`
-- `user_id`
-- `action`
-- `status`
-- `expires_at`
-- `used_at`
-- `created_at`
+### A. 资产总览 Hero 区重排
 
-### D. 文件读取
+重排 `/data-steward/assets` 的 Hero / 顶部概览区。
 
-本批只实现最小只读流式读取：
+目标是让用户一眼看懂：
 
-1. 支持 `nas:///Volumes/...` 和 `nas:///tmp/...`。
-2. 正确把 `nas:///Volumes/a.pdf` 解析为 `/Volumes/a.pdf`。
-3. 文件不存在、不可读、路径解析失败要有明确错误码和错误文案。
-4. `minio://`、对象存储、客户现场存储未接入时可返回 `STORAGE_PROVIDER_UNSUPPORTED`，不得假装成功。
-5. 不要一次性把文件读进内存，必须流式响应。
+1. 这里是做真实 NAS 项目数字化交付治理的入口。
+2. 现在有多少真实项目。
+3. 哪些项目已登记资产。
+4. 哪些项目已初始化主数据。
+5. 哪些项目已进入交付治理。
+6. 哪些项目还有风险。
+7. 下一步应该做什么。
 
-### E. 预览格式
+Hero 区建议形成四层结构：
 
-本批实际预览只开放：
+第一层：平台目标
 
-- PDF
-- 图片：`png/jpg/jpeg/webp/gif/bmp/svg`
+- 真实项目接入。
+- 工程主数据准备。
+- 交付治理闭环。
 
-Office、CAD、BIM：
+第二层：项目状态
 
-- 继续返回需要转换或暂不支持。
-- 不做正文抽取。
-- 不做模型轻量化。
-- 不做构件级解析。
+- 真实 NAS 项目。
+- 已登记资产。
+- 已初始化主数据。
+- 已进入交付治理。
+- 待接入 / 待治理。
 
-### F. 审计
+第三层：下一步动作
 
-必须审计：
+- 进入真实项目。
+- 查看接入评估。
+- 完善工程主数据。
+- 进入交付治理助手。
 
-- 创建预览票据
-- 创建下载票据
-- 打开预览
-- 下载文件
-- 权限拒绝
-- 路径失效或文件不可读
+第四层：风险提醒
 
-## 4. 前端必须完成
+- 缺工程主数据。
+- 缺交付标准。
+- 待审核。
+- 缺 checksum。
+- 低置信度。
 
-优先增强现有页面，不新增大模块：
+要求：
 
-1. `/data-steward/assets/{projectId}` 项目资产详情页。
-2. `/data-steward/catalog` 资产目录详情抽屉。
+- 不做营销页。
+- 不做复杂大屏。
+- 不堆技术字段。
+- 入口文案必须说明“这个功能有什么用”。
+- 父子结构必须比现在清晰。
+- 页面不能横向撑爆。
 
-页面要求：
+### B. 真实项目治理路径
 
-1. 清楚展示是否可预览、是否可下载。
-2. `打开预览` 只有在有预览权限且格式支持时可点。
-3. `下载文件` 只有在有下载权限时可点。
-4. 权限不足、路径失效、文件不可读时展示可理解原因。
-5. 不展示真实 NAS 路径给普通用户。
-6. 页面不能横向撑爆。
+在资产总览和项目卡片 / 表格中强化通用治理路径：
 
-实现方式可用访问票据 `accessUrl` 打开预览/下载，避免把 Bearer token 塞进 URL。
+`资产目录 -> 接入评估 -> 工程主数据草案 -> 交付治理助手 -> 缺失项解释 -> 人工确认挂接`
 
-## 5. 脚本必须完成
+对每个真实 NAS 项目，用户应能看懂：
 
-新增：
+- 当前在哪一步。
+- 下一步是什么。
+- 为什么要做。
+- 缺什么。
 
-`scripts/dev/check-phase2-batch4-file-access.sh`
+不能只为 105 展示。至少另一个真实 NAS 项目也必须看到同样结构。
 
-脚本至少覆盖：
+### C. Hermes 常驻入口 MVP
 
-1. 创建本机临时小文件并登记为 `nas:///tmp/...` 文件资源。
-2. 管理员可创建预览票据并读取内容。
-3. 管理员可创建下载票据并读取内容。
-4. 查看者只可预览，不可下载。
-5. 跨项目用户不能创建票据。
-6. 文件不存在时返回清晰错误。
-7. 预览、下载、拒绝、失败动作能查到审计。
-8. OpenAPI 包含新增接口。
-9. 旧 `scripts/dev/check-file-preview-shell.sh` 不回归。
-10. 不修改真实 NAS `/Volumes/zyzn/卓羽智能项目`。
+Hermes 从局部页面组件升级为平台常驻入口 MVP。
 
-## 6. 明确禁止事项
+要求：
+
+- 在核心工作区提供常驻入口，例如右下角浮窗或全局按钮。
+- 至少覆盖：
+  - 资产总览。
+  - 项目工作台。
+  - 真实项目接入向导。
+  - 交付治理助手。
+- 常驻入口可打开 Hermes 面板。
+- Hermes 请求仍走平台后端 Gateway。
+- 前端不直连 Hermes。
+
+Hermes 提问时必须带当前上下文：
+
+- 当前路由。
+- 当前项目 ID。
+- 当前项目编码 / 名称。
+- 当前页面类型。
+
+Hermes 至少能回答或引导：
+
+- 这个页面是干什么的？
+- 我下一步应该做什么？
+- 当前项目处于哪一步？
+- 为什么模板只是草案？
+- 工程主数据缺什么？
+- 交付治理助手能做什么？
+- 哪些资料还缺证据？
+
+如果 Hermes 外部服务不可用，必须安全降级，不白屏、不 500。
+
+### D. 修正历史 smoke 项目分类
+
+测试报告指出：
+
+- “全部”筛选中历史 `B6A-SMOKE-*` 项目仍显示为“手工/API”而不是“测试”分类。
+
+本轮应修复分类规则：
+
+- `B6A-SMOKE-*`
+- `PHASE2-*`
+- `PH2*`
+- `SMOKE`
+- `TEST`
+- `测试`
+
+这类项目在全部视图中应归为测试项目。
+
+默认真实项目视图不得混入这些项目。
+
+## 4. 明确禁止
 
 本轮禁止：
 
-1. 不清理样板项目，不重置样板项目，不隐藏 `PH2B2-*` 测试命名。
-2. 不做模型轻量化。
-3. 不做构件级解析。
-4. 不做 Office/CAD/BIM 转换。
-5. 不做正文抽取、向量库或搜索引擎写入。
-6. 不做 Agent 自动审批、自动整改、自动写库。
-7. 不移动、不删除、不改名、不修改真实 NAS 文件。
-8. 不改 `docs/**`。
-9. 不创建子 agent。
-10. 不大改页面结构或权限体系。
+1. 修改 `docs/**`。
+2. 进入 8B / 8C / 9A。
+3. 真实 NAS 增删改查。
+4. 文件移动、删除、重命名、上传。
+5. 读取 PDF / Office / DWG / RVT / IFC 正文。
+6. BIM 构件级解析。
+7. selective indexing。
+8. 写 Hermes memory。
+9. 写 OpenSearch / Qdrant / MinIO documents/chunks。
+10. Agent 自动审批。
+11. Agent 自动整改。
+12. Agent 自动创建真实交付结论。
+13. 前端直连 Hermes。
+14. 为 105 写死特殊逻辑。
+15. 实现或伪实现 Evidence Layer / Memory Layer / Orchestration Layer。
 
-## 7. 自测要求
+## 5. 必做验证
 
-完成后至少执行并记录：
+至少执行：
 
 ```bash
 cd /Users/vc/Documents/数字化交付平台/backend
@@ -206,21 +281,44 @@ cd /Users/vc/Documents/数字化交付平台/backend
 
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
-curl -fsS http://localhost:8080/actuator/health
-bash scripts/dev/check-phase2-batch4-file-access.sh
-bash scripts/dev/check-file-preview-shell.sh
+curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-phase2-insert-g2-real-project-onboarding.sh
+bash scripts/dev/check-hermes-jarvis-gateway.sh
+bash scripts/dev/check-phase2-insert-g1-agent-delivery-governance.sh
+bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh
 git diff --check
 ```
 
-建议回归：
+如修改了 G2 脚本，应增强它覆盖：
 
-```bash
-bash scripts/dev/check-phase2-batch1-readonly-catalog.sh
-bash scripts/dev/check-phase2-batch2-standard-delivery.sh
-bash scripts/dev/check-phase2-batch3-review-rectification-report.sh
-```
+- Hero 区核心文案或 API 支撑字段。
+- smoke 项目分类。
+- 至少两个真实 NAS 项目治理入口。
+- Hermes 常驻入口对应的前端结构或 API 上下文。
 
-## 8. 报告要求
+## 6. 手动回归
+
+至少用浏览器验证：
+
+1. `/data-steward/assets`
+   - Hero 区父子结构清晰。
+   - 用户能看懂平台目标、项目状态、下一步动作和风险提醒。
+   - 默认真实项目视图不混入测试项目。
+2. 105 项目
+   - 可以作为样本进入治理路径。
+   - 不出现 105 专属硬编码痕迹。
+3. 另一个真实 NAS 项目
+   - 也能看到同样的治理路径和入口。
+4. Hermes 常驻入口
+   - 资产总览可打开。
+   - 项目工作台可打开。
+   - 接入向导可打开。
+   - 交付治理助手可打开。
+   - 能带当前项目和页面上下文。
+5. smoke 项目分类
+   - “全部”视图里 `B6A-SMOKE-*` 归为测试项目。
+
+## 7. 报告要求
 
 完成后写入：
 
@@ -228,26 +326,35 @@ bash scripts/dev/check-phase2-batch3-review-rectification-report.sh
 
 报告必须包含：
 
-1. Ralph Loop 使用情况。
-2. 根因/缺口分析。
-3. 后端改动点。
-4. 前端改动点。
-5. 新增接口与权限。
-6. 预览和下载权限如何分离。
-7. 如何保证不暴露 NAS 路径。
-8. 如何保证只读、不修改真实 NAS。
-9. 自测结果。
-10. 已知风险或未做项。
+1. 修改文件。
+2. Hero 区如何重排。
+3. 父子结构如何表达。
+4. 通用真实项目治理路径如何体现。
+5. 105 是否只是样本，有无硬编码。
+6. 另一个真实 NAS 项目验证结果。
+7. Hermes 常驻入口实现方式。
+8. Hermes 如何携带当前项目 / 当前页面上下文。
+9. 本轮如何保持 Catalog Layer 边界。
+10. 是否触碰 Evidence / Memory / Orchestration，答案必须为否。
+11. smoke 项目分类修复。
+12. 自测命令结果。
+13. 禁止项确认。
+14. 未完成事项。
 
-## 9. 完成定义
+## 8. 完成定义
 
 只有同时满足以下条件，才能标记完成：
 
-1. `<promise>PHASE2_BATCH4_FILE_ACCESS_COMPLETE</promise>` 已兑现。
-2. 预览/下载通过平台受控票据访问。
-3. 预览权限和下载权限可被脚本证明分离。
-4. 无权限、跨项目、路径失效均有清晰错误。
-5. 关键访问动作有审计。
-6. 前后端构建通过。
-7. 专项脚本和旧预览外壳脚本通过。
-8. `handoff/dev-agent/latest-report.md` 已写。
+- 资产总览 Hero 区看得懂。
+- 真实项目治理路径对所有真实 NAS 项目通用。
+- 105 只是样本，没有被硬编码。
+- 至少另一个真实项目也可走同样入口。
+- Hermes 常驻入口可用。
+- Hermes 不直连、不写库、不自动治理。
+- smoke 项目分类修复。
+- 构建和回归脚本通过。
+- `handoff/dev-agent/latest-report.md` 已写。
+
+完成承诺：
+
+`<promise>PHASE2_G2B_EXISTING_PROJECT_GOVERNANCE_USABILITY_COMPLETE</promise>`

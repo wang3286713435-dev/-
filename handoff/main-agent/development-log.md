@@ -1,5 +1,16 @@
 # 主 Agent 开发监控日志
 
+## 2026-05-18：文件管理页目录树超时修复任务收束
+
+- 用户反馈项目详情 `文件管理` 中目录结构与右侧文件对应关系异常，并出现 `timeout of 10000ms exceeded`。
+- 主 agent 复核代码后确认根因方向：`CatalogApplicationService.listCatalogDirectories(...)` 先从 `data_file_resources.logical_path` 聚合目录，随后又调用 `mergePhysicalDirectories(...)`；该方法会基于 NAS 路径映射同步执行 `File.listFiles(...)` 递归遍历真实 NAS。真实项目 `506` 下，右侧 `catalog/files` 查询很快，而左侧 `catalog/directories` 被同步物理目录扫描拖超时。
+- 同时确认目录树和文件表存在口径风险：文件表按数据库 `logical_path` 的目录表达式过滤，但目录树混入真实物理目录后，左侧节点可能来自真实 NAS 绝对路径，右侧表按资产元数据过滤，导致点击目录后不对应。
+- 本轮修复范围已冻结为 P0/P1 修复，不进入二期 6B，不做新的目录同步系统，不修改 `docs/**`，不引入真实 NAS 写操作，不通过调大前端全局 timeout 掩盖问题。
+- 后端修复方向：`GET /api/data-steward/catalog/directories` 默认只返回数据库已登记文件资产推导出的目录；保留项目权限校验；目录 `directoryPath` 与 `catalog/files` 的 `directoryPath` 查询使用同一套 `logical_path` 口径；默认请求链路不再同步扫真实 NAS。
+- 前端兜底方向：目录加载失败时给中文业务提示，右侧文件表继续可用；不删除文件表分页、更多菜单、预览/下载、详情、治理、补 checksum 等既有操作。
+- 开发 agent prompt 已写入 `handoff/dev-agent/current-prompt.md`，完成承诺为 `<promise>FILE_BROWSER_DIRECTORY_TIMEOUT_FIXED</promise>`，并要求 Claude Code 使用 Ralph Loop。
+- 测试 agent 极短回归 prompt 已写入 `handoff/test-agent/current-prompt.md`，重点复验项目 `506` 的目录接口耗时、目录/文件对应关系、禁止真实路径泄露和文件表操作不回归。
+
 ## 2026-05-13：一期文件预览安全外壳完成
 
 - 用户确认继续向后开发，但要求不要拓展太多功能，先完整一期主线。
@@ -1212,3 +1223,1303 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
 - 当前裁决：
   - 主 agent 认为测试报告中的 P0 已修复。
   - 二期批次四仍不直接收口，需测试 agent 做正式复验后再关闭。
+
+## 2026-05-15：暂停继续扩功能，转入导航与项目工作台重组规划
+
+- 用户最新反馈：
+  - 当前平台前端对各项目的管理和跳转混乱。
+  - 首页不是最常用工作入口。
+  - 文件资产、工程主数据、工作中心割裂。
+  - 项目详情页没有形成真正项目工作台。
+  - 顶部全局“当前项目”切换器造成“全局项目”和“页面项目”并存的困惑。
+  - 项目详情里的文件资产应改成类似文件管理器的左目录、右文件结构。
+- 主 agent 已停止继续推进新业务功能，不启动开发 agent。
+- 已阅读并确认当前结构：
+  - `frontend/src/router/index.ts`：`/`、登录后已认证跳转、兜底路由都指向 `/home`。
+  - `frontend/src/modules/core/layout/AppLayout.vue`：顶部存在全局“当前项目”下拉，切换后跳回 `/home`。
+  - `backend/delivery-core/src/main/java/com/zhuoyu/delivery/core/user/application/CurrentUserApplicationService.java`：工程主数据和工作中心作为全局菜单返回。
+  - `AssetProjectDetailPage.vue`：当前是项目资产详情，文件资产为平铺表格。
+  - `AssetCatalogPage.vue`：已有可复用的目录浏览能力，包括 `fetchCatalogDirectories` 和 `fetchCatalogFiles`。
+  - 主数据和工作中心页面主要依赖 `authStore.currentProjectId`，不是路由中的 `projectId`。
+- 根因判断：
+  - 平台当前同时存在 token 当前项目、顶部全局项目切换器、项目详情路由和全局主数据/工作中心菜单。
+  - 用户进入项目详情后，后续主数据和工作中心仍像全局页面，缺少“当前项目工作台”的壳层。
+  - 文件资产页没有复用已完成的目录浏览能力，导致大项目下仍像平铺资产表。
+- 改造范围收束：
+  - 默认入口改为 `/data-steward/assets`。
+  - `/data-steward/assets/:projectId` 升级为项目工作台。
+  - 项目工作台顶部提供工程主数据和工作中心入口。
+  - 新增项目内路由别名，保留旧路由兼容。
+  - 进入项目内页面时同步 route `projectId` 与 token currentProject，避免 `CORE_PROJECT_CONTEXT_MISMATCH`。
+  - 文件资产区复用 catalog 目录能力，改为左目录右文件。
+  - 顶部全局项目切换器移除或隐藏。
+  - 不修改 `docs/**`，不改数据库迁移，不碰真实 NAS 文件，不做模型轻量化、正文抽取、向量库或 Agent 自动动作。
+- 已写入交接文件：
+  - 规划文件：`handoff/main-agent/navigation-project-workbench-reorg-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+- 当前裁决：
+  - 可以在用户确认后启动开发 agent 执行本轮“项目壳层改造”。
+  - 本轮完成后必须让测试 agent 做专项回归，重点验收默认入口、项目工作台、目录文件浏览、项目 A/B 上下文切换和既有批次一至四能力不回归。
+
+## 2026-05-15：导航与项目工作台重组已完成主 agent 审计，待测试 agent 复验
+
+- 执行方式：
+  - 已通过 Claude Code 开发 agent 执行本轮前端改造，要求使用 Ralph Loop，未创建子 agent。
+  - 第一次 Claude 会话因尝试长时间整文件重写 `AssetProjectDetailPage.vue` 且迟迟未落盘，被主 agent 中断。
+  - 第二次改为续跑 prompt，以“小组件 + 小补丁”方式完成，便于追踪和审计。
+- 已落地范围：
+  - `/`、登录成功、兜底路由都进入 `/data-steward/assets`。
+  - `/data-steward/assets/:projectId` 已升级为项目工作台。
+  - 项目工作台顶部增加项目内导航：文件资产、工程主数据、工作中心。
+  - 新增项目内路由：主数据三页、文档交付、图纸交付、整改闭环、项目驾驶舱。
+  - 顶部全局“当前项目”切换器已移除；全局侧边栏隐藏旧 `首页`、`工程主数据`、`工作中心` 顶级入口。
+  - 文件资产区改为左目录树、右文件表，复用 catalog 目录/文件 API。
+- 主 agent 审计补丁：
+  - 修复登录页仍跳 `/home` 的遗漏。
+  - 增加路由守卫，进入项目内页面前先同步 route `projectId` 到当前项目，避免主数据/工作中心页面抢先使用旧项目上下文。
+  - 修复 `AssetProjectFileBrowser` 首屏只加载目录、不加载第一页文件的问题。
+  - 增加目录/文件请求序号保护，快速切换项目或筛选时旧响应不会覆盖新状态。
+  - 保留 `?qualityIssue=` 进入项目详情后的质量问题筛选能力。
+  - 治理保存、checksum 成功后刷新目录式文件表，不再刷新旧的隐藏平铺表。
+  - 清理 `AssetProjectDetailPage.vue` 中已废弃的旧平铺文件表状态，避免后续维护误判。
+- 修改文件：
+  - `.claude/ralph/progress.txt`
+  - `frontend/src/modules/auth/pages/LoginPage.vue`
+  - `frontend/src/modules/core/layout/AppLayout.vue`
+  - `frontend/src/modules/core/composables/useProjectWorkspaceContext.ts`
+  - `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
+  - `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
+  - `frontend/src/router/index.ts`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/dev-agent/latest-report.md`
+  - `handoff/dev-agent/project-workbench-continuation-prompt.md`
+  - `handoff/main-agent/navigation-project-workbench-reorg-plan.md`
+  - `handoff/test-agent/current-prompt.md`
+- 边界确认：
+  - 未修改 `docs/**`。
+  - 未修改后端代码和数据库迁移。
+  - 未写入、移动、删除或改名真实 NAS 文件。
+  - 未扩展模型轻量化、正文抽取、向量库或 Agent 自动动作。
+- 验证结果：
+  - `corepack pnpm --dir frontend build`：通过，仅既有 Vite chunk size warning。
+  - `curl -fsS http://localhost:8080/actuator/health`：`{"status":"UP"}`。
+  - `git diff --check`：通过。
+- 当前裁决：
+  - 主 agent 审计通过。
+  - 不能直接收口，建议测试 agent 按 `handoff/test-agent/current-prompt.md` 做专项复验。
+  - 重点验收默认入口、项目工作台、左目录右文件、项目 A/B 上下文切换、批次四路径隐藏不回归。
+
+## 2026-05-15：导航与项目工作台测试报告 P1/P2 返修完成，待短回归
+
+- 测试 agent 最新报告结论：
+  - 当前无 P0。
+  - 存在 1 个 P1：左侧全局菜单仍显示 `工程主数据 / 工作中心`，项目内外导航边界仍有混淆。
+  - 存在 1 个 P2：项目工作台顶栏没有明确展示负责人。
+- P1 修复：
+  - 修复文件：`frontend/src/modules/core/layout/AppLayout.vue`。
+  - 修复方式：侧边栏过滤从单纯路径精确匹配升级为 `菜单 key + 路径前缀` 双重过滤。
+  - 当前效果：全局侧边栏不再显示 `首页 / 工程主数据 / 工作中心` 这些会造成混淆的顶级入口，保留 `数据管家` 作为平台级主入口；工程主数据和工作中心继续通过项目工作台顶栏进入。
+  - 兼容性：旧 `/master-data/*`、`/work/*` 路由仍保留，访问时仍会兼容跳转到当前项目内页面。
+- P2 修复：
+  - 修复文件：
+    - `backend/delivery-core/src/main/java/com/zhuoyu/delivery/core/project/domain/AccessibleProject.java`
+    - `backend/delivery-core/src/main/java/com/zhuoyu/delivery/core/project/dto/ProjectSummaryResponse.java`
+    - `backend/delivery-core/src/main/java/com/zhuoyu/delivery/core/project/application/ProjectAccessApplicationService.java`
+    - `backend/delivery-core/src/main/java/com/zhuoyu/delivery/core/project/repository/ProjectAccessRepository.java`
+    - `frontend/src/modules/core/api/types.ts`
+    - `frontend/src/modules/core/components/ProjectWorkspaceNav.vue`
+  - 修复方式：当前用户项目摘要增加 `projectManagerName` 字段，项目工作台顶栏显示 `负责人：xxx`；为空时显示 `负责人：待维护`。
+- 主 agent 验证结果：
+  - 前端构建通过，仅有既有 Vite chunk size warning。
+  - 后端构建通过，8 个模块 SUCCESS。
+  - `git diff --check` 通过。
+  - 临时 `18080` 后端接口验证通过：`/api/core/users/me` 返回项目摘要包含 `projectManagerName`，按前端过滤逻辑后侧边栏只剩 `数据管家`；临时后端已停止。
+- 当前裁决：
+  - 主 agent 认为测试报告中的 P1/P2 已修复。
+  - 不直接收口，建议测试 agent 做极短回归：重点看左侧菜单是否只保留平台级入口、项目工作台顶栏是否显示负责人、项目内工程主数据/工作中心导航是否不回归。
+
+## 2026-05-15：阶段二前端批次一转入数据管家资产驾驶舱
+
+- 用户重新明确阶段二前端重点：
+  - 当前前端仍混乱，需要优先围绕数据管家做项目级数据可视化。
+  - 已参考 RealBIM 数据管家的文件管理、模型集成、事项列表、任务列表、导出列表、管理对象、文件服务和智慧大屏形态。
+  - 本批次不做二期深水区能力，不做真实 NAS 写操作，不做模型轻量化、构件级解析、正文抽取、向量库或 agent 自动动作。
+- 本轮落地范围：
+  - `/data-steward/assets/:projectId` 默认进入“资产驾驶舱”，第一屏展示项目资产统计和治理风险。
+  - 驾驶舱接入文件总数、模型数、图纸数、文档数、总容量、路径映射、文件类型分布、专业分布、最近扫描、最近入库、治理动态。
+  - 文件管理区继续复刻 RealBIM 核心结构：左目录树、面包屑、右文件表、高级搜索、文件 ID、行内“更多”操作。
+  - 大项目目录树默认只展开根和一级目录，避免真实 NAS 项目一次性展开过多节点导致卡顿。
+  - 资产项目路由增加 `assetProjectContext`，避免资产项目 ID 被当成核心项目 ID 同步，修复 `/data-steward/assets/506` 这类真实 NAS 项目上下文混淆。
+- 后端最小修复：
+  - `AssetQualityRepository` 修复 SQL 文本拼接问题，避免 `:projectId` 与 `HAVING` 粘连。
+  - 质量概览接口已恢复：`/api/data-steward/assets/quality/overview?projectId=506` 返回 `200 OK`，当前真实数据 `riskSignalCount=5923`、`missingChecksumCount=5912`。
+- 验证结果：
+  - `corepack pnpm --dir frontend build` 通过，仅既有 Vite chunk size warning。
+  - `cd backend && ./mvnw -pl delivery-app -am -DskipTests package` 通过，8 个模块 SUCCESS。
+  - `curl -fsS http://localhost:8080/actuator/health` 返回 `{"status":"UP"}`。
+  - `git diff --check` 通过。
+  - Chrome 页面验证：`http://localhost:5173/data-steward/assets/506` 可显示真实项目 `93 中建八局国交酒店项目`，驾驶舱显示 5,912 个文件、588 个模型、5,324 张图纸、72.57 GB、5,912 个缺 checksum 风险；文件管理页显示目录树和文件表。
+- 当前裁决：
+  - 主 agent 认为阶段二前端批次一核心实现已完成，可以进入测试 agent 专项回归。
+  - 测试重点：驾驶舱真实统计、风险卡片跳转、文件管理目录筛选、更多操作不丢失、大项目不卡死、页面不横向撑爆。
+
+## 2026-05-15：文件管理目录树可用性问题已修复
+
+- 用户反馈：
+  - 文件管理左侧目录结构下方有大量留白，但目录内容被裁切。
+  - 空文件夹也必须保留在目录结构中，保证目录结构真实。
+  - 需要增加双击文件夹进入目录的交互。
+  - 新建文件夹按钮不可用，需要明确原因。
+  - 左侧 tab/menu 区背景为黑色、字体也发黑，导致不可见。
+- 修复范围：
+  - `DirectoryTreePanel.vue`：目录面板改为自适应高度布局，滚动发生在目录面板内部，不再出现下方留白但内容被截断。
+  - `DirectoryTreeNodeItem.vue`、`AssetProjectFileBrowser.vue`：目录节点支持双击进入，同时保留单击选择目录。
+  - `CatalogApplicationService.java`：目录接口在原有文件元数据目录基础上，只读合并项目路径映射下的真实物理目录，保留 0 文件空目录；增加项目权限校验、最大目录数和最大深度保护。
+  - `directoryTree.ts`：避免项目根目录重复展示。
+  - `AssetProjectFileBrowser.vue`：新建、上传、导入等按钮增加只读阶段说明；面包屑只显示项目内相对目录，不展示本机挂载路径分段。
+  - `index.css`：补齐深色侧边栏菜单文字、图标、hover 和选中态颜色。
+- 产品边界裁决：
+  - 当前创建不了文件夹是正确行为：一期和本批次仍是 NAS 只读接管，不向真实 NAS 写入、移动或删除文件夹。
+  - 新建文件夹、上传、移动、删除、更新版本应留到后续“受控写操作”阶段，并且必须有审批、审计和回滚策略。
+- 验证结果：
+  - 前端构建通过，仅既有 Vite chunk size warning。
+  - 后端构建通过，8 个模块 SUCCESS。
+  - `curl -fsS http://localhost:8080/actuator/health` 返回 `{"status":"UP"}`。
+  - `git diff --check` 通过。
+  - `/api/data-steward/catalog/directories?projectId=506` 返回 673 个目录，其中 88 个为 0 文件目录。
+  - Chrome 页面验证：项目 506 文件管理页可见空目录 `00_工作进度`，双击可进入，右侧显示空目录状态；左侧菜单文字可读，目录树未再裁切。
+- 当前裁决：
+  - 主 agent 认为本轮可用性修复已完成。
+  - 建议测试 agent 做极短回归：目录树高度、空目录展示、双击进入、禁用按钮提示、侧边栏可读性。
+
+## 2026-05-15：文件管理左右缩放、checksum 入口与重复操作收口
+
+- 用户反馈：
+  - 文件管理左侧目录树需要像文件管理器一样自由调整宽度，右侧文件表要跟随缩放，不能出现点击区域或表格布局错位。
+  - 当前大量文件缺 checksum，需要明确怎么改善。
+  - 文件行“更多”里的 `预览` 和 `受控访问` 打开的页面相同，容易造成用户困惑。
+- 主 agent 裁决：
+  - 左右拖拽属于阶段二数据管家可用性主线，可以当前批次处理。
+  - checksum 不应一次性强推全量 10TB 补算，先在 `缺 checksum` 筛选场景提供受控批量补算入口，单次最多 500 个任务，由用户确认后执行。
+  - `受控访问` 与 `预览` 入口重复，应合并为一个更清楚的 `预览/下载`，实际受控打开/下载继续留在弹窗内。
+- 开发改动：
+  - `AssetProjectFileBrowser.vue` 增加目录树/文件表之间的可拖拽分隔条，支持拖拽、键盘调整、双击恢复默认，并在宽度变化后触发表格重新布局。
+  - `AssetProjectFileBrowser.vue` 在 `缺 checksum` 筛选下展示说明和“创建本项目补算任务”入口。
+  - `dataSteward.ts` 增加 `createBatchChecksumJobs(projectId)`，复用既有批量 checksum 后端接口。
+  - `AssetProjectDetailPage.vue` 增加批量 checksum 二次确认和执行逻辑，确认文案明确“不修改、不移动、不删除 NAS 文件”。
+  - 文件行更多菜单删除重复 `受控访问`，将 `预览` 调整为 `预览/下载`。
+- 验证结果：
+  - `corepack pnpm --dir frontend build` 通过，仅既有 Vite chunk size warning。
+  - `curl -fsS http://localhost:8080/actuator/health` 返回 `{"status":"UP"}`。
+  - `git diff --check` 通过。
+  - Chrome 手动确认：项目 506 文件管理页可拖动目录树宽度，右侧表格同步收缩；更多菜单不再出现重复的 `受控访问`。
+- 风险与边界：
+  - 未在真实 NAS 项目上点击批量创建 checksum 任务，避免误触发大量后台读取任务。
+  - 本轮没有新增统一任务中心，也没有改后端 checksum 算法。
+- 当前裁决：
+  - 主 agent 认为用户提出的三项优化已完成。
+  - 建议测试 agent 做短回归：拖拽目录树、缺 checksum 筛选入口、更多菜单去重、预览/详情/治理/补 checksum 不回归。
+
+## 2026-05-15：二期主视角切换与路线文档完成
+
+- 用户要求：
+  - 一期已经收口，后端数据库已经完成。
+  - 当前 docs 多数仍以一期为主，需要减少上下文占用。
+  - 在围绕 PRD 和现有文档的前提下，把项目主视角切换到二期，并基于当前二期开发进度规划后续路线。
+- 本轮已盘点：
+  - `docs/07-complete-delivery-prd.md`
+  - `docs/08-acceptance-and-agent-integration.md`
+  - `docs/03-architecture-and-system-design.md`
+  - `docs/README.md`
+  - `handoff/main-agent/status.md`
+  - `handoff/main-agent/decisions.md`
+  - 二期批次一到四相关计划和收口文件
+  - 最新开发报告和测试报告
+  - 前端模块、后端模块、Flyway 迁移和验收脚本清单
+- 当前判断：
+  - 一期后端数据库、NAS 资产接管、稳定读模型、权限审计和删除隔离能力已收口。
+  - 二期批次一到三已收口。
+  - 项目工作台导航重组、数据管家资产驾驶舱、文件管理重做和三项优化已形成当前二期前端基线。
+  - 二期批次四文件访问安全闭环仍应作为下一道客户交付安全闸门重新复验和正式收口。
+- 新增文档：
+  - `docs/10-phase2-development-roadmap.md`
+  - `handoff/main-agent/phase2-current-roadmap.md`
+- 更新文档：
+  - `docs/README.md` 增加二期路线入口和上下文减负建议。
+  - `handoff/main-agent/status.md` 增加当前主视角和下一步路线。
+  - `handoff/main-agent/decisions.md` 增加二期主视角切换裁决。
+- 后续推荐路线：
+  1. 数据管家前端重做批次一收口。
+  2. 批次 4R：文件访问安全闭环复验与收口。
+  3. 批次 5：数据管家客户版模块补齐。
+  4. 批次 6：客户项目初始化与标准模板化。
+  5. 批次 7：文件预览转换与批量交付增强。
+  6. 批次 8：BIM 轻量化适配层。
+  7. 批次 9：构件级解析、搜索与交付联动。
+  8. 批次 10：客户部署、运维和交付文档包。
+- 自检：
+  - 新增和修改的路线文档未发现 `TODO/TBD/待定/占位`。
+  - 本轮新增和修改的路线文档 `git diff --check` 通过。
+  - 仓库整体 `git diff --check` 当前仍会报告 `handoff/test-agent/latest-report.md` 中测试 agent 写入的行尾空格；该文件不是本轮规划文档修改范围，暂未改动。
+
+## 2026-05-15：Hermes / 贾维斯耦合文档已纳入二期路线
+
+- 用户提供：
+  - `/Users/vc/Downloads/HERMES_DATA_STEWARD_PLATFORM_COUPLING_GUIDE.md`
+- 文档结论：
+  - 当前可以开始在平台内嵌 Hermes 数据管家，但第一阶段只能做 `catalog-only / read-only / permission-aware / Missing Evidence / operation plan draft`。
+  - 当前不能做 Agent DB CRUD、NAS CRUD、真实正文问答、全量 BIM 解析、OpenSearch/Qdrant/MinIO 写入、自动审批或 production rollout。
+  - 平台前端不能直连 Hermes；必须通过平台后端 Agent Gateway。
+  - 平台负责权限证明，Hermes 负责遵守权限。
+- 当前代码基础复核：
+  - 后端已有 `AgentGatewayController`、`AgentGatewayApplicationService`、`AgentPermissionProofService`、`AgentAssetContextResolver`、`HermesAgentClient` 和 `HermesGatewayProperties`。
+  - 后端已有 `/api/agent/hermes/capabilities` 与 `/api/agent/hermes/chat`。
+  - 前端已有 `DataStewardPanel`、`DataStewardAnswerCard`、`EvidenceModeBadge`、`MissingEvidenceNotice`、`OperationPlanPreview`。
+  - 项目详情和资产目录已有 `问数据管家` 入口。
+- 主 agent 裁决：
+  - 用户可见产品名收束为 `贾维斯数据管家`，技术内核仍称 Hermes。
+  - 新增近期优先批次 `批次 5A：贾维斯数据管家内嵌 v0`。
+  - 批次 5A 位置：在文件访问安全闭环 `4R` 之后，在数据管家客户版模块补齐 `5B` 之前。
+  - 批次 5A 重点：产品化命名、前端亮点入口、平台侧只读审计、Hermes 不可用 fail closed、专项脚本、安全验收。
+- 新增文档：
+  - `handoff/main-agent/hermes-jarvis-coupling-roadmap.md`
+- 更新文档：
+  - `docs/10-phase2-development-roadmap.md`
+  - `handoff/main-agent/phase2-current-roadmap.md`
+  - `handoff/main-agent/status.md`
+  - `handoff/main-agent/decisions.md`
+  - `docs/README.md`
+
+## 2026-05-18：二期批次 4R 文件访问安全闭环由 Claude Code 完成并通过主 agent 审计
+
+- 用户要求：
+  - 写完批次 4R 开发 agent prompt 后，调用项目目录下的 Claude Code 完成开发。
+  - Claude Code 必须按 Ralph Loop 执行，主 agent 负责实时监控、防偏航和审计。
+- 执行情况：
+  - 已写入并执行 `handoff/dev-agent/current-prompt.md`。
+  - 已通过 `claude --permission-mode bypassPermissions` 启动 Claude Code。
+  - 已要求 Claude Code 读取 prompt 而不是把 prompt 当 shell 执行，并在早期路径误用后纠偏。
+  - Ralph 进度已写入 `.claude/ralph/progress.txt`。
+- 本轮实际改动：
+  - `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
+    - 文件详情抽屉的“存储路径”从硬编码隐藏改为条件显示。
+    - 后端返回路径时展示路径；后端不返回路径时展示“路径已隐藏，请使用平台受控预览或下载入口”。
+  - `scripts/dev/check-phase2-batch4-file-access.sh`
+    - 新增交付工程师可预览和下载断言。
+    - 新增 catalog 文件列表不暴露 NAS 路径断言。
+    - 新增预览票据不返回下载响应断言。
+  - `handoff/dev-agent/latest-report.md`
+    - 已写入本轮开发报告和完成承诺。
+- Claude Code 验证结果：
+  - 前端构建通过。
+  - 后端 Maven 构建通过，8 个模块 `SUCCESS`。
+  - 临时后端 `http://localhost:18080` 健康检查 `UP`。
+  - `scripts/dev/check-phase2-batch4-file-access.sh`：`18/18 PASS`。
+  - `scripts/dev/check-file-preview-shell.sh`：通过。
+  - `scripts/dev/check-phase2-batch1-readonly-catalog.sh`：`25/25 PASS`。
+  - `scripts/dev/check-phase2-batch2-standard-delivery.sh`：`38/38 PASS`。
+  - `scripts/dev/check-phase2-batch3-review-rectification-report.sh`：`52/52 PASS`。
+- 主 agent 审计：
+  - 已复核 `handoff/dev-agent/latest-report.md` 和 `.claude/ralph/progress.txt`。
+  - 已对本轮关键文件执行 `bash -n` 与局部 `git diff --check`，通过。
+  - 未发现本轮新增 `docs/**`、Hermes/Jarvis、模型/Office/CAD 转换或真实 NAS 写操作。
+  - Claude Code 结束时 Ralph stop hook 出现 CLI 层面的余额错误，但报告、进度和完成承诺均已落盘，主 agent 不判定为业务阻塞。
+- 当前裁决：
+  - 批次 4R 开发侧可以进入测试 agent 专项复验。
+  - 后续测试应重点覆盖：路径隐藏、预览/下载权限分离、短时票据、cross-action 防护、审计无敏感路径、前端详情抽屉路径展示。
+
+## 2026-05-18：二期批次 4R 测试复验通过并正式收口
+
+- 测试报告：
+  - `handoff/test-agent/latest-report.md`
+- 测试 agent 总结论：
+  - 通过。
+  - 当前无 `P0 / P1`。
+  - 仅有既有 `Vite chunk size warning` P2，不影响本轮收口。
+- 核心验收结论：
+  - 普通项目用户不会在 catalog 列表、catalog 详情、项目文件详情中看到真实 NAS 路径。
+  - 管理员在有权限项目详情场景下仍可看到必要真实路径。
+  - `PROJECT_VIEWER` 可预览、不可下载。
+  - `DELIVERY_ENGINEER` 可预览、可下载。
+  - 预览票据不会跨动作变成下载响应。
+  - 文件访问成功、拒绝、失败都有审计，且未发现票据 secret、真实路径或 NAS 绝对路径泄露。
+  - 前端详情抽屉路径展示与后端返回一致，未新增文件表路径暴露列。
+- 验证结果：
+  - 后端构建通过。
+  - 前端构建通过。
+  - 健康检查通过，实际验收端口为 `8080`。
+  - 局部 `git diff --check` 通过。
+  - `scripts/dev/check-phase2-batch4-file-access.sh`：`18/18 PASS`。
+  - `scripts/dev/check-file-preview-shell.sh`：通过。
+  - `scripts/dev/check-phase2-batch1-readonly-catalog.sh`：通过。
+  - `scripts/dev/check-phase2-batch2-standard-delivery.sh`：通过。
+  - `scripts/dev/check-phase2-batch3-review-rectification-report.sh`：通过。
+- 主 agent 裁决：
+  - 二期批次四/4R 正式收口。
+  - 下一步可进入 `批次 5A：贾维斯数据管家内嵌 v0`，或如需先补齐 RealBIM 数据管家业务模块，则进入 `批次 5B：数据管家客户版模块补齐`。
+
+## 2026-05-18：二期批次 5A 贾维斯数据管家内嵌启动
+
+- 用户裁决：
+  - 先做 `批次 5A：贾维斯数据管家内嵌`。
+- 主 agent 边界确认：
+  - 本批只做 `catalog-only / read-only / permission-aware / Missing Evidence / operation plan draft`。
+  - 不做正文抽取、向量库、OpenSearch/Qdrant/MinIO 写入、NAS 写操作、Agent 自动审批、自动整改、自动删除、模型轻量化或构件级解析。
+  - 继续沿用 4R 文件访问安全基线，不能暴露真实 NAS 路径。
+- 已完成准备：
+  - 复核 `handoff/main-agent/hermes-jarvis-coupling-roadmap.md` 和 `docs/10-phase2-development-roadmap.md`。
+  - 复核现有后端 Hermes Gateway：`AgentGatewayController`、`AgentGatewayApplicationService`、`AgentAssetContextResolver`、`AgentPermissionProofService`、`HermesAgentClient`、`HermesGatewayProperties`。
+  - 复核现有前端问答组件：`DataStewardPanel`、`DataStewardAnswerCard`、`EvidenceModeBadge`、`MissingEvidenceNotice`、`OperationPlanPreview`。
+  - 已将开发 agent 当前 prompt 更新为 `二期批次 5A 贾维斯数据管家内嵌 v0`：`handoff/dev-agent/current-prompt.md`。
+- 开发要求：
+  - 开发 agent 必须使用 Ralph Loop。
+  - 完成承诺固定为 `<promise>PHASE2_BATCH5A_JARVIS_DATA_STEWARD_EMBEDDED_COMPLETE</promise>`。
+  - 必须新增专项脚本 `scripts/dev/check-hermes-jarvis-gateway.sh`。
+  - 完成后必须写入 `handoff/dev-agent/latest-report.md`。
+
+## 2026-05-18：二期批次 5A 贾维斯数据管家内嵌完成开发侧验证
+
+- 执行说明：
+  - 主 agent 已启动 Claude Code 并发送 `handoff/dev-agent/current-prompt.md`。
+  - Claude Code 当前返回 `API Error: 402 Insufficient Balance`，无法实际执行开发。
+  - 为避免主线阻塞，本轮由主 agent 按同一份 5A prompt 直接完成实现、验证和报告。
+- 本轮改动：
+  - 后端 `AgentGatewayApplicationService`：
+    - `capabilities.agentName` 收束为 `贾维斯数据管家`。
+    - chat 响应增加平台侧只读审计。
+    - 外部 Hermes 响应进入平台前做敏感路径和密钥净化。
+    - 正文类问题强制降级为 Missing Evidence，避免把 catalog metadata 伪装为正文 evidence。
+    - Hermes 启用但不可用时返回 `agent_unavailable`，不返回 500。
+  - 后端 `AgentPermissionProofService`：
+    - `allowedActions` 只保留只读白名单：`catalog_query`、`agent_catalog_assist`、`operation_plan_draft`。
+  - 前端：
+    - 项目工作台和文件详情入口改为 `问贾维斯`。
+    - 抽屉标题改为 `贾维斯数据管家`。
+    - 问答面板展示资产目录辅助、正文问答未开放、写操作不会执行、生产发布未开放。
+    - 回答卡片展示权限、项目范围、权限标签和 fail closed 状态。
+    - 操作建议明确为草案，需要人工审批。
+  - 脚本：
+    - 新增 `scripts/dev/check-hermes-jarvis-gateway.sh`。
+- 开发侧验证：
+  - 后端构建通过，8 个模块 `SUCCESS`。
+  - 前端构建通过，仅有既有 Vite chunk size warning。
+  - 临时后端 `http://localhost:18080` 健康检查 `UP`。
+  - `BASE_URL=http://localhost:18080 bash scripts/dev/check-hermes-jarvis-gateway.sh`：`PASS=7 FAIL=0`。
+  - `BASE_URL=http://localhost:18080 bash scripts/dev/check-phase2-batch4-file-access.sh`：`PASS=18 FAIL=0`。
+  - 额外启动 `HERMES_AGENT_GATEWAY_ENABLED=true` 且 `HERMES_MEMORY_BASE_URL=http://127.0.0.1:1` 的临时后端，验证 Hermes 不可用时返回 `agent_unavailable`。
+  - 局部 `git diff --check` 通过。
+- 报告与测试交接：
+  - 开发侧报告已写入 `handoff/dev-agent/latest-report.md`。
+  - 测试 agent 当前 prompt 已更新为 5A 专项复验：`handoff/test-agent/current-prompt.md`。
+- 当前裁决：
+  - 批次 5A 开发侧可进入测试 agent 专项复验。
+  - 5A 尚未正式收口，需测试 agent 确认无 P0/P1 后再收口。
+
+## 2026-05-18：二期批次 5A 验收通过并吸收 Hermes V3 联调口径
+
+- 测试报告：
+  - `handoff/test-agent/latest-report.md`
+- 测试 agent 结论：
+  - 通过。
+  - 当前无 `P0 / P1`。
+  - 仅有既有 `Vite chunk size warning` P2，不影响收口。
+- 5A 收口结论：
+  - 平台对外展示已完成 `Hermes` 到 `贾维斯数据管家` 的用户侧包装。
+  - 项目页与文件详情入口均显示 `问贾维斯`。
+  - 能力边界清楚：只做 `catalog-only / read-only / permission-aware / Missing Evidence / operation plan draft`。
+  - 普通目录问题可返回目录级辅助回答。
+  - 正文类问题返回 `missing_evidence`，不编造正文。
+  - 无效项目范围 fail closed，不返回 500。
+  - Hermes 不可用时返回 `agent_unavailable`。
+  - 审计落到 `agent.jarvis.chat.*`，未发现 `nas://`、`/Volumes/`、`token`、`secret` 泄露。
+  - 4R 文件访问安全闭环未回归。
+- 用户新增输入：
+  - `/Users/vc/Downloads/DB_TEAM_HERMES_FRONTEND_GATEWAY_INTEGRATION_V3.md`
+- V3 路线调整：
+  - Hermes 当前口径更新为 `phase-2.89-test-machine-runtime-preflight-handoff-baseline`。
+  - V3 允许继续做前端嵌入、平台后端 Gateway、Hermes health、只读 chat/catalog lookup、权限上下文传递和审计 trace 对齐。
+  - V3 仍不授权真实 DB 写入、parser、NAS copy、index write、Agent answer integration 或 production rollout。
+  - 新增建议小批次 `5A.1：贾维斯 Gateway 合同对齐与联调增强`。
+  - 5A.1 仅补 health、平台语义别名、只读 catalog search 壳、trace 关联和 feature flag 状态展示，不进入正文抽取、索引写入、Agent CRUD 或 NAS 写操作。
+- 更新文件：
+  - `handoff/main-agent/hermes-jarvis-coupling-roadmap.md`
+  - `handoff/main-agent/phase2-current-roadmap.md`
+  - `handoff/main-agent/jarvis-v3-gateway-alignment-plan.md`
+  - `docs/10-phase2-development-roadmap.md`
+  - `handoff/main-agent/decisions.md`
+  - `handoff/main-agent/status.md`
+
+## 2026-05-18：二期批次 5A.1 贾维斯 Gateway 合同对齐完成开发侧验证
+
+- 执行结论：
+  - 批次 5A.1 已按 Hermes V3 联调口径完成开发侧实现。
+  - 本批定位为薄网关合同对齐，不进入批次 5B，不做数据库结构扩展。
+- 本轮新增和调整：
+  - 新增平台语义健康接口：`GET /api/data-steward/hermes/health`。
+  - 新增平台语义聊天入口：`POST /api/data-steward/chat`。
+  - 保留兼容入口：`GET /api/agent/hermes/health` 和既有 `/api/agent/hermes/chat`。
+  - 前端 `贾维斯数据管家` 面板展示健康状态、只读网关模式、运行时写入未开放、正式正文回答未开放和不可用原因。
+  - `scripts/dev/check-hermes-jarvis-gateway.sh` 增加 health 和平台语义 chat 断言。
+- 安全边界：
+  - health 响应不返回 baseUrl、DB 连接串、secret 或真实 NAS 路径。
+  - Hermes 不可用时 health 返回降级状态，chat 返回统一响应体并携带 `agent_unavailable`，不执行写操作。
+  - 继续不开放正文抽取、selective indexing、OpenSearch/Qdrant/MinIO 写入、Agent CRUD、NAS 写操作、Agent answer integration 和 production rollout。
+- 开发侧验证：
+  - 后端构建 `./mvnw -pl delivery-app -am -DskipTests package` 通过。
+  - 前端构建 `corepack pnpm --dir frontend build` 通过，仅有既有 Vite chunk size warning。
+  - 临时后端 `http://localhost:18080` 健康检查 `UP`。
+  - `BASE_URL=http://localhost:18080 bash scripts/dev/check-hermes-jarvis-gateway.sh`：`PASS=9 FAIL=0`。
+  - `BASE_URL=http://localhost:18080 bash scripts/dev/check-phase2-batch4-file-access.sh`：`PASS=18 FAIL=0`。
+  - 额外用不可达 Hermes 地址启动临时后端，验证 health 降级和 chat fail closed。
+- 当前裁决：
+  - 批次 5A.1 开发侧完成，可交给测试 agent 专项复验。
+  - 测试通过前不正式收口 5A.1。
+
+## 2026-05-18：二期批次 5A.1 测试复验通过并正式收口
+
+- 测试报告：
+  - `handoff/test-agent/latest-report.md`
+- 测试 agent 结论：
+  - 通过。
+  - 当前无 `P0 / P1`。
+  - 仅有既有 `Vite chunk size warning` P2，以及本轮明确不在范围内的 `/api/data-steward/catalog/search` 未实现说明，不影响收口。
+- 核心验收结论：
+  - `GET /api/data-steward/hermes/health` 可用，不泄露 baseUrl、secret、数据库连接串或真实 NAS 路径。
+  - `POST /api/data-steward/chat` 可用，行为与既有只读贾维斯边界一致。
+  - 前端 `问贾维斯` 面板已展示健康状态、只读网关模式、运行时写入未开放、正式正文回答未开放。
+  - Hermes 不可用时，health 与 chat 都安全降级，不返回 500。
+  - 平台侧审计可关联 `pageType / requestId / projectRef / sourceView / evidenceMode / permissionStatus`。
+  - 4R 文件访问安全闭环未回归。
+- 验证结果：
+  - 后端构建通过。
+  - 前端构建通过。
+  - 健康检查通过，实际验收端口为 `8080`。
+  - `scripts/dev/check-hermes-jarvis-gateway.sh`：`PASS=9 FAIL=0`。
+  - `scripts/dev/check-phase2-batch4-file-access.sh`：`PASS=18 FAIL=0`。
+  - 局部 `git diff --check` 通过。
+- 主 agent 裁决：
+  - 二期批次 5A.1 正式收口。
+  - 下一步进入 `批次 5B：数据管家客户版模块补齐`，优先补齐模型集成、管理对象、事项列表、任务列表、导出列表和文件服务。
+
+## 2026-05-18：二期批次 5B 规划与开发/测试交接完成
+
+- 用户确认继续下一步。
+- 主 agent 判断：
+  - 真实 NAS 增删改查仍不适合开放，应放到二期后段或三期，以受控写操作形式逐步开放。
+  - 当前下一步应执行 `批次 5B：数据管家客户版模块补齐`。
+- 已梳理当前基础：
+  - 模型集成和管理对象已有早期 MVP 页面与后端 API。
+  - 资产驾驶舱和文件管理已是当前数据管家前端基线。
+  - 任务、扫描、事件、质量、文件访问、贾维斯只读能力可复用。
+  - 事项列表、任务列表、导出列表、文件服务尚未形成客户可见模块。
+- 已新增规划文件：
+  - `handoff/main-agent/phase2-batch5b-data-steward-modules-plan.md`
+- 已更新开发 agent prompt：
+  - `handoff/dev-agent/current-prompt.md`
+  - 完成承诺：`<promise>PHASE2_BATCH5B_DATA_STEWARD_MODULES_COMPLETE</promise>`
+  - 要求使用 Ralph Loop，不创建子 agent，不修改 `docs/**`。
+- 已更新测试 agent prompt：
+  - `handoff/test-agent/current-prompt.md`
+- 5B 明确范围：
+  - 资产驾驶舱、文件管理、模型集成、管理对象、事项列表、任务列表、导出列表、文件服务。
+- 5B 明确禁止：
+  - 真实 NAS 写入、移动、重命名、删除、新建文件夹。
+  - 模型轻量化、构件级解析、正文抽取。
+  - Agent 自动治理、自动审批、自动修复。
+  - 写 OpenSearch/Qdrant/MinIO。
+- 当前裁决：
+  - 5B 已具备派发给开发 agent 的条件。
+  - 已尝试启动项目目录下 Claude Code 并派发 `handoff/dev-agent/current-prompt.md`。
+  - Claude Code 当前仍返回 `API Error: 402 Insufficient Balance`，未能实际进入开发。
+  - 因 5B 属于较大前端/接口整合批次，实际代码开发尚未开始；后续可在 Claude Code 余额恢复后继续派发，或由主 agent 直接接手开发。
+
+## 2026-05-18：二期批次 5B 主 agent 直接实现完成开发侧验证
+
+- 执行说明：
+  - 用户确认先由主 agent 开发实现 5B。
+  - Claude Code 仍因 `402 Insufficient Balance` 不可用，本轮由主 agent 直接实现。
+  - 未创建子 agent，未修改 `docs/**`。
+- 本轮改动：
+  - 新增项目内数据管家路由：模型集成、管理对象、事项列表、任务列表、导出列表、文件服务。
+  - 项目工作台导航新增 `数据管家` 分组。
+  - 项目资产详情页新增 8 个数据管家模块入口卡片。
+  - `ModelIntegrationsPage.vue` 客户化，模型文件选择改为分页检索，页面明确不做真实轻量化。
+  - `ManagedObjectsPage.vue` 客户化，展示关联模型和部位，支持创建、编辑和停用平台对象记录。
+  - 新增 `DataStewardIssuesPage.vue`，聚合质量缺口、失败扫描和待审核事项。
+  - 新增 `DataStewardTasksPage.vue`，聚合扫描任务和后台任务，支持失败后台任务重试。
+  - 新增 `DataStewardExportsPage.vue`，提供不含真实 NAS 路径的文件清单 CSV 导出。
+  - 新增 `DataStewardFileServicePage.vue`，展示已开放文件服务和禁用的 NAS 写操作。
+  - 新增专项脚本 `scripts/dev/check-phase2-batch5b-data-steward-modules.sh`。
+- 边界确认：
+  - 未开放真实 NAS 写入、移动、重命名、删除或新建文件夹。
+  - 未做模型轻量化、构件级解析、正文抽取、Agent 自动治理或索引写入。
+  - 未新增数据库迁移。
+- 开发侧验证：
+  - 后端构建 `./mvnw -pl delivery-app -am -DskipTests package` 通过。
+  - 前端构建 `corepack pnpm --dir frontend build` 通过，仅有既有 Vite chunk size warning。
+  - 健康检查 `http://localhost:8080/actuator/health` 返回 `UP`。
+  - `bash scripts/dev/check-phase2-batch5b-data-steward-modules.sh`：`PASS=15 FAIL=0`。
+  - `bash scripts/dev/check-phase2-batch4-file-access.sh`：`PASS=18 FAIL=0`。
+  - `bash scripts/dev/check-hermes-jarvis-gateway.sh`：`PASS=9 FAIL=0`。
+  - 局部 `git diff --check` 通过。
+- 当前裁决：
+  - 5B 开发侧完成，可交给测试 agent 按 `handoff/test-agent/current-prompt.md` 做页面专项验收。
+  - 测试通过前不正式收口 5B。
+
+## 2026-05-18：二期批次 5B 测试 P0 返修完成
+
+- 测试报告：
+  - `handoff/test-agent/latest-report.md`
+- 测试 agent 判定：
+  - 5B 暂不通过。
+  - P0：导出列表页面和 `catalog/files` 接口的 `logicalPath` 泄露真实 NAS 绝对路径 `/Volumes/...`。
+  - P2：任务列表失败原因直接展示真实绝对路径。
+- 本轮修复：
+  - 后端 `CatalogApplicationService` 将 `catalog/files` 与文件详情返回的 `logicalPath` 统一转为项目内路径。
+  - 转换策略：优先按项目路径映射剥离 NAS 根路径；再按项目编码/名称定位项目目录；仍无法确认时只返回文件名。
+  - 真实路径继续仅在受权限控制的 `storagePath` 详情字段中返回，不再进入导出来源。
+  - 前端 `DataStewardExportsPage.vue` 将导出字段改为 `项目内路径`，并增加 `/Volumes/`、`nas://`、`//` 兜底脱敏。
+  - 前端 `DataStewardTasksPage.vue` 将任务进度说明和失败原因里的真实路径替换为 `[受控存储路径]`。
+  - `scripts/dev/check-phase2-batch5b-data-steward-modules.sh` 增加真实 NAS 项目样本断言。
+- 验证结果：
+  - 后端构建通过。
+  - 前端构建通过，仅有既有 Vite chunk size warning。
+  - 健康检查 `http://localhost:8080/actuator/health` 返回 `UP`。
+  - `bash scripts/dev/check-phase2-batch5b-data-steward-modules.sh`：`PASS=16 FAIL=0`，新增真实 NAS 脱敏断言通过。
+  - `bash scripts/dev/check-phase2-batch4-file-access.sh`：`PASS=18 FAIL=0`。
+  - `bash scripts/dev/check-hermes-jarvis-gateway.sh`：`PASS=9 FAIL=0`。
+  - 直接抽查 `projectId=506` 的 `catalog/files`，返回 `logicalPath` 不再包含 `/Volumes/` 且不再以 `/` 开头。
+- 当前裁决：
+  - 5B P0 已完成开发侧返修。
+  - 建议测试 agent 对导出列表、`catalog/files`、任务列表失败原因做短回归。
+  - 短回归通过前仍不正式收口 5B。
+
+## 2026-05-18：二期批次 5B 短回归通过并正式收口
+
+- 测试报告：
+  - `handoff/test-agent/latest-report.md`
+- 测试 agent 结论：
+  - 通过。
+  - 当前未发现新的 `P0 / P1 / P2`。
+  - 建议收口 5B。
+- 关键验证：
+  - 后端健康检查 `http://localhost:8080/actuator/health` 返回 `UP`。
+  - `bash scripts/dev/check-phase2-batch5b-data-steward-modules.sh`：`PASS=16 FAIL=0`。
+  - `bash scripts/dev/check-phase2-batch4-file-access.sh`：`PASS=18 FAIL=0`。
+  - 抽查 `GET /api/data-steward/catalog/files?projectId=506&pageNo=1&pageSize=5`，`logicalPath` 已为项目内相对路径，不含 `/Volumes/`，不以 `/` 开头。
+  - 导出列表 `/data-steward/assets/506/data-steward/exports` 已展示 `项目内路径`，页面可见样本不再出现 `/Volumes/`。
+  - 任务列表失败原因已脱敏为 `[受控存储路径]`。
+- 主 agent 裁决：
+  - 二期批次 5B 正式收口。
+  - 当前二期已完成：4R 文件访问安全闭环、5A 贾维斯内嵌、5A.1 贾维斯 Gateway 合同对齐、5B 数据管家客户版模块补齐。
+  - 下一步进入 `批次 6：客户项目初始化与标准模板化`。
+
+## 2026-05-18：二期批次 6A 规划与开发/测试交接完成
+
+- 用户确认进入下一步。
+- 主 agent 将批次 6 拆为 `6A：项目初始化评估 + 建筑机电/BIM 交付基础模板预览/套用`。
+- 拆分原因：
+  - 当前工程主数据和交付标准底座已具备 CRUD 与状态接口。
+  - 客户缺的是“从空项目到标准就绪”的向导式流程。
+  - 不适合一次性混入模板市场、文件转换、BIM 轻量化、构件级能力或真实 NAS 写操作。
+- 已新增规划文件：
+  - `handoff/main-agent/phase2-batch6a-project-initialization-plan.md`
+- 已更新开发 agent prompt：
+  - `handoff/dev-agent/current-prompt.md`
+  - 完成承诺：`<promise>PHASE2_BATCH6A_PROJECT_INITIALIZATION_TEMPLATE_COMPLETE</promise>`
+  - 要求使用 Ralph Loop，不创建子 agent，不修改 `docs/**`。
+- 已更新测试 agent prompt：
+  - `handoff/test-agent/current-prompt.md`
+- 6A 范围：
+  - 初始化状态接口。
+  - 内置 `MEP_BIM_BASIC` 建筑机电/BIM交付基础模板。
+  - 模板列表、详情、预览、套用接口。
+  - 幂等套用，不覆盖、不删除已有客户数据。
+  - 套用审计。
+  - 项目工作台内 `初始化向导` 页面。
+  - 专项脚本 `scripts/dev/check-phase2-batch6a-project-initialization.sh`。
+- 6A 禁止：
+  - 真实 NAS 上传、新建文件夹、移动、重命名、删除。
+  - Office/CAD/BIM 文件转换。
+  - BIM 轻量化。
+  - 构件级解析、构件级搜索。
+  - 正文抽取、向量库、selective indexing。
+  - Agent 自动初始化、自动审批、自动写库。
+  - 多行业模板市场。
+- 当前裁决：
+  - 6A 已具备派发给开发 agent 的条件。
+  - 开发完成后必须先跑专项脚本和主数据/交付标准/5B 回归，再交给测试 agent。
+
+## 2026-05-18：Catalog-only / Hermes 架构建议评审
+
+- 已阅读外部评审输入 `/Users/vc/Downloads/catalog_only_architecture_pr_review_prompt.md`。
+- 本轮定位为架构建议评审，不作为开发指令执行；未修改底表、SQL View、Flyway 迁移、API 或前端实现。
+- 已核对当前稳定读模型和 Jarvis/Hermes 网关：
+  - `ProjectAssetView`、`FileAssetView`、`ModelAssetView`、`AuditEventView` 已具备 v1.1 catalog-only 治理字段。
+  - `AgentAssetContextResolver` 只允许四个稳定 View 作为 Agent 上下文来源。
+  - `AgentGatewayApplicationService` 已约束 catalog-only、Missing Evidence、路径脱敏、只读、禁止执行动作。
+  - `AgentPermissionProofService` 仅允许 `catalog_query`、`agent_catalog_assist`、`operation_plan_draft`。
+- 评审结论已写入 `handoff/main-agent/catalog-only-architecture-suggestion-review.md`：
+  - 当前架构健康等级：Green。
+  - 不需要刹停。
+  - 不需要底层重构。
+  - 建议将 `file_id` 主关联键、路径脱敏、mtime 区分、checksum 状态、能力标记、query feedback 和未来 semantic index 字段进入 backlog。
+- 已更新 `handoff/main-agent/backlog.md`，新增 `Catalog-only / Jarvis 契约补强项`。
+- 当前主线不变：继续推进 `批次 6A：项目初始化评估 + 建筑机电/BIM交付基础模板预览/套用`。
+
+## 2026-05-18：Hermes V3 平台接入补强完成
+
+- 用户要求先根据 `/Users/vc/Downloads/DB_TEAM_HERMES_FRONTEND_GATEWAY_INTEGRATION_V3.md` 进行 Hermes 接入平台开发。
+- 本轮保持 V3 边界：
+  - 允许：前端入口、平台后端 Gateway、Hermes health、只读 chat/catalog lookup、权限上下文、审计 trace。
+  - 禁止：Agent DB CRUD、NAS CRUD、正文抽取、写 `documents/chunks`、写 OpenSearch/Qdrant/MinIO、Agent 自动审批、production rollout。
+- 后端完成：
+  - 新增 `POST /api/data-steward/catalog/search`，返回权限过滤后的只读资产目录 metadata preview。
+  - `/api/data-steward/chat` 兼容 V3 请求格式：`session_id / message / project_filters / mode`，同时保留旧页面请求格式。
+  - `project_filters` 可按当前用户权限解析项目 ID 或项目编码，解析不到则 fail closed。
+  - 新增 `agent.jarvis.catalog.search` 审计，只记录安全摘要，不记录真实路径、raw row 或 secret。
+- 前端完成：
+  - `DataStewardPanel.vue` 在问贾维斯时同步展示“资产目录预览”。
+  - 预览明确标注仅为目录元数据，不是文件正文证据。
+- 验证通过：
+  - 后端构建 `./mvnw -pl delivery-app -am -DskipTests package`。
+  - 前端构建 `corepack pnpm --dir frontend build`。
+  - 后端健康检查 `UP`。
+  - `bash scripts/dev/check-hermes-jarvis-gateway.sh`：`PASS=11 FAIL=0`。
+- 当前本地后端已通过 `screen` 会话 `delivery-backend` 以新版 jar 运行，供前端和测试 agent 继续验证。
+## 2026-05-18：数据库 / 平台 Agent 风险提醒评审
+
+- 已阅读外部风险提醒 `/Users/vc/Downloads/database_platform_agent_risk_notes.md`。
+- 评审结论：值得采纳，作为后续 Hermes / 贾维斯、catalog-only、selective indexing 和客户演示文案的安全边界；当前不需要修改底表、Flyway migration、SQL View 或核心 API。
+- 已形成评审文件：`handoff/main-agent/database-platform-agent-risk-notes-review.md`。
+- 风险优先级裁决：
+  - P0 guardrail：不得把 catalog metadata 当文件正文证据；不得默认暴露真实 NAS 路径。
+  - P1：不得混淆 `updated_at` 与 NAS 文件 mtime；不得把 `process_status/component_index_status` 当 semantic index；不得把 `checksum=null` 解释为文件无变化或确定异常。
+  - Phase gate：未来 selective indexing、全文索引、语义索引、BIM 构件索引必须单独设计，不能混入 Hermes long-term memory。
+- 已补充 backlog：前端和客户材料不得过度承诺 DWG/RVT 内容理解能力。
+## 2026-05-18：Hermes 只读前端网关脱敏接入评审
+
+- 已按 Hermes Phase 2.89 / V3 对接文档完成接口设计与边界评审。
+- 已确认当前允许范围：平台后端 Gateway、前端内嵌 Hermes、health check、只读 catalog metadata preview、project_scope、permission proof、审计 trace、Missing Evidence。
+- 已确认当前禁止范围：Agent DB CRUD、生成 SQL、扫描 NAS、读取 DWG/RVT 正文、返回真实 `storage_path`、写 `documents/chunks/OpenSearch/Qdrant/MinIO`、前端直连 Hermes。
+- 已形成评审文件：`handoff/main-agent/hermes-readonly-frontend-gateway-access-review.md`。
+- 当前 Go / Pause / No-Go 裁决：
+  - Go：只读 Gateway 与前端嵌入继续。
+  - Pause：selective indexing、正文抽取、evidence write、query feedback。
+  - No-Go：任何 Agent 写库、写 NAS、生成 SQL、真实路径泄露。
+- 当前进入下一轮代码前的 P1：用户可见命名仍残留 `贾维斯`，必须统一改为 `Hermes`。
+## 2026-05-18：Hermes 正式命名收束
+
+- 测试 agent 已完成 Hermes V3 短回归，结论通过，无 P0/P1，仅保留既有 Vite chunk size warning P2。
+- 主 agent 复核发现：测试报告仍出现 `贾维斯` 用户侧命名，与用户新裁决“企业 Agent 正式名称统一为 Hermes”冲突。
+- 已完成极小命名收束：
+  - 后端 `capabilities.agentName` 改为 `Hermes`。
+  - 前端入口、按钮、抽屉标题和提示文案统一为 `Hermes / Hermes 数据管家 / 问 Hermes`。
+  - 平台审计 action 从 `agent.jarvis.*` 收束为 `agent.hermes.*`。
+  - 目录预览审计 action 改为 `agent.hermes.catalog.search`。
+  - 内部 Controller 类名收束为 `HermesDataStewardGatewayController`。
+- 验证结果：
+  - 后端构建通过。
+  - 前端构建通过，仅既有 Vite chunk size warning。
+  - 后端健康检查 `UP`。
+  - `scripts/dev/check-hermes-jarvis-gateway.sh` 通过，`PASS=11 FAIL=0`。
+  - `git diff --check` 通过。
+- 当前裁决：Hermes V3 只读 Gateway 接入可以收口；下一步可以继续二期主线，但仍不得进入 Agent DB CRUD、SQL 生成、NAS 扫描、DWG/RVT 正文读取、真实路径返回或索引写入。
+## 2026-05-18：Hermes 命名收束 + 只读 Gateway 前端复验完成
+
+- 已按用户补充要求完成极小批次。
+- 用户可见文案已从 `贾维斯` 收束为 `Hermes / Hermes 数据管家`；代码侧 `frontend/` 与 `backend/delivery-data-steward/` 已无 `贾维斯/Jarvis/jarvis` 残留。
+- 前端能力查询改为 `/api/data-steward/hermes/capabilities`，不再使用 `/api/agent/hermes/capabilities`。
+- `/api/agent/hermes/*` 已标记为内部/兼容接口；当前只保留脚本兼容验证，不新增前端使用点。
+- 前端 catalog 预览不再发送可信 `project_scope`，只发送普通 `projectFilters`；后端把 `project_filters/projectFilters` 当作不可信筛选条件，并由平台后端 Gateway 生成可信 project scope。
+- `operationPlan` 收束为 `manual_review_required / draft_only`，专项脚本断言 action 不包含 `ingestion / writer / index`。
+- forbidden field 断言已补强：响应不得包含 `storage_path/storage_uri/storagePath/storageUri`、`/Volumes`、`nas://`、`smb://`、raw row、SQL 片段、token、secret、bearer。
+- Missing Evidence 断言已补强：正文类问题返回 `missing_evidence`，catalog-only 不伪装成正文 evidence。
+- 验证结果：
+  - 后端构建通过。
+  - 前端构建通过，仅既有 Vite chunk size warning。
+  - 后端健康检查 `UP`。
+  - `scripts/dev/check-hermes-jarvis-gateway.sh` 通过，`PASS=11 FAIL=0`。
+  - `git diff --check` 通过。
+
+## 2026-05-18：二期 6A 项目初始化与标准模板化完成开发自测
+
+- 已恢复二期主线，进入 `批次 6A：项目初始化评估 + 建筑机电/BIM交付基础模板预览/套用`。
+- 本轮只做客户项目开局标准底座，不做 NAS 写操作、模型轻量化、正文抽取、向量库、Hermes 自动写操作或多行业模板市场。
+- 后端新增初始化接口：
+  - `GET /api/master-data/projects/{projectId}/initialization/status`
+  - `GET /api/master-data/standard-templates`
+  - `GET /api/master-data/standard-templates/{templateCode}`
+  - `POST /api/master-data/projects/{projectId}/initialization:preview-template`
+  - `POST /api/master-data/projects/{projectId}/initialization:apply-template`
+- 内置模板：
+  - `MEP_BIM_BASIC / 建筑机电 BIM 交付基础模板`
+  - 覆盖部位树、节点类型、交付物定义、交付物类型、交付物属性和目录模板。
+- 安全与验收边界：
+  - 模板应用幂等，不覆盖、不删除、不改名已有项目数据。
+  - 应用前必须确认。
+  - 已锁定节点类型且仍需新增节点类型时会阻塞。
+  - 应用成功写审计 `masterdata.initialization.template-apply`。
+  - 未新增 Flyway migration，未修改旧 migration。
+- 前端新增：
+  - `/data-steward/assets/:projectId/master-data/initialization`
+  - 项目工作台 `工程主数据` 分组新增 `初始化向导`。
+  - 初始化页面展示标准状态、模板详情、预览影响、应用结果和后续入口。
+- 验证结果：
+  - 后端构建通过。
+  - 前端构建通过，仅既有 Vite chunk size warning。
+  - 后端健康检查 `UP`。
+  - `scripts/dev/check-phase2-batch6a-project-initialization.sh` 通过。
+  - `scripts/dev/check-hermes-jarvis-gateway.sh` 回归通过，`PASS=11 FAIL=0`。
+  - `git diff --check` 通过。
+- 当前裁决：进入测试 agent 专项验收。验收通过后再规划 6B/7，不提前进入文件转换、BIM 轻量化或 Agent 写操作。
+
+## 2026-05-18：二期 6A 测试 P0 导航断裂修复
+
+- 测试 agent 报告结论：6A 不通过，唯一 P0 是从 `/data-steward/assets` 进入项目详情后，项目详情页缺少 `工程主数据 -> 初始化向导` 主链路入口。
+- 根因：项目详情页 `data-steward-asset-detail` 使用 `assetProjectContext=true`，`AppLayout` 会隐藏全局 `ProjectWorkspaceNav`；而 `AssetProjectDetailPage.vue` 自身没有补项目工作台顶部导航。
+- 修复：
+  - 在 `AssetProjectDetailPage.vue` 顶部加入 `ProjectWorkspaceNav`。
+  - 保持项目详情页原有数据管家驾驶舱、文件管理、扫描任务、路径映射等功能不变。
+  - 后端无改动。
+- 验证：
+  - `corepack pnpm --dir frontend build` 通过，仅既有 Vite chunk size warning。
+- 当前裁决：请测试 agent 做极短回归，只看项目详情页是否能从 `工程主数据 -> 初始化向导` 进入当前项目初始化页，以及页面是否无横向溢出。
+
+## 2026-05-18：二期 6A 正式收口
+
+- 测试 agent 已完成 P0 导航断裂极短复验。
+- 复验结果：
+  - `/data-steward/assets` 可正常打开。
+  - 从项目列表进入 `/data-steward/assets/503` 成功。
+  - 项目详情页顶部已显示统一项目工作台导航。
+  - `工程主数据 -> 初始化向导` 入口存在。
+  - 点击后进入 `/data-steward/assets/503/master-data/initialization`。
+  - 项目上下文保持为 `503`。
+  - 项目详情页和初始化页页面级横向溢出均为 `0`。
+- 上轮唯一 P0 已关闭，当前未发现新的 P0。
+- 收口报告已写入：`handoff/main-agent/phase2-batch6a-project-initialization-closure.md`。
+- 当前裁决：二期 6A 正式收口。下一步建议进入 `6B：文件预览与批量交付增强` 规划，仍不提前进入 BIM 轻量化、构件级解析、正文抽取、Hermes 写操作或真实 NAS 写操作。
+
+## 2026-05-18：文件管理页目录树超时修复完成并通过主 Agent 审计
+
+- 用户问题：项目详情进入 `文件管理` 后目录结构请求超时，且目录树与右侧文件表对应关系不稳定。
+- 本轮按用户确认使用 Claude Code 开发 agent 修复，开发 agent 已调用 Ralph Loop，并写回 `handoff/dev-agent/latest-report.md`。
+- 修复范围保持在本轮边界内：未修改 `docs/**`，未新增真实 NAS 写操作，未修改全局前端超时配置。
+- 后端修复结论：`catalog/directories` 默认不再同步递归扫描真实 NAS，改为只基于数据库已登记文件资产推导目录；目录路径统一转为项目内相对路径。
+- 目录/文件口径修复：`catalog/files` 的 `directoryPath` 过滤已能接受目录树返回的相对路径，并映射回数据库中的原始 `logical_path` 做匹配，支持当前目录及子目录文件。
+- 前端兜底：目录树加载失败时显示中文业务提示与重试入口，右侧文件表不再被目录失败拖死。
+- 主 agent 独立复核结果：
+  - `projectId=506` 的 `catalog/directories` 返回 585 个目录，耗时约 `0.16s`。
+  - 目录响应中未检出 `/Volumes`、`smb://`、`nas://`。
+  - 选取目录树返回路径再查 `catalog/files`，返回 `45` 个匹配文件，分页首屏 `20` 条，说明左树右表口径已打通。
+  - `catalog/files?projectId=506&page=1&pageSize=50` 返回总数 `5912`，耗时约 `0.04s`。
+  - 后端 Maven 构建通过，8 个模块 `SUCCESS`。
+  - 前端构建通过，仅保留既有 Vite chunk size warning。
+  - 后端健康检查 `UP`。
+  - `git diff --check` 通过。
+- 当前裁决：开发修复通过主 agent 审计。建议测试 agent 做极短浏览器专项复验，只看项目 506 文件管理页是否不再 timeout、目录树是否加载、点击目录后右侧文件是否对应、文件表更多菜单/预览/详情/治理/补 checksum 是否不回归。
+
+## 2026-05-18：二期 6B 批量挂接交付与交付包准备视图启动
+
+- 用户确认回到主线开发，当前进入 `6B：批量挂接交付 + 交付包准备视图 + 最小预览状态增强`。
+- 主 agent 已完成现状判断：
+  - 当前交付绑定后端为单文件接口 `POST /api/work-center/projects/{projectId}/delivery-bindings`。
+  - 当前 `DeliveryViewPanel.vue` 的“选择文件补交”为单选远程搜索。
+  - 当前已具备完整率、交付视图、审核记录、文件预览和受控访问票据接口，可复用为本批基础。
+- 本批边界：
+  - 做批量挂接接口、前端多选补交、只读交付包准备视图。
+  - 不做 BIM 轻量化、构件级解析、正文抽取、Hermes 写操作、真实 NAS 写操作、压缩包生成或批量下载。
+  - 新增接口不得返回真实 NAS 路径。
+- 已写入开发 agent prompt：
+  - `handoff/dev-agent/current-prompt.md`
+  - 完成承诺：`<promise>PHASE2_BATCH6B_BATCH_DELIVERY_PACKAGE_COMPLETE</promise>`
+  - 要求 Claude Code 使用 Ralph Loop，不创建子 agent，不修改 `docs/**`。
+- 已写入测试 agent prompt：
+  - `handoff/test-agent/current-prompt.md`
+  - 重点验收批量挂接幂等、跨项目/类型权限、交付包准备视图、禁止路径字段、前端多选补交和审核回归。
+- 当前裁决：启动 Claude Code 开发 agent 执行 6B，并由主 agent 监控偏航。
+
+## 2026-05-18：二期 6B 开发完成并通过主 Agent 审计
+
+- 开发方式：使用项目目录下 Claude Code 开发 agent 执行，已要求调用 Ralph Loop；后续因 Claude CLI 中断后输入未正常提交，主 agent 接手完成脚本修补、编译修复和验收报告写回。
+- 后端完成：
+  - 新增 `POST /api/work-center/projects/{projectId}/delivery-bindings:batch`，支持文档/图纸批量挂接、逐行结果、幂等跳过、失败计数和审计。
+  - 新增 `GET /api/work-center/projects/{projectId}/delivery-package/summary`，输出文档/图纸交付包准备汇总和缺失/已挂接行。
+  - 主 agent 审计时补强 `targetType` 口径，交付包汇总按 `SECTION` / `OBJECT` 过滤，不把对象/部位交付混算。
+- 前端完成：
+  - `DeliveryViewPanel.vue` 的“去挂接”弹窗由单文件选择升级为远程分页多选。
+  - 保留文件 ID、文件名、版本、处理状态、轻量预览状态和已有审核/整改操作。
+  - 新增交付包准备汇总区域，展示文档/图纸应交、已挂接、缺失、待审、已通过、已驳回和可进入交付包数量。
+- 验收脚本：
+  - 新增 `scripts/dev/check-phase2-batch6b-delivery-package.sh`。
+  - 脚本自包含生成 `mock://batch6b/{runId}/...` 元数据测试文件，不依赖真实 NAS，不写真实文件。
+  - 覆盖批量挂接、重复幂等、错误文件类型拒绝、跨项目文件拒绝、交付包汇总、敏感路径禁止、OpenAPI 和审计事件。
+- 主 agent 验证结果：
+  - `bash scripts/dev/check-phase2-batch6b-delivery-package.sh` 通过，`PASS=17 FAIL=0`。
+  - `cd backend && ./mvnw -pl delivery-app -am -DskipTests package` 通过，8 个模块 `SUCCESS`。
+  - `corepack pnpm --dir frontend build` 通过，仅既有 Vite chunk size warning。
+  - `curl -fsS http://127.0.0.1:8080/actuator/health` 返回 `UP`。
+  - `git diff --check` 通过。
+  - 已用最新构建包重启本地后端，并再次执行 6B 脚本，仍为 `PASS=17 FAIL=0`。
+- 开发报告已写回：
+  - `handoff/dev-agent/latest-report.md`
+- 当前裁决：6B 开发通过主 agent 审计。建议测试 agent 按 `handoff/test-agent/current-prompt.md` 做专项短回归，重点看文档/图纸交付页批量选择、结果摘要、交付包准备视图、权限/类型/路径泄漏断言和横向溢出。
+
+## 2026-05-19：二期 6B 正式收口
+
+- 测试 agent 已完成 6B 专项短回归，报告写入 `handoff/test-agent/latest-report.md`。
+- 测试结论：通过，当前没有新的 `P0 / P1`。
+- 保留既有非阻塞 `P2`：前端生产构建仍有 Vite chunk size warning。
+- 验收通过项：
+  - 后端构建通过。
+  - 前端构建通过。
+  - 健康检查通过。
+  - `scripts/dev/check-phase2-batch6b-delivery-package.sh` 通过，`PASS=17 FAIL=0`。
+  - `scripts/dev/check-phase2-batch4-file-access.sh` 通过，`PASS=18 FAIL=0`。
+  - `scripts/dev/check-phase2-batch6a-project-initialization.sh` 通过。
+  - `git diff --check` 通过。
+- 页面短回归通过：
+  - `/data-steward/assets/1/work/document-delivery`
+  - `/data-steward/assets/1/work/drawing-delivery`
+- 已确认能力：
+  - 文档交付页可批量选择文件补交。
+  - 文件选择器仍按分页远程加载。
+  - 交付包准备视图可展开并显示汇总与明细。
+  - 批量挂接幂等、跨项目拦截、类型校验未回归。
+  - 新增响应未发现真实 NAS 路径或存储字段泄露。
+- 收口报告已写入：
+  - `handoff/main-agent/phase2-batch6b-batch-delivery-package-closure.md`
+- 当前裁决：二期 6B 正式收口。下一步建议进入 `7A：文件预览策略与交付包导出前置能力` 规划，继续禁止真实 NAS 写操作、模型轻量化、正文抽取和 Hermes 写操作，除非进入后续明确批次。
+
+## 2026-05-19：二期 7A 文件预览策略与交付包导出预检查启动
+
+- 用户确认进入下一步，当前启动 `7A：文件预览策略与交付包导出前置能力`。
+- 主 agent 已完成现状判断：
+  - 数据管家已有 `GET /api/data-steward/assets/files/{fileId}/preview` 和访问票据能力。
+  - 6B 已有交付包准备视图和批量挂接。
+  - 当前预览状态判断散落在数据管家后端和工作中心前端，需要统一口径。
+- 本批边界：
+  - 做共享预览策略。
+  - 做只读交付包导出预检查接口。
+  - 做前端导出预检查面板。
+  - 不生成真实 ZIP，不批量下载，不读取文件正文，不做 BIM 轻量化，不写 NAS，不做 Hermes 写操作。
+- 已写入规划：
+  - `handoff/main-agent/phase2-batch7a-preview-export-precheck-plan.md`
+- 已写入开发 agent prompt：
+  - `handoff/dev-agent/current-prompt.md`
+  - 完成承诺：`<promise>PHASE2_BATCH7A_PREVIEW_EXPORT_PRECHECK_COMPLETE</promise>`
+  - 要求 Claude Code 使用 Ralph Loop，不创建子 agent，不修改 `docs/**`。
+- 已写入测试 agent prompt：
+  - `handoff/test-agent/current-prompt.md`
+- 当前裁决：启动 Claude Code 开发 agent 执行 7A，并由主 agent 监控偏航。
+
+## 2026-05-19：二期 7A 正式收口
+
+- 测试 agent 已完成 7A 专项验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 测试结论：通过，当前未发现新的 `P0 / P1`。
+- 保留既有非阻塞 `P2`：前端生产构建仍有 Vite chunk size warning。
+- 验收通过项：
+  - 后端构建通过。
+  - 前端构建通过。
+  - 后端健康检查通过。
+  - `scripts/dev/check-phase2-batch7a-preview-export-precheck.sh` 通过，`PASS=18 FAIL=0`。
+  - `scripts/dev/check-phase2-batch6b-delivery-package.sh` 通过，`PASS=17 FAIL=0`。
+  - `scripts/dev/check-phase2-batch4-file-access.sh` 通过，`PASS=18 FAIL=0`。
+  - `scripts/dev/check-phase2-batch6a-project-initialization.sh` 通过。
+  - `git diff --check` 通过。
+- 已确认能力：
+  - `GET /api/work-center/projects/{projectId}/delivery-package/export-precheck` 已纳入 OpenAPI。
+  - DOCUMENT / DRAWING / ALL 三种口径均可查。
+  - 预检查响应明确 `dryRun=true`、`packageGenerated=false`。
+  - 页面能展示导出预检查统计卡片和明细表。
+  - 文档/图纸交付页仍保留项目工作台导航、批量补交、审核、驳回、记录和分页远程文件选择能力。
+  - 响应未发现真实 NAS 路径或底层存储字段泄露。
+- 收口报告已写入：
+  - `handoff/main-agent/phase2-batch7a-preview-export-precheck-closure.md`
+- 当前裁决：二期 7A 正式收口。下一步建议进入 `7B：文件预览转换增强` 规划，继续禁止真实 NAS 写操作、真实交付包生成、批量下载、正文抽取、BIM 轻量化和 Hermes 写操作，除非进入后续明确批次。
+
+## 2026-05-19：二期 7B 文件预览转换体验增强启动
+
+- 用户确认继续下一步，当前启动 `7B：文件预览转换体验增强`。
+- 主 agent 已完成边界收束：
+  - 本批做预览状态、转换提示、不可预览交互和交付包预检查表达增强。
+  - 本批不做真实 Office/CAD/BIM 转换，不做 BIM 轻量化，不生成真实预览缓存，不读文件正文，不写 NAS，不做真实交付包或批量下载。
+- 已写入规划：
+  - `handoff/main-agent/phase2-batch7b-preview-conversion-experience-plan.md`
+- 已写入开发 agent prompt：
+  - `handoff/dev-agent/current-prompt.md`
+  - 完成承诺：`<promise>PHASE2_BATCH7B_PREVIEW_CONVERSION_EXPERIENCE_COMPLETE</promise>`
+  - 当前开发方式为独立开发 Codex 会话主导开发，禁止创建子 agent，禁止调用 Claude Code，禁止修改 `docs/**`。
+- 已写入测试 agent prompt：
+  - `handoff/test-agent/current-prompt.md`
+- 当前裁决：可以启动开发 Codex 会话执行 7B。主 agent 后续只做监控、审计和收口判断。
+
+## 2026-05-19：二期 7B 正式收口
+
+- 开发 agent 已完成 7B 开发并写入 `handoff/dev-agent/latest-report.md`。
+- 测试 agent 已完成 7B 专项验收并写入 `handoff/test-agent/latest-report.md`。
+- 测试结论：通过，当前未发现新的 `P0 / P1`。
+- 保留既有非阻塞 `P2`：前端生产构建仍有 Vite chunk size warning。
+- 验收通过项：
+  - 后端构建通过。
+  - 前端构建通过。
+  - 后端健康检查通过。
+  - `scripts/dev/check-phase2-batch7b-preview-conversion-experience.sh` 通过，`PASS=20 FAIL=0`。
+  - `scripts/dev/check-phase2-batch7a-preview-export-precheck.sh` 通过，`PASS=18 FAIL=0`。
+  - `scripts/dev/check-phase2-batch6b-delivery-package.sh` 通过，`PASS=17 FAIL=0`。
+  - `scripts/dev/check-phase2-batch4-file-access.sh` 通过，`PASS=18 FAIL=0`。
+  - `scripts/dev/check-phase2-batch6a-project-initialization.sh` 通过。
+  - `git diff --check` 通过。
+- 已确认能力：
+  - PDF / 图片显示可在线预览。
+  - Office / CAD / BIM 显示需要对应转换或轻量化服务。
+  - 压缩包显示仅下载原文件。
+  - 未知格式显示暂不支持在线预览。
+  - 不可直接在线预览文件不会被误创建 `PREVIEW` 访问票据。
+  - 文档/图纸交付页继续区分预览状态与导出状态。
+  - 响应未发现真实 NAS 路径或底层存储字段泄露。
+- 收口报告已写入：
+  - `handoff/main-agent/phase2-batch7b-preview-conversion-experience-closure.md`
+- 当前裁决：二期 7B 正式收口。下一步建议进入 `8A：BIM 轻量化适配层规划`，先做适配层、状态契约、Mock/占位能力和页面入口，不直接绑定具体厂商或执行真实轻量化转换，除非用户另行确认。
+
+## 2026-05-19：二期 8A BIM 轻量化适配层与 Mock 预览入口启动
+
+- 用户确认继续下一步，当前启动 `8A：BIM 轻量化适配层与 Mock 预览入口`。
+- 主 agent 已完成边界收束：
+  - 本批做可插拔 BIM 轻量化适配层合同、Mock 状态、轻量化准备计划和模型集成页入口。
+  - 本批不接入真实 BIM 引擎，不绑定厂商 SDK，不执行真实模型转换，不生成轻量化产物，不做构件级解析，不读取模型正文，不写 NAS。
+- 已写入规划：
+  - `handoff/main-agent/phase2-batch8a-bim-lightweight-adapter-plan.md`
+- 已写入开发 agent prompt：
+  - `handoff/dev-agent/current-prompt.md`
+  - 完成承诺：`<promise>PHASE2_BATCH8A_BIM_LIGHTWEIGHT_ADAPTER_COMPLETE</promise>`
+  - 当前开发方式为独立开发 Codex 会话主导开发，禁止创建子 agent，禁止调用 Claude Code，禁止修改 `docs/**`。
+- 已写入测试 agent prompt：
+  - `handoff/test-agent/current-prompt.md`
+- 当前裁决：可以启动开发 Codex 会话执行 8A。主 agent 后续只做监控、审计和收口判断。
+
+## 2026-05-19：二期 8A 正式收口并暂停后续批次
+
+- 开发 agent 已完成 8A 开发并写入 `handoff/dev-agent/latest-report.md`。
+- 测试 agent 已完成 8A 专项验收并写入 `handoff/test-agent/latest-report.md`。
+- 测试结论：通过，当前未发现新的 `P0 / P1`。
+- 保留既有非阻塞 `P2`：前端生产构建仍有 Vite chunk size warning。
+- 验收通过项：
+  - 后端构建通过。
+  - 前端构建通过。
+  - 后端健康检查通过。
+  - `scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh` 通过，`PASS=11 FAIL=0`。
+  - `scripts/dev/check-phase2-batch7b-preview-conversion-experience.sh` 通过，`PASS=20 FAIL=0`。
+  - `scripts/dev/check-phase2-batch7a-preview-export-precheck.sh` 通过，`PASS=18 FAIL=0`。
+  - `scripts/dev/check-phase2-batch4-file-access.sh` 通过，`PASS=18 FAIL=0`。
+  - `scripts/dev/check-phase2-batch6b-delivery-package.sh` 通过，`PASS=17 FAIL=0`。
+  - `scripts/dev/check-phase2-batch6a-project-initialization.sh` 通过。
+  - `git diff --check` 通过。
+- 已确认能力：
+  - 新增 BIM 轻量化 Mock 状态接口和 dry-run 准备计划接口。
+  - 模型集成页展示轻量化状态、适配模式、准备检查和 3D 预览入口。
+  - 3D 入口只提示 Mock 状态，不跳转伪造三维页面。
+  - 未执行真实转换，未触碰 NAS，未读取模型正文，未写 Hermes memory，未泄露真实路径。
+- 收口报告已写入：
+  - `handoff/main-agent/phase2-batch8a-bim-lightweight-adapter-closure.md`
+- 用户最新裁决：8A 收口后暂时暂停，不进入 8B。
+- 当前裁决：不启动新的开发批次；后续仅处理用户明确提出的 P0/P1 回归、局部修复或规划核对。
+
+## 2026-05-19：二期插入批次 G1 Agent 引导式交付治理 MVP 启动
+
+- 用户明确要求：8A 收口后暂不进入 8B，也不立即开放真实 NAS 增删改查。
+- 当前临时插入高优先级模块：`Agent 引导式交付治理 MVP`。
+- 主 agent 判断：该模块用于降低真实 NAS 项目进入数字化交付闭环的门槛，优先级高于真实 BIM 轻量化和 NAS 增删改查。
+- 本批核心链路：`项目交付体检 -> 缺失项解释 -> 候选文件推荐 -> 人工确认 -> 批量挂接 -> 审计留痕 -> 完整率刷新`。
+- 本批只做：
+  - 只读交付体检。
+  - 文档/图纸缺失项解释。
+  - 基于元数据的候选文件推荐。
+  - 推荐挂接方案表格。
+  - 人工确认后复用既有批量挂接能力。
+  - Hermes / Agent 只读辅助安全降级。
+- 本批严禁：
+  - Agent 自动写库、自动挂接、自动审核、自动整改。
+  - Agent 自动修改部位树、节点类型、交付物标准。
+  - Agent 移动、删除、重命名、上传 NAS 文件。
+  - 读取 PDF / Office / DWG / RVT / IFC 正文。
+  - 写向量库、长期 memory、OpenSearch、Qdrant、MinIO documents/chunks。
+  - 返回真实 NAS 绝对路径给普通用户。
+  - 破坏 8A BIM Mock 预览入口。
+- 已写入规划：
+  - `handoff/main-agent/phase2-insert-g1-agent-delivery-governance-mvp-plan.md`
+- 已写入开发 agent prompt：
+  - `handoff/dev-agent/current-prompt.md`
+  - 完成承诺：`<promise>PHASE2_INSERT_G1_AGENT_DELIVERY_GOVERNANCE_MVP_COMPLETE</promise>`
+  - 当前开发方式为独立开发 Codex 会话主导开发，禁止创建子 agent，禁止调用 Claude Code，禁止修改 `docs/**`。
+- 已写入测试 agent prompt：
+  - `handoff/test-agent/current-prompt.md`
+- 当前裁决：可以启动开发 Codex 会话执行 G1。主 agent 后续只做监控、审计和收口判断。
+
+## 2026-05-19：二期插入批次 G1 正式收口
+
+- 开发 agent 已完成 G1 开发并写入 `handoff/dev-agent/latest-report.md`。
+- 测试 agent 已完成 G1 专项验收并写入 `handoff/test-agent/latest-report.md`。
+- 测试结论：通过，当前未发现 `P0 / P1`。
+- 保留非阻塞 `P2`：
+  - 前端生产构建仍有既有 Vite chunk size warning。
+  - G1 专项脚本和页面验收会留下 `PHASE2-G1-*` 元数据与测试挂接，连续复跑会影响样板项目缺失项、完整率和交付包预检查数字；当前不触碰真实 NAS，后续可补脚本自清理或隔离测试项目。
+- 验收通过项：
+  - 后端构建通过。
+  - 前端构建通过。
+  - 后端健康检查通过。
+  - `git diff --check` 通过。
+  - `scripts/dev/check-phase2-insert-g1-agent-delivery-governance.sh` 通过，`PASS=34 FAIL=0`。
+  - `scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh` 通过，`PASS=11 FAIL=0`。
+  - `scripts/dev/check-phase2-batch7a-preview-export-precheck.sh` 通过，`PASS=18 FAIL=0`。
+  - `scripts/dev/check-phase2-batch6b-delivery-package.sh` 通过，`PASS=17 FAIL=0`。
+  - `scripts/dev/check-phase2-batch3-review-rectification-report.sh` 通过，`通过=52 失败=0`。
+- 已确认能力：
+  - 新增 4 个 G1 接口：overview、missing-items、recommend-bindings、recommendations:apply。
+  - 项目工作台已有 `交付治理助手` 入口，项目详情页已有 `开始交付治理` 入口。
+  - 页面可展示项目体检、Agent 总结、工程主数据状态、文档/图纸完整率、缺失项解释和推荐挂接方案。
+  - 未选择推荐、未勾选人工确认时不能挂接。
+  - 勾选人工确认后可调用既有批量挂接能力并显示创建、跳过、失败结果。
+  - 审计包含 `work.agent-governance.recommend` 和 `work.agent-governance.apply`。
+  - 未发现真实 NAS 路径泄露、真实文件访问、Hermes 写操作或 Agent 自动治理。
+- 收口报告已写入：
+  - `handoff/main-agent/phase2-insert-g1-agent-delivery-governance-mvp-closure.md`
+- 当前裁决：G1 正式收口，当前不自动进入下一批次。后续候选方向由用户确认。
+
+## 2026-05-19：G1-P2 测试数据自清理小修复启动
+
+- 用户确认下一步先处理 G1 非阻塞 P2：专项脚本和页面验收留下 `PHASE2-G1-*` 元数据与测试挂接。
+- 主 agent 已确认污染点：`scripts/dev/check-phase2-insert-g1-agent-delivery-governance.sh` 会在当前项目创建测试部位、节点类型、交付物定义/类型/属性、目录模板、mock 文件元数据和测试挂接，当前无自清理。
+- 本轮目标：
+  - G1 脚本仍通过。
+  - G1 脚本连续复跑仍通过。
+  - 本轮创建的测试挂接和 mock 文件元数据可清理。
+  - 可清理的主数据资源尽量清理。
+  - 支持 `G1_TEST_PROJECT_ID` 作为隔离项目。
+  - 脚本失败时通过 `trap cleanup EXIT` 尽量清理。
+- 本轮严禁：
+  - 修改 G1 产品功能。
+  - 修改 `docs/**`。
+  - 新增危险生产删除能力。
+  - 硬删除真实业务数据。
+  - 触碰真实 NAS 文件。
+  - 进入真实 BIM 轻量化或 NAS 增删改查。
+- 已写入规划：
+  - `handoff/main-agent/phase2-g1-p2-test-fixture-cleanup-plan.md`
+- 已写入开发 agent prompt：
+  - `handoff/dev-agent/current-prompt.md`
+  - 完成承诺：`<promise>PHASE2_G1_P2_TEST_FIXTURE_CLEANUP_COMPLETE</promise>`
+- 已写入测试 agent prompt：
+  - `handoff/test-agent/current-prompt.md`
+- 当前裁决：可以启动开发 Codex 会话执行 G1-P2 小修复。主 agent 后续只做审计和收口判断。
+
+## 2026-05-19：插入批次 G2 真实项目接入与工程主数据映射修复 MVP 启动
+
+- 用户反馈当前工程主数据初始化仍偏模板套用，容易脱离真实 NAS 项目资产；资产总览中真实项目、样例项目、测试项目和历史数据的区分也不够清晰。
+- 用户同时指出交付治理助手 Hermes 面板仍有产品契约问题：
+  - 有权限项目可能被感知为权限拒绝。
+  - 正文证据缺失和权限拒绝文案混杂。
+  - 项目级问题不应强制要求 assetId。
+  - 前端不应直接展示裸 requestId。
+- 主 agent 判断：这是高于 G1-P2 的产品契约修复。当前暂停 G1-P2，不进入 8B，不开放真实 NAS 增删改查。
+- 当前插入批次：
+  - `G2：真实项目接入与工程主数据映射修复 MVP`
+- 本批只做：
+  - 资产总览项目归类与默认筛选。
+  - 真实 NAS 项目接入状态展示。
+  - 初始化向导升级为真实项目接入向导。
+  - 模板草案 / 待确认语义表达。
+  - 基于 metadata/catalog 的接入评估和草案预览。
+  - 交付治理助手 Hermes project-level 权限、Missing Evidence 和诊断编号表达修复。
+- 本批严禁：
+  - 真实 NAS 增删改查。
+  - 文件移动、删除、重命名、上传。
+  - PDF / Office / DWG / RVT / IFC 正文读取。
+  - BIM 构件级解析。
+  - selective indexing。
+  - Hermes memory / OpenSearch / Qdrant / MinIO documents/chunks 写入。
+  - Agent 自动审批、自动整改、自动创建真实交付结论。
+  - 前端直连 Hermes。
+  - 修改 `docs/**`。
+- 已写入规划：
+  - `handoff/main-agent/phase2-insert-g2-real-project-onboarding-masterdata-mapping-plan.md`
+- 已写入开发 agent prompt：
+  - `handoff/dev-agent/current-prompt.md`
+  - 完成承诺：`<promise>PHASE2_INSERT_G2_REAL_PROJECT_ONBOARDING_MASTERDATA_MAPPING_COMPLETE</promise>`
+- 已写入测试 agent prompt：
+  - `handoff/test-agent/current-prompt.md`
+- 当前裁决：可以启动独立开发 Codex 会话执行 G2。主 agent 后续只做审计、纠偏和收口判断。
+
+## 2026-05-19：G2 批次命名冻结
+
+- 用户明确要求立即冻结批次命名。
+- 冻结结论：
+  - 当前批次固定为 `G2：真实项目接入与工程主数据映射修复 MVP`。
+  - G2 是 G1 后的真实项目接入纠偏批次。
+  - G2 不代表 9A 已完成，也不代表进入了 9A 后续治理。
+  - 8B、8C、9A 均尚未正式进入。
+  - 不再新增 `H1` / `R1` 等临时命名，避免进一步混乱。
+  - 后续所有 prompt、报告、脚本、状态文档必须统一使用 `G2`。
+- 已新增命名冻结文件：
+  - `handoff/main-agent/phase2-g2-naming-freeze.md`
+- 已修正 G2 新专项脚本命名：
+  - 固定为 `scripts/dev/check-phase2-insert-g2-real-project-onboarding.sh`
+  - 历史回归脚本 `check-hermes-jarvis-gateway.sh`、`check-phase2-insert-g1-agent-delivery-governance.sh`、`check-phase2-batch8a-bim-lightweight-adapter.sh` 保持原名，仅作为 G2 回归依赖。
+- 已同步更新：
+  - `handoff/main-agent/status.md`
+  - `handoff/main-agent/phase2-current-roadmap.md`
+  - `handoff/main-agent/phase2-insert-g2-real-project-onboarding-masterdata-mapping-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+- 本轮未修改 `docs/**`。
+
+## 2026-05-20：G2-A 收口判断与 G2-B 启动
+
+- 测试 agent 已完成 `G2-A：真实项目接入与工程主数据映射修复` 验收。
+- 结论：通过。
+- 当前无 P0/P1。
+- 剩余 P2：
+  - 外部 Hermes 真服务未启用，`EXPECT_HERMES_AGENT_AVAILABLE=true` 因环境未启用或 token 未注入失败；本地 Gateway 降级链路通过。
+  - `/api/data-steward/chat` 直接响应仍包含结构化 `data.trace.requestId`，但前端不裸展示，仅弱化为诊断编号。
+  - “全部”筛选里历史 `B6A-SMOKE-*` 项目分类仍不准，默认真实项目视图不受影响。
+- 已确认：
+  - 105 项目业务编码对应内部 `projectId=503`，被识别为真实 NAS 项目。
+  - 105 文件数 `2927`、模型 `198`、图纸 `2729`。
+  - 真实项目接入向导可用。
+  - 模板草案 / 待确认语义可用。
+  - 未确认 apply 被拒绝，未污染 105。
+  - Hermes 对有权限项目不误报权限拒绝。
+  - 正文 / BIM / 构件类问题返回 Missing Evidence。
+  - 未发现真实 NAS 路径、storage 字段、raw row、SQL、token、cookie、password 泄露。
+- 主 agent 裁决：
+  - G2-A 可收口。
+  - 用户要求后续能力不能只解决 105，105 仅作为当前测试样本。
+  - 当前启动 `G2-B：既有真实项目治理可用性补丁`。
+- G2-B 范围：
+  - 资产总览 Hero 区父子结构重排。
+  - 真实项目通用治理路径表达。
+  - Hermes 常驻入口 MVP。
+  - smoke 项目分类修复。
+  - 105 作为样本，同时至少验证另一个真实 NAS 项目。
+- 已写入规划：
+  - `handoff/main-agent/phase2-g2b-existing-project-governance-usability-plan.md`
+- 已写入开发 agent prompt：
+  - `handoff/dev-agent/current-prompt.md`
+  - 完成承诺：`<promise>PHASE2_G2B_EXISTING_PROJECT_GOVERNANCE_USABILITY_COMPLETE</promise>`
+- 已写入测试 agent prompt：
+  - `handoff/test-agent/current-prompt.md`
+- 当前裁决：可以启动独立开发 Codex 会话执行 G2-B。G2-B 通过后，整个 G2 应收口并进入 Git checkpoint，再恢复二期后续主线候选。
+
+## 2026-05-20：读取 Hermes 能力边界并按四层模型更新 G2-B
+
+- 已读取共享文档：
+  - `DigitalDeliveryProject/agent-briefings/hermes_capability_handoff.md`
+  - `DigitalDeliveryProject/integration-contracts/platform_to_hermes_contract.md`
+  - `DigitalDeliveryProject/integration-contracts/gateway_response_contract.md`
+  - `DigitalDeliveryProject/integration-contracts/missing_evidence_policy.md`
+  - `DigitalDeliveryProject/docs/01_capability_matrix.md`
+  - `DigitalDeliveryProject/integration-contracts/feedback_contract.md`
+  - `DigitalDeliveryProject/adr/ADR-002-no-nas-data-in-hermes-memory.md`
+- Hermes 接入口径确认：
+  - `Catalog Layer -> Evidence Layer -> Memory Layer -> Orchestration Layer`
+  - 当前平台只应把 G2-B 做成 Catalog Layer 强化和常驻入口。
+  - Evidence Layer、Memory Layer、Orchestration Layer 不在 G2-B 中实现。
+- 已新增主 agent 裁决：
+  - `handoff/main-agent/hermes-layered-integration-decision.md`
+- 已更新：
+  - `handoff/main-agent/phase2-g2b-existing-project-governance-usability-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+  - `handoff/main-agent/status.md`
+  - `handoff/main-agent/phase2-current-roadmap.md`
+- 当前 G2-B 允许：
+  - Hermes 常驻入口。
+  - 当前页面 / 当前项目上下文。
+  - catalog-only 问答。
+  - 页面用途、下一步动作、治理路径解释。
+  - Missing Evidence 解释。
+- 当前 G2-B 禁止：
+  - `document_evidence_search`。
+  - PDF / Office 正文问答。
+  - DWG / RVT / BIM 内容理解。
+  - Hermes long-term memory 写入正文、raw path、raw catalog row。
+  - 多 Agent 编排或自动治理。
+
+## 2026-05-20：修复本机 Hermes Gateway 外部服务接入环境
+
+- 问题：
+  - 测试报告第 15 项显示本机 `8642` 曾有 Hermes 服务监听，但平台后端处于本地目录兜底模式。
+  - 平台侧 `/api/data-steward/hermes/health` 期望返回外部 Hermes 可用，而不是 `GATEWAY_DISABLED_LOCAL_FALLBACK`。
+- 处理：
+  - 确认平台配置已支持 `HERMES_AGENT_GATEWAY_*` 环境变量。
+  - 从 macOS Keychain 的本机安全条目注入 Hermes service token，未在聊天、日志或命令输出中打印 token 值。
+  - 恢复本机 Hermes Gateway：`http://127.0.0.1:8642/health` 返回 `status=ok`。
+  - 停止旧的未启用 Gateway 的平台后端进程，使用 Hermes Gateway 配置重新启动平台后端。
+- 验证结果：
+  - `GET /api/data-steward/hermes/health` 已返回：
+    - `status=ok`
+    - `hermesAvailable=true`
+    - `gatewayEnabled=true`
+    - `agentAnswerIntegrationEnabled=true`
+    - `unavailableReason=""`
+    - `runtimeWriteEnabled=false`
+    - `readonly=true`
+  - `EXPECT_HERMES_AGENT_AVAILABLE=true bash scripts/dev/check-hermes-jarvis-gateway.sh` 通过，`PASS=13 FAIL=0`。
+- 当前状态：
+  - Hermes Gateway PID 已写入 `tmp/run-logs/hermes-gateway.pid`。
+  - 平台后端 PID 已写入 `tmp/run-logs/backend.pid`。
+  - 本次仅修复本机运行环境，未修改业务代码，未修改 `docs/**`。
+
+## 2026-05-20：Hermes 真实回复链路热修
+
+- 用户问题：
+  - 平台中任意提问都显示“仅基于资产目录和权限上下文 / 密级 UNKNOWN / catalog-only”等固定话术。
+  - 只有少数预设问题看似可回复，且不像真实 LLM 思考结果。
+- 根因：
+  - 之前 health 只检查 Hermes `/health`，该接口不校验 token。
+  - 实际 `/v1/chat/completions` 因 token 不匹配返回 401，平台后端静默走本地 catalog-only 兜底。
+  - 平台未向 Hermes 传入安全的项目目录摘要，真实 Agent 即使接通，也无法回答项目文件数量、类型分布等目录级问题。
+- 修复：
+  - 修正本机安全存储中的 Hermes service token。
+  - 后端 health 增加带认证的 `/v1/models` 校验，避免“绿灯但聊天不可用”。
+  - 后端 Gateway 在 `page_context` 注入安全 `catalog_summary`，只包含目录级字段，不包含真实 NAS 路径或正文。
+  - 外部 Hermes 正常回复时标记 `trace.agentMode=openai_compatible_catalog_only`。
+  - 前端回答卡片明确显示“真实 Hermes 回答”或“平台安全兜底”。
+  - 普通目录级问题不再强制展示正文 Missing Evidence；正文、DWG、RVT、BIM、构件类问题仍返回 Missing Evidence。
+  - Hermes 专项脚本在 `EXPECT_HERMES_AGENT_AVAILABLE=true` 时强制验证真实外部 Hermes 回复。
+- 验证：
+  - 后端构建通过。
+  - 前端构建通过，仅保留既有 Vite chunk size warning。
+  - 后端健康检查通过。
+  - `EXPECT_HERMES_AGENT_AVAILABLE=true bash scripts/dev/check-hermes-jarvis-gateway.sh` 通过，`PASS=13 FAIL=0`。
+  - `你好` 和 `这个项目有哪些已登记文件？` 已返回真实 Hermes 自然语言回答。
+  - `这张 DWG 图纸里有哪些设备？` 仍返回 Missing Evidence，不编造正文或图纸内容。
+
+## 2026-05-20：G2-B Hermes 前端问答超时修复短回归通过
+
+- 测试报告：
+  - `handoff/test-agent/latest-report.md`
+- 结论：
+  - G2-B Hermes 问答超时修复通过。
+  - 当前无 P0 / P1 / 新增 P2。
+  - 上一轮 `timeout of 10000ms exceeded` P1 已关闭。
+- 已验证：
+  - 全局 Axios 超时仍保持 `10000ms`，未粗暴放大全局超时。
+  - `askHermes()` 单独配置 `HERMES_CHAT_TIMEOUT_MS = 45_000`。
+  - 前端仍通过平台后端 `/api/data-steward/chat`，未直连 Hermes。
+  - 浏览器实测 `这个页面是干什么的？`、`我下一步应该做什么？` 等 10 秒以上真实 Hermes 回答可正常展示。
+  - 等待期间输入框和提交按钮禁用，并显示“真实 Hermes 正在组织回答，可能需要 10-30 秒。平台未执行任何写操作。”
+  - 正文 / DWG / RVT / BIM / 构件类问题仍返回 Missing Evidence，不编造文件正文或模型内部内容。
+  - 未泄露 `/Volumes`、`smb://`、`nas://`、`storage_path`、SQL、raw row、token / secret / password。
+- 必跑命令：
+  - 前端构建通过，仅保留既有 Vite chunk size warning。
+  - 后端健康检查通过。
+  - `EXPECT_HERMES_AGENT_AVAILABLE=true bash scripts/dev/check-hermes-jarvis-gateway.sh` 通过，`PASS=13 FAIL=0`。
+  - `bash scripts/dev/check-phase2-insert-g2-real-project-onboarding.sh` 通过，`PASS=11 FAIL=0`。
+  - `git diff --check` 通过。
+- 主 agent 裁决：
+  - G2-B 可以收口。
+  - 建议进入 G2 整体收口与 Git checkpoint 前的变更分组审计。
+  - 由于当前工作区存在较多历史未提交改动和未跟踪文件，Git checkpoint 不应直接全量提交；需要先按 G2、Hermes、历史批次、运行态临时文件分组确认。

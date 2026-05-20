@@ -1,5 +1,82 @@
 # 主 Agent 裁决记录
 
+## 2026-05-18：企业 Agent 正式名称收束为 Hermes
+
+裁决：
+
+- 项目企业 Agent 正式名称统一为 `Hermes`。
+- 前端用户可见文案、平台后端 capabilities、只读网关返回文案和新审计 action 均使用 `Hermes`。
+- 历史 handoff 中已经完成的 `贾维斯` 阶段记录保留为历史，不再作为后续产品命名依据。
+- 后续开发 prompt、测试 prompt 和客户演示材料不得再把正式产品名写成 `Jarvis / 贾维斯`。
+- 当前仍保持 `catalog-only / read-only / permission-aware / Missing Evidence / draft-only`，名称收束不代表开放正文读取、Agent 写库、NAS 扫描或索引写入。
+
+原因：
+
+- 用户已明确要求企业 Agent 正式名称统一为 Hermes。
+- Hermes Phase 2.89/V3 对接文档也以 Hermes 作为技术和产品协作口径。
+- 统一命名可以减少前端、后端、测试报告和后续客户材料之间的歧义。
+
+## 2026-05-15：二期主视角切换与路线收束裁决
+
+裁决：
+
+- 项目主视角正式从 `一期内部 BIM 资产管理试点` 切换到 `二期客户交付版`。
+- 一期后端数据库、NAS 资产接管、稳定 SQL View、事件流、权限审计、agent API Key、删除隔离等能力视为已收口；后续只处理 P0/P1 回归、真实 NAS 数据治理必要修复和客户交付前安全补强。
+- 新增 `docs/10-phase2-development-roadmap.md` 作为二期路线入口，新增 `handoff/main-agent/phase2-current-roadmap.md` 作为主 agent 日常交接入口。
+- 后续二期日常上下文默认读取 `docs/07`、`docs/08`、`docs/03`、`docs/10` 和最新 handoff 报告，不再默认加载大量一期历史报告，减少上下文占用。
+- 二期后续推进顺序固定为：
+  1. 数据管家前端重做批次一收口。
+  2. `批次 4R：文件访问安全闭环复验与收口`。
+  3. `批次 5：数据管家客户版模块补齐`。
+  4. `批次 6：客户项目初始化与标准模板化`。
+  5. `批次 7：文件预览转换与批量交付增强`。
+  6. `批次 8：BIM 轻量化适配层`。
+  7. `批次 9：构件级解析、搜索与交付联动`。
+  8. `批次 10：客户部署、运维和交付文档包`。
+- 企业 agent 自动审批、自动整改、自动删除、自动写库、正文向量化、长期 memory、多 agent 调度真实业务动作、真实 NAS 自动移动/删除/改名均不得混入近期二期批次，继续后置到三期或单独审批。
+
+原因：
+
+- 当前 docs 和 handoff 中一期资料过多，继续全部加载会干扰二期判断。
+- 二期批次一到三已经收口，当前瓶颈不再是后端数据库，而是客户交付版产品面貌、文件访问安全、数据管家模块完整性、BIM 轻量化和客户部署交付包。
+- 用户明确要求在围绕 PRD 的前提下将项目主视角移到二期，并减少上下文占用。
+
+## 2026-05-15：Hermes 内核包装为“贾维斯数据管家”裁决
+
+裁决：
+
+- 用户提供的 `/Users/vc/Downloads/HERMES_DATA_STEWARD_PLATFORM_COUPLING_GUIDE.md` 纳入二期路线。
+- 平台用户可见名称定为 `贾维斯数据管家`，技术内核仍按 `Hermes Memory / Hermes Data Steward` 管理。
+- 贾维斯是二期客户交付版的重要亮点，但第一阶段只能按 `catalog-only / read-only / permission-aware / Missing Evidence / operation plan draft` 接入。
+- 近期新增优先批次：`批次 5A：贾维斯数据管家内嵌 v0`。
+- 批次 5A 放在 `批次 4R：文件访问安全闭环复验与收口` 之后、`批次 5B：数据管家客户版模块补齐` 之前。
+- 当前平台已有 Hermes Gateway 和前端问答组件，批次 5A 重点不是从零开发，而是正式产品化、命名收束、审计补齐、专项脚本和安全验收。
+- 近期仍禁止：Agent 直接写 DB、直接写 Hermes DB、写 OpenSearch/Qdrant/MinIO、直接扫描/移动/删除/修改 NAS 文件、全量解析 BIM 文件、把 catalog metadata 当正文 evidence、自动审批、自动整改、production rollout。
+
+原因：
+
+- Hermes 当前仍处于 `Phase 2.86a Temp Evidence Write Rehearsal Implementation`，尚未真实写入 documents/chunks/document_versions，也未开放正式正文问答。
+- 用户明确希望贾维斯成为平台最重要的亮点，因此不能等到 Hermes 全量能力完成后才做前端入口；但必须先以只读、权限感知、缺证据可解释的方式安全接入。
+- 当前平台已具备 asset views v1.1、Agent Gateway、权限证明和前端问答抽屉，具备快速产品化为 `贾维斯数据管家 v0` 的条件。
+
+## 2026-05-18：Hermes V3 联调口径与 5A 收口裁决
+
+裁决：
+
+- `批次 5A：贾维斯数据管家内嵌 v0` 已通过测试 agent 专项复验，正式收口。
+- 用户提供的 `/Users/vc/Downloads/DB_TEAM_HERMES_FRONTEND_GATEWAY_INTEGRATION_V3.md` 纳入后续贾维斯路线。
+- Hermes 当前版本口径更新为 `phase-2.89-test-machine-runtime-preflight-handoff-baseline`。
+- V3 允许继续推进前端内嵌、平台后端 Gateway、Hermes health、只读 chat/catalog lookup、权限上下文传递和审计 trace 对齐。
+- V3 不授权真实 DB 写入、parser、NAS copy、index write、Agent answer integration 或 production rollout。
+- 在 5B 之前新增一个可选小批次：`5A.1 贾维斯 Gateway 合同对齐与联调增强`。
+- 5A.1 只补 health、平台语义别名、只读 catalog search 壳、trace 关联和 feature flag 状态展示，不进入正文抽取、索引写入、Agent CRUD 或 NAS 写操作。
+
+原因：
+
+- 5A 已经满足当前安全主线，但 V3 增加了更明确的联调接口建议，包括 health、catalog search、trace 对齐和 feature flag。
+- 这些能力适合做成很薄的 Gateway 合同增强，不应膨胀成正文问答或 Agent 自动治理。
+- 数据管家客户版 5B 仍需推进，5A.1 不能长期阻塞业务模块补齐。
+
 ## 2026-05-12：二期批次一只读目录与 Agent 预览层裁决
 
 裁决：
@@ -321,3 +398,24 @@
 - `95` 与 `99` 存在重复编号，直接入库会污染项目编码、权限和后续检索。
 - 投标、参考、未知命名目录不是确定的正式交付项目，不能进入正式资产库。
 - 这类复杂历史资料正是平台后续数据治理能力的价值点，适合由企业 agent 辅助识别，人工监控后再入库。
+
+## 2026-05-18：二期批次 4R 文件访问安全闭环正式收口裁决
+
+裁决：
+
+- 二期批次四/4R `文件访问安全闭环复验与收口` 正式收口。
+- 当前无 P0/P1，仅保留既有 `Vite chunk size warning` P2，不阻塞后续开发。
+- 文件访问安全基线固定为：
+  - 普通项目用户不得看到真实 NAS 路径。
+  - 管理员在有权限项目中可见必要真实路径，便于内部排障。
+  - `PROJECT_VIEWER` 可预览、不可下载。
+  - `DELIVERY_ENGINEER` 可预览、可下载。
+  - 短时访问票据不暴露真实路径，预览票据不得跨动作变成下载响应。
+  - 文件访问成功、拒绝、失败必须留审计，审计不得泄露票据 secret、真实路径或 NAS 绝对路径。
+- 后续涉及文件预览、下载、Jarvis/Hermes 问答证据、文件正文抽取或客户版部署时，不得绕开以上安全基线。
+
+原因：
+
+- 测试 agent 专项复验确认：构建、健康检查、批次四专项脚本、文件预览脚本、二期批次一/二/三回归均通过。
+- 4R 复验确认普通项目用户路径泄露问题已收住，管理员路径可见性未被误伤。
+- 这是后续 `贾维斯数据管家`、文件正文只读抽取、模型预览和客户交付版权限体系的基础安全闸门。

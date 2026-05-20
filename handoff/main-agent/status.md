@@ -1,14 +1,86 @@
 # 主 Agent 项目状态
 
+## 2026-05-20 G2-B 收口裁决
+
+- `G2-B：既有真实项目治理可用性补丁` 已通过测试 agent 短回归。
+- 上一轮 Hermes 前端问答 `timeout of 10000ms exceeded` P1 已关闭。
+- 当前 G2-B 无 P0 / P1 / 新增 P2。
+- 真实 Hermes 已保持外部接入，10 秒以上回答可正常展示；前端仍通过平台后端 `/api/data-steward/chat`，未直连 Hermes。
+- 正文 / DWG / RVT / BIM / 构件类问题仍返回 Missing Evidence，不编造正文或模型内容。
+- G2-B 可以收口；下一步建议进入 G2 整体收口与 Git checkpoint 前的变更分组审计。
+- 注意：当前工作区存在较多历史未提交改动和未跟踪文件，Git checkpoint 前必须先分组确认，不建议直接全量提交。
+- Git checkpoint 前审计文件：`handoff/main-agent/g2-git-checkpoint-audit.md`。
+- 主 agent 建议：优先采用分组 checkpoint；如用户更重视快速保护当前成果，可采用完整阶段 checkpoint，但需明确这不是干净小 PR。
+
+## 2026-05-15 当前主视角
+
+项目主视角已从 `一期内部 BIM 资产管理试点` 切换到 `二期客户交付版`。
+
+一期后端数据库、NAS 资产接管、SQL View、事件流、权限审计和删除隔离等能力已经收口，后续一期只处理 P0/P1 回归或真实 NAS 数据治理必要修复。
+
+二期当前已完成并可作为基线的能力：
+
+- 批次一：只读资产目录、REST 权限证明、Agent preview / audit-ready 页面。
+- 批次二：标准驱动交付闭环最小可用版。
+- 批次三：人工审核、整改闭环、基础报表导出。
+- 项目工作台导航重组。
+- 数据管家资产驾驶舱和 RealBIM 风格文件管理第一批。
+- 文件管理三项优化短回归已通过：目录树宽度可调、缺 checksum 受控补算入口、更多菜单去重，当前无 P0/P1/P2。
+- 批次 4R：文件访问安全闭环复验与收口已通过测试 agent 专项复验，当前无 P0/P1，仅有既有 Vite chunk size warning P2。
+- 批次 5A：Hermes 数据管家内嵌 v0 已通过测试 agent 专项复验并正式收口。
+- 批次 5A.1：Hermes Gateway 合同对齐与联调增强已通过测试 agent 专项复验并正式收口。
+- 批次 5B：数据管家客户版模块补齐已通过测试 agent 短回归并正式收口。
+- 批次 6A：项目初始化评估与建筑机电/BIM交付基础模板预览/套用已通过测试 agent 专项验收并正式收口。
+- 批次 6B：批量挂接交付与交付包准备视图已通过测试 agent 专项短回归并正式收口。
+- 批次 7A：文件预览策略统一与交付包导出预检查已通过测试 agent 专项验收并正式收口。
+- 批次 7B：文件预览转换体验增强已通过测试 agent 专项验收并正式收口。
+- 批次 8A：BIM 轻量化适配层与 Mock 预览入口已通过测试 agent 专项验收并正式收口。
+- 插入批次 G1：Agent 引导式交付治理 MVP 已通过测试 agent 专项验收并正式收口。
+
+二期新的路线入口：
+
+- `docs/10-phase2-development-roadmap.md`
+- `handoff/main-agent/phase2-current-roadmap.md`
+- `handoff/main-agent/hermes-jarvis-coupling-roadmap.md`
+
+当前插入批次：
+
+1. 插入批次 G1 已正式收口。
+2. G1-P2 `测试数据自清理 / 隔离测试项目` 原为非阻塞小修复；因用户提出更高优先级产品契约问题，当前暂停，不作为主线入口。
+3. 当前主线切到 `G2：真实项目接入与工程主数据映射修复 MVP`。
+4. 本轮只修真实 NAS 项目识别、项目分类、真实项目接入向导、模板草案语义、交付治理助手 Hermes 权限/Missing Evidence/诊断编号表达。
+5. 命名已冻结：`G2 = 真实项目接入与工程主数据映射修复 MVP`。
+6. G2 是 G1 后的真实项目接入纠偏批次，不代表 9A 已完成，也不代表进入了 9A 后续治理。
+7. 8B、8C、9A 均尚未正式进入。
+8. 不再新增 `H1` / `R1` 等临时命名；后续所有 prompt、报告、脚本、状态文档必须统一使用 `G2`。
+9. 本轮仍不进入 8B / 8C / 9A，不开放真实 NAS 增删改查，不做真实 BIM 轻量化，不做正文抽取，不做 selective indexing，不允许 Agent 自动治理。
+10. 后续是否恢复 G1-P2、进入 8B / 8C / 9A、NAS 受控增删改查、构件级能力、Hermes selective indexing、正文抽取和受控写操作，均需用户再次明确确认。
+11. G2-A 已通过测试 agent 验收，当前无 P0/P1，仅剩不阻塞 P2。
+12. 当前进入 `G2-B：既有真实项目治理可用性补丁`。105 项目仅作为样本，能力必须适用于所有已接管真实 NAS 项目。
+13. G2-B 通过后，整个 G2 应收口并进入 Git checkpoint，再由用户决定是否恢复 8B / 8C / 9A。
+14. Hermes 后续接入按 `Catalog Layer -> Evidence Layer -> Memory Layer -> Orchestration Layer` 推进。G2-B 只强化 Catalog Layer 和常驻入口，不进入 Evidence / Memory / Orchestration 实现。
+
+后续日常开发默认读取 `docs/07`、`docs/08`、`docs/03`、`docs/10`、`handoff/main-agent/phase2-current-roadmap.md`、`handoff/main-agent/hermes-jarvis-coupling-roadmap.md`、`handoff/dev-agent/latest-report.md`、`handoff/test-agent/latest-report.md`。`docs/01` 到 `docs/06` 和大量一期 handoff 报告默认作为历史资料，不再反复加载。
+
 ## 当前阶段
 
-文档与验收口径已升级为三期路线，当前已完成 `一期：内部 BIM 资产管理试点` 的主线收口。`一期内部试运行可用性与验收完整度短回归` 已通过测试 agent 极短复验，当前无 P0/P1/P2。`二期批次一：只读资产目录与 Agent 对接预览层` 已通过测试 agent 短回归，正式收口。`二期批次二：标准驱动交付闭环最小可用版` 已通过测试 agent 验收，当前无 P0/P1/P2，正式收口。`二期批次三：人工审核、整改闭环与基础报表导出` 已通过测试 agent 正式验收，当前无 P0/P1，仅有不阻塞收口的 Vite chunk size warning P2，正式收口。`标准驱动交付流程新手可用性补丁` 已通过测试 agent 短回归，上一轮 P1 已关闭，正式收口。
+文档与验收口径已升级为三期路线，当前已完成 `一期：内部 BIM 资产管理试点` 的主线收口。`一期内部试运行可用性与验收完整度短回归` 已通过测试 agent 极短复验，当前无 P0/P1/P2。`二期批次一：只读资产目录与 Agent 对接预览层` 已通过测试 agent 短回归，正式收口。`二期批次二：标准驱动交付闭环最小可用版` 已通过测试 agent 验收，当前无 P0/P1/P2，正式收口。`二期批次三：人工审核、整改闭环与基础报表导出` 已通过测试 agent 正式验收，当前无 P0/P1，仅有不阻塞收口的 Vite chunk size warning P2，正式收口。`标准驱动交付流程新手可用性补丁` 已通过测试 agent 短回归，上一轮 P1 已关闭，正式收口。`导航与项目工作台重组` 已完成开发、返修与短回归，作为当前前端项目工作台基线保留。`二期批次四/4R：文件访问安全闭环` 已通过测试 agent 专项复验，正式收口。
+
+当前最新裁决：二期批次 5B 已通过测试 agent 短回归并正式收口。用户提供的 V3 Hermes 前端网关耦合文档已纳入路线，Hermes 当前口径更新为 `phase-2.89-test-machine-runtime-preflight-handoff-baseline`。5B 首轮 P0“导出列表和 `catalog/files.logicalPath` 泄露 `/Volumes/...`”已关闭，`logicalPath` 已统一转为项目内路径，导出和任务失败原因已做兜底脱敏。2026-05-18 已按 V3 文档补强平台侧 Hermes 接入：`/api/data-steward/chat` 兼容 V3 请求格式，新增 `/api/data-steward/catalog/search` 只读资产目录 metadata preview，并在前端 Hermes 面板展示资产目录预览；Hermes 正式命名已收束，前端用户侧、后端 capabilities 和新审计 action 均统一为 Hermes；前端不再向 catalog search 发送可信 `project_scope`，只发送普通 `projectFilters`，可信范围由平台后端 Gateway 生成；专项脚本 `check-hermes-jarvis-gateway.sh` 已通过 `PASS=11 FAIL=0`。`批次 6A：项目初始化评估 + 建筑机电/BIM交付基础模板预览/套用` 已通过测试 agent 专项验收并正式收口，收口报告为 `handoff/main-agent/phase2-batch6a-project-initialization-closure.md`。
 
 ## 当前判断
 
 平台基础工程、`master-data`、数据管家 MVP、工作中心 MVP、智慧大屏和 3D 适配层 mock 已形成可运行闭环。现在项目重点不再是继续扩早期 MVP，而是把公司内部几百个 BIM 项目和约 10TB 模型资产先接入平台，并提前为企业内核级 agent 做数据库检索和接口对接准备。
 
-最新裁决：一期后端数据治理正式收口，一期内部试运行可用性验收收口。前端已补齐资产总览、项目资产详情、扫描任务、非标准资料治理、数据质量、文件详情、人工治理和文件预览状态外壳等一期试运行页面；测试 agent 极短复验确认 DB-2 只读合同、首页项目下拉和扫描脚本自清理均通过，当前无 P0/P1/P2。后续不再继续扩大一期后端治理范围，除非发现 P0/P1 回归。二期批次一只做“前端资产目录、REST 权限证明、只读 catalog API、Agent preview / audit-ready 页面”，不做 Agent 写库、自动修复、自动删除、正文向量化、自动审批或客户生产级权限承诺。
+最新裁决：一期后端数据治理正式收口，一期内部试运行可用性验收收口。前端已补齐资产总览、项目资产详情、扫描任务、非标准资料治理、数据质量、文件详情、人工治理和文件预览状态外壳等一期试运行页面；测试 agent 极短复验确认 DB-2 只读合同、首页项目下拉和扫描脚本自清理均通过，当前无 P0/P1/P2。后续不再继续扩大一期后端治理范围，除非发现 P0/P1 回归。
+
+当前最新主线：二期客户交付版继续推进。导航与项目工作台重组已作为前端基线完成，文件访问安全闭环 4R、Hermes 数据管家 5A、Hermes Gateway 合同对齐 5A.1、数据管家客户版模块补齐 5B、项目初始化与标准模板化 6A、批量挂接交付与交付包准备视图 6B、文件预览策略统一与交付包导出预检查 7A、文件预览转换体验增强 7B、BIM 轻量化适配层与 Mock 预览入口 8A、Agent 引导式交付治理 MVP G1 均已正式收口。G1 用于降低真实 NAS 项目进入交付闭环的门槛；继续禁止真实 NAS 写操作、正文抽取、真实模型轻量化和 Agent 自动治理，除非进入后续明确批次。根因已经确认：平台曾同时存在 token 当前项目、顶部全局项目切换器、项目详情路由和全局主数据/工作中心菜单，导致用户感受不到“先进入项目，再在项目内工作”。主 agent 已产出规划与 agent prompt，并已完成开发、审计和测试报告 P1/P2 返修：
+
+- 规划文件：`handoff/main-agent/navigation-project-workbench-reorg-plan.md`
+- 开发 prompt：`handoff/dev-agent/current-prompt.md`
+- 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+本轮推荐方案是“项目壳层改造”：`/data-steward/assets` 作为默认入口，`/data-steward/assets/:projectId` 升级为项目工作台，工作台顶部承载工程主数据和工作中心入口，文件资产区复用 catalog 目录能力改为左目录右文件，顶部全局项目切换器移除或隐藏。当前 P1/P2 返修结果：左侧全局菜单已进一步收紧，不再展示 `首页 / 工程主数据 / 工作中心` 顶级入口；项目工作台顶栏已展示负责人，为空时显示 `待维护`。
 
 二期批次一最新状态：Claude Code 开发 agent 已完成实现并写入 `handoff/dev-agent/latest-report.md`；主 agent 审计发现并修复过一次无权限 `audit-context` 返回 500 的问题。测试 agent 首轮验收无 P0，但指出 P1：前端资产目录页缺少“按目录浏览 + 版本筛选”的完整页面交互。该 P1 首次补齐后，测试 agent 二次短回归又发现 2 个真实联调 P1：前端分页字段未按真实 `items/pageNo/pageSize/total` 读取，目录接口返回文件路径级记录而非目录聚合。当前这些 P1 已全部修复，并已通过测试 agent 2026-05-13 短回归。最终验证：专项脚本 `scripts/dev/check-phase2-batch1-readonly-catalog.sh` `25/25 PASS`，真实页面不再空表，`catalog/directories` 返回目录聚合，目录浏览和版本筛选可用。收口报告：`handoff/main-agent/phase2-batch1-readonly-catalog-closure.md`。
 
@@ -181,7 +253,7 @@
 - 本批只做：PDF/图片浏览器原生预览入口、下载权限与预览权限分离、短时访问票据、NAS 只读流式读取、访问审计和专项验收脚本。
 - 本批不做：样板项目清理、模型轻量化、构件级解析、Office/CAD/BIM 转换、正文抽取、向量库、Agent workflow、自动审批、真实 NAS 写操作或客户生产级权限体系承诺。
 - 开发 agent 必须使用 Ralph Loop，完成承诺固定为 `<promise>PHASE2_BATCH4_FILE_ACCESS_COMPLETE</promise>`。
-- 当前状态：测试 agent 正式验收首轮不通过，发现 1 个 P0：普通项目用户可在 `/data-steward/catalog` 文件详情中看到真实 NAS 路径。主 agent 已完成 P0 返修，当前等待测试 agent 复验后再决定是否正式收口。
+- 当前状态：正式收口。测试 agent 已完成 4R 文件访问安全闭环专项复验，结论为通过，当前无 P0/P1，仅有既有 Vite chunk size warning P2。
 - P0 返修内容：
   - `catalog/files` 列表和 `catalog/files/{fileId}` 详情按项目角色控制路径可见性。
   - 仅 `PROJECT_ADMIN` 可见真实 `storagePath`。
@@ -196,7 +268,21 @@
   - `scripts/dev/check-file-preview-shell.sh`：通过。
   - `scripts/dev/check-phase2-batch1-readonly-catalog.sh`：`25/25 PASS`。
   - `git diff --check`：通过。
-- 当前裁决：P0 已按主 agent 自测修复，但二期批次四暂不正式收口；需要测试 agent 按 `handoff/test-agent/current-prompt.md` 复验，重点复核普通项目用户路径隐藏。
+- 4R 测试 agent 复验结果：
+  - 后端构建通过。
+  - 前端构建通过。
+  - 健康检查通过，实际验收端口为 `8080`。
+  - 局部 `git diff --check` 通过。
+  - `scripts/dev/check-phase2-batch4-file-access.sh`：`18/18 PASS`。
+  - `scripts/dev/check-file-preview-shell.sh`：通过。
+  - `scripts/dev/check-phase2-batch1-readonly-catalog.sh`：通过。
+  - `scripts/dev/check-phase2-batch2-standard-delivery.sh`：通过。
+  - `scripts/dev/check-phase2-batch3-review-rectification-report.sh`：通过。
+  - 普通项目用户不会在 catalog 列表、catalog 详情、项目文件详情中看到真实 NAS 路径。
+  - 管理员必要路径可见性未被误伤。
+  - 预览/下载权限分离有效，预览票据不会跨动作变成下载响应。
+  - 文件访问成功、拒绝、失败均有审计，未发现 secret、真实路径或 NAS 绝对路径泄露。
+- 当前裁决：二期批次四/4R 正式收口。下一步可进入 `批次 5A：贾维斯数据管家内嵌 v0`，或若用户希望先补业务模块，则进入 `批次 5B：数据管家客户版模块补齐`。
 
 ## 企业 Agent 对接裁决
 
@@ -427,6 +513,15 @@
   - 当前验收口径：下拉 `18` 个项目，真实 NAS `16` 个项目，真实文件 `40935` 份，非标准目录 `11` 条。
   - 通过标准：真实项目可查、文件元数据可看、路径可复制、专业/路径/大小关键字段不缺失、非标准目录不污染正式库、普通用户不越权、DB-2 稳定 View 准备好。
   - 阻塞标准：权限泄漏、找不到真实文件、正式资产污染、页面主链路打不开。
+- 当前导航与项目工作台重组已完成主 agent 审计，并已按测试 agent 报告完成 P1/P2 返修，待测试 agent 极短回归。
+  - 默认入口、登录后跳转和兜底路由已改为 `/data-steward/assets`。
+  - 项目详情已改为项目工作台，顶部提供工程主数据和工作中心项目内入口。
+  - 文件资产区已改为左目录树 + 右文件表，并保留详情、治理、预览、checksum、复制路径等操作。
+  - 顶部全局“当前项目”切换器已移除，项目内路由进入前会同步当前项目上下文。
+  - P1 返修：左侧全局菜单过滤已收紧，页面侧边栏不再展示 `首页 / 工程主数据 / 工作中心` 顶级入口，保留 `数据管家` 作为平台级主入口。
+  - P2 返修：项目工作台顶栏已展示负责人；后端当前用户项目摘要已补充 `projectManagerName` 字段，空值显示为 `待维护`。
+  - 验证通过：前端构建、后端构建、临时 `18080` 后端接口抽查、`git diff --check`。
+  - 短回归入口：`handoff/test-agent/current-prompt.md`。
 
 ## 跨机器交接入口
 
