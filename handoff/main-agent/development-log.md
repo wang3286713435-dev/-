@@ -1,5 +1,20 @@
 # 主 Agent 开发监控日志
 
+## 2026-05-20：M1C 工程主数据真实项目落地启动
+
+- 用户确认进入 M1C。
+- 主 agent 裁决：
+  - M1C 是平台本体稳定批次，不是 Hermes/G4 分支。
+  - 本批目标是让真实 NAS 项目通过“资产证据 -> 接入评估 -> 草案预览 -> 人工确认 -> 工程主数据可维护”进入交付闭环。
+  - 模板只能是草案/建议，不能冒充真实工程结构。
+  - 105 项目仅作为样本之一，不能写死；必须至少抽查另一个真实 NAS 项目。
+- 当前禁止：
+  - Hermes 新能力、G4、8B / 8C / 9A、真实 NAS 写操作、正文抽取、真实 BIM 轻量化、Agent 自动治理。
+- 已写入：
+  - M1C 计划：`handoff/main-agent/m1c-real-project-masterdata-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
 ## 2026-05-20：M1B 项目工作台与数据管家可用性收口
 
 - 测试 agent 已完成 M1B 验收。

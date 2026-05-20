@@ -1,5 +1,17 @@
 # 主 Agent 项目状态
 
+## 2026-05-20 M1C 启动
+
+- 用户确认进入 `M1C：工程主数据真实项目落地`。
+- 当前 active 批次：`M1C`。
+- M1C 目标：把真实项目接入向导、初始化向导、部位树、节点类型和交付物标准，从“模板演示”收敛为真实 NAS 项目可用的工程主数据落地流程。
+- M1C 主链路：`真实项目资产 -> 接入评估 -> 草案预览 -> 人工确认 -> 创建/补齐工程主数据 -> 进入交付闭环`。
+- 105 项目只作为样本之一；能力必须同样适用于 93/506 或其他真实 NAS 项目，不允许为 105/503 写死逻辑。
+- M1C 禁止：新增 Hermes 能力、继续 G4、进入 8B / 8C / 9A、真实 NAS 增删改查、正文抽取、真实 BIM 轻量化、Agent 自动治理。
+- 开发 prompt：`handoff/dev-agent/current-prompt.md`。
+- 测试 prompt：`handoff/test-agent/current-prompt.md`。
+- 主 agent 计划：`handoff/main-agent/m1c-real-project-masterdata-plan.md`。
+
 ## 2026-05-20 M1B 收口
 
 - `M1B：项目工作台与数据管家可用性收口` 已通过测试 agent 验收并正式收口。
