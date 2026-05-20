@@ -42,7 +42,7 @@ public class ChecksumApplicationService {
         eventService.record("CHECKSUM", file.projectId(), "FILE_RESOURCE", String.valueOf(request.fileId()),
             "checksum.create", userId, "API", "创建checksum任务: " + file.fileName(), null);
 
-        return jobRepository.requireById(jobId);
+        return AssetJobResponseSanitizer.sanitize(jobRepository.requireById(jobId));
     }
 
     @Transactional

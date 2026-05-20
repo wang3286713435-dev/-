@@ -9,6 +9,7 @@
         <p>{{ projectSubTitle }}</p>
       </div>
       <div class="asset-command-center__meta">
+        <el-tag type="info" effect="plain">平台内部ID {{ projectId }}</el-tag>
         <el-tag type="info" effect="plain">{{ project?.assetSource || '内部资产' }}</el-tag>
         <el-tag :type="project?.assetStatus === 'ACTIVE' ? 'success' : 'info'" effect="plain">
           {{ project?.assetStatus || '未加载' }}
@@ -208,7 +209,7 @@
               <article v-for="item in recentFiles" :key="item.fileId" class="asset-activity-item">
                 <div>
                   <strong>{{ item.fileName }}</strong>
-                  <span>文件ID {{ item.fileId }} / {{ formatBytes(item.sizeBytes) }} / {{ formatDate(item.updatedAt) }}</span>
+                  <span>平台文件ID {{ item.fileId }} / {{ formatBytes(item.sizeBytes) }} / {{ formatDate(item.updatedAt) }}</span>
                 </div>
                 <el-tag size="small">{{ item.fileKind }}</el-tag>
               </article>
@@ -237,6 +238,64 @@
       </el-tab-pane>
 
       <el-tab-pane label="文件管理" name="files">
+        <section class="asset-job-panel" data-m1e-checksum-jobs>
+          <div class="asset-job-panel__header">
+            <div>
+              <h2>checksum 后台任务</h2>
+              <span>后台任务编号会和文件名、平台文件ID、状态、进度绑定展示。</span>
+            </div>
+            <el-button size="small" :loading="checksumJobsLoading" @click="loadChecksumJobs(true)">刷新任务</el-button>
+          </div>
+          <el-table
+            v-loading="checksumJobsLoading"
+            :data="checksumJobs"
+            class="master-table asset-job-table"
+            empty-text="暂无 checksum 后台任务"
+          >
+            <el-table-column label="后台任务编号" width="130">
+              <template #default="{ row }">#{{ row.id }}</template>
+            </el-table-column>
+            <el-table-column label="对应文件" min-width="260" show-overflow-tooltip>
+              <template #default="{ row }">
+                <div class="asset-job-file">
+                  <strong>{{ checksumJobFileName(row) }}</strong>
+                  <span>平台文件ID：{{ row.targetId || '-' }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="110">
+              <template #default="{ row }">
+                <el-tag :type="jobStatusTag(row.status)">{{ jobStatusLabel(row.status) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="进度" width="160">
+              <template #default="{ row }">
+                <el-progress :percentage="jobProgressValue(row)" :stroke-width="8" />
+              </template>
+            </el-table-column>
+            <el-table-column label="失败原因" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">{{ safePathText(row.failureReason) }}</template>
+            </el-table-column>
+            <el-table-column label="更新时间" width="170">
+              <template #default="{ row }">{{ formatDate(row.updatedAt) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="150" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" text @click="openChecksumJob(row)">查看</el-button>
+                <el-button
+                  v-if="row.status === 'FAILED'"
+                  size="small"
+                  text
+                  type="primary"
+                  :loading="checksumJobRetrying && selectedChecksumJob?.id === row.id"
+                  @click="retryChecksumJob(row)"
+                >
+                  重试
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </section>
         <AssetProjectFileBrowser
           v-if="Number.isFinite(projectId)"
           :key="`${projectId}-${fileBrowserRefreshKey}-${catalogInitialQualityIssue}`"
@@ -245,6 +304,7 @@
           :discipline-options="disciplineOptions"
           :initial-quality-issue="catalogInitialQualityIssue"
           :batch-checksum-creating="batchChecksumCreating"
+          :active="activeTab === 'files'"
           @open-preview="openPreviewById"
           @open-detail="openFileDetailById"
           @open-metadata="openMetadataById"
@@ -256,7 +316,7 @@
 
       <el-tab-pane label="扫描任务" name="scans">
         <el-table v-loading="loading" :data="projectScans" class="master-table" empty-text="暂无扫描任务">
-          <el-table-column prop="id" label="任务ID" width="90" />
+          <el-table-column prop="id" label="扫描任务编号" width="120" />
           <el-table-column prop="rootCode" label="根编码" width="130" show-overflow-tooltip />
           <el-table-column prop="status" label="状态" width="120">
             <template #default="{ row }">
@@ -305,9 +365,10 @@
         <section class="asset-detail-section">
           <h3>文件识别</h3>
           <el-descriptions :column="1" border size="small">
-            <el-descriptions-item label="文件ID">{{ selectedFile.fileId }}</el-descriptions-item>
+            <el-descriptions-item label="平台文件ID">{{ selectedFile.fileId }}</el-descriptions-item>
             <el-descriptions-item label="文件名">{{ selectedFile.fileName }}</el-descriptions-item>
             <el-descriptions-item label="项目">{{ selectedFile.projectCode }} {{ selectedFile.projectName }}</el-descriptions-item>
+            <el-descriptions-item label="项目平台内部ID">{{ selectedFile.projectId }}</el-descriptions-item>
             <el-descriptions-item label="文件类型">{{ selectedFile.fileKind }}</el-descriptions-item>
             <el-descriptions-item label="扩展名">{{ selectedFile.fileExt || '-' }}</el-descriptions-item>
             <el-descriptions-item label="专业">{{ disciplineLabel(selectedFile.discipline) }}</el-descriptions-item>
@@ -388,8 +449,8 @@
           <el-descriptions :column="1" border size="small">
             <el-descriptions-item label="来源类型">{{ selectedFile.sourceType || '-' }}</el-descriptions-item>
             <el-descriptions-item label="存储提供方">{{ selectedFile.storageProvider }}</el-descriptions-item>
-            <el-descriptions-item label="逻辑路径">{{ selectedFile.logicalPath || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="存储路径">
+            <el-descriptions-item label="文件位置提示">{{ filePathHint(selectedFile) }}</el-descriptions-item>
+            <el-descriptions-item label="底层路径">
               <template v-if="selectedFile.storagePath">
                 <el-tag type="info" size="small">底层路径已隐藏，请使用平台受控预览或下载入口</el-tag>
               </template>
@@ -461,7 +522,7 @@
             :closable="false"
           />
           <el-descriptions class="preview-descriptions" :column="1" border size="small">
-            <el-descriptions-item label="文件ID">{{ selectedPreview.fileId }}</el-descriptions-item>
+            <el-descriptions-item label="平台文件ID">{{ selectedPreview.fileId }}</el-descriptions-item>
             <el-descriptions-item label="文件类型">{{ selectedPreview.fileKind }} {{ selectedPreview.fileExt }}</el-descriptions-item>
             <el-descriptions-item label="预览方式">{{ previewModeLabel(selectedPreview) }}</el-descriptions-item>
             <el-descriptions-item label="转换状态">{{ conversionStatusLabel(selectedPreview) }}</el-descriptions-item>
@@ -504,7 +565,7 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="checksumJobDialogVisible" title="checksum 任务状态" width="620px" @closed="stopChecksumJobPolling">
+    <el-dialog v-model="checksumJobDialogVisible" title="checksum 后台任务" width="680px" @closed="stopChecksumJobPolling">
       <div v-loading="checksumJobLoading" class="job-dialog-body">
         <template v-if="selectedChecksumJob">
           <div class="job-state-panel">
@@ -512,7 +573,7 @@
               {{ jobStatusLabel(selectedChecksumJob.status) }}
             </el-tag>
             <div>
-              <strong>任务 {{ selectedChecksumJob.id }}</strong>
+              <strong>后台任务编号 #{{ selectedChecksumJob.id }}</strong>
               <span>{{ checksumJobTargetLabel }}</span>
             </div>
           </div>
@@ -521,20 +582,24 @@
             :status="selectedChecksumJob.status === 'FAILED' ? 'exception' : selectedChecksumJob.status === 'SUCCEEDED' ? 'success' : undefined"
           />
           <el-descriptions class="job-descriptions" :column="1" border size="small">
+            <el-descriptions-item label="后台任务编号">#{{ selectedChecksumJob.id }}</el-descriptions-item>
+            <el-descriptions-item label="对应文件">{{ checksumJobFileName(selectedChecksumJob) }}</el-descriptions-item>
+            <el-descriptions-item label="平台文件ID">{{ selectedChecksumJob.targetId || '-' }}</el-descriptions-item>
             <el-descriptions-item label="任务类型">{{ selectedChecksumJob.jobType }}</el-descriptions-item>
             <el-descriptions-item label="状态">{{ jobStatusLabel(selectedChecksumJob.status) }}</el-descriptions-item>
             <el-descriptions-item label="进度">
               {{ formatCount(selectedChecksumJob.progressCurrent) }} / {{ formatCount(selectedChecksumJob.progressTotal) }}
             </el-descriptions-item>
-            <el-descriptions-item label="进度说明">{{ selectedChecksumJob.progressMessage || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="进度说明">{{ safePathText(selectedChecksumJob.progressMessage) }}</el-descriptions-item>
             <el-descriptions-item label="创建时间">{{ formatDate(selectedChecksumJob.createdAt) }}</el-descriptions-item>
+            <el-descriptions-item label="更新时间">{{ formatDate(selectedChecksumJob.updatedAt) }}</el-descriptions-item>
             <el-descriptions-item label="开始时间">{{ formatDate(selectedChecksumJob.startedAt) }}</el-descriptions-item>
             <el-descriptions-item label="完成时间">{{ formatDate(selectedChecksumJob.completedAt) }}</el-descriptions-item>
           </el-descriptions>
           <el-alert
             v-if="selectedChecksumJob.status === 'FAILED'"
             class="job-message"
-            :title="selectedChecksumJob.failureReason || '任务失败，但未返回失败原因'"
+            :title="safePathText(selectedChecksumJob.failureReason) || '任务失败，但未返回失败原因'"
             type="error"
             show-icon
             :closable="false"
@@ -574,7 +639,7 @@
 
     <el-dialog v-model="metadataDialogVisible" title="人工治理文件元数据" width="520px">
       <el-form label-width="96px">
-        <el-form-item label="文件ID">
+        <el-form-item label="平台文件ID">
           <el-input :model-value="metadataForm.fileId ? String(metadataForm.fileId) : ''" disabled />
         </el-form-item>
         <el-form-item label="文件类型">
@@ -630,6 +695,7 @@ import {
   fetchAssetQualityOverview,
   fetchAssetScanTasks,
   fetchAssetStatistics,
+  fetchAssetJobs,
   fetchAssetJob,
   fetchCatalogFiles,
   fetchFileAsset,
@@ -691,6 +757,9 @@ const hermesAssetId = ref<number | undefined>();
 const checksumJobDialogVisible = ref(false);
 const checksumJobLoading = ref(false);
 const checksumJobRetrying = ref(false);
+const checksumJobsLoading = ref(false);
+const checksumJobs = ref<AssetJob[]>([]);
+const checksumJobFileMap = ref<Record<number, FileAsset>>({});
 const selectedChecksumJob = ref<AssetJob | null>(null);
 const selectedChecksumJobFile = ref<FileAsset | null>(null);
 const fileBrowserRefreshKey = ref(0);
@@ -812,8 +881,10 @@ const currentPreview = computed(() => {
 const catalogInitialQualityIssue = computed(() => queryString(route.query.qualityIssue) ?? 'ALL');
 const checksumJobTargetLabel = computed(() => {
   const file = selectedChecksumJobFile.value;
-  if (!file) return '文件资产 checksum 计算';
-  return `${file.fileName} / 文件ID ${file.fileId}`;
+  const job = selectedChecksumJob.value;
+  if (file) return `${file.fileName} / 平台文件ID ${file.fileId}`;
+  if (job?.targetId) return `${checksumJobFileName(job)} / 平台文件ID ${job.targetId}`;
+  return '文件资产 checksum 计算';
 });
 const cards = computed(() => {
   const item = statistics.value;
@@ -906,6 +977,7 @@ async function loadPage() {
     disciplineOptions.value = disciplinesResult.status === 'fulfilled' ? disciplinesResult.value : [];
     recentFiles.value = recentFilesResult.status === 'fulfilled' ? recentFilesResult.value.rows : [];
     initializationStatus.value = initStatusResult.status === 'fulfilled' ? initStatusResult.value : null;
+    void loadChecksumJobs(false);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '项目资产加载失败');
   } finally {
@@ -928,6 +1000,8 @@ function resetProjectData() {
   selectedPreview.value = null;
   selectedChecksumJob.value = null;
   selectedChecksumJobFile.value = null;
+  checksumJobs.value = [];
+  checksumJobFileMap.value = {};
   detailDrawerVisible.value = false;
   previewDialogVisible.value = false;
   hermesDrawerVisible.value = false;
@@ -1043,6 +1117,53 @@ async function saveMetadata() {
   }
 }
 
+async function loadChecksumJobs(showError = false) {
+  if (!Number.isFinite(projectId.value) || checksumJobsLoading.value) return;
+  checksumJobsLoading.value = true;
+  try {
+    const jobs = await fetchAssetJobs({ projectId: projectId.value, jobType: 'CHECKSUM_CALC', limit: 8 });
+    checksumJobs.value = jobs;
+    await hydrateChecksumJobFiles(jobs);
+  } catch (error) {
+    if (showError) {
+      ElMessage.error(error instanceof Error ? error.message : 'checksum 后台任务加载失败');
+    }
+  } finally {
+    checksumJobsLoading.value = false;
+  }
+}
+
+async function hydrateChecksumJobFiles(jobs: AssetJob[]) {
+  const nextMap = { ...checksumJobFileMap.value };
+  const targetIds = Array.from(new Set(
+    jobs
+      .map((job) => job.targetId)
+      .filter((targetId): targetId is number => targetId !== null && targetId !== undefined && Number.isFinite(Number(targetId)))
+  )).slice(0, 8);
+  await Promise.all(targetIds.map(async (fileId) => {
+    if (nextMap[fileId]) return;
+    try {
+      nextMap[fileId] = await fetchFileAsset(fileId);
+    } catch {
+      // 任务仍可展示，文件名拿不到时退回平台文件ID。
+    }
+  }));
+  checksumJobFileMap.value = nextMap;
+}
+
+function checksumJobFileName(job: AssetJob) {
+  const targetId = Number(job.targetId ?? 0);
+  const file = targetId ? checksumJobFileMap.value[targetId] : null;
+  return file?.fileName ?? (targetId ? `平台文件ID ${targetId}` : '未绑定文件');
+}
+
+function openChecksumJob(job: AssetJob) {
+  selectedChecksumJob.value = job;
+  selectedChecksumJobFile.value = job.targetId ? checksumJobFileMap.value[Number(job.targetId)] ?? null : null;
+  checksumJobDialogVisible.value = true;
+  startChecksumJobPolling(job.id);
+}
+
 async function createChecksum(row: FileAsset) {
   if (row.checksum || checksumCreating.value) return;
   checksumCreating.value = true;
@@ -1052,6 +1173,7 @@ async function createChecksum(row: FileAsset) {
     selectedChecksumJob.value = job;
     checksumJobDialogVisible.value = true;
     ElMessage.success('checksum 任务已创建，正在后台执行');
+    void loadChecksumJobs(false);
     startChecksumJobPolling(job.id);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '创建 checksum 任务失败');
@@ -1081,6 +1203,7 @@ async function createBatchChecksumForProject() {
     const count = await createBatchChecksumJobs(projectId.value);
     if (count > 0) {
       ElMessage.success(`已创建 ${count} 个 checksum 后台任务`);
+      await loadChecksumJobs(false);
     } else {
       ElMessage.info('当前项目没有需要补算的 checksum 文件');
     }
@@ -1115,6 +1238,10 @@ async function loadChecksumJob(jobId: number, showError: boolean) {
     const job = await fetchAssetJob(jobId);
     if (requestId !== checksumJobRequestId) return;
     selectedChecksumJob.value = job;
+    if (job.targetId && !selectedChecksumJobFile.value) {
+      selectedChecksumJobFile.value = checksumJobFileMap.value[Number(job.targetId)] ?? null;
+    }
+    checksumJobs.value = checksumJobs.value.map((item) => item.id === job.id ? job : item);
     if (isTerminalJobStatus(job.status)) {
       stopChecksumJobPolling();
       if (job.status === 'SUCCEEDED') {
@@ -1137,13 +1264,15 @@ async function refreshChecksumJob() {
   await loadChecksumJob(selectedChecksumJob.value.id, true);
 }
 
-async function retryChecksumJob() {
-  const job = selectedChecksumJob.value;
+async function retryChecksumJob(row?: AssetJob) {
+  const job = row ?? selectedChecksumJob.value;
   if (!job || checksumJobRetrying.value) return;
+  selectedChecksumJob.value = job;
   checksumJobRetrying.value = true;
   try {
     await retryAssetJob(job.id);
     ElMessage.success('checksum 任务已重新提交');
+    await loadChecksumJobs(false);
     startChecksumJobPolling(job.id);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '任务重试失败');
@@ -1156,6 +1285,7 @@ async function refreshChecksumTarget(job: AssetJob) {
   if (job.targetId && selectedFile.value?.fileId === job.targetId) {
     selectedFile.value = await fetchFileAsset(job.targetId);
   }
+  await loadChecksumJobs(false);
   refreshFileBrowser();
 }
 
@@ -1264,10 +1394,23 @@ function scanProgressHint(item: AssetScanTask) {
 
 function safePathText(value: string | null | undefined) {
   if (!value) return '-';
-  if (/nas:\/\/|smb:\/\/|afp:\/\/|\/Volumes\/|\/Users\/|storage_path|storage_uri|storagePath|storageUri/i.test(value)) {
+  if (containsForbiddenPathText(value)) {
+    if (value.includes('文件不存在')) return '文件不存在，底层路径已隐藏';
     return '底层路径已隐藏';
   }
   return value;
+}
+
+function containsForbiddenPathText(value: string) {
+  return /nas:\/\/|smb:\/\/|afp:\/\/|\/Volumes\/|\/Users\/|\/tmp\/|\/private\/|\/var\/|storage_path|storage_uri|storagePath|storageUri/i.test(value);
+}
+
+function filePathHint(file: FileAsset) {
+  const raw = file.logicalPath || file.storagePath || '';
+  if (!raw || containsForbiddenPathText(raw) || raw.startsWith('/')) {
+    return `path_hint: ${file.projectCode} 项目内已登记文件，底层目录不在前端展示`;
+  }
+  return `path_hint: ${raw}`;
 }
 
 function qualityFlags(file: FileAsset) {
@@ -1537,6 +1680,64 @@ function scanProgressValue(task: AssetScanTask) {
   background: #ffffff;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 8px;
+}
+
+.asset-job-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.asset-job-panel__header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.asset-job-panel__header h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.asset-job-panel__header span {
+  display: block;
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.asset-job-table {
+  width: 100%;
+}
+
+.asset-job-file {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.asset-job-file strong,
+.asset-job-file span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-job-file strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.asset-job-file span {
+  color: #64748b;
+  font-size: 12px;
 }
 
 .asset-workspace-gate {

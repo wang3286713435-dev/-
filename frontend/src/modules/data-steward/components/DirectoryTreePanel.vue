@@ -37,11 +37,13 @@
           <DirectoryTreeNodeItem
             v-for="node in model.nodes"
             :key="node.id"
-            :node="node"
-            :active-path="activePath"
-            @select="$emit('select', $event)"
-            @enter="$emit('enter', $event)"
-          />
+        :node="node"
+        :active-path="activePath"
+        :expanded-paths="expandedPaths"
+        @select="$emit('select', $event)"
+        @enter="$emit('enter', $event)"
+        @toggle-expand="(path, isExpanded) => $emit('toggle-expand', path, isExpanded)"
+      />
         </ul>
       </div>
     </div>
@@ -58,6 +60,7 @@ import DirectoryTreeNodeItem from '@/modules/data-steward/components/DirectoryTr
 const props = withDefaults(defineProps<{
   directories: CatalogDirectory[];
   activePath: string;
+  expandedPaths?: string[];
   rootLabel: string;
   enabled?: boolean;
   loading?: boolean;
@@ -66,6 +69,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   enabled: true,
   loading: false,
+  expandedPaths: () => [],
   emptyDescription: '暂无目录',
   disabledDescription: '选择项目后浏览目录'
 });
@@ -73,6 +77,7 @@ const props = withDefaults(defineProps<{
 defineEmits<{
   select: [path: string];
   enter: [path: string];
+  'toggle-expand': [path: string, expanded: boolean];
 }>();
 
 const model = computed(() => buildDirectoryTree(props.directories));

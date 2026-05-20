@@ -14,11 +14,13 @@
         v-else
         :directories="directories"
         :active-path="activeDir"
+        :expanded-paths="expandedDirs"
         :root-label="rootLabel"
         :loading="dirLoading"
         empty-description="暂无可浏览目录"
         @select="selectDir"
         @enter="enterDir"
+        @toggle-expand="toggleExpandedDir"
       />
     </div>
 
@@ -62,7 +64,7 @@
           <el-input
             v-model="filters.keyword"
             clearable
-            placeholder="搜索文件或ID"
+            placeholder="搜索文件名或平台文件ID"
             :prefix-icon="Search"
             @keyup.enter="reloadFiles"
             @clear="reloadFiles"
@@ -74,6 +76,17 @@
               <ArrowDown />
             </el-icon>
           </el-button>
+        </div>
+      </div>
+
+      <div class="file-browser__continuity" data-m1e-continuity-bar>
+        <div>
+          <strong>{{ continuityTitle }}</strong>
+          <span>{{ continuitySummary }}</span>
+        </div>
+        <div class="file-browser__continuity-actions">
+          <el-button v-if="lastFileId" size="small" @click="openLastFile">打开最近文件</el-button>
+          <el-button size="small" @click="resetViewState">重置视图</el-button>
         </div>
       </div>
 
@@ -124,13 +137,13 @@
         class="master-table"
         empty-text="暂无文件资产"
       >
-        <el-table-column label="名称 / ID" min-width="320" show-overflow-tooltip>
+        <el-table-column label="名称 / 平台文件ID" min-width="320" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="file-browser__name-cell">
               <el-icon><Document /></el-icon>
               <div>
                 <strong>{{ row.fileName }}</strong>
-                <span>文件ID: {{ row.fileId }}</span>
+                <span>平台文件ID: {{ row.fileId }}</span>
               </div>
             </div>
           </template>
@@ -207,6 +220,7 @@
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { ArrowDown, Document, FolderAdd, MoreFilled, Search, Upload } from '@element-plus/icons-vue';
+import { useRoute, useRouter } from 'vue-router';
 
 import {
   fetchCatalogDirectories,
@@ -223,6 +237,7 @@ const props = defineProps<{
   disciplineOptions: AssetDiscipline[];
   initialQualityIssue?: string;
   batchChecksumCreating?: boolean;
+  active?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -234,16 +249,36 @@ const emit = defineEmits<{
 }>();
 
 const TREE_WIDTH_KEY = 'delivery.dataSteward.fileBrowser.treeWidth';
+const STATE_KEY_PREFIX = 'delivery.dataSteward.fileBrowser.state';
 const DEFAULT_TREE_WIDTH = 320;
 const MIN_TREE_WIDTH = 240;
 const MIN_TABLE_WIDTH = 560;
 const MAX_TREE_WIDTH = 640;
+const DEFAULT_PAGE_SIZE = 50;
+const PAGE_SIZE_OPTIONS = new Set([20, 50, 100, 200]);
+const QUERY_KEYS = [
+  'tab',
+  'fileDir',
+  'fileKeyword',
+  'fileKind',
+  'discipline',
+  'fileExt',
+  'qualityIssue',
+  'filePage',
+  'filePageSize',
+  'lastFileId'
+];
 
+const route = useRoute();
+const router = useRouter();
 const browserRef = ref<HTMLElement | null>(null);
 const tableRef = ref<{ doLayout?: () => void } | null>(null);
 const directories = ref<CatalogDirectory[]>([]);
 const files = ref<CatalogFile[]>([]);
 const activeDir = ref('');
+const expandedDirs = ref<string[]>([]);
+const lastFileId = ref<number | null>(null);
+const lastFileName = ref('');
 const fileLoading = ref(false);
 const dirLoading = ref(false);
 const dirLoadFailed = ref(false);
@@ -254,6 +289,8 @@ let resizePointerId: number | null = null;
 let tableLayoutFrame = 0;
 let directoryRequestId = 0;
 let fileRequestId = 0;
+let applyingSavedState = false;
+let stateReady = false;
 
 const filters = reactive({
   keyword: '',
@@ -265,7 +302,7 @@ const filters = reactive({
 
 const pagination = reactive({
   page: 1,
-  pageSize: 50,
+  pageSize: DEFAULT_PAGE_SIZE,
   total: 0
 });
 
@@ -291,9 +328,39 @@ const qualityIssueOptions = [
   { label: '零大小', value: 'ZERO_SIZE_FILE' }
 ];
 
+type FileBrowserState = {
+  activeDir?: string;
+  keyword?: string;
+  fileKind?: string;
+  disciplineCode?: string;
+  fileExt?: string;
+  qualityIssue?: string;
+  page?: number;
+  pageSize?: number;
+  expandedDirs?: string[];
+  lastFileId?: number | null;
+  lastFileName?: string;
+  updatedAt?: string;
+};
+
 const fileBrowserStyle = computed(() => ({
   '--tree-width': `${treeWidth.value}px`
 }));
+
+const continuityTitle = computed(() => lastFileId.value ? '已恢复项目文件管理位置' : '文件管理会记住本项目位置');
+const continuitySummary = computed(() => {
+  const parts = [
+    activeDir.value ? `目录：${pathLeaf(activeDir.value)}` : '目录：项目根目录',
+    filters.keyword.trim() ? `关键词：${filters.keyword.trim()}` : '',
+    filters.fileKind !== 'ALL' ? `类型：${fileKindLabel(filters.fileKind)}` : '',
+    filters.disciplineCode ? `专业：${disciplineLabel(filters.disciplineCode)}` : '',
+    filters.fileExt.trim() ? `扩展名：${normalizeExt(filters.fileExt)}` : '',
+    filters.qualityIssue !== 'ALL' ? `质量：${qualityIssueLabel(filters.qualityIssue)}` : '',
+    `第 ${pagination.page} 页`,
+    lastFileId.value ? `最近文件：${lastFileName.value || `平台文件ID ${lastFileId.value}`}` : ''
+  ].filter(Boolean);
+  return `${parts.join(' / ')}。可重置视图，不会修改 NAS 文件。`;
+});
 
 const breadcrumbItems = computed(() => {
   if (!activeDir.value) return [];
@@ -333,15 +400,40 @@ const directoryPrefixLength = computed(() => {
 watch(
   () => [props.projectId, props.initialQualityIssue] as const,
   () => {
-    activeDir.value = '';
-    files.value = [];
-    pagination.page = 1;
-    pagination.total = 0;
-    filters.qualityIssue = props.initialQualityIssue || 'ALL';
+    initializeBrowserState();
     void loadDirectories();
     void loadFiles();
   },
   { immediate: true }
+);
+
+watch(
+  () => props.active,
+  (active) => {
+    if (active) {
+      persistBrowserState(true);
+    }
+  }
+);
+
+watch(
+  () => [
+    activeDir.value,
+    filters.keyword,
+    filters.fileKind,
+    filters.disciplineCode,
+    filters.fileExt,
+    filters.qualityIssue,
+    pagination.page,
+    pagination.pageSize,
+    expandedDirs.value.join('|'),
+    lastFileId.value,
+    lastFileName.value
+  ],
+  () => {
+    if (!stateReady || applyingSavedState) return;
+    persistBrowserState();
+  }
 );
 
 onMounted(() => {
@@ -356,6 +448,127 @@ onUnmounted(() => {
     window.cancelAnimationFrame(tableLayoutFrame);
   }
 });
+
+function initializeBrowserState() {
+  applyingSavedState = true;
+  stateReady = false;
+  files.value = [];
+  pagination.total = 0;
+
+  const state = readQueryState() ?? readStoredBrowserState() ?? {};
+  const fallbackQualityIssue = props.initialQualityIssue || 'ALL';
+  activeDir.value = state.activeDir ?? '';
+  filters.keyword = state.keyword ?? '';
+  filters.fileKind = normalizeFileKind(state.fileKind);
+  filters.disciplineCode = state.disciplineCode ?? '';
+  filters.fileExt = state.fileExt ?? '';
+  filters.qualityIssue = state.qualityIssue ?? fallbackQualityIssue;
+  pagination.page = positiveNumber(state.page, 1);
+  pagination.pageSize = normalizePageSize(state.pageSize);
+  expandedDirs.value = Array.isArray(state.expandedDirs) ? state.expandedDirs.filter(Boolean) : [];
+  lastFileId.value = state.lastFileId && Number.isFinite(Number(state.lastFileId)) ? Number(state.lastFileId) : null;
+  lastFileName.value = state.lastFileName ?? '';
+  advancedSearchVisible.value = hasAdvancedFilters();
+
+  applyingSavedState = false;
+  stateReady = true;
+  persistBrowserState();
+}
+
+function readQueryState(): FileBrowserState | null {
+  const hasQueryState = QUERY_KEYS.some((key) => key !== 'tab' && route.query[key] !== undefined);
+  if (!hasQueryState) return null;
+  return {
+    activeDir: queryString(route.query.fileDir) ?? '',
+    keyword: queryString(route.query.fileKeyword) ?? '',
+    fileKind: queryString(route.query.fileKind) ?? 'ALL',
+    disciplineCode: queryString(route.query.discipline) ?? '',
+    fileExt: queryString(route.query.fileExt) ?? '',
+    qualityIssue: queryString(route.query.qualityIssue) ?? props.initialQualityIssue ?? 'ALL',
+    page: positiveNumber(queryString(route.query.filePage), 1),
+    pageSize: normalizePageSize(positiveNumber(queryString(route.query.filePageSize), DEFAULT_PAGE_SIZE)),
+    lastFileId: positiveNumber(queryString(route.query.lastFileId), 0) || null
+  };
+}
+
+function readStoredBrowserState(): FileBrowserState | null {
+  try {
+    const raw = window.localStorage.getItem(projectStateKey());
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as FileBrowserState;
+    return typeof parsed === 'object' && parsed !== null ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistBrowserState(forceRouteSync = false) {
+  if (!Number.isFinite(props.projectId)) return;
+  const state = currentBrowserState();
+  window.localStorage.setItem(projectStateKey(), JSON.stringify(state));
+  if (props.active || forceRouteSync) {
+    syncBrowserStateToRoute(state);
+  }
+}
+
+function currentBrowserState(): FileBrowserState {
+  return {
+    activeDir: activeDir.value,
+    keyword: filters.keyword.trim(),
+    fileKind: filters.fileKind,
+    disciplineCode: filters.disciplineCode,
+    fileExt: filters.fileExt.trim(),
+    qualityIssue: filters.qualityIssue,
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    expandedDirs: expandedDirs.value,
+    lastFileId: lastFileId.value,
+    lastFileName: lastFileName.value,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function syncBrowserStateToRoute(state: FileBrowserState) {
+  const nextQuery: Record<string, string> = {};
+  for (const [key, value] of Object.entries(route.query)) {
+    if (!QUERY_KEYS.includes(key) && typeof value === 'string') {
+      nextQuery[key] = value;
+    }
+  }
+  nextQuery.tab = 'files';
+  assignQuery(nextQuery, 'fileDir', state.activeDir);
+  assignQuery(nextQuery, 'fileKeyword', state.keyword);
+  assignQuery(nextQuery, 'fileKind', state.fileKind === 'ALL' ? '' : state.fileKind);
+  assignQuery(nextQuery, 'discipline', state.disciplineCode);
+  assignQuery(nextQuery, 'fileExt', state.fileExt);
+  assignQuery(nextQuery, 'qualityIssue', state.qualityIssue === 'ALL' ? '' : state.qualityIssue);
+  assignQuery(nextQuery, 'filePage', state.page && state.page > 1 ? String(state.page) : '');
+  assignQuery(nextQuery, 'filePageSize', state.pageSize && state.pageSize !== DEFAULT_PAGE_SIZE ? String(state.pageSize) : '');
+  assignQuery(nextQuery, 'lastFileId', state.lastFileId ? String(state.lastFileId) : '');
+
+  if (isSameQuery(nextQuery, route.query)) return;
+  void router.replace({ path: route.path, query: nextQuery });
+}
+
+function resetViewState() {
+  activeDir.value = '';
+  filters.keyword = '';
+  filters.fileKind = 'ALL';
+  filters.disciplineCode = '';
+  filters.fileExt = '';
+  filters.qualityIssue = 'ALL';
+  pagination.page = 1;
+  pagination.pageSize = DEFAULT_PAGE_SIZE;
+  pagination.total = 0;
+  expandedDirs.value = [];
+  lastFileId.value = null;
+  lastFileName.value = '';
+  advancedSearchVisible.value = false;
+  window.localStorage.removeItem(projectStateKey());
+  persistBrowserState(true);
+  void loadFiles();
+  ElMessage.success('文件管理视图已重置');
+}
 
 async function loadDirectories() {
   if (!Number.isFinite(props.projectId)) return;
@@ -415,6 +628,7 @@ async function loadFiles() {
 
 function selectDir(dirPath: string) {
   activeDir.value = dirPath;
+  rememberExpandedAncestors(dirPath);
   pagination.page = 1;
   void loadFiles();
 }
@@ -515,6 +729,36 @@ function resetAdvancedFilters() {
   reloadFiles();
 }
 
+function toggleExpandedDir(path: string, expanded: boolean) {
+  const next = new Set(expandedDirs.value);
+  if (expanded) {
+    next.add(path);
+  } else {
+    next.delete(path);
+  }
+  expandedDirs.value = Array.from(next);
+}
+
+function rememberExpandedAncestors(path: string) {
+  if (!path) return;
+  const parts = splitPath(path);
+  const hasLeadingSlash = path.startsWith('/');
+  const ancestors = parts
+    .map((_, index) => joinPath(parts.slice(0, index + 1), hasLeadingSlash))
+    .filter(Boolean);
+  expandedDirs.value = Array.from(new Set([...expandedDirs.value, ...ancestors]));
+}
+
+function rememberFile(row: CatalogFile) {
+  lastFileId.value = row.fileId;
+  lastFileName.value = row.fileName;
+}
+
+function openLastFile() {
+  if (!lastFileId.value) return;
+  emit('open-detail', lastFileId.value);
+}
+
 function goParentDir() {
   if (!activeDir.value) return;
   const items = breadcrumbItems.value;
@@ -527,6 +771,7 @@ function goParentDir() {
 
 function handleRowCommand(command: string | number | object, row: CatalogFile) {
   const action = String(command);
+  rememberFile(row);
   if (action === 'preview') {
     emit('open-preview', row.fileId);
   } else if (action === 'detail') {
@@ -558,16 +803,80 @@ function joinPath(parts: string[], hasLeadingSlash: boolean) {
   return hasLeadingSlash ? `/${next}` : next;
 }
 
+function pathLeaf(path: string) {
+  const parts = splitPath(path);
+  return parts.at(-1) ?? '项目根目录';
+}
+
+function projectStateKey() {
+  return `${STATE_KEY_PREFIX}.${props.projectId}`;
+}
+
+function assignQuery(query: Record<string, string>, key: string, value: string | number | null | undefined) {
+  const next = value === undefined || value === null ? '' : String(value).trim();
+  if (next) {
+    query[key] = next;
+  } else {
+    delete query[key];
+  }
+}
+
+function isSameQuery(next: Record<string, string>, current: Record<string, unknown>) {
+  const currentNormalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(current)) {
+    if (Array.isArray(value)) {
+      if (value[0] !== undefined) currentNormalized[key] = String(value[0]);
+    } else if (value !== undefined && value !== null) {
+      currentNormalized[key] = String(value);
+    }
+  }
+  return JSON.stringify(next) === JSON.stringify(currentNormalized);
+}
+
+function hasAdvancedFilters() {
+  return filters.fileKind !== 'ALL'
+    || Boolean(filters.disciplineCode)
+    || Boolean(filters.fileExt.trim())
+    || filters.qualityIssue !== 'ALL';
+}
+
+function normalizeFileKind(value: string | undefined) {
+  return fileKindOptions.some((item) => item.value === value) ? String(value) : 'ALL';
+}
+
+function normalizePageSize(value: number | string | undefined) {
+  const parsed = positiveNumber(value, DEFAULT_PAGE_SIZE);
+  return PAGE_SIZE_OPTIONS.has(parsed) ? parsed : DEFAULT_PAGE_SIZE;
+}
+
+function positiveNumber(value: number | string | undefined | null, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function queryString(value: unknown) {
+  if (Array.isArray(value)) return value[0] ? String(value[0]) : undefined;
+  return value ? String(value) : undefined;
+}
+
 function fileKindTag(value: string) {
   if (value === 'MODEL') return 'success';
   if (value === 'DRAWING') return 'primary';
   return 'info';
 }
 
+function fileKindLabel(value: string) {
+  return fileKindOptions.find((item) => item.value === value)?.label ?? value;
+}
+
 function disciplineLabel(code: string | null | undefined) {
   if (!code) return '-';
   const found = props.disciplineOptions.find((item) => item.code === code);
   return found?.name ?? code;
+}
+
+function qualityIssueLabel(value: string) {
+  return qualityIssueOptions.find((item) => item.value === value)?.label ?? value;
 }
 
 function formatBytes(value: number | null | undefined) {
@@ -706,6 +1015,46 @@ function formatDate(value: string | null | undefined) {
   background: #f8fafc;
 }
 
+.file-browser__continuity {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.file-browser__continuity > div:first-child {
+  min-width: 0;
+}
+
+.file-browser__continuity strong,
+.file-browser__continuity span {
+  display: block;
+  min-width: 0;
+}
+
+.file-browser__continuity strong {
+  color: #1e3a8a;
+  font-size: 13px;
+}
+
+.file-browser__continuity span {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.file-browser__continuity-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
 .file-browser__checksum-alert {
   margin-bottom: 12px;
 }
@@ -805,6 +1154,15 @@ function formatDate(value: string | null | undefined) {
 
   .file-browser__advanced {
     grid-template-columns: 1fr;
+  }
+
+  .file-browser__continuity {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .file-browser__continuity-actions {
+    justify-content: flex-start;
   }
 }
 </style>

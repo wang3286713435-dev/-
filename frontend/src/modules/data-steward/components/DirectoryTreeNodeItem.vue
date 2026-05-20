@@ -6,7 +6,7 @@
         class="directory-tree-node__toggle"
         type="button"
         :aria-label="expanded ? '折叠目录' : '展开目录'"
-        @click.stop="expanded = !expanded"
+        @click.stop="toggleExpanded"
       >
         <el-icon class="directory-tree-node__toggle-icon" :class="{ 'is-expanded': expanded }">
           <CaretRight />
@@ -37,15 +37,17 @@
         :node="child"
         :depth="depth + 1"
         :active-path="activePath"
+        :expanded-paths="expandedPaths"
         @select="$emit('select', $event)"
         @enter="$emit('enter', $event)"
+        @toggle-expand="(path, isExpanded) => $emit('toggle-expand', path, isExpanded)"
       />
     </ul>
   </li>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import { CaretRight, Folder, FolderOpened } from '@element-plus/icons-vue';
 
 import type { DirectoryTreeNode } from '@/modules/data-steward/utils/directoryTree';
@@ -58,23 +60,41 @@ const props = withDefaults(defineProps<{
   node: DirectoryTreeNode;
   depth?: number;
   activePath: string;
+  expandedPaths?: string[];
 }>(), {
-  depth: 0
+  depth: 0,
+  expandedPaths: () => []
 });
 
 const emit = defineEmits<{
   select: [path: string];
   enter: [path: string];
+  'toggle-expand': [path: string, expanded: boolean];
 }>();
 
-const expanded = ref(props.depth === 0);
 const hasChildren = computed(() => props.node.children.length > 0);
+const expanded = computed(() =>
+  props.depth === 0
+  || props.expandedPaths.includes(props.node.fullPath)
+  || isActiveAncestor(props.node.fullPath, props.activePath)
+);
 
 function enterDirectory() {
   if (hasChildren.value) {
-    expanded.value = true;
+    emit('toggle-expand', props.node.fullPath, true);
   }
   emit('enter', props.node.fullPath);
+}
+
+function toggleExpanded() {
+  emit('toggle-expand', props.node.fullPath, !expanded.value);
+}
+
+function isActiveAncestor(nodePath: string, activePath: string) {
+  if (!nodePath || !activePath) return false;
+  const normalizedNode = nodePath.replace(/\/+$/, '');
+  const normalizedActive = activePath.replace(/\/+$/, '');
+  return normalizedActive === normalizedNode || normalizedActive.startsWith(`${normalizedNode}/`);
 }
 </script>
 

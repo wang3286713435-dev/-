@@ -48,6 +48,7 @@ public class JobApplicationService {
                 }
                 return accessibleIds.contains(j.projectId());
             })
+            .map(AssetJobResponseSanitizer::sanitize)
             .toList();
     }
 
@@ -56,7 +57,7 @@ public class JobApplicationService {
         if (!canAccessJob(userId, job)) {
             throw new BusinessException("ASSET_JOB_ACCESS_DENIED", "无权访问该任务", HttpStatus.FORBIDDEN);
         }
-        return job;
+        return AssetJobResponseSanitizer.sanitize(job);
     }
 
     @Transactional

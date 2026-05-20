@@ -165,7 +165,9 @@ public class AgentApplicationService {
         auditQuery(agent, projectId, "agent.query.jobs");
         List<Long> accessibleProjectIds = filterProjectIds(agent);
         return jobRepository.listForAgent(accessibleProjectIds, agent.createdBy(),
-            projectId, jobType, status);
+            projectId, jobType, status).stream()
+            .map(AssetJobResponseSanitizer::sanitize)
+            .toList();
     }
 
     public JobResponse getJob(AgentPrincipal agent, Long jobId) {
@@ -188,7 +190,7 @@ public class AgentApplicationService {
             }
         }
         auditQuery(agent, job.projectId(), "agent.query.job");
-        return job;
+        return AssetJobResponseSanitizer.sanitize(job);
     }
 
     // ===== trigger checksum =====
@@ -206,7 +208,7 @@ public class AgentApplicationService {
         eventApplicationService.record("AGENT_TASK", file.projectId(), "JOB",
             String.valueOf(job.id()), "agent.checksum.create", agent.createdBy(), "AGENT",
             "Agent 触发 checksum: fileId=" + fileId + " key=" + agent.keyName(), null);
-        return job;
+        return AssetJobResponseSanitizer.sanitize(job);
     }
 
     // ===== trigger NAS scan =====
