@@ -11,6 +11,8 @@ import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LinkageRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LinkageResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightPlanResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightStatusResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LocateResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.VisualizationContextResponse;
 import jakarta.validation.Valid;
@@ -54,6 +56,26 @@ public class VisualizationAdapterController {
         var principal = securityPrincipalAccessor.requireCurrentPrincipal();
         projectContextApplicationService.requireCurrentProject(principal, projectId);
         return ApiResponse.success(visualizationAdapterApplicationService.publishModel(principal.userId(), projectId, integrationId));
+    }
+
+    @GetMapping("/model-integrations/{integrationId}/lightweight-status")
+    public ApiResponse<LightweightStatusResponse> lightweightStatus(
+        @PathVariable Long projectId,
+        @PathVariable Long integrationId
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(visualizationAdapterApplicationService.lightweightStatus(projectId, integrationId));
+    }
+
+    @GetMapping("/model-integrations/{integrationId}/lightweight-plan")
+    public ApiResponse<LightweightPlanResponse> lightweightPlan(
+        @PathVariable Long projectId,
+        @PathVariable Long integrationId
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(visualizationAdapterApplicationService.lightweightPlan(projectId, integrationId));
     }
 
     @PostMapping("/managed-objects/{objectId}:locate")

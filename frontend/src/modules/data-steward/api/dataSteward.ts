@@ -64,6 +64,48 @@ export interface ModelIntegrationPayload {
   adapterPayloadJson?: string;
 }
 
+export interface BimLightweightStatus {
+  projectId: number;
+  integrationId: number;
+  modelFileId: number;
+  modelName: string;
+  modelFormat: string;
+  integrationStatus: string;
+  engineMode: string;
+  engineConnected: boolean;
+  lightweightStatus: string;
+  viewerAvailable: boolean;
+  taskStatus: string;
+  conversionRequired: boolean;
+  componentIndexStatus: string;
+  previewMode: string;
+  statusLabel: string;
+  actionHint: string;
+  blockedReason: string;
+  supportedOperations: string[];
+  forbiddenOperations: string[];
+}
+
+export interface BimLightweightPlan {
+  projectId: number;
+  integrationId: number;
+  modelFileId: number;
+  modelName: string;
+  modelFormat: string;
+  engineMode: string;
+  dryRun: boolean;
+  taskCreated: boolean;
+  engineBindingRequired: boolean;
+  realConversionExecuted: boolean;
+  nasFileTouched: boolean;
+  viewerAvailable: boolean;
+  requiredConditions: string[];
+  futureSteps: string[];
+  riskWarnings: string[];
+  supportedOperations: string[];
+  forbiddenOperations: string[];
+}
+
 export interface ManagedObject {
   id: number;
   projectId: number;
@@ -102,6 +144,15 @@ export interface AssetProject {
   modelCount: number | null;
   totalSizeBytes: number | null;
   lastModelUpdatedAt: string | null;
+  projectSource?: string | null;
+  projectCategory?: string | null;
+  onboardingStatus?: string | null;
+  fileCount?: number | null;
+  dominantFileKinds?: string[];
+  lastScanAt?: string | null;
+  hasMasterData?: boolean;
+  hasDeliveryStandard?: boolean;
+  governanceReady?: boolean;
 }
 
 export interface AssetCapacityByFileKind {
@@ -267,6 +318,10 @@ export interface FilePreview {
   conversionRequired: boolean;
   message: string;
   supportedActions: string[];
+  downloadOnly: boolean;
+  statusLabel: string;
+  actionHint: string;
+  riskLevel: string;
   previewAllowed: boolean;
   downloadAllowed: boolean;
   accessPolicyMessage: string;
@@ -530,6 +585,20 @@ export async function publishModelIntegration(projectId: number, integrationId: 
   return data.data;
 }
 
+export async function fetchBimLightweightStatus(projectId: number, integrationId: number) {
+  const { data } = await http.get<ApiResponse<BimLightweightStatus>>(
+    `/api/visualization-adapter/projects/${projectId}/model-integrations/${integrationId}/lightweight-status`
+  );
+  return data.data;
+}
+
+export async function fetchBimLightweightPlan(projectId: number, integrationId: number) {
+  const { data } = await http.get<ApiResponse<BimLightweightPlan>>(
+    `/api/visualization-adapter/projects/${projectId}/model-integrations/${integrationId}/lightweight-plan`
+  );
+  return data.data;
+}
+
 export async function createManagedObject(projectId: number, payload: ManagedObjectPayload) {
   const { data } = await http.post<ApiResponse<ManagedObject>>(
     `/api/data-steward/projects/${projectId}/managed-objects`,
@@ -551,6 +620,10 @@ export async function updateManagedObject(projectId: number, objectId: number, p
     payload
   );
   return data.data;
+}
+
+export async function deleteManagedObject(projectId: number, objectId: number) {
+  await http.delete<ApiResponse<null>>(`/api/data-steward/projects/${projectId}/managed-objects/${objectId}`);
 }
 
 export async function fetchAssetProjects(keyword?: string, assetSource?: string) {
@@ -648,6 +721,11 @@ export async function updateFileAssetMetadata(fileId: number, payload: FileAsset
 export async function createChecksumJob(fileId: number) {
   const { data } = await http.post<ApiResponse<AssetJob>>('/api/data-steward/assets/checksum-jobs', { fileId });
   return data.data;
+}
+
+export async function createBatchChecksumJobs(projectId: number) {
+  const { data } = await http.post<ApiResponse<number>>('/api/data-steward/assets/checksum-jobs/batch', { projectId });
+  return data.data ?? 0;
 }
 
 export async function fetchAssetJobs(params: AssetJobQuery = {}) {
@@ -826,6 +904,171 @@ export interface PermissionProof {
   checkedAt: string;
 }
 
+export interface HermesCapabilities {
+  agentName: string;
+  mode: string;
+  contractVersion: string;
+  supports: {
+    catalogQuery: boolean;
+    missingEvidence: boolean;
+    operationPlanDraft: boolean;
+    documentContentAnswer: boolean;
+    dbCrud: boolean;
+    nasCrud: boolean;
+    fullBimParse: boolean;
+    productionRollout: boolean;
+  };
+  safety: {
+    failClosed: boolean;
+    requiresProjectScope: boolean;
+    requiresCitationForContentAnswer: boolean;
+  };
+}
+
+export interface HermesHealth {
+  status: string;
+  hermesAvailable: boolean;
+  mode: string;
+  contractVersion: string;
+  gatewayEnabled: boolean;
+  readonly: boolean;
+  runtimeWriteEnabled: boolean;
+  agentAnswerIntegrationEnabled: boolean;
+  unavailableReason: string;
+  checkedAt: string;
+}
+
+export interface HermesChatRequest {
+  pageType: string;
+  projectId: number;
+  assetId?: number;
+  sourceView?: string;
+  currentRoute?: string;
+  projectCode?: string;
+  projectName?: string;
+  pageTitle?: string;
+  question: string;
+}
+
+export interface HermesCitation {
+  citationType: string;
+  sourceView: string;
+  assetRef: string;
+  projectRef: string;
+  displayLabel: string;
+  safeToOpen: boolean;
+}
+
+export interface HermesPermissionResult {
+  permissionStatus: string;
+  projectScopeChecked: boolean;
+  permissionTagsChecked: boolean;
+  failClosedApplied: boolean;
+  reasonCode: string | null;
+}
+
+export interface HermesMissingEvidence {
+  reason: string;
+  message: string;
+}
+
+export interface HermesPathHint {
+  displayPath: string;
+  pathHint: string;
+  provider: string;
+  matchStrategy: string;
+}
+
+export interface HermesOperationAction {
+  actionType: string;
+  status: string;
+}
+
+export interface HermesOperationPlan {
+  available: boolean;
+  requiresHumanApproval: boolean;
+  actions: HermesOperationAction[];
+}
+
+export interface HermesTrace {
+  requestId: string;
+  agentMode: string;
+  productionRollout: boolean;
+}
+
+export interface HermesChatResponse {
+  status: 'ok' | 'denied' | 'missing_evidence' | 'catalog_only' | 'error' | string;
+  evidenceMode: 'catalog_only' | 'missing_evidence' | string;
+  assetCatalogOnly: boolean;
+  queryId: string;
+  traceId: string;
+  sourceView: string;
+  fileId: number | null;
+  modelId: number | null;
+  pathHints: HermesPathHint[];
+  answer: string;
+  citations: HermesCitation[];
+  permission: HermesPermissionResult;
+  missingEvidence: HermesMissingEvidence[];
+  operationPlan: HermesOperationPlan;
+  trace: HermesTrace;
+}
+
+const HERMES_CHAT_TIMEOUT_MS = 45_000;
+
+export interface CatalogSearchRequest {
+  query: string;
+  projectFilters?: string[];
+  filters?: {
+    assetKind?: string[];
+    fileExt?: string[];
+    lifecycleStatus?: string[];
+    indexEligibility?: string[];
+  };
+  page?: {
+    limit?: number;
+    cursor?: string | null;
+  };
+}
+
+export interface CatalogSearchResult {
+  assetRef: string;
+  assetKind: string;
+  sourceView: string;
+  fileId: number;
+  modelId: number | null;
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  fileName: string;
+  displayPath: string;
+  pathHint: string;
+  fileExt: string;
+  disciplineCode: string | null;
+  version: string | null;
+  sizeBucket: string;
+  lifecycleStatus: string;
+  indexEligibility: string;
+  contentEvidenceAvailable: boolean;
+  missingEvidence: string[];
+  updatedAt: string | null;
+}
+
+export interface CatalogSearchResponse {
+  queryId: string;
+  traceId: string;
+  assetCatalogOnly: boolean;
+  permissionDecision: string;
+  evidenceMode: string;
+  results: CatalogSearchResult[];
+  nextCursor: string | null;
+  safety: {
+    rawRowsOutput: boolean;
+    trueNasPathOutput: boolean;
+    secretPrinted: boolean;
+  };
+}
+
 export interface CatalogFilesQuery {
   projectId?: number;
   keyword?: string;
@@ -896,5 +1139,27 @@ export async function checkPermissionProofs(fileIds: number[], actorType = 'USER
     '/api/data-steward/catalog/permission-proofs:check',
     { fileIds, actorType }
   );
+  return data.data;
+}
+
+export async function fetchHermesCapabilities() {
+  const { data } = await http.get<ApiResponse<HermesCapabilities>>('/api/data-steward/hermes/capabilities');
+  return data.data;
+}
+
+export async function askHermes(request: HermesChatRequest) {
+  const { data } = await http.post<ApiResponse<HermesChatResponse>>('/api/data-steward/chat', request, {
+    timeout: HERMES_CHAT_TIMEOUT_MS
+  });
+  return data.data;
+}
+
+export async function fetchHermesHealth() {
+  const { data } = await http.get<ApiResponse<HermesHealth>>('/api/data-steward/hermes/health');
+  return data.data;
+}
+
+export async function searchCatalogPreview(request: CatalogSearchRequest) {
+  const { data } = await http.post<ApiResponse<CatalogSearchResponse>>('/api/data-steward/catalog/search', request);
   return data.data;
 }

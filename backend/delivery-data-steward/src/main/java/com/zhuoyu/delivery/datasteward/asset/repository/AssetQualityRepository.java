@@ -220,6 +220,7 @@ public class AssetQualityRepository {
         MapSqlParameterSource params = new MapSqlParameterSource("userId", userId);
         appendProjectAndSource(sql, params, projectId, assetSource);
         sql.append("""
+
             HAVING total_risk_count > 0
             ORDER BY total_risk_count DESC, p.id DESC
             LIMIT :limit

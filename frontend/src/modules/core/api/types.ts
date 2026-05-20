@@ -12,6 +12,7 @@ export interface ProjectSummary {
   name: string;
   industryType: string;
   status: string;
+  projectManagerName: string | null;
   roleCode: string;
   roleName: string;
 }

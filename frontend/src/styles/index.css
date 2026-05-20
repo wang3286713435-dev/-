@@ -102,16 +102,34 @@ body {
 .sidebar-menu {
   border-right: none !important;
   background: transparent !important;
+  --el-menu-bg-color: transparent;
+  --el-menu-text-color: #cbd5e1;
+  --el-menu-hover-bg-color: rgba(148, 163, 184, 0.14);
+  --el-menu-hover-text-color: #f8fafc;
+  --el-menu-active-color: #f8fafc;
 }
 
-.sidebar-menu .el-menu-item {
+.sidebar-menu .el-menu-item,
+.sidebar-menu .el-sub-menu__title {
   border-radius: 8px;
   margin-bottom: 4px;
+  color: #cbd5e1 !important;
+}
+
+.sidebar-menu .el-menu-item:hover,
+.sidebar-menu .el-sub-menu__title:hover {
+  background: rgba(148, 163, 184, 0.14) !important;
+  color: #f8fafc !important;
 }
 
 .sidebar-menu .el-menu-item.is-active {
   background: rgba(59, 130, 246, 0.18);
-  color: #f8fafc;
+  color: #f8fafc !important;
+}
+
+.sidebar-menu .el-icon,
+.sidebar-menu .el-sub-menu__icon-arrow {
+  color: inherit !important;
 }
 
 .app-layout__main {

@@ -7,13 +7,18 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogDirectoryRespo
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogFileDetailResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogFileResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogProjectResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogSearchRequest;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogSearchResponse;
 import com.zhuoyu.delivery.shared.api.ApiResponse;
 import com.zhuoyu.delivery.shared.api.PageResponse;
 import com.zhuoyu.delivery.shared.exception.BusinessException;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -69,6 +74,14 @@ public class CatalogController {
         Long userId = currentUserId();
         return ApiResponse.success(catalogApplicationService.listCatalogFiles(
             userId, projectId, keyword, directoryPath, fileExt, fileKind, disciplineCode, version, qualityIssue, page, pageSize));
+    }
+
+    @PostMapping("/search")
+    public ApiResponse<CatalogSearchResponse> search(
+        @Valid @RequestBody CatalogSearchRequest request
+    ) {
+        Long userId = currentUserId();
+        return ApiResponse.success(catalogApplicationService.searchCatalog(userId, request));
     }
 
     @GetMapping("/files/{fileId}")

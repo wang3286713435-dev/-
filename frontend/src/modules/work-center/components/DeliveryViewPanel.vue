@@ -230,7 +230,7 @@
     </el-drawer>
 
     <!-- Create binding dialog -->
-    <el-dialog v-model="dialogVisible" :title="`选择文件补交到${title}`" width="620px">
+    <el-dialog v-model="dialogVisible" :title="`选择文件补交到${title}`" width="680px">
       <el-form label-position="top" class="master-form">
         <el-form-item label="交付物类型">
           <el-select v-model="form.deliverableTypeId" filterable>
@@ -238,28 +238,47 @@
           </el-select>
           <div class="field-hint">这表示当前要补交哪一类资料，通常已由缺失项自动带入。</div>
         </el-form-item>
-        <el-form-item label="文件资源">
+        <el-form-item label="搜索并添加文件">
           <el-select
-            v-model="form.fileResourceId"
+            model-value=""
             filterable
             remote
             :remote-method="searchFiles"
             :loading="filesLoading"
-            placeholder="输入关键词搜索文件"
+            placeholder="输入关键词搜索文件，点击添加到下方列表"
             @focus="searchFiles('')"
+            @change="(val: number) => { const f = searchFileCache.get(val); if (f) addFileToSelection(f); }"
           >
             <el-option
               v-for="file in files"
               :key="file.id"
-              :label="`${file.originalName} | ${file.processStatus}`"
+              :label="`${file.originalName} | ${file.versionNo ? 'v' + file.versionNo : ''}`"
               :value="file.id"
             />
           </el-select>
-          <div class="field-hint">选择本次要提交的文件。列表只显示当前项目已处理完成的{{ viewLabel }}文件。</div>
+          <div class="field-hint">支持搜索多个文件，逐条添加到下方已选列表。列表只显示当前项目已处理完成的{{ viewLabel }}文件。</div>
+        </el-form-item>
+        <!-- Selected files list -->
+        <el-form-item v-if="selectedFiles.length" label="已选文件">
+          <el-table :data="selectedFiles" size="small" max-height="180" class="compact-table">
+            <el-table-column label="#" type="index" width="32" />
+            <el-table-column prop="originalName" label="文件名" min-width="180" />
+            <el-table-column prop="versionNo" label="版本" width="80" />
+            <el-table-column label="预览状态" width="150">
+              <template #default="{ row }">
+                <el-tag :type="previewRiskTagType(previewForFile(row))" size="small">{{ previewStatusLabel(previewForFile(row)) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="50" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" type="danger" :icon="Delete" circle @click="removeSelectedFile(row.id)" />
+              </template>
+            </el-table-column>
+          </el-table>
         </el-form-item>
         <el-form-item label="挂接目标">
           <el-segmented v-model="form.targetMode" :options="targetModeOptions" />
-          <div class="field-hint">挂接目标用于说明这份文件对应哪个工程部位或管理对象。</div>
+          <div class="field-hint">挂接目标用于说明这些文件对应哪个工程部位或管理对象。</div>
         </el-form-item>
         <el-form-item v-if="form.targetMode === 'SECTION'" label="工程部位">
           <el-select v-model="form.sectionNodeId" filterable>
@@ -277,9 +296,263 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
+        <el-button type="primary" :loading="saving" :disabled="!selectedFiles.length" @click="handleSave">
+          保存 {{ selectedFiles.length ? `(${selectedFiles.length}个文件)` : '' }}
+        </el-button>
       </template>
     </el-dialog>
+
+    <!-- Batch result dialog -->
+    <el-dialog v-model="batchResultVisible" title="批量挂接结果" width="560px">
+      <section v-if="batchResult" class="batch-result">
+        <div class="batch-result__summary">
+          <el-tag type="success" size="large">创建 {{ batchResult.createdCount }}</el-tag>
+          <el-tag type="warning" size="large">跳过 {{ batchResult.skippedCount }}</el-tag>
+          <el-tag type="danger" size="large">失败 {{ batchResult.failedCount }}</el-tag>
+        </div>
+        <el-table :data="batchResult.results" size="small" max-height="300" class="master-table" style="margin-top:12px">
+          <el-table-column prop="fileResourceId" label="文件ID" width="80" />
+          <el-table-column label="结果" width="80">
+            <template #default="{ row }">
+              <el-tag v-if="row.status === 'CREATED'" type="success" size="small">已创建</el-tag>
+              <el-tag v-else-if="row.status === 'SKIPPED'" type="warning" size="small">已跳过</el-tag>
+              <el-tag v-else type="danger" size="small">失败</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="bindingId" label="绑定ID" width="80" />
+          <el-table-column prop="message" label="说明" min-width="160" />
+        </el-table>
+      </section>
+      <template #footer>
+        <el-button @click="batchResultVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Delivery package readiness section -->
+    <section class="package-readiness">
+      <div class="package-readiness__header">
+        <h2>交付包准备视图</h2>
+        <el-button :loading="packageLoading" @click="loadPackageSummary">
+          {{ showPackageView ? '刷新准备状态' : '查看交付准备状态' }}
+        </el-button>
+      </div>
+      <p class="field-hint">这是只读准备视图，显示当前项目交付包的审核与就绪状态，不生成真实文件包。</p>
+
+      <section v-if="packageSummary && showPackageView" class="package-readiness__content">
+        <div class="package-readiness__cards">
+          <article class="package-card">
+            <h3>文档交付准备</h3>
+            <el-descriptions :column="2" size="small" border>
+              <el-descriptions-item label="应交">{{ packageSummary.documentSummary.totalRequired }}</el-descriptions-item>
+              <el-descriptions-item label="已挂接">{{ packageSummary.documentSummary.boundCount }}</el-descriptions-item>
+              <el-descriptions-item label="缺失">{{ packageSummary.documentSummary.missingCount }}</el-descriptions-item>
+              <el-descriptions-item label="完成率">{{ Math.round(packageSummary.documentSummary.completionRate * 100) }}%</el-descriptions-item>
+              <el-descriptions-item label="待审">{{ packageSummary.documentSummary.pendingReviewCount }}</el-descriptions-item>
+              <el-descriptions-item label="已通过">{{ packageSummary.documentSummary.approvedCount }}</el-descriptions-item>
+              <el-descriptions-item label="已驳回">{{ packageSummary.documentSummary.rejectedCount }}</el-descriptions-item>
+              <el-descriptions-item label="可进入交付包">{{ packageSummary.documentSummary.reviewReadyCount }}</el-descriptions-item>
+            </el-descriptions>
+          </article>
+          <article class="package-card">
+            <h3>图纸交付准备</h3>
+            <el-descriptions :column="2" size="small" border>
+              <el-descriptions-item label="应交">{{ packageSummary.drawingSummary.totalRequired }}</el-descriptions-item>
+              <el-descriptions-item label="已挂接">{{ packageSummary.drawingSummary.boundCount }}</el-descriptions-item>
+              <el-descriptions-item label="缺失">{{ packageSummary.drawingSummary.missingCount }}</el-descriptions-item>
+              <el-descriptions-item label="完成率">{{ Math.round(packageSummary.drawingSummary.completionRate * 100) }}%</el-descriptions-item>
+              <el-descriptions-item label="待审">{{ packageSummary.drawingSummary.pendingReviewCount }}</el-descriptions-item>
+              <el-descriptions-item label="已通过">{{ packageSummary.drawingSummary.approvedCount }}</el-descriptions-item>
+              <el-descriptions-item label="已驳回">{{ packageSummary.drawingSummary.rejectedCount }}</el-descriptions-item>
+              <el-descriptions-item label="可进入交付包">{{ packageSummary.drawingSummary.reviewReadyCount }}</el-descriptions-item>
+            </el-descriptions>
+          </article>
+        </div>
+
+        <el-table
+          v-if="packageSummary.rows.length"
+          v-loading="packageLoading"
+          :data="packageSummary.rows"
+          class="master-table"
+          size="small"
+          empty-text="暂无交付包明细"
+        >
+          <el-table-column prop="deliverableDefinitionName" label="交付定义" min-width="150" />
+          <el-table-column prop="deliverableTypeName" label="交付类型" min-width="130" />
+          <el-table-column prop="targetName" label="目标" min-width="120" />
+          <el-table-column prop="fileName" label="文件" min-width="180">
+            <template #default="{ row }">
+              <span v-if="row.fileName">{{ row.fileName }}</span>
+              <el-tag v-else size="small" type="danger">MISSING</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="fileKind" label="类型" width="80" />
+          <el-table-column prop="versionNo" label="版本" width="80" />
+          <el-table-column prop="reviewStatus" label="审核" width="90">
+            <template #default="{ row }">
+              <el-tag v-if="row.reviewStatus" :type="reviewTagType(row.reviewStatus)" size="small">{{ reviewLabel(row.reviewStatus) }}</el-tag>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="readinessStatus" label="准备状态" width="120">
+            <template #default="{ row }">
+              <el-tag v-if="row.readinessStatus === 'READY'" type="success" size="small">可交付</el-tag>
+              <el-tag v-else-if="row.readinessStatus === 'MISSING'" type="danger" size="small">缺失</el-tag>
+              <el-tag v-else-if="row.readinessStatus === 'PENDING_REVIEW'" type="warning" size="small">待审核</el-tag>
+              <el-tag v-else-if="row.readinessStatus === 'REJECTED'" type="danger" size="small">已驳回</el-tag>
+              <el-tag v-else size="small">{{ row.readinessStatus }}</el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-else description="暂无交付包明细数据" />
+      </section>
+    </section>
+
+    <!-- Export precheck section -->
+    <section class="package-readiness">
+      <div class="package-readiness__header">
+        <h2>导出预检查</h2>
+        <el-button :loading="precheckLoading" @click="loadPrecheck">
+          {{ showPrecheckView ? '刷新预检查' : '导出预检查' }}
+        </el-button>
+      </div>
+      <p class="field-hint">这是只读检查，不生成真实文件包，不访问、不复制 NAS 文件，也不代表正式导出已完成。预览转换状态只影响在线查看体验，不代表文件不能作为原始文件交付。</p>
+
+      <section v-if="precheckResult && showPrecheckView" class="package-readiness__content">
+        <el-alert v-if="precheckResult.dryRun && !precheckResult.packageGenerated" type="info" :closable="false" show-icon class="mb">
+          <template #title>
+            预检查模式：<strong>dryRun=true</strong>，未生成交付包（<strong>packageGenerated=false</strong>）
+          </template>
+        </el-alert>
+
+        <div class="precheck-stats">
+          <el-row :gutter="12">
+            <el-col :span="6">
+              <el-statistic title="可纳入导出" :value="precheckResult.readyCount">
+                <template #suffix>
+                  <el-tag type="success" size="small">READY</el-tag>
+                </template>
+              </el-statistic>
+            </el-col>
+            <el-col :span="6">
+              <el-statistic title="阻塞" :value="precheckResult.blockedCount">
+                <template #suffix>
+                  <el-tag type="danger" size="small">BLOCKED</el-tag>
+                </template>
+              </el-statistic>
+            </el-col>
+            <el-col :span="6">
+              <el-statistic title="缺失" :value="precheckResult.missingCount">
+                <template #suffix>
+                  <el-tag type="danger" size="small">MISSING</el-tag>
+                </template>
+              </el-statistic>
+            </el-col>
+            <el-col :span="6">
+              <el-statistic title="待审" :value="precheckResult.pendingReviewCount">
+                <template #suffix>
+                  <el-tag type="warning" size="small">待审</el-tag>
+                </template>
+              </el-statistic>
+            </el-col>
+          </el-row>
+          <el-row :gutter="12" style="margin-top:12px">
+            <el-col :span="6">
+              <el-statistic title="已驳回" :value="precheckResult.rejectedCount">
+                <template #suffix>
+                  <el-tag type="danger" size="small">驳回</el-tag>
+                </template>
+              </el-statistic>
+            </el-col>
+            <el-col :span="6">
+              <el-statistic title="需转换预览" :value="precheckResult.conversionRequiredCount">
+                <template #suffix>
+                  <el-tag type="warning" size="small">需转换</el-tag>
+                </template>
+              </el-statistic>
+            </el-col>
+            <el-col :span="6">
+              <el-statistic title="暂不支持预览" :value="precheckResult.unsupportedPreviewCount">
+                <template #suffix>
+                  <el-tag type="info" size="small">不支持</el-tag>
+                </template>
+              </el-statistic>
+            </el-col>
+            <el-col :span="6">
+              <el-statistic title="总计" :value="precheckResult.totalCount" />
+            </el-col>
+          </el-row>
+        </div>
+
+        <el-table
+          v-if="precheckResult.rows.length"
+          v-loading="precheckLoading"
+          :data="precheckResult.rows"
+          class="master-table"
+          size="small"
+          style="margin-top:16px"
+          empty-text="暂无预检查明细"
+        >
+          <el-table-column prop="deliverableDefinitionName" label="交付定义" min-width="140" />
+          <el-table-column prop="deliverableTypeName" label="交付类型" min-width="120" />
+          <el-table-column prop="targetName" label="目标" min-width="130">
+            <template #default="{ row }">
+              <el-tag size="small" type="info">{{ row.targetType === 'SECTION' ? '部位' : '对象' }}</el-tag>
+              {{ row.targetName ?? '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="fileResourceId" label="文件ID" width="90">
+            <template #default="{ row }">
+              <span>{{ row.fileResourceId ?? '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="fileName" label="文件" min-width="160">
+            <template #default="{ row }">
+              <span v-if="row.fileName">{{ row.fileName }}</span>
+              <el-tag v-else size="small" type="danger">MISSING</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="fileKind" label="类型" width="80" />
+          <el-table-column prop="versionNo" label="版本" width="80">
+            <template #default="{ row }">
+              <span>{{ row.versionNo ?? '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="reviewStatus" label="审核状态" width="90">
+            <template #default="{ row }">
+              <el-tag v-if="row.reviewStatus" :type="reviewTagType(row.reviewStatus)" size="small">{{ reviewLabel(row.reviewStatus) }}</el-tag>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="previewStatus" label="预览状态" width="120">
+            <template #default="{ row }">
+              <el-tag :type="previewRiskTagType(row)" size="small">{{ previewStatusLabel(row) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="previewMode" label="预览方式" width="140">
+            <template #default="{ row }">
+              {{ previewModeLabel(row) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="actionHint" label="预览提示" min-width="220" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ previewActionHint(row) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="exportStatus" label="导出状态" width="110">
+            <template #default="{ row }">
+              <el-tag v-if="row.exportStatus === 'READY'" type="success" size="small">可导出</el-tag>
+              <el-tag v-else-if="row.exportStatus === 'MISSING'" type="danger" size="small">缺失</el-tag>
+              <el-tag v-else-if="row.exportStatus === 'REVIEW_REQUIRED'" type="warning" size="small">待审核</el-tag>
+              <el-tag v-else-if="row.exportStatus === 'REJECTED'" type="danger" size="small">已驳回</el-tag>
+              <el-tag v-else-if="row.exportStatus === 'BLOCKED'" type="danger" size="small">阻塞</el-tag>
+              <el-tag v-else size="small">{{ row.exportStatus }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="blockReason" label="阻塞原因" min-width="160" />
+        </el-table>
+        <el-empty v-else description="暂无预检查明细数据" />
+      </section>
+    </section>
   </section>
 </template>
 
@@ -287,15 +560,25 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { Link, Refresh } from '@element-plus/icons-vue';
+import { Delete, Link, Refresh } from '@element-plus/icons-vue';
 
 import { fetchFileResourcesPage, fetchManagedObjects, type FileResource, type ManagedObject } from '@/modules/data-steward/api/dataSteward';
+import {
+  previewActionHint,
+  previewFromFileName,
+  previewModeLabel,
+  previewRiskTagType,
+  previewStatusLabel,
+  type PreviewStatusLike
+} from '@/modules/data-steward/utils/previewStatus';
 import { fetchDeliverableTypes, fetchSectionTree, type DeliverableType, type SectionNode } from '@/modules/master-data/api/masterData';
 import {
-  createDeliveryBinding, fetchDeliveryCompleteness, fetchDeliveryView,
-  submitForReview, approveBinding, rejectBinding, fetchReviewRecords,
+  createBatchDeliveryBinding, fetchDeliveryCompleteness, fetchDeliveryView,
+  fetchDeliveryPackageSummary, fetchExportPrecheck, submitForReview, approveBinding, rejectBinding, fetchReviewRecords,
   exportDeliveryCompletenessCsv, exportReviewSummaryCsv,
-  type DeliveryBinding, type DeliveryCompletenessRow, type DeliveryView, type ReviewRecordItem
+  type BatchBindingRowResult, type BatchDeliveryBindingResponse,
+  type DeliveryBinding, type DeliveryCompletenessRow, type DeliveryPackageSummaryResponse, type DeliveryView,
+  type ExportPrecheckResponse, type ReviewRecordItem
 } from '@/modules/work-center/api/delivery';
 import { useAuthStore } from '@/stores/auth';
 
@@ -319,15 +602,30 @@ const completeness = ref<Awaited<ReturnType<typeof fetchDeliveryCompleteness>> |
 const completenessLoading = ref(false);
 const activeTab = ref('bound');
 let fileAbortController: AbortController | null = null;
+const searchFileCache = new Map<number, FileResource>();
 
 const form = reactive({
   deliverableTypeId: null as number | null,
-  fileResourceId: null as number | null,
   targetMode: 'SECTION',
   sectionNodeId: null as number | null,
   managedObjectId: null as number | null,
   remark: ''
 });
+
+// Multi-file selection state
+const selectedFiles = ref<FileResource[]>([]);
+const batchResult = ref<BatchDeliveryBindingResponse | null>(null);
+const batchResultVisible = ref(false);
+
+// Delivery package readiness
+const packageSummary = ref<DeliveryPackageSummaryResponse | null>(null);
+const packageLoading = ref(false);
+const showPackageView = ref(false);
+
+// Export precheck
+const precheckResult = ref<ExportPrecheckResponse | null>(null);
+const precheckLoading = ref(false);
+const showPrecheckView = ref(false);
 
 const targetModeOptions = [
   { label: '部位', value: 'SECTION' },
@@ -508,6 +806,9 @@ async function searchFiles(keyword: string) {
       fileAbortController.signal
     );
     files.value = result.rows;
+    for (const f of result.rows) {
+      searchFileCache.set(f.id, f);
+    }
   } catch {
     // aborted or error - ignore
   } finally {
@@ -518,50 +819,103 @@ async function searchFiles(keyword: string) {
 function openCreateDialog() {
   Object.assign(form, {
     deliverableTypeId: deliverableTypes.value[0]?.id ?? null,
-    fileResourceId: null,
     targetMode: 'SECTION',
     sectionNodeId: sectionOptions.value[0]?.id ?? null,
     managedObjectId: objects.value[0]?.id ?? null,
     remark: ''
   });
   files.value = [];
+  selectedFiles.value = [];
+  batchResult.value = null;
+  batchResultVisible.value = false;
   dialogVisible.value = true;
 }
 
 function openBindFromMissing(row: DeliveryCompletenessRow) {
   Object.assign(form, {
     deliverableTypeId: row.deliverableTypeId,
-    fileResourceId: null,
     targetMode: row.targetType === 'OBJECT' ? 'OBJECT' : 'SECTION',
     sectionNodeId: row.targetType === 'SECTION' ? row.targetId : sectionOptions.value[0]?.id ?? null,
     managedObjectId: row.targetType === 'OBJECT' ? row.targetId : objects.value[0]?.id ?? null,
     remark: ''
   });
   files.value = [];
+  selectedFiles.value = [];
+  batchResult.value = null;
+  batchResultVisible.value = false;
   dialogVisible.value = true;
 }
 
+function addFileToSelection(file: FileResource) {
+  if (!selectedFiles.value.some((f) => f.id === file.id)) {
+    selectedFiles.value.push(file);
+  }
+  files.value = [];
+}
+
+function removeSelectedFile(fileId: number) {
+  selectedFiles.value = selectedFiles.value.filter((f) => f.id !== fileId);
+}
+
+function previewForFile(file: FileResource): PreviewStatusLike {
+  return previewFromFileName(file.originalName, file.fileKind);
+}
+
+async function loadPrecheck() {
+  if (!projectId.value) return;
+  precheckLoading.value = true;
+  try {
+    precheckResult.value = await fetchExportPrecheck(projectId.value, props.viewType);
+    showPrecheckView.value = true;
+  } catch {
+    precheckResult.value = null;
+  } finally {
+    precheckLoading.value = false;
+  }
+}
+
 async function handleSave() {
-  if (!projectId.value || !form.deliverableTypeId || !form.fileResourceId) return;
+  if (!projectId.value || !form.deliverableTypeId || selectedFiles.value.length === 0) return;
   saving.value = true;
   try {
-    await createDeliveryBinding(projectId.value, {
+    const result = await createBatchDeliveryBinding(projectId.value, {
       viewType: props.viewType,
       deliverableTypeId: form.deliverableTypeId,
-      fileResourceId: form.fileResourceId,
+      fileResourceIds: selectedFiles.value.map((f) => f.id),
       sectionNodeId: form.targetMode === 'SECTION' ? form.sectionNodeId : null,
       managedObjectId: form.targetMode === 'OBJECT' ? form.managedObjectId : null,
       bindingStatus: 'BOUND',
       reviewStatus: 'PENDING',
       remark: form.remark
     });
-    ElMessage.success('交付挂接已保存');
+    batchResult.value = result;
+    batchResultVisible.value = true;
+    if (result.createdCount > 0) {
+      ElMessage.success(`成功挂接 ${result.createdCount} 个文件${result.skippedCount > 0 ? `，跳过 ${result.skippedCount} 个` : ''}${result.failedCount > 0 ? `，失败 ${result.failedCount} 个` : ''}`);
+    } else if (result.skippedCount > 0) {
+      ElMessage.warning(`所有 ${result.skippedCount} 个文件均已挂接过，已跳过`);
+    } else {
+      ElMessage.error(`挂接失败：${result.failedCount} 个文件`);
+    }
     dialogVisible.value = false;
     await loadPage();
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '保存失败');
   } finally {
     saving.value = false;
+  }
+}
+
+async function loadPackageSummary() {
+  if (!projectId.value) return;
+  packageLoading.value = true;
+  try {
+    packageSummary.value = await fetchDeliveryPackageSummary(projectId.value, props.viewType);
+    showPackageView.value = true;
+  } catch {
+    packageSummary.value = null;
+  } finally {
+    packageLoading.value = false;
   }
 }
 
@@ -646,5 +1000,42 @@ function flattenSections(nodes: SectionNode[], prefix = ''): Array<{ id: number;
 }
 .mvp-tabs {
   margin-top: 12px;
+}
+.batch-result__summary {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+.package-readiness {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 2px solid var(--el-border-color-light);
+}
+.package-readiness__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.package-readiness__header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.package-readiness__content {
+  margin-top: 12px;
+}
+.package-readiness__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.package-card h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.compact-table {
+  font-size: 13px;
 }
 </style>

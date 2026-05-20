@@ -72,6 +72,149 @@ export interface StandardStatus {
   directoryTemplateCount: number;
 }
 
+export interface InitializationStatus {
+  projectId: number;
+  standardStatus: StandardStatus;
+  currentStep: string;
+  ready: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextActions: string[];
+}
+
+export interface TemplateCounts {
+  sectionNodes: number;
+  nodeTypes: number;
+  deliverableDefinitions: number;
+  deliverableTypes: number;
+  deliverableAttributes: number;
+  directoryTemplates: number;
+}
+
+export interface StandardTemplateSummary {
+  templateCode: string;
+  templateName: string;
+  industryType: string;
+  description: string;
+  counts: TemplateCounts;
+}
+
+export interface StandardTemplateDetail extends StandardTemplateSummary {
+  items: StandardTemplateItem[];
+}
+
+export interface StandardTemplateItem {
+  category: string;
+  code: string;
+  name: string;
+  parentCode: string | null;
+  targetCode: string | null;
+  fileKind: string | null;
+  required: boolean | null;
+}
+
+export interface TemplatePreviewItem {
+  category: string;
+  code: string;
+  name: string;
+  action: 'CREATE' | 'SKIP' | 'CONFLICT';
+  reason: string;
+}
+
+export interface TemplatePreview {
+  templateCode: string;
+  templateName: string;
+  blocked: boolean;
+  blockReasons: string[];
+  conflicts: string[];
+  willCreate: TemplateCounts;
+  willSkip: TemplateCounts;
+  items: TemplatePreviewItem[];
+}
+
+export interface TemplateApplyResult {
+  templateCode: string;
+  templateName: string;
+  created: TemplateCounts;
+  skipped: TemplateCounts;
+  conflictCount: number;
+  standardStatus: StandardStatus;
+  nextActions: string[];
+}
+
+export interface OnboardingAssetSummary {
+  fileCount: number;
+  modelFileCount: number;
+  drawingFileCount: number;
+  documentFileCount: number;
+  pathMappingCount: number;
+  dominantFileKinds: string[];
+  lastAssetSeenAt: string | null;
+  lastScanAt: string | null;
+}
+
+export interface OnboardingEvidenceClue {
+  clueType: string;
+  label: string;
+  evidenceMode: string;
+  assetCatalogOnly: boolean;
+  description: string;
+}
+
+export interface OnboardingGap {
+  code: string;
+  severity: string;
+  description: string;
+  missingEvidenceReason: string;
+}
+
+export interface OnboardingAssessment {
+  projectId: number;
+  assetCatalogOnly: boolean;
+  evidenceMode: string;
+  onboardingStatus: string;
+  assetSummary: OnboardingAssetSummary;
+  standardStatus: StandardStatus;
+  evidenceClues: OnboardingEvidenceClue[];
+  gaps: OnboardingGap[];
+  nextActions: string[];
+}
+
+export interface OnboardingDraftItem {
+  category: string;
+  name: string;
+  reason: string;
+  fromRealAssetClue: boolean;
+  fromTemplateSkeleton: boolean;
+  pendingConfirmation: boolean;
+}
+
+export interface OnboardingDraftPreview {
+  projectId: number;
+  dryRun: boolean;
+  confirmedRequired: boolean;
+  nasTouched: boolean;
+  contentRead: boolean;
+  evidenceMode: string;
+  templateCode: string;
+  templateName: string;
+  assetSummary: OnboardingAssetSummary;
+  templatePreview: TemplatePreview;
+  draftItems: OnboardingDraftItem[];
+  warnings: string[];
+}
+
+export interface OnboardingApplyResult {
+  projectId: number;
+  confirmed: boolean;
+  nasTouched: boolean;
+  contentRead: boolean;
+  draftApplied: boolean;
+  evidenceMode: string;
+  templateResult: TemplateApplyResult;
+  nextActions: string[];
+}
+
 export interface DeliverableDefinition {
   id: number;
   projectId: number;
@@ -167,6 +310,64 @@ export interface DirectoryTemplatePayload {
 export async function fetchStandardStatus(projectId: number) {
   const { data } = await http.get<ApiResponse<StandardStatus>>(
     `/api/master-data/projects/${projectId}/standard-status`
+  );
+  return data.data;
+}
+
+export async function fetchInitializationStatus(projectId: number) {
+  const { data } = await http.get<ApiResponse<InitializationStatus>>(
+    `/api/master-data/projects/${projectId}/initialization/status`
+  );
+  return data.data;
+}
+
+export async function fetchStandardTemplates() {
+  const { data } = await http.get<ApiResponse<StandardTemplateSummary[]>>('/api/master-data/standard-templates');
+  return data.data;
+}
+
+export async function fetchStandardTemplateDetail(templateCode: string) {
+  const { data } = await http.get<ApiResponse<StandardTemplateDetail>>(
+    `/api/master-data/standard-templates/${templateCode}`
+  );
+  return data.data;
+}
+
+export async function previewStandardTemplate(projectId: number, templateCode: string) {
+  const { data } = await http.post<ApiResponse<TemplatePreview>>(
+    `/api/master-data/projects/${projectId}/initialization:preview-template`,
+    { templateCode }
+  );
+  return data.data;
+}
+
+export async function applyStandardTemplate(projectId: number, templateCode: string) {
+  const { data } = await http.post<ApiResponse<TemplateApplyResult>>(
+    `/api/master-data/projects/${projectId}/initialization:apply-template`,
+    { templateCode, confirmApply: true }
+  );
+  return data.data;
+}
+
+export async function fetchOnboardingAssessment(projectId: number) {
+  const { data } = await http.get<ApiResponse<OnboardingAssessment>>(
+    `/api/master-data/projects/${projectId}/onboarding/assessment`
+  );
+  return data.data;
+}
+
+export async function fetchOnboardingPreview(projectId: number, templateCode?: string) {
+  const { data } = await http.get<ApiResponse<OnboardingDraftPreview>>(
+    `/api/master-data/projects/${projectId}/onboarding/preview`,
+    { params: templateCode ? { templateCode } : undefined }
+  );
+  return data.data;
+}
+
+export async function applyOnboardingDraft(projectId: number, templateCode: string) {
+  const { data } = await http.post<ApiResponse<OnboardingApplyResult>>(
+    `/api/master-data/projects/${projectId}/onboarding/apply`,
+    { templateCode, confirmed: true }
   );
   return data.data;
 }

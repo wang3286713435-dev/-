@@ -308,7 +308,7 @@ public class AssetController {
         @RequestParam(required = false) String keyword,
         @RequestParam(required = false) String qualityIssue
     ) {
-        return ApiResponse.success(assetApplicationService.listFileAssets(
+        return ApiResponse.success(assetApplicationService.listFileAssetsForDisplay(
             currentUserId(), projectId, fileKind, discipline,
             fileName, fileExt, sourceType, keyword, qualityIssue));
     }
@@ -327,14 +327,14 @@ public class AssetController {
         @RequestParam(required = false, defaultValue = "1") Integer pageNo,
         @RequestParam(required = false, defaultValue = "50") Integer pageSize
     ) {
-        return ApiResponse.success(assetApplicationService.listFileAssetsPage(
+        return ApiResponse.success(assetApplicationService.listFileAssetsPageForDisplay(
             currentUserId(), projectId, fileKind, discipline,
             fileName, fileExt, sourceType, keyword, assetSource, qualityIssue, pageNo, pageSize));
     }
 
     @GetMapping("/files/{fileId}")
     public ApiResponse<FileAssetResponse> getFile(@PathVariable Long fileId) {
-        return ApiResponse.success(assetApplicationService.getFileById(currentUserId(), fileId));
+        return ApiResponse.success(assetApplicationService.getFileByIdForDisplay(currentUserId(), fileId));
     }
 
     @GetMapping("/files/{fileId}/preview")

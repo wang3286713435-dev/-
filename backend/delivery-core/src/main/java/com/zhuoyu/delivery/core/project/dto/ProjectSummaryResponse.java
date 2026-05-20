@@ -6,6 +6,7 @@ public record ProjectSummaryResponse(
     String name,
     String industryType,
     String status,
+    String projectManagerName,
     String roleCode,
     String roleName
 ) {

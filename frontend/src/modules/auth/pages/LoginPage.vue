@@ -71,7 +71,7 @@ async function handleSubmit() {
   try {
     await authStore.signIn(form.username, form.password);
     ElMessage.success('登录成功');
-    router.push({ name: 'home' });
+    router.push({ name: 'data-steward-assets' });
   } catch (error) {
     const message = error instanceof Error ? error.message : '登录失败';
     ElMessage.error(message);

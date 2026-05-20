@@ -86,40 +86,21 @@
     </div>
 
     <div class="catalog-body">
-      <aside class="catalog-directory-panel">
-        <div class="catalog-directory-header">
-          <div>
-            <strong>目录浏览</strong>
-            <span>{{ selectedProjectName }}</span>
-          </div>
-          <el-button text type="primary" :disabled="!filters.directoryPath" @click="clearDirectory">全部</el-button>
-        </div>
-        <el-empty v-if="!filters.projectId" description="选择项目后浏览目录" :image-size="80" />
-        <el-empty
-          v-else-if="!directoriesLoading && directories.length === 0"
-          description="暂无目录"
-          :image-size="80"
-        />
-        <el-scrollbar v-else class="catalog-directory-scroll">
-          <button
-            v-for="directory in directories"
-            :key="directory.directoryPath"
-            type="button"
-            class="catalog-directory-item"
-            :class="{ 'is-active': filters.directoryPath === directory.directoryPath }"
-            @click="selectDirectory(directory)"
-          >
-            <span class="catalog-directory-name">{{ compactDirectoryName(directory.directoryPath) }}</span>
-            <span class="catalog-directory-meta">{{ directory.fileCount }} 个文件 · {{ formatBytes(directory.totalSizeBytes) }}</span>
-            <span class="catalog-directory-path">{{ directory.directoryPath }}</span>
-          </button>
-        </el-scrollbar>
-      </aside>
+      <DirectoryTreePanel
+        :directories="directories"
+        :active-path="filters.directoryPath"
+        :root-label="selectedProjectName"
+        :enabled="Boolean(filters.projectId)"
+        :loading="directoriesLoading"
+        empty-description="暂无目录"
+        disabled-description="选择项目后浏览目录"
+        @select="selectDirectoryPath"
+      />
 
       <div class="catalog-file-panel">
         <div v-if="filters.directoryPath" class="catalog-active-directory">
           <span>当前目录</span>
-          <el-tag closable @close="clearDirectory">{{ filters.directoryPath }}</el-tag>
+          <el-tag closable @close="clearDirectory">{{ activeDirectoryLabel }}</el-tag>
         </div>
 
         <el-table
@@ -238,12 +219,15 @@
           <h3>文件访问</h3>
           <el-descriptions v-if="detailPreview" :column="1" border size="small">
             <el-descriptions-item label="预览状态">
-              <el-tag :type="detailPreview.previewAvailable ? 'success' : 'info'" size="small">
-                {{ detailPreview.previewAvailable ? '可原生预览' : '需要转换或暂不支持' }}
+              <el-tag :type="previewRiskTagType(detailPreview)" size="small">
+                {{ previewStatusLabel(detailPreview) }}
               </el-tag>
             </el-descriptions-item>
+            <el-descriptions-item label="在线查看">{{ previewOnlineStateText(detailPreview) }}</el-descriptions-item>
+            <el-descriptions-item label="预览方式">{{ previewModeLabel(detailPreview) }}</el-descriptions-item>
+            <el-descriptions-item label="转换状态">{{ conversionStatusLabel(detailPreview) }}</el-descriptions-item>
             <el-descriptions-item label="访问权限">{{ detailPreview.accessPolicyMessage }}</el-descriptions-item>
-            <el-descriptions-item label="说明">{{ detailPreview.message }}</el-descriptions-item>
+            <el-descriptions-item label="业务提示">{{ previewActionHint(detailPreview) }}</el-descriptions-item>
           </el-descriptions>
           <el-alert
             v-else
@@ -268,6 +252,7 @@
             >
               下载文件
             </el-button>
+            <el-button @click="openHermesForDetail">问 Hermes</el-button>
           </div>
         </div>
 
@@ -301,6 +286,17 @@
         </div>
       </template>
     </el-drawer>
+
+    <el-drawer v-model="hermesDrawerVisible" title="Hermes 数据管家" size="520px">
+      <DataStewardPanel
+        v-if="detail"
+        :project-id="detail.projectId"
+        page-type="asset_detail"
+        source-view="FileAssetView"
+        :asset-id="detail.fileId"
+      />
+      <el-empty v-else description="请先选择文件" :image-size="56" />
+    </el-drawer>
   </section>
 </template>
 
@@ -321,6 +317,17 @@ import {
   type CatalogFileDetail,
   type FilePreview
 } from '@/modules/data-steward/api/dataSteward';
+import DataStewardPanel from '@/modules/data-steward/components/DataStewardPanel.vue';
+import DirectoryTreePanel from '@/modules/data-steward/components/DirectoryTreePanel.vue';
+import { buildDirectoryTree } from '@/modules/data-steward/utils/directoryTree';
+import {
+  conversionStatusLabel,
+  previewActionHint,
+  previewModeLabel,
+  previewOnlineStateText,
+  previewRiskTagType,
+  previewStatusLabel
+} from '@/modules/data-steward/utils/previewStatus';
 
 const projects = ref<CatalogProject[]>([]);
 const directories = ref<CatalogDirectory[]>([]);
@@ -329,6 +336,7 @@ const total = ref(0);
 const loading = ref(false);
 const directoriesLoading = ref(false);
 const drawerVisible = ref(false);
+const hermesDrawerVisible = ref(false);
 const detail = ref<CatalogFileDetail | null>(null);
 const detailPreview = ref<FilePreview | null>(null);
 const accessLoading = ref<'PREVIEW' | 'DOWNLOAD' | null>(null);
@@ -350,7 +358,12 @@ const detailTitle = computed(() => detail.value ? `${detail.value.fileName} - �
 const selectedProjectName = computed(() => {
   if (!filters.value.projectId) return '未选择项目';
   const project = projects.value.find(item => item.projectId === filters.value.projectId);
-  return project ? `${project.projectCode} ${project.projectName}` : '当前项目';
+  return project ? `${project.projectName} (${project.projectCode})` : '当前项目';
+});
+const directoryModel = computed(() => buildDirectoryTree(directories.value));
+const activeDirectoryLabel = computed(() => {
+  if (!filters.value.directoryPath) return '项目根目录';
+  return directoryModel.value.labelByPath.get(filters.value.directoryPath) ?? compactDirectoryName(filters.value.directoryPath);
 });
 
 function loadPage() {
@@ -374,8 +387,8 @@ function loadDirectories() {
     .finally(() => { directoriesLoading.value = false; });
 }
 
-function selectDirectory(directory: CatalogDirectory) {
-  filters.value.directoryPath = directory.directoryPath;
+function selectDirectoryPath(directoryPath: string) {
+  filters.value.directoryPath = directoryPath;
   filters.value.page = 1;
   loadFiles();
 }
@@ -409,6 +422,7 @@ function loadFiles() {
 
 function openDetail(row: CatalogFile) {
   detailPreview.value = null;
+  hermesDrawerVisible.value = false;
   fetchCatalogFileDetail(row.fileId).then(d => {
     detail.value = d;
     drawerVisible.value = true;
@@ -429,7 +443,7 @@ async function openFileAccess(action: 'PREVIEW' | 'DOWNLOAD') {
     return;
   }
   if (action === 'PREVIEW' && !canOpenPreview(preview)) {
-    ElMessage.warning(preview.accessPolicyMessage || '当前文件暂不可预览');
+    ElMessage.warning(previewActionHint(preview) || preview.accessPolicyMessage || '当前文件暂不可预览');
     return;
   }
   if (action === 'DOWNLOAD' && !preview.downloadAllowed) {
@@ -452,6 +466,11 @@ async function openFileAccess(action: 'PREVIEW' | 'DOWNLOAD') {
   } finally {
     accessLoading.value = null;
   }
+}
+
+function openHermesForDetail() {
+  if (!detail.value) return;
+  hermesDrawerVisible.value = true;
 }
 
 function compactDirectoryName(path: string): string {
@@ -492,75 +511,6 @@ loadPage();
   grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
   gap: 16px;
   align-items: start;
-}
-.catalog-directory-panel {
-  border: 1px solid #dcdfe6;
-  border-radius: 8px;
-  background: #fff;
-  min-height: 360px;
-  overflow: hidden;
-}
-.catalog-directory-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: flex-start;
-  padding: 12px;
-  border-bottom: 1px solid #ebeef5;
-}
-.catalog-directory-header div {
-  min-width: 0;
-}
-.catalog-directory-header strong,
-.catalog-directory-header span {
-  display: block;
-}
-.catalog-directory-header span {
-  margin-top: 3px;
-  font-size: 12px;
-  color: #909399;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.catalog-directory-scroll {
-  height: 440px;
-}
-.catalog-directory-item {
-  display: block;
-  width: 100%;
-  padding: 10px 12px;
-  border: 0;
-  border-bottom: 1px solid #f0f2f5;
-  background: #fff;
-  text-align: left;
-  cursor: pointer;
-}
-.catalog-directory-item:hover,
-.catalog-directory-item.is-active {
-  background: #ecf5ff;
-}
-.catalog-directory-name,
-.catalog-directory-meta,
-.catalog-directory-path {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.catalog-directory-name {
-  color: #303133;
-  font-weight: 600;
-}
-.catalog-directory-meta {
-  margin-top: 4px;
-  color: #606266;
-  font-size: 12px;
-}
-.catalog-directory-path {
-  margin-top: 3px;
-  color: #909399;
-  font-size: 12px;
 }
 .catalog-file-panel {
   min-width: 0;
@@ -616,9 +566,6 @@ loadPage();
 @media (max-width: 1100px) {
   .catalog-body {
     grid-template-columns: 1fr;
-  }
-  .catalog-directory-scroll {
-    height: 260px;
   }
 }
 </style>

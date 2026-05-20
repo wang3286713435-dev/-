@@ -39,6 +39,8 @@ import com.zhuoyu.delivery.datasteward.asset.repository.NonstandardDirectoryRepo
 import com.zhuoyu.delivery.datasteward.asset.repository.StorageRootRepository;
 import com.zhuoyu.delivery.shared.api.PageResponse;
 import com.zhuoyu.delivery.shared.exception.BusinessException;
+import com.zhuoyu.delivery.shared.preview.FilePreviewPolicy;
+import com.zhuoyu.delivery.shared.preview.PreviewDecision;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -67,9 +69,6 @@ public class AssetApplicationService {
     private static final String MODULE_CODE = "data-steward";
     private static final String PERMISSION_FILE_PREVIEW = "DATA_STEWARD_FILE_PREVIEW";
     private static final String PERMISSION_FILE_DOWNLOAD = "DATA_STEWARD_FILE_DOWNLOAD";
-    private static final List<String> BROWSER_NATIVE_PREVIEW_EXTENSIONS = List.of(
-        ".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"
-    );
     private static final String DEFAULT_SCAN_EXTENSIONS = ".rvt,.dwg,.ifc,.nwd,.nwc,.dxf,.pdf,.doc,.docx,.wps,.xls,.xlsx,.ppt,.pptx,.glb,.gltf,.zip,.rar";
     private static final List<String> DEFAULT_SKIP_DIRECTORY_KEYWORDS = List.of(
         ".git", ".svn", ".hg", ".idea", ".vscode", "node_modules",
@@ -597,6 +596,15 @@ public class AssetApplicationService {
             fileName, fileExt, sourceType, keyword, null, qualityIssue, 0, 200);
     }
 
+    public List<FileAssetResponse> listFileAssetsForDisplay(Long userId, Long projectId, String fileKind,
+                                                             String discipline, String fileName, String fileExt,
+                                                             String sourceType, String keyword, String qualityIssue) {
+        return listFileAssets(userId, projectId, fileKind, discipline, fileName, fileExt, sourceType, keyword, qualityIssue)
+            .stream()
+            .map(file -> maskStoragePathIfNeeded(userId, file))
+            .toList();
+    }
+
     public PageResponse<FileAssetResponse> listFileAssetsPage(Long userId, Long projectId, String fileKind,
                                                               String discipline, String fileName, String fileExt,
                                                               String sourceType, String keyword, String assetSource,
@@ -611,12 +619,30 @@ public class AssetApplicationService {
         return new PageResponse<>(items, safePageNo, safePageSize, total);
     }
 
+    public PageResponse<FileAssetResponse> listFileAssetsPageForDisplay(Long userId, Long projectId, String fileKind,
+                                                                         String discipline, String fileName, String fileExt,
+                                                                         String sourceType, String keyword, String assetSource,
+                                                                         String qualityIssue, Integer pageNo, Integer pageSize) {
+        PageResponse<FileAssetResponse> page = listFileAssetsPage(userId, projectId, fileKind, discipline,
+            fileName, fileExt, sourceType, keyword, assetSource, qualityIssue, pageNo, pageSize);
+        return new PageResponse<>(
+            page.items().stream().map(file -> maskStoragePathIfNeeded(userId, file)).toList(),
+            page.pageNo(),
+            page.pageSize(),
+            page.total()
+        );
+    }
+
     public FileAssetResponse getFileById(Long userId, Long fileId) {
         List<FileAssetResponse> files = bimAssetRepository.listFileById(userId, fileId);
         if (files.isEmpty()) {
             throw new BusinessException("ASSET_FILE_NOT_FOUND", "文件不存在或无权访问", HttpStatus.NOT_FOUND);
         }
         return files.getFirst();
+    }
+
+    public FileAssetResponse getFileByIdForDisplay(Long userId, Long fileId) {
+        return maskStoragePathIfNeeded(userId, getFileById(userId, fileId));
     }
 
     public FilePreviewResponse getFilePreview(Long userId, Long fileId) {
@@ -634,7 +660,11 @@ public class AssetApplicationService {
                 "NOT_STARTED",
                 false,
                 "文件缺少存储路径，先完成路径治理后才能接入预览。",
-                List.of("FIX_METADATA")
+                List.of("FIX_METADATA"),
+                false,
+                "文件不可用",
+                "文件缺少存储路径，先完成路径治理后才能接入预览。",
+                "DANGER"
             );
         } else if (List.of("DELETED", "QUARANTINED").contains(lifecycleStatus)) {
             decision = new PreviewDecision(
@@ -644,12 +674,16 @@ public class AssetApplicationService {
                 "NOT_STARTED",
                 false,
                 "文件已停用或处于隔离状态，不能打开预览。",
-                List.of("VIEW_AUDIT")
+                List.of("VIEW_AUDIT"),
+                false,
+                "文件不可用",
+                "文件已停用或处于隔离状态，不能打开预览。",
+                "DANGER"
             );
         } else {
             decision = decidePreview(ext, file.fileKind());
         }
-        String accessPolicyMessage = accessPolicyMessage(previewPermission, downloadPermission, decision.previewAvailable());
+        String accessPolicyMessage = accessPolicyMessage(previewPermission, downloadPermission, decision);
         return new FilePreviewResponse(
             file.fileId(),
             file.projectId(),
@@ -665,6 +699,10 @@ public class AssetApplicationService {
             decision.conversionRequired(),
             decision.message(),
             decision.supportedActions(),
+            decision.downloadOnly(),
+            decision.statusLabel(),
+            decision.actionHint(),
+            decision.riskLevel(),
             previewPermission,
             downloadPermission,
             accessPolicyMessage,
@@ -687,7 +725,11 @@ public class AssetApplicationService {
             }
             if (!previewable) {
                 recordFileAccessAudit(file, "asset.file.access.denied", userId, "PREVIEW_UNSUPPORTED");
-                throw new BusinessException("ASSET_FILE_PREVIEW_UNSUPPORTED", "当前文件格式暂不支持直接预览", HttpStatus.PRECONDITION_FAILED);
+                PreviewDecision decision = decidePreview(normalizePreviewExt(file.fileExt(), file.fileName()), file.fileKind());
+                String message = decision.actionHint() != null && !decision.actionHint().isBlank()
+                    ? decision.actionHint()
+                    : "当前文件格式暂不支持直接预览";
+                throw new BusinessException("ASSET_FILE_PREVIEW_UNSUPPORTED", message, HttpStatus.PRECONDITION_FAILED);
             }
         } else if (!downloadable) {
             recordFileAccessAudit(file, "asset.file.access.denied", userId, "DOWNLOAD_FORBIDDEN");
@@ -841,6 +883,56 @@ public class AssetApplicationService {
         return value == null ? "-" : value;
     }
 
+    private FileAssetResponse maskStoragePathIfNeeded(Long userId, FileAssetResponse file) {
+        if (file == null || canViewStoragePath(userId, file.projectId())) {
+            return file;
+        }
+        return new FileAssetResponse(
+            file.fileId(),
+            file.projectId(),
+            file.projectCode(),
+            file.projectName(),
+            file.fileName(),
+            file.fileExt(),
+            file.fileKind(),
+            file.discipline(),
+            file.versionNo(),
+            file.sizeBytes(),
+            file.checksum(),
+            file.storageProvider(),
+            null,
+            file.logicalPath(),
+            file.sourceType(),
+            file.processStatus(),
+            file.reviewStatus(),
+            file.confidenceLevel(),
+            file.createdAt(),
+            file.updatedAt(),
+            file.permissionTags(),
+            file.projectScope(),
+            file.confidentialityLevel(),
+            file.lastSeenAt(),
+            file.lifecycleStatus(),
+            file.indexEligibility()
+        );
+    }
+
+    private boolean canViewStoragePath(Long userId, Long projectId) {
+        if (userId == null || projectId == null) {
+            return false;
+        }
+        Integer count = jdbcTemplate.queryForObject("""
+            SELECT COUNT(1)
+            FROM core_user_project_roles upr
+            JOIN core_roles r ON r.id = upr.role_id AND r.deleted = 0
+            WHERE upr.user_id = ?
+              AND upr.project_id = ?
+              AND upr.deleted = 0
+              AND r.code = 'PROJECT_ADMIN'
+            """, Integer.class, userId, projectId);
+        return count != null && count > 0;
+    }
+
     private boolean hasFilePermission(Long userId, Long projectId, String permissionCode) {
         if (userId == null || projectId == null || permissionCode == null) {
             return false;
@@ -849,12 +941,17 @@ public class AssetApplicationService {
             .anyMatch(permission -> permissionCode.equals(permission.code()));
     }
 
-    private String accessPolicyMessage(boolean previewAllowed, boolean downloadAllowed, boolean previewAvailable) {
+    private String accessPolicyMessage(boolean previewAllowed, boolean downloadAllowed, PreviewDecision decision) {
         if (!previewAllowed && !downloadAllowed) {
             return "当前账号只能查看文件元数据，不能预览或下载。";
         }
         if (previewAllowed && !downloadAllowed) {
-            return previewAvailable ? "当前账号可预览文件，但没有下载权限。" : "当前账号有预览权限，但该格式需要后续转换。";
+            if (Boolean.TRUE.equals(decision.previewAvailable())) {
+                return "当前账号可预览文件，但没有下载权限。";
+            }
+            return Boolean.TRUE.equals(decision.conversionRequired())
+                ? "当前账号有预览权限；在线预览需要后续转换服务。"
+                : "当前账号有预览权限；当前格式暂不支持在线预览。";
         }
         if (!previewAllowed) {
             return "当前账号可下载文件，但没有在线预览权限。";
@@ -875,7 +972,7 @@ public class AssetApplicationService {
     }
 
     private boolean isBrowserNativePreview(FileAssetResponse file) {
-        return BROWSER_NATIVE_PREVIEW_EXTENSIONS.contains(normalizePreviewExt(file.fileExt(), file.fileName()));
+        return FilePreviewPolicy.isBrowserNative(normalizePreviewExt(file.fileExt(), file.fileName()));
     }
 
     private void validateFileLifecycle(FileAssetResponse file) {
@@ -1200,83 +1297,7 @@ public class AssetApplicationService {
     }
 
     private static PreviewDecision decidePreview(String ext, String fileKind) {
-        if (List.of(".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg").contains(ext)) {
-            return new PreviewDecision(
-                "AVAILABLE",
-                "BROWSER_NATIVE",
-                true,
-                "NOT_REQUIRED",
-                false,
-                "该格式可接入浏览器原生预览。当前阶段只开放预览入口与状态，不直接读取 NAS 文件正文。",
-                List.of("OPEN_PREVIEW_STATUS", "DOWNLOAD_VIA_PLATFORM")
-            );
-        }
-        if (List.of(".doc", ".docx", ".wps", ".xls", ".xlsx", ".ppt", ".pptx").contains(ext)) {
-            return new PreviewDecision(
-                "NEEDS_CONVERSION",
-                "OFFICE_CONVERSION",
-                false,
-                "NOT_STARTED",
-                true,
-                "Office 文件需要后续接入离线转换服务后才能在线预览。",
-                List.of("REQUEST_CONVERSION", "VIEW_METADATA")
-            );
-        }
-        if (List.of(".dwg", ".dxf", ".dgn").contains(ext)) {
-            return new PreviewDecision(
-                "NEEDS_CONVERSION",
-                "CAD_CONVERSION",
-                false,
-                "NOT_STARTED",
-                true,
-                "CAD 图纸需要后续接入图纸转换或查看引擎后才能在线预览。",
-                List.of("REQUEST_CONVERSION", "VIEW_METADATA")
-            );
-        }
-        if (List.of(".rvt", ".ifc", ".nwd", ".nwc", ".glb", ".gltf").contains(ext)
-            || "MODEL".equalsIgnoreCase(fileKind)
-            || "MODEL_VIEWER".equalsIgnoreCase(fileKind)) {
-            return new PreviewDecision(
-                "NEEDS_CONVERSION",
-                "BIM_LIGHTWEIGHT",
-                false,
-                "NOT_STARTED",
-                true,
-                "BIM 模型需要后续接入轻量化转换与模型查看器后才能在线预览。",
-                List.of("REQUEST_CONVERSION", "VIEW_METADATA")
-            );
-        }
-        if (List.of(".zip", ".rar", ".7z").contains(ext)) {
-            return new PreviewDecision(
-                "UNSUPPORTED",
-                "DOWNLOAD_ONLY",
-                false,
-                "NOT_SUPPORTED",
-                false,
-                "归档包暂不支持在线预览，只保留元数据治理与受控访问入口。",
-                List.of("VIEW_METADATA")
-            );
-        }
-        return new PreviewDecision(
-            "UNSUPPORTED",
-            "NONE",
-            false,
-            "NOT_SUPPORTED",
-            false,
-            "当前格式暂未纳入一期预览能力范围。",
-            List.of("VIEW_METADATA")
-        );
-    }
-
-    private record PreviewDecision(
-        String previewStatus,
-        String previewMode,
-        Boolean previewAvailable,
-        String conversionStatus,
-        Boolean conversionRequired,
-        String message,
-        List<String> supportedActions
-    ) {
+        return FilePreviewPolicy.decide(ext, fileKind);
     }
 
     public record FileAccessResource(

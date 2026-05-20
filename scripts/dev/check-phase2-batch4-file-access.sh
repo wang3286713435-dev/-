@@ -157,6 +157,16 @@ download_file="${TMP_DIR}/download.out"
 curl -fsS -D "${headers_file}" -o "${download_file}" "${BASE_URL}${admin_download_url}"
 if grep -qi 'content-disposition: attachment' "${headers_file}" && grep -q 'PDF sample for phase2 batch4' "${download_file}"; then
   pass "管理员可通过短时票据下载文件"
+echo '== preview ticket cannot be used as download =='
+preview_ticket_url="$(parse_json 'import json,sys; print(json.load(sys.stdin)["data"]["accessUrl"])' <<< "${admin_preview_response}")"
+preview_as_download_headers="${TMP_DIR}/preview-as-download.headers"
+curl -fsS -D "${preview_as_download_headers}" -o /dev/null "${BASE_URL}${preview_ticket_url}"
+if grep -qi 'content-disposition: attachment' "${preview_as_download_headers}"; then
+  fail "预览票据返回了下载响应"
+else
+  pass "预览票据不返回下载响应"
+fi
+
 else
   fail "管理员下载响应不符合预期"
 fi
@@ -175,6 +185,19 @@ if [[ "${viewer_download_code}" == "ASSET_FILE_DOWNLOAD_FORBIDDEN" ]]; then
 else
   fail "查看者下载拒绝错误码不正确: ${viewer_download_code}"
 fi
+
+echo '== delivery engineer can preview and download =='
+regular_preview_response="$(create_ticket "${regular_token}" "${file_id}" "PREVIEW")"
+assert_ok "${regular_preview_response}"
+regular_preview_url="$(parse_json 'import json,sys; print(json.load(sys.stdin)["data"]["accessUrl"])' <<< "${regular_preview_response}")"
+curl -fsS "${BASE_URL}${regular_preview_url}" >/dev/null
+pass "交付工程师可预览"
+
+regular_download_response="$(create_ticket "${regular_token}" "${file_id}" "DOWNLOAD")"
+assert_ok "${regular_download_response}"
+regular_download_url="$(parse_json 'import json,sys; print(json.load(sys.stdin)["data"]["accessUrl"])' <<< "${regular_download_response}")"
+curl -fsS -o /dev/null "${BASE_URL}${regular_download_url}"
+pass "交付工程师可下载"
 
 echo '== catalog detail must hide NAS path for ordinary project users =='
 viewer_catalog_detail="$(curl -sS "${BASE_URL}/api/data-steward/catalog/files/${file_id}" \
@@ -209,6 +232,20 @@ if [[ "${cross_code}" == "ASSET_FILE_NOT_FOUND" || "${cross_code}" == "ASSET_FIL
 else
   fail "跨项目拒绝错误码不正确: ${cross_code}"
 fi
+echo '== catalog file list must hide NAS path =='
+viewer_catalog_list="$(curl -sS "${BASE_URL}/api/data-steward/catalog/files?projectId=${PROJECT_ID}&pageSize=50"   -H "Authorization: Bearer ${viewer_token}")"
+assert_ok "${viewer_catalog_list}"
+parse_json '
+import json, sys
+payload=json.load(sys.stdin)["data"]
+items=payload["items"]
+assert len(items) > 0, "no files in catalog list"
+for item in items:
+    assert item["storagePathVisible"] is False, item
+    assert item["storagePathVisibilityReason"] not in ("", "PROJECT_ADMIN"), item
+' <<< "${viewer_catalog_list}" >/dev/null
+pass "查看者catalog列表不暴露NAS路径"
+
 
 missing_response="$(create_ticket "${admin_token}" "${missing_file_id}" "PREVIEW" || true)"
 missing_code="$(assert_not_ok "${missing_response}")"

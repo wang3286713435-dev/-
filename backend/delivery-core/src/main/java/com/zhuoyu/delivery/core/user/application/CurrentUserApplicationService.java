@@ -60,32 +60,6 @@ public class CurrentUserApplicationService {
 
     private List<MenuItemResponse> buildMenus(List<String> permissions) {
         List<MenuItemResponse> menus = new ArrayList<>();
-        if (permissions.contains("WORKCENTER_HOME_VIEW")) {
-            menus.add(new MenuItemResponse("home", "首页", "/home", "House"));
-        }
-        if (
-            permissions.contains("MASTERDATA_SECTION_READ")
-                || permissions.contains("MASTERDATA_NODE_TYPE_READ")
-                || permissions.contains("MASTERDATA_DELIVERABLE_READ")
-        ) {
-            List<MenuItemResponse> masterDataChildren = new ArrayList<>();
-            if (permissions.contains("MASTERDATA_SECTION_READ")) {
-                masterDataChildren.add(
-                    new MenuItemResponse("master-data-sections", "工程管理部位", "/master-data/sections", "OfficeBuilding")
-                );
-            }
-            if (permissions.contains("MASTERDATA_NODE_TYPE_READ")) {
-                masterDataChildren.add(
-                    new MenuItemResponse("master-data-node-types", "节点类型", "/master-data/node-types", "Tickets")
-                );
-            }
-            if (permissions.contains("MASTERDATA_DELIVERABLE_READ")) {
-                masterDataChildren.add(
-                    new MenuItemResponse("master-data-deliverable-standard", "交付物标准", "/master-data/deliverable-standard", "Files")
-                );
-            }
-            menus.add(new MenuItemResponse("master-data", "工程主数据", "/master-data/sections", "Files", masterDataChildren));
-        }
         if (
             permissions.contains("DATA_STEWARD_ASSET_READ")
                 || permissions.contains("DATA_STEWARD_FILE_READ")
@@ -135,6 +109,32 @@ public class CurrentUserApplicationService {
             }
             String dataStewardPath = permissions.contains("DATA_STEWARD_ASSET_READ") ? "/data-steward/assets" : "/data-steward/files";
             menus.add(new MenuItemResponse("data-steward", "数据管家", dataStewardPath, "FolderOpened", dataStewardChildren));
+        }
+        if (permissions.contains("WORKCENTER_HOME_VIEW")) {
+            menus.add(new MenuItemResponse("home", "首页", "/home", "House"));
+        }
+        if (
+            permissions.contains("MASTERDATA_SECTION_READ")
+                || permissions.contains("MASTERDATA_NODE_TYPE_READ")
+                || permissions.contains("MASTERDATA_DELIVERABLE_READ")
+        ) {
+            List<MenuItemResponse> masterDataChildren = new ArrayList<>();
+            if (permissions.contains("MASTERDATA_SECTION_READ")) {
+                masterDataChildren.add(
+                    new MenuItemResponse("master-data-sections", "工程管理部位", "/master-data/sections", "OfficeBuilding")
+                );
+            }
+            if (permissions.contains("MASTERDATA_NODE_TYPE_READ")) {
+                masterDataChildren.add(
+                    new MenuItemResponse("master-data-node-types", "节点类型", "/master-data/node-types", "Tickets")
+                );
+            }
+            if (permissions.contains("MASTERDATA_DELIVERABLE_READ")) {
+                masterDataChildren.add(
+                    new MenuItemResponse("master-data-deliverable-standard", "交付物标准", "/master-data/deliverable-standard", "Files")
+                );
+            }
+            menus.add(new MenuItemResponse("master-data", "工程主数据", "/master-data/sections", "Files", masterDataChildren));
         }
         if (
             permissions.contains("WORKCENTER_DELIVERY_READ")

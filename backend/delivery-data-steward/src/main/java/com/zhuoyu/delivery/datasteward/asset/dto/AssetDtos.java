@@ -1,5 +1,6 @@
 package com.zhuoyu.delivery.datasteward.asset.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -93,6 +94,15 @@ public final class AssetDtos {
         Integer modelCount,
         Long totalSizeBytes,
         Instant lastModelUpdatedAt,
+        String projectSource,
+        String projectCategory,
+        String onboardingStatus,
+        Integer fileCount,
+        List<String> dominantFileKinds,
+        Instant lastScanAt,
+        Boolean hasMasterData,
+        Boolean hasDeliveryStandard,
+        Boolean governanceReady,
         List<String> permissionTags,
         String projectScope,
         String confidentialityLevel,
@@ -412,6 +422,10 @@ public final class AssetDtos {
         Boolean conversionRequired,
         String message,
         List<String> supportedActions,
+        Boolean downloadOnly,
+        String statusLabel,
+        String actionHint,
+        String riskLevel,
         Boolean previewAllowed,
         Boolean downloadAllowed,
         String accessPolicyMessage,
@@ -931,6 +945,98 @@ public final class AssetDtos {
         Boolean agentReadable,
         String agentReadReason,
         List<String> agentContractView
+    ) {
+    }
+
+    public record CatalogSearchRequest(
+        String query,
+        @JsonAlias({"project_filters", "project_ids"})
+        List<String> projectFilters,
+        @JsonAlias("project_scope")
+        @Valid
+        CatalogSearchProjectScope projectScope,
+        @Valid
+        CatalogSearchFilters filters,
+        @Valid
+        CatalogSearchPage page
+    ) {
+        public List<String> untrustedProjectFilters() {
+            if (projectFilters != null && !projectFilters.isEmpty()) {
+                return projectFilters;
+            }
+            return projectScope == null ? null : projectScope.projectIds();
+        }
+
+        public boolean legacyProjectScopeProvided() {
+            return projectScope != null;
+        }
+    }
+
+    public record CatalogSearchProjectScope(
+        String type,
+        @JsonAlias("project_ids")
+        List<String> projectIds
+    ) {
+    }
+
+    public record CatalogSearchFilters(
+        @JsonAlias("asset_kind")
+        List<String> assetKind,
+        @JsonAlias("file_ext")
+        List<String> fileExt,
+        @JsonAlias("lifecycle_status")
+        List<String> lifecycleStatus,
+        @JsonAlias("index_eligibility")
+        List<String> indexEligibility
+    ) {
+    }
+
+    public record CatalogSearchPage(
+        Integer limit,
+        String cursor
+    ) {
+    }
+
+    public record CatalogSearchResponse(
+        String queryId,
+        String traceId,
+        Boolean assetCatalogOnly,
+        String permissionDecision,
+        String evidenceMode,
+        List<CatalogSearchResult> results,
+        String nextCursor,
+        CatalogSearchSafety safety
+    ) {
+    }
+
+    public record CatalogSearchResult(
+        String assetRef,
+        String assetKind,
+        String sourceView,
+        Long fileId,
+        Long modelId,
+        Long projectId,
+        String projectCode,
+        String projectName,
+        String fileName,
+        String displayPath,
+        String pathHint,
+        String fileExt,
+        String disciplineCode,
+        String version,
+        String sizeBucket,
+        String lifecycleStatus,
+        String indexEligibility,
+        Boolean contentEvidenceAvailable,
+        List<String> missingEvidence,
+        java.time.Instant updatedAt
+    ) {
+    }
+
+    public record CatalogSearchSafety(
+        Boolean rawRowsOutput,
+        Boolean trueNasPathOutput,
+        Boolean secretPrinted
     ) {
     }
 

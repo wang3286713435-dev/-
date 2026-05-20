@@ -33,6 +33,7 @@ public class ProjectAccessApplicationService {
             project.name(),
             project.industryType(),
             project.status(),
+            project.projectManagerName(),
             project.roleCode(),
             project.roleName()
         );

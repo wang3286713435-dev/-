@@ -10,6 +10,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -142,17 +143,68 @@ public class BimAssetRepository {
                    p.project_manager_name,
                    p.asset_status,
                    p.asset_source,
-                   COUNT(f.id) AS model_count,
-                   COALESCE(SUM(f.size_bytes), 0) AS total_size_bytes,
-                   MAX(f.updated_at) AS last_model_updated_at,
-                   MAX(f.last_verified_at) AS last_asset_verified_at,
+                   COALESCE(fa.model_count, 0) AS model_count,
+                   COALESCE(fa.file_count, 0) AS file_count,
+                   COALESCE(fa.total_size_bytes, 0) AS total_size_bytes,
+                   fa.last_model_updated_at,
+                   fa.last_asset_verified_at,
+                   fa.dominant_file_kinds,
+                   sa.last_scan_at,
+                   COALESCE(pm.path_mapping_count, 0) AS path_mapping_count,
+                   CASE WHEN COALESCE(md.master_data_count, 0) > 0 THEN 1 ELSE 0 END AS has_master_data,
+                   CASE WHEN COALESCE(ds.delivery_standard_count, 0) > 0 THEN 1 ELSE 0 END AS has_delivery_standard,
+                   CASE WHEN COALESCE(wb.binding_count, 0) > 0 THEN 1 ELSE 0 END AS has_delivery_governance,
                    p.updated_at AS project_updated_at
             FROM core_user_project_roles upr
             JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
-            LEFT JOIN data_file_resources f
-              ON f.project_id = p.id
-             AND f.deleted = 0
-             AND f.file_kind = 'MODEL'
+            LEFT JOIN (
+                SELECT project_id,
+                       COUNT(1) AS file_count,
+                       SUM(CASE WHEN file_kind = 'MODEL' THEN 1 ELSE 0 END) AS model_count,
+                       COALESCE(SUM(size_bytes), 0) AS total_size_bytes,
+                       MAX(CASE WHEN file_kind = 'MODEL' THEN updated_at ELSE NULL END) AS last_model_updated_at,
+                       MAX(last_verified_at) AS last_asset_verified_at,
+                       GROUP_CONCAT(DISTINCT file_kind ORDER BY file_kind SEPARATOR ',') AS dominant_file_kinds
+                FROM data_file_resources
+                WHERE deleted = 0
+                GROUP BY project_id
+            ) fa ON fa.project_id = p.id
+            LEFT JOIN (
+                SELECT project_id, MAX(COALESCE(completed_at, started_at, updated_at)) AS last_scan_at
+                FROM data_asset_scan_tasks
+                WHERE deleted = 0
+                GROUP BY project_id
+            ) sa ON sa.project_id = p.id
+            LEFT JOIN (
+                SELECT project_id, COUNT(1) AS path_mapping_count
+                FROM data_asset_project_path_mappings
+                WHERE deleted = 0 AND enabled = 1
+                GROUP BY project_id
+            ) pm ON pm.project_id = p.id
+            LEFT JOIN (
+                SELECT project_id, COUNT(1) AS master_data_count
+                FROM (
+                    SELECT project_id FROM masterdata_section_nodes WHERE deleted = 0
+                    UNION ALL
+                    SELECT project_id FROM masterdata_node_types WHERE deleted = 0
+                ) rows_for_master_data
+                GROUP BY project_id
+            ) md ON md.project_id = p.id
+            LEFT JOIN (
+                SELECT project_id, COUNT(1) AS delivery_standard_count
+                FROM (
+                    SELECT project_id FROM masterdata_deliverable_definitions WHERE deleted = 0
+                    UNION ALL
+                    SELECT project_id FROM masterdata_directory_templates WHERE deleted = 0
+                ) rows_for_delivery_standard
+                GROUP BY project_id
+            ) ds ON ds.project_id = p.id
+            LEFT JOIN (
+                SELECT project_id, COUNT(1) AS binding_count
+                FROM work_delivery_bindings
+                WHERE deleted = 0
+                GROUP BY project_id
+            ) wb ON wb.project_id = p.id
             WHERE upr.user_id = :userId
               AND upr.deleted = 0
               AND (
@@ -164,8 +216,6 @@ public class BimAssetRepository {
             """);
         appendAssetSourceFilter(sql, params, "p", assetSource);
         sql.append("""
-            GROUP BY p.id, p.code, p.name, p.industry_type, p.project_stage,
-                     p.project_manager_name, p.asset_status, p.asset_source, p.updated_at
             ORDER BY total_size_bytes DESC, p.id DESC
             """);
         return jdbcTemplate.query(sql.toString(), params, PROJECT_ROW_MAPPER);
@@ -539,10 +589,16 @@ public class BimAssetRepository {
     private static AssetProjectResponse mapProject(ResultSet rs, int rowNum) throws SQLException {
         Timestamp lastModelUpdatedAt = rs.getTimestamp("last_model_updated_at");
         Timestamp lastAssetVerifiedAt = rs.getTimestamp("last_asset_verified_at");
+        Timestamp lastScanAt = rs.getTimestamp("last_scan_at");
         Timestamp projectUpdatedAt = rs.getTimestamp("project_updated_at");
         String assetSource = rs.getString("asset_source");
         String confidentialityLevel = projectConfidentialityLevel(assetSource);
         String indexEligibility = projectIndexEligibility(assetSource);
+        int fileCount = rs.getInt("file_count");
+        boolean hasMasterData = rs.getInt("has_master_data") > 0;
+        boolean hasDeliveryStandard = rs.getInt("has_delivery_standard") > 0;
+        boolean hasDeliveryGovernance = rs.getInt("has_delivery_governance") > 0;
+        int pathMappingCount = rs.getInt("path_mapping_count");
         Instant lastSeenAt = lastAssetVerifiedAt == null
             ? (lastModelUpdatedAt == null
                 ? (projectUpdatedAt == null ? null : projectUpdatedAt.toInstant())
@@ -561,6 +617,15 @@ public class BimAssetRepository {
             rs.getInt("model_count"),
             rs.getLong("total_size_bytes"),
             lastModelUpdatedAt == null ? null : lastModelUpdatedAt.toInstant(),
+            projectSource(assetSource, rs.getString("code"), rs.getString("name")),
+            projectCategory(rs.getString("code"), rs.getString("name"), assetSource, fileCount, pathMappingCount),
+            onboardingStatus(fileCount, hasMasterData, hasDeliveryStandard, hasDeliveryGovernance, pathMappingCount),
+            fileCount,
+            splitFileKinds(rs.getString("dominant_file_kinds")),
+            lastScanAt == null ? null : lastScanAt.toInstant(),
+            hasMasterData,
+            hasDeliveryStandard,
+            hasMasterData && hasDeliveryStandard,
             permissionTags("ProjectAssetView", "PROJECT", projectId, confidentialityLevel, indexEligibility),
             null,
             confidentialityLevel,
@@ -568,6 +633,99 @@ public class BimAssetRepository {
             lifecycleStatus(rs.getString("asset_status"), null, null, null),
             indexEligibility
         );
+    }
+
+    private static List<String> splitFileKinds(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(value.split(","))
+            .map(String::trim)
+            .filter(item -> !item.isBlank())
+            .limit(5)
+            .toList();
+    }
+
+    private static String projectSource(String assetSource, String code, String name) {
+        String text = ((code == null ? "" : code) + " " + (name == null ? "" : name)).toLowerCase();
+        if (isTestProjectText(text)) {
+            return "TEST";
+        }
+        String source = blankToNull(assetSource);
+        if (source == null) {
+            return "MANUAL";
+        }
+        String upper = source.toUpperCase();
+        if (upper.startsWith("NAS_REAL")) {
+            return "REAL_NAS";
+        }
+        if (upper.contains("SAMPLE") || upper.contains("TEMPLATE")) {
+            return "SAMPLE_TEMPLATE";
+        }
+        if (upper.contains("TEST") || upper.contains("AGENT_TEST")) {
+            return "TEST";
+        }
+        if (upper.contains("ARCHIVE") || upper.contains("HISTORY")) {
+            return "ARCHIVED_HISTORY";
+        }
+        if (upper.contains("API") || upper.contains("MANUAL")) {
+            return "MANUAL";
+        }
+        return source;
+    }
+
+    private static String projectCategory(String code, String name, String assetSource, int fileCount, int pathMappingCount) {
+        String source = projectSource(assetSource, code, name);
+        String text = ((code == null ? "" : code) + " " + (name == null ? "" : name)).toLowerCase();
+        if ("TEST".equals(source) || isTestProjectText(text)) {
+            return "TEST_PROJECT";
+        }
+        if ("SAMPLE_TEMPLATE".equals(source) || text.contains("样例") || text.contains("模板") || text.contains("sample")) {
+            return "SAMPLE_TEMPLATE";
+        }
+        if ("ARCHIVED_HISTORY".equals(source) || text.contains("归档") || text.contains("历史")) {
+            return "ARCHIVED_HISTORY";
+        }
+        if ("REAL_NAS".equals(source) || fileCount > 0 || pathMappingCount > 0) {
+            return "REAL_NAS_PROJECT";
+        }
+        return "UNFINISHED_ONBOARDING";
+    }
+
+    private static boolean isTestProjectText(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        return text.contains("test")
+            || text.contains("测试")
+            || text.contains("smoke")
+            || text.startsWith("ph2")
+            || text.startsWith("phase2")
+            || text.startsWith("b6a-smoke")
+            || text.contains(" phase2-")
+            || text.contains(" ph2");
+    }
+
+    private static String onboardingStatus(
+        int fileCount,
+        boolean hasMasterData,
+        boolean hasDeliveryStandard,
+        boolean hasDeliveryGovernance,
+        int pathMappingCount
+    ) {
+        if (hasDeliveryGovernance) {
+            return "GOVERNANCE_READY";
+        }
+        if (hasMasterData || hasDeliveryStandard) {
+            return "MASTERDATA_INITIALIZED";
+        }
+        if (fileCount > 0) {
+            return "ASSETS_REGISTERED";
+        }
+        if (pathMappingCount > 0) {
+            return "PATH_MAPPED";
+        }
+        return "NOT_ONBOARDED";
     }
 
     private static ModelAssetResponse mapModel(ResultSet rs, int rowNum) throws SQLException {
@@ -971,10 +1129,28 @@ public class BimAssetRepository {
         if (source.endsWith("*")) {
             sb.append(" AND ").append(tableAlias).append(".asset_source LIKE :assetSourceLike ");
             params.addValue("assetSourceLike", source.substring(0, source.length() - 1) + "%");
+            appendRealProjectNameFilter(sb, tableAlias, source);
             return;
         }
         sb.append(" AND ").append(tableAlias).append(".asset_source = :assetSource ");
         params.addValue("assetSource", source);
+        appendRealProjectNameFilter(sb, tableAlias, source);
+    }
+
+    private void appendRealProjectNameFilter(StringBuilder sb, String tableAlias, String assetSource) {
+        if (assetSource == null || !assetSource.toUpperCase().startsWith("NAS_REAL")) {
+            return;
+        }
+        sb.append(" AND LOWER(CONCAT(COALESCE(").append(tableAlias).append(".code, ''), ' ', COALESCE(")
+            .append(tableAlias).append(".name, ''))) NOT LIKE '%test%' ");
+        sb.append(" AND LOWER(CONCAT(COALESCE(").append(tableAlias).append(".code, ''), ' ', COALESCE(")
+            .append(tableAlias).append(".name, ''))) NOT LIKE '%smoke%' ");
+        sb.append(" AND LOWER(CONCAT(COALESCE(").append(tableAlias).append(".code, ''), ' ', COALESCE(")
+            .append(tableAlias).append(".name, ''))) NOT LIKE 'ph2%' ");
+        sb.append(" AND LOWER(CONCAT(COALESCE(").append(tableAlias).append(".code, ''), ' ', COALESCE(")
+            .append(tableAlias).append(".name, ''))) NOT LIKE 'phase2%' ");
+        sb.append(" AND CONCAT(COALESCE(").append(tableAlias).append(".code, ''), ' ', COALESCE(")
+            .append(tableAlias).append(".name, '')) NOT LIKE '%测试%' ");
     }
 
     private static String extensionOf(String name) {

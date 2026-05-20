@@ -3,12 +3,16 @@ package com.zhuoyu.delivery.workcenter.delivery;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DashboardSummaryResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryBindingResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCompletenessRow;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageSummaryRow;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.ExportPrecheckRow;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.AgentGovernanceCandidateFile;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.RectificationResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.ReviewRecordResponse;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -217,6 +221,64 @@ public class DeliveryBindingRepository {
             WHERE project_id = :projectId AND deleted = 0 AND status = 'ACTIVE'
             ORDER BY id
             """, new MapSqlParameterSource("projectId", projectId), Long.class);
+    }
+
+    public int countOpenRectifications(Long projectId) {
+        Integer count = jdbcTemplate.queryForObject("""
+            SELECT COUNT(1)
+            FROM work_rectifications
+            WHERE project_id = :projectId
+              AND deleted = 0
+              AND status IN ('OPEN', 'REOPENED')
+            """, new MapSqlParameterSource("projectId", projectId), Integer.class);
+        return count == null ? 0 : count;
+    }
+
+    public List<AgentGovernanceCandidateFile> findAgentCandidateFiles(Long projectId, String fileKind, int limit) {
+        return jdbcTemplate.query("""
+            SELECT id,
+                   original_name,
+                   file_kind,
+                   LOWER(SUBSTRING_INDEX(original_name, '.', -1)) AS file_ext,
+                   version_no,
+                   process_status,
+                   business_tag,
+                   CASE WHEN checksum IS NULL OR checksum = '' THEN 0 ELSE 1 END AS checksum_present
+            FROM data_file_resources
+            WHERE project_id = :projectId
+              AND deleted = 0
+              AND file_kind = :fileKind
+            ORDER BY
+              CASE WHEN process_status = 'PROCESSED' THEN 0 ELSE 1 END,
+              id DESC
+            LIMIT :limit
+            """, new MapSqlParameterSource()
+            .addValue("projectId", projectId)
+            .addValue("fileKind", fileKind)
+            .addValue("limit", Math.max(1, limit)),
+            (rs, rowNum) -> new AgentGovernanceCandidateFile(
+                rs.getLong("id"),
+                rs.getString("original_name"),
+                rs.getString("file_kind"),
+                rs.getString("file_ext"),
+                rs.getString("version_no"),
+                rs.getString("process_status"),
+                rs.getString("business_tag"),
+                rs.getInt("checksum_present") == 1
+            ));
+    }
+
+    public List<String> findBoundDeliverableTypeFileKeys(Long projectId, String viewType) {
+        return jdbcTemplate.queryForList("""
+            SELECT CONCAT(deliverable_type_id, ':', file_resource_id)
+            FROM work_delivery_bindings
+            WHERE project_id = :projectId
+              AND view_type = :viewType
+              AND binding_status = 'BOUND'
+              AND deleted = 0
+            """, new MapSqlParameterSource()
+            .addValue("projectId", projectId)
+            .addValue("viewType", viewType), String.class);
     }
 
     public List<DeliveryCompletenessRow> findRequiredDeliverables(
@@ -686,6 +748,220 @@ public class DeliveryBindingRepository {
               ON o.id = b.managed_object_id AND o.project_id = b.project_id AND o.deleted = 0
             %s
             """.formatted(whereClause);
+    }
+
+    // ---- batch binding existence check ----
+
+    public boolean bindingExists(Long projectId, String viewType, Long sectionNodeId,
+                                 Long managedObjectId, Long deliverableTypeId, Long fileResourceId) {
+        String targetClause;
+        MapSqlParameterSource params = new MapSqlParameterSource()
+            .addValue("projectId", projectId)
+            .addValue("viewType", viewType)
+            .addValue("deliverableTypeId", deliverableTypeId)
+            .addValue("fileResourceId", fileResourceId);
+        if (sectionNodeId != null) {
+            targetClause = "AND section_node_id = :targetId";
+            params.addValue("targetId", sectionNodeId);
+        } else if (managedObjectId != null) {
+            targetClause = "AND managed_object_id = :targetId";
+            params.addValue("targetId", managedObjectId);
+        } else {
+            targetClause = "AND section_node_id IS NULL AND managed_object_id IS NULL";
+        }
+        Integer count = jdbcTemplate.queryForObject("""
+            SELECT COUNT(1) FROM work_delivery_bindings
+            WHERE project_id = :projectId
+              AND view_type = :viewType
+              AND deliverable_type_id = :deliverableTypeId
+              AND file_resource_id = :fileResourceId
+              %s
+              AND deleted = 0
+            """.formatted(targetClause), params, Integer.class);
+        return count != null && count > 0;
+    }
+
+    public Long findExistingBindingId(Long projectId, String viewType, Long sectionNodeId,
+                                       Long managedObjectId, Long deliverableTypeId, Long fileResourceId) {
+        String targetClause;
+        MapSqlParameterSource params = new MapSqlParameterSource()
+            .addValue("projectId", projectId)
+            .addValue("viewType", viewType)
+            .addValue("deliverableTypeId", deliverableTypeId)
+            .addValue("fileResourceId", fileResourceId);
+        if (sectionNodeId != null) {
+            targetClause = "AND section_node_id = :targetId";
+            params.addValue("targetId", sectionNodeId);
+        } else if (managedObjectId != null) {
+            targetClause = "AND managed_object_id = :targetId";
+            params.addValue("targetId", managedObjectId);
+        } else {
+            targetClause = "AND section_node_id IS NULL AND managed_object_id IS NULL";
+        }
+        List<Long> ids = jdbcTemplate.queryForList("""
+            SELECT id FROM work_delivery_bindings
+            WHERE project_id = :projectId
+              AND view_type = :viewType
+              AND deliverable_type_id = :deliverableTypeId
+              AND file_resource_id = :fileResourceId
+              %s
+              AND deleted = 0
+            LIMIT 1
+            """.formatted(targetClause), params, Long.class);
+        return ids.isEmpty() ? null : ids.getFirst();
+    }
+
+    // ---- delivery package summary ----
+
+    public List<DeliveryPackageSummaryRow> findPackageSummaryRows(Long projectId, String viewType, String targetType) {
+        boolean sectionTarget = "SECTION".equals(targetType);
+        String targetIdExpression = sectionTarget ? "sn.id" : "mo.id";
+        String targetNameExpression = sectionTarget ? "sn.name" : "mo.name";
+        String targetFilter = sectionTarget ? "AND b.section_node_id IS NOT NULL" : "AND b.managed_object_id IS NOT NULL";
+        String sql = """
+            SELECT
+                dd.id AS def_id, dd.name AS def_name,
+                dt.id AS type_id, dt.name AS type_name,
+                :targetType AS target_type,
+                %s AS target_id,
+                %s AS target_name,
+                b.id AS binding_id,
+                b.file_resource_id,
+                f.original_name AS file_name,
+                f.file_kind,
+                f.version_no,
+                b.review_status
+            FROM work_delivery_bindings b
+            JOIN data_file_resources f ON f.id = b.file_resource_id AND f.project_id = b.project_id AND f.deleted = 0
+            JOIN masterdata_deliverable_types dt ON dt.id = b.deliverable_type_id AND dt.project_id = b.project_id AND dt.deleted = 0
+            JOIN masterdata_deliverable_definitions dd ON dd.id = dt.deliverable_definition_id AND dd.project_id = b.project_id AND dd.deleted = 0
+            LEFT JOIN masterdata_section_nodes sn ON sn.id = b.section_node_id AND sn.project_id = b.project_id AND sn.deleted = 0
+            LEFT JOIN data_managed_objects mo ON mo.id = b.managed_object_id AND mo.project_id = b.project_id AND mo.deleted = 0
+            WHERE b.project_id = :projectId
+              AND b.view_type = :viewType
+              AND b.deleted = 0
+              AND b.binding_status = 'BOUND'
+              %s
+            ORDER BY dd.sort_order, dt.sort_order, b.id
+            """.formatted(targetIdExpression, targetNameExpression, targetFilter);
+        return jdbcTemplate.query(sql,
+            new MapSqlParameterSource("projectId", projectId)
+                .addValue("viewType", viewType)
+                .addValue("targetType", targetType),
+            (rs, rowNum) -> {
+                String reviewStatus = rs.getString("review_status");
+                String targetTypeValue = rs.getString("target_type");
+                String readiness = computeReadiness(reviewStatus, rs.getObject("binding_id") != null);
+                return new DeliveryPackageSummaryRow(
+                    rs.getObject("def_id") != null ? rs.getLong("def_id") : null,
+                    rs.getString("def_name"),
+                    rs.getObject("type_id") != null ? rs.getLong("type_id") : null,
+                    rs.getString("type_name"),
+                    targetTypeValue,
+                    rs.getObject("target_id") != null ? rs.getLong("target_id") : null,
+                    rs.getString("target_name"),
+                    rs.getObject("binding_id") != null ? rs.getLong("binding_id") : null,
+                    rs.getObject("file_resource_id") != null ? rs.getLong("file_resource_id") : null,
+                    rs.getString("file_name"),
+                    rs.getString("file_kind"),
+                    rs.getString("version_no"),
+                    reviewStatus,
+                    readiness
+                );
+            });
+    }
+
+    private static String computeReadiness(String reviewStatus, boolean hasBinding) {
+        if (!hasBinding) return "MISSING";
+        if ("APPROVED".equals(reviewStatus)) return "READY";
+        if ("PENDING".equals(reviewStatus) || "DRAFT".equals(reviewStatus)) return "PENDING_REVIEW";
+        if ("REJECTED".equals(reviewStatus)) return "REJECTED";
+        return "PENDING_REVIEW";
+    }
+
+    public List<DeliveryCompletenessRow> findMissingRequiredRows(Long projectId, String viewType, String targetType) {
+        // Reuse the completeness logic: find all required rows, then filter those without bindings
+        String fileKind = "DRAWING".equals(viewType) ? "DRAWING" : "DOCUMENT";
+        List<DeliveryCompletenessRow> required = findRequiredDeliverables(projectId, fileKind, targetType, viewType);
+        List<DeliveryCompletenessRow> completed = findCompletedBindings(projectId, viewType, targetType);
+
+        var completedMap = new LinkedHashMap<String, DeliveryCompletenessRow>();
+        for (var c : completed) {
+            String key = c.targetId() + "_" + c.deliverableTypeId();
+            completedMap.putIfAbsent(key, c);
+        }
+
+        List<DeliveryCompletenessRow> missing = new ArrayList<>();
+        for (var req : required) {
+            String key = req.targetId() + "_" + req.deliverableTypeId();
+            if (!completedMap.containsKey(key)) {
+                missing.add(req);
+            }
+        }
+        return missing;
+    }
+
+    // ---- export precheck ----
+
+    public List<ExportPrecheckRow> findExportPrecheckBoundRows(Long projectId, String viewType, String targetType) {
+        boolean sectionTarget = "SECTION".equals(targetType);
+        String targetIdExpression = sectionTarget ? "sn.id" : "mo.id";
+        String targetNameExpression = sectionTarget ? "sn.name" : "mo.name";
+        String targetFilter = sectionTarget ? "AND b.section_node_id IS NOT NULL" : "AND b.managed_object_id IS NOT NULL";
+        String sql = """
+            SELECT
+                dd.id AS def_id, dd.name AS def_name,
+                dt.id AS type_id, dt.name AS type_name,
+                :targetType AS target_type,
+                %s AS target_id,
+                %s AS target_name,
+                b.id AS binding_id,
+                b.file_resource_id,
+                f.original_name AS file_name,
+                f.file_kind,
+                f.version_no,
+                LOWER(SUBSTRING_INDEX(f.original_name, '.', -1)) AS file_ext,
+                b.review_status
+            FROM work_delivery_bindings b
+            JOIN data_file_resources f ON f.id = b.file_resource_id AND f.project_id = b.project_id AND f.deleted = 0
+            JOIN masterdata_deliverable_types dt ON dt.id = b.deliverable_type_id AND dt.project_id = b.project_id AND dt.deleted = 0
+            JOIN masterdata_deliverable_definitions dd ON dd.id = dt.deliverable_definition_id AND dd.project_id = b.project_id AND dd.deleted = 0
+            LEFT JOIN masterdata_section_nodes sn ON sn.id = b.section_node_id AND sn.project_id = b.project_id AND sn.deleted = 0
+            LEFT JOIN data_managed_objects mo ON mo.id = b.managed_object_id AND mo.project_id = b.project_id AND mo.deleted = 0
+            WHERE b.project_id = :projectId
+              AND b.view_type = :viewType
+              AND b.deleted = 0
+              AND b.binding_status = 'BOUND'
+              %s
+            ORDER BY dd.sort_order, dt.sort_order, b.id
+            """.formatted(targetIdExpression, targetNameExpression, targetFilter);
+        return jdbcTemplate.query(sql,
+            new MapSqlParameterSource("projectId", projectId)
+                .addValue("viewType", viewType)
+                .addValue("targetType", targetType),
+            (rs, rowNum) -> {
+                String reviewStatus = rs.getString("review_status");
+                return new ExportPrecheckRow(
+                    rs.getObject("def_id") != null ? rs.getLong("def_id") : null,
+                    rs.getString("def_name"),
+                    rs.getObject("type_id") != null ? rs.getLong("type_id") : null,
+                    rs.getString("type_name"),
+                    rs.getString("target_type"),
+                    rs.getObject("target_id") != null ? rs.getLong("target_id") : null,
+                    rs.getString("target_name"),
+                    rs.getObject("binding_id") != null ? rs.getLong("binding_id") : null,
+                    rs.getObject("file_resource_id") != null ? rs.getLong("file_resource_id") : null,
+                    rs.getString("file_name"),
+                    rs.getString("file_kind"),
+                    rs.getString("version_no"),
+                    rs.getString("file_ext"),
+                    reviewStatus,
+                    null, // readinessStatus filled by service
+                    null, null, null, null, // preview fields filled by service
+                    null, null, null, null, // preview display fields filled by service
+                    null, null // export fields filled by service
+                );
+            });
     }
 
     private static DeliveryBindingResponse mapBinding(ResultSet rs, int rowNum) throws SQLException {

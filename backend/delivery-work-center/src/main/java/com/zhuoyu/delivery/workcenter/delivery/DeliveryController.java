@@ -3,11 +3,15 @@ package com.zhuoyu.delivery.workcenter.delivery;
 import com.zhuoyu.delivery.core.auth.application.SecurityPrincipalAccessor;
 import com.zhuoyu.delivery.core.project.application.ProjectContextApplicationService;
 import com.zhuoyu.delivery.shared.api.ApiResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.BatchDeliveryBindingRequest;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.BatchDeliveryBindingResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DashboardSummaryResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryBindingRequest;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryBindingResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCompletenessResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageSummaryResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryViewResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.ExportPrecheckResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.RejectRequest;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.ReviewRecordResponse;
 import jakarta.validation.Valid;
@@ -84,6 +88,38 @@ public class DeliveryController {
         var principal = securityPrincipalAccessor.requireCurrentPrincipal();
         projectContextApplicationService.requireCurrentProject(principal, projectId);
         return ApiResponse.success(deliveryApplicationService.deliveryCompleteness(projectId, viewType, targetType, onlyMissing));
+    }
+
+    @PostMapping("/delivery-bindings:batch")
+    public ApiResponse<BatchDeliveryBindingResponse> createBatchBinding(
+        @PathVariable Long projectId,
+        @Valid @RequestBody BatchDeliveryBindingRequest request
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(deliveryApplicationService.createBatchBinding(principal.userId(), projectId, request));
+    }
+
+    @GetMapping("/delivery-package/summary")
+    public ApiResponse<DeliveryPackageSummaryResponse> deliveryPackageSummary(
+        @PathVariable Long projectId,
+        @RequestParam(required = false) String viewType,
+        @RequestParam(defaultValue = "SECTION") String targetType
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(deliveryApplicationService.deliveryPackageSummary(projectId, viewType, targetType));
+    }
+
+    @GetMapping("/delivery-package/export-precheck")
+    public ApiResponse<ExportPrecheckResponse> exportPrecheck(
+        @PathVariable Long projectId,
+        @RequestParam(required = false) String viewType,
+        @RequestParam(defaultValue = "SECTION") String targetType
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(deliveryApplicationService.exportPrecheck(projectId, viewType, targetType));
     }
 
     // ---- review ----

@@ -1,102 +1,203 @@
 <template>
   <section class="mvp-page asset-page">
-    <div class="mvp-page__header">
-      <div>
-        <el-button text :icon="Back" @click="router.push({ name: 'data-steward-assets' })">返回资产总览</el-button>
+    <ProjectWorkspaceNav v-if="Number.isFinite(projectId)" :project-id="projectId" />
+
+    <header class="asset-command-center">
+      <div class="asset-command-center__copy">
+        <span>数据管家工作台</span>
         <h1>{{ projectTitle }}</h1>
         <p>{{ projectSubTitle }}</p>
       </div>
-      <div class="mvp-page__actions">
+      <div class="asset-command-center__meta">
+        <el-tag type="info" effect="plain">{{ project?.assetSource || '内部资产' }}</el-tag>
+        <el-tag :type="project?.assetStatus === 'ACTIVE' ? 'success' : 'info'" effect="plain">
+          {{ project?.assetStatus || '未加载' }}
+        </el-tag>
+      </div>
+      <div class="asset-command-center__actions">
+        <el-button :icon="View" type="success" @click="goAgentGovernance">开始交付治理</el-button>
+        <el-button :icon="ChatDotRound" type="primary" @click="hermesDrawerVisible = true">问 Hermes</el-button>
         <el-button :icon="Refresh" @click="loadPage">刷新</el-button>
       </div>
-    </div>
+    </header>
 
-    <section class="mvp-dashboard">
-      <article v-for="item in cards" :key="item.label" class="mvp-stat mvp-stat--large">
-        <span>{{ item.label }}</span>
-        <strong>{{ item.value }}</strong>
-        <em>{{ item.unit }}</em>
-      </article>
+    <section class="asset-module-grid" aria-label="数据管家模块">
+      <button
+        v-for="item in moduleCards"
+        :key="item.name"
+        class="asset-module-card"
+        type="button"
+        @click="openModule(item)"
+      >
+        <span>{{ item.group }}</span>
+        <strong>{{ item.label }}</strong>
+        <em>{{ item.description }}</em>
+      </button>
     </section>
 
     <el-tabs v-model="activeTab" class="asset-tabs">
-      <el-tab-pane label="文件资产" name="files">
-        <section class="asset-toolbar">
-          <el-input
-            v-model="filters.keyword"
-            clearable
-            placeholder="文件名、路径"
-            :prefix-icon="Search"
-            @keyup.enter="reloadFilesFromFirstPage"
-            @clear="reloadFilesFromFirstPage"
-          />
-          <el-segmented v-model="filters.fileKind" :options="fileKindOptions" @change="reloadFilesFromFirstPage" />
-          <el-select v-model="filters.qualityIssue" @change="reloadFilesFromFirstPage">
-            <el-option v-for="item in qualityIssueOptions" :key="item.value" :label="item.label" :value="item.value" />
-          </el-select>
-          <el-select v-model="filters.discipline" clearable filterable placeholder="专业" @change="reloadFilesFromFirstPage">
-            <el-option v-for="item in disciplineOptions" :key="item.code" :label="item.name" :value="item.code" />
-          </el-select>
-          <el-input v-model="filters.fileExt" clearable placeholder="扩展名" @keyup.enter="reloadFilesFromFirstPage" @clear="reloadFilesFromFirstPage" />
-          <el-button :icon="Search" @click="reloadFilesFromFirstPage">查询</el-button>
-        </section>
+      <el-tab-pane label="资产驾驶舱" name="dashboard">
+        <section v-loading="loading" class="asset-dashboard-grid">
+          <div class="asset-dashboard-panel asset-dashboard-panel--overview">
+            <div class="asset-dashboard-panel__header">
+              <div>
+                <h2>资产总览</h2>
+                <span>按当前项目实时汇总文件元数据</span>
+              </div>
+              <span>{{ formatDate(statistics?.lastUpdatedAt) }}</span>
+            </div>
+            <div class="asset-kpi-grid">
+              <article v-for="item in cards" :key="item.label" class="asset-kpi">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+                <em>{{ item.unit }}</em>
+              </article>
+            </div>
+          </div>
 
-        <el-table v-loading="fileLoading" :data="files" class="master-table" empty-text="暂无文件资产" @row-dblclick="openFileDetail">
-          <el-table-column prop="fileId" label="文件ID" width="90" align="right" />
-          <el-table-column prop="fileName" label="文件名称" min-width="260" show-overflow-tooltip />
-          <el-table-column prop="fileKind" label="类型" width="100">
-            <template #default="{ row }">
-              <el-tag :type="fileKindTag(row.fileKind)">{{ row.fileKind }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="fileExt" label="扩展名" width="90" />
-          <el-table-column label="专业" width="120" show-overflow-tooltip>
-            <template #default="{ row }">
-              <el-tag type="info">{{ disciplineLabel(row.discipline) }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="versionNo" label="版本" width="90" />
-          <el-table-column label="大小" width="120" align="right">
-            <template #default="{ row }">{{ formatBytes(row.sizeBytes) }}</template>
-          </el-table-column>
-          <el-table-column prop="confidenceLevel" label="置信度" width="100">
-            <template #default="{ row }">
-              <el-tag :type="row.confidenceLevel === 'HIGH' ? 'success' : 'warning'">
-                {{ row.confidenceLevel ?? '-' }}
+          <div class="asset-dashboard-panel asset-dashboard-panel--risks">
+            <div class="asset-dashboard-panel__header">
+              <div>
+                <h2>治理风险</h2>
+                <span>点击风险卡片进入文件筛选或任务视图</span>
+              </div>
+              <el-tag :type="riskSignalCount > 0 ? 'warning' : 'success'" effect="plain">
+                {{ formatCount(riskSignalCount) }} 项
               </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="质量问题" width="130">
-            <template #default="{ row }">
-              <el-tag v-if="qualityFlags(row).length === 0" type="success" size="small">正常</el-tag>
-              <el-tag v-else type="warning" size="small">{{ qualityFlags(row).length }} 项</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="更新时间" width="170">
-            <template #default="{ row }">{{ formatDate(row.updatedAt) }}</template>
-          </el-table-column>
-          <el-table-column prop="storagePath" label="存储路径" min-width="280" show-overflow-tooltip />
-          <el-table-column label="操作" width="310" fixed="right">
-            <template #default="{ row }">
-              <el-button text :icon="View" @click="openPreview(row)">预览</el-button>
-              <el-button text @click="openFileDetail(row)">详情</el-button>
-              <el-button text @click="openMetadataDialog(row)">治理</el-button>
-              <el-button text :disabled="Boolean(row.checksum)" @click="createChecksum(row)">补 checksum</el-button>
-              <el-button text :icon="CopyDocument" @click="copyPath(row.storagePath)">复制路径</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+            </div>
+            <div class="asset-risk-grid">
+              <button
+                v-for="risk in riskCards"
+                :key="risk.key"
+                class="asset-risk-card"
+                type="button"
+                @click="openRiskCard(risk)"
+              >
+                <span>{{ risk.label }}</span>
+                <strong>{{ formatCount(risk.count) }}</strong>
+                <em>{{ risk.helper }}</em>
+              </button>
+            </div>
+          </div>
 
-        <div class="asset-pagination">
-          <el-pagination
-            v-model:current-page="filePagination.pageNo"
-            v-model:page-size="filePagination.pageSize"
-            :page-sizes="[20, 50, 100, 200]"
-            :total="filePagination.total"
-            layout="total, sizes, prev, pager, next"
-            @change="loadFiles"
-          />
-        </div>
+          <div class="asset-dashboard-panel">
+            <div class="asset-dashboard-panel__header">
+              <div>
+                <h2>文件类型</h2>
+                <span>按登记类型统计容量与数量</span>
+              </div>
+            </div>
+            <div class="asset-bars">
+              <article v-for="item in fileKindRows" :key="item.fileKind" class="asset-bar-row">
+                <div>
+                  <strong>{{ fileKindLabel(item.fileKind) }}</strong>
+                  <span>{{ formatCount(item.fileCount) }} 份 / {{ formatBytes(item.totalSizeBytes) }}</span>
+                </div>
+                <div class="asset-bar-row__track">
+                  <span :style="{ width: barWidth(item.totalSizeBytes, maxFileKindSize) }" />
+                </div>
+              </article>
+              <el-empty v-if="fileKindRows.length === 0" description="暂无文件类型统计" :image-size="56" />
+            </div>
+          </div>
+
+          <div class="asset-dashboard-panel">
+            <div class="asset-dashboard-panel__header">
+              <div>
+                <h2>专业分布</h2>
+                <span>辅助判断资产登记是否完整</span>
+              </div>
+            </div>
+            <div class="asset-bars">
+              <article v-for="item in disciplineRows" :key="item.discipline" class="asset-bar-row">
+                <div>
+                  <strong>{{ disciplineLabel(item.discipline) }}</strong>
+                  <span>{{ formatCount(item.fileCount) }} 份 / {{ formatBytes(item.totalSizeBytes) }}</span>
+                </div>
+                <div class="asset-bar-row__track asset-bar-row__track--muted">
+                  <span :style="{ width: barWidth(item.totalSizeBytes, maxDisciplineSize) }" />
+                </div>
+              </article>
+              <el-empty v-if="disciplineRows.length === 0" description="暂无专业统计" :image-size="56" />
+            </div>
+          </div>
+
+          <div class="asset-dashboard-panel">
+            <div class="asset-dashboard-panel__header">
+              <div>
+                <h2>最近扫描</h2>
+                <span>追踪 NAS 接管任务状态</span>
+              </div>
+              <el-button text @click="activeTab = 'scans'">查看全部</el-button>
+            </div>
+            <div class="asset-activity-list">
+              <article v-for="item in recentScans" :key="item.id" class="asset-activity-item">
+                <div>
+                  <strong>任务 {{ item.id }} / {{ item.rootCode }}</strong>
+                  <span>{{ scanProgressHint(item) }}</span>
+                </div>
+                <el-tag :type="scanStatusTag(item.status)" size="small">{{ item.status }}</el-tag>
+              </article>
+              <el-empty v-if="recentScans.length === 0" description="暂无扫描任务" :image-size="56" />
+            </div>
+          </div>
+
+          <div class="asset-dashboard-panel">
+            <div class="asset-dashboard-panel__header">
+              <div>
+                <h2>最近入库</h2>
+                <span>最近登记或更新的文件资产</span>
+              </div>
+              <el-button text @click="activeTab = 'files'">进入文件管理</el-button>
+            </div>
+            <div class="asset-activity-list">
+              <article v-for="item in recentFiles" :key="item.fileId" class="asset-activity-item">
+                <div>
+                  <strong>{{ item.fileName }}</strong>
+                  <span>文件ID {{ item.fileId }} / {{ formatBytes(item.sizeBytes) }} / {{ formatDate(item.updatedAt) }}</span>
+                </div>
+                <el-tag size="small">{{ item.fileKind }}</el-tag>
+              </article>
+              <el-empty v-if="recentFiles.length === 0" description="暂无最近文件" :image-size="56" />
+            </div>
+          </div>
+
+          <div class="asset-dashboard-panel asset-dashboard-panel--events">
+            <div class="asset-dashboard-panel__header">
+              <div>
+                <h2>治理动态</h2>
+                <span>最近审计与事件流记录</span>
+              </div>
+              <span>{{ formatDate(qualityOverview?.latestEventAt) }}</span>
+            </div>
+            <div class="asset-event-list">
+              <article v-for="item in recentEvents" :key="item.id" class="asset-event-item">
+                <strong>{{ item.actionCode }}</strong>
+                <span>{{ item.summary || item.eventType }}</span>
+                <em>{{ formatDate(item.createdAt) }}</em>
+              </article>
+              <el-empty v-if="recentEvents.length === 0" description="暂无治理动态" :image-size="56" />
+            </div>
+          </div>
+        </section>
+      </el-tab-pane>
+
+      <el-tab-pane label="文件管理" name="files">
+        <AssetProjectFileBrowser
+          v-if="Number.isFinite(projectId)"
+          :key="`${projectId}-${fileBrowserRefreshKey}-${catalogInitialQualityIssue}`"
+          :project-id="projectId"
+          :root-label="projectRootLabel"
+          :discipline-options="disciplineOptions"
+          :initial-quality-issue="catalogInitialQualityIssue"
+          :batch-checksum-creating="batchChecksumCreating"
+          @open-preview="openPreviewById"
+          @open-detail="openFileDetailById"
+          @open-metadata="openMetadataById"
+          @create-checksum="createChecksumById"
+          @create-batch-checksum="createBatchChecksumForProject"
+        />
+        <el-empty v-else description="请先选择项目" :image-size="56" />
       </el-tab-pane>
 
       <el-tab-pane label="扫描任务" name="scans">
@@ -118,8 +219,12 @@
               {{ formatCount(row.totalScanned) }} / {{ formatCount(row.autoIngested) }} / {{ formatCount(row.pendingReview) }}
             </template>
           </el-table-column>
-          <el-table-column prop="failureReason" label="失败原因" min-width="180" show-overflow-tooltip />
-          <el-table-column prop="lastScannedPath" label="最后扫描路径" min-width="260" show-overflow-tooltip />
+          <el-table-column label="失败原因" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }">{{ safePathText(row.failureReason) }}</template>
+          </el-table-column>
+          <el-table-column label="路径提示" min-width="260" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.lastScannedPath ? '扫描路径已隐藏，仅保留任务状态。' : '-' }}</template>
+          </el-table-column>
           <el-table-column label="更新时间" width="170">
             <template #default="{ row }">{{ formatDate(row.updatedAt) }}</template>
           </el-table-column>
@@ -130,7 +235,9 @@
         <el-table v-loading="loading" :data="pathMappings" class="master-table" empty-text="暂无路径映射">
           <el-table-column prop="providerCode" label="存储" width="120" />
           <el-table-column prop="matchStrategy" label="匹配方式" width="130" />
-          <el-table-column prop="nasPath" label="NAS路径" min-width="320" show-overflow-tooltip />
+          <el-table-column label="路径提示" min-width="320" show-overflow-tooltip>
+            <template #default="{ row }">{{ pathMappingHint(row) }}</template>
+          </el-table-column>
           <el-table-column prop="remark" label="备注" min-width="180" show-overflow-tooltip />
           <el-table-column label="创建时间" width="170">
             <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
@@ -191,14 +298,14 @@
           <template v-if="currentPreview">
             <el-descriptions :column="1" border size="small">
               <el-descriptions-item label="预览状态">
-                <el-tag :type="previewStatusTag(currentPreview.previewStatus)">
-                  {{ previewStatusLabel(currentPreview.previewStatus) }}
+                <el-tag :type="previewRiskTagType(currentPreview)">
+                  {{ previewStatusLabel(currentPreview) }}
                 </el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="预览方式">{{ previewModeLabel(currentPreview.previewMode) }}</el-descriptions-item>
-              <el-descriptions-item label="转换状态">{{ conversionStatusLabel(currentPreview.conversionStatus) }}</el-descriptions-item>
-            <el-descriptions-item label="后续处理">
-                {{ currentPreview.conversionRequired ? '需要接入转换服务' : '暂不需要转换' }}
+              <el-descriptions-item label="预览方式">{{ previewModeLabel(currentPreview) }}</el-descriptions-item>
+              <el-descriptions-item label="转换状态">{{ conversionStatusLabel(currentPreview) }}</el-descriptions-item>
+              <el-descriptions-item label="后续处理">
+                {{ previewOnlineStateText(currentPreview) }}
               </el-descriptions-item>
               <el-descriptions-item label="预览权限">
                 <el-tag :type="currentPreview.previewAllowed ? 'success' : 'info'" size="small">
@@ -213,8 +320,8 @@
             </el-descriptions>
             <el-alert
               class="preview-message"
-              :title="currentPreview.accessPolicyMessage || currentPreview.message"
-              :type="currentPreview.previewAvailable ? 'success' : 'info'"
+              :title="previewActionHint(currentPreview)"
+              :type="previewRiskTagType(currentPreview)"
               show-icon
               :closable="false"
             />
@@ -229,7 +336,12 @@
             <el-descriptions-item label="存储提供方">{{ selectedFile.storageProvider }}</el-descriptions-item>
             <el-descriptions-item label="逻辑路径">{{ selectedFile.logicalPath || '-' }}</el-descriptions-item>
             <el-descriptions-item label="存储路径">
-              <span class="mono-text">{{ selectedFile.storagePath || '-' }}</span>
+              <template v-if="selectedFile.storagePath">
+                <el-tag type="info" size="small">底层路径已隐藏，请使用平台受控预览或下载入口</el-tag>
+              </template>
+              <template v-else>
+                <el-tag type="info" size="small">路径已隐藏，请使用平台受控预览或下载入口</el-tag>
+              </template>
             </el-descriptions-item>
             <el-descriptions-item label="创建时间">{{ formatDate(selectedFile.createdAt) }}</el-descriptions-item>
             <el-descriptions-item label="更新时间">{{ formatDate(selectedFile.updatedAt) }}</el-descriptions-item>
@@ -256,17 +368,32 @@
             下载文件
           </el-button>
           <el-button :disabled="Boolean(selectedFile.checksum)" @click="createChecksum(selectedFile)">创建 checksum 任务</el-button>
-          <el-button :icon="CopyDocument" @click="copyPath(selectedFile.storagePath)">复制路径</el-button>
+          <el-button :icon="ChatDotRound" @click="openHermesForFile(selectedFile.fileId)">问 Hermes</el-button>
         </section>
       </template>
+    </el-drawer>
+
+    <el-drawer v-model="hermesDrawerVisible" title="Hermes 数据管家" size="520px">
+      <DataStewardPanel
+        v-if="Number.isFinite(projectId)"
+        :project-id="projectId"
+        page-type="project_detail"
+        source-view="FileAssetView"
+        :asset-id="hermesAssetId"
+        :current-route="route.fullPath"
+        :project-code="project?.code"
+        :project-name="project?.name"
+        page-title="项目工作台"
+      />
+      <el-empty v-else description="请先选择项目" :image-size="56" />
     </el-drawer>
 
     <el-dialog v-model="previewDialogVisible" title="文件预览状态" width="640px">
       <div v-loading="previewLoading" class="preview-dialog-body">
         <template v-if="selectedPreview">
           <div class="preview-state-panel">
-            <el-tag :type="previewStatusTag(selectedPreview.previewStatus)" size="large">
-              {{ previewStatusLabel(selectedPreview.previewStatus) }}
+            <el-tag :type="previewRiskTagType(selectedPreview)" size="large">
+              {{ previewStatusLabel(selectedPreview) }}
             </el-tag>
             <div>
               <strong>{{ selectedPreview.fileName }}</strong>
@@ -274,7 +401,7 @@
             </div>
           </div>
           <el-alert
-            title="一期只提供预览入口和状态判断，不读取文件正文，也不执行真实模型轻量化或 Office/CAD 转换。"
+            title="当前仅提供受控预览入口和转换状态判断，不读取文件正文，也不执行真实模型轻量化或 Office/CAD 转换。"
             type="info"
             show-icon
             :closable="false"
@@ -282,13 +409,14 @@
           <el-descriptions class="preview-descriptions" :column="1" border size="small">
             <el-descriptions-item label="文件ID">{{ selectedPreview.fileId }}</el-descriptions-item>
             <el-descriptions-item label="文件类型">{{ selectedPreview.fileKind }} {{ selectedPreview.fileExt }}</el-descriptions-item>
-            <el-descriptions-item label="预览方式">{{ previewModeLabel(selectedPreview.previewMode) }}</el-descriptions-item>
-            <el-descriptions-item label="转换状态">{{ conversionStatusLabel(selectedPreview.conversionStatus) }}</el-descriptions-item>
+            <el-descriptions-item label="预览方式">{{ previewModeLabel(selectedPreview) }}</el-descriptions-item>
+            <el-descriptions-item label="转换状态">{{ conversionStatusLabel(selectedPreview) }}</el-descriptions-item>
             <el-descriptions-item label="是否可直接预览">
-              {{ selectedPreview.previewAvailable ? '可以接入预览入口' : '需要后续转换或查看器能力' }}
+              {{ previewOnlineStateText(selectedPreview) }}
             </el-descriptions-item>
             <el-descriptions-item label="访问权限">{{ selectedPreview.accessPolicyMessage }}</el-descriptions-item>
-            <el-descriptions-item label="说明">{{ selectedPreview.message }}</el-descriptions-item>
+            <el-descriptions-item label="业务提示">{{ previewActionHint(selectedPreview) }}</el-descriptions-item>
+            <el-descriptions-item label="策略说明">{{ selectedPreview.message }}</el-descriptions-item>
             <el-descriptions-item label="可用动作">
               <el-tag
                 v-for="action in selectedPreview.supportedActions"
@@ -434,20 +562,23 @@
 
 <script setup lang="ts">
 import { computed, onUnmounted, reactive, ref, watch } from 'vue';
+import type { RouteRecordName } from 'vue-router';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
-import { Back, CopyDocument, Refresh, Search, View } from '@element-plus/icons-vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { ChatDotRound, Refresh, View } from '@element-plus/icons-vue';
 
 import {
   createChecksumJob,
+  createBatchChecksumJobs,
   fetchAssetDisciplines,
   fetchAssetPathMappings,
   fetchAssetProjects,
+  fetchAssetQualityOverview,
   fetchAssetScanTasks,
   fetchAssetStatistics,
   fetchAssetJob,
+  fetchCatalogFiles,
   fetchFileAsset,
-  fetchFileAssetsPage,
   fetchFilePreview,
   createFileAccessTicket,
   retryAssetJob,
@@ -456,57 +587,61 @@ import {
   type AssetDiscipline,
   type AssetPathMapping,
   type AssetProject,
+  type AssetQualityOverview,
   type AssetScanTask,
   type AssetStatistics,
+  type CatalogFile,
   type FileAsset,
   type FilePreview
 } from '@/modules/data-steward/api/dataSteward';
-import { copyText } from '@/modules/data-steward/utils/clipboard';
+import AssetProjectFileBrowser from '@/modules/data-steward/components/AssetProjectFileBrowser.vue';
+import DataStewardPanel from '@/modules/data-steward/components/DataStewardPanel.vue';
+import {
+  conversionStatusLabel,
+  previewActionHint,
+  previewActionLabel,
+  previewModeLabel,
+  previewOnlineStateText,
+  previewRiskTagType,
+  previewStatusLabel
+} from '@/modules/data-steward/utils/previewStatus';
+import ProjectWorkspaceNav from '@/modules/core/components/ProjectWorkspaceNav.vue';
 
 const route = useRoute();
 const router = useRouter();
 const projectId = computed(() => Number(route.params.projectId));
 
 const loading = ref(false);
-const fileLoading = ref(false);
-const activeTab = ref('files');
+const activeTab = ref('dashboard');
 const project = ref<AssetProject | null>(null);
 const statistics = ref<AssetStatistics | null>(null);
-const files = ref<FileAsset[]>([]);
+const qualityOverview = ref<AssetQualityOverview | null>(null);
 const scanTasks = ref<AssetScanTask[]>([]);
 const pathMappings = ref<AssetPathMapping[]>([]);
 const disciplineOptions = ref<AssetDiscipline[]>([]);
+const recentFiles = ref<CatalogFile[]>([]);
 const detailDrawerVisible = ref(false);
 const selectedFile = ref<FileAsset | null>(null);
 const metadataDialogVisible = ref(false);
 const metadataSaving = ref(false);
 const checksumCreating = ref(false);
+const batchChecksumCreating = ref(false);
 const previewDialogVisible = ref(false);
 const previewLoading = ref(false);
 const accessActionLoading = ref<'PREVIEW' | 'DOWNLOAD' | null>(null);
 const selectedPreview = ref<FilePreview | null>(null);
+const hermesDrawerVisible = ref(false);
+const hermesAssetId = ref<number | undefined>();
 const checksumJobDialogVisible = ref(false);
 const checksumJobLoading = ref(false);
 const checksumJobRetrying = ref(false);
 const selectedChecksumJob = ref<AssetJob | null>(null);
 const selectedChecksumJobFile = ref<FileAsset | null>(null);
+const fileBrowserRefreshKey = ref(0);
 let pageLoadRequestId = 0;
-let fileLoadRequestId = 0;
 let previewRequestId = 0;
 let checksumJobRequestId = 0;
 let checksumJobTimer: ReturnType<typeof window.setInterval> | null = null;
-const filters = reactive({
-  keyword: '',
-  fileKind: 'ALL',
-  qualityIssue: queryString(route.query.qualityIssue) ?? 'ALL',
-  discipline: '',
-  fileExt: ''
-});
-const filePagination = reactive({
-  pageNo: 1,
-  pageSize: 50,
-  total: 0
-});
 const metadataForm = reactive({
   fileId: undefined as number | undefined,
   fileKind: '',
@@ -516,15 +651,6 @@ const metadataForm = reactive({
   reviewStatus: ''
 });
 
-const fileKindOptions = [
-  { label: '全部', value: 'ALL' },
-  { label: '模型', value: 'MODEL' },
-  { label: '图纸', value: 'DRAWING' },
-  { label: '文档', value: 'DOCUMENT' },
-  { label: '表格', value: 'SPREADSHEET' },
-  { label: '汇报', value: 'PRESENTATION' },
-  { label: '归档包', value: 'ARCHIVE' }
-];
 const metadataFileKindOptions = [
   { label: '模型', value: 'MODEL' },
   { label: '图纸', value: 'DRAWING' },
@@ -535,16 +661,24 @@ const metadataFileKindOptions = [
   { label: '归档包', value: 'ARCHIVE' },
   { label: '其他', value: 'OTHER' }
 ];
-const qualityIssueOptions = [
-  { label: '全部质量', value: 'ALL' },
-  { label: '缺 checksum', value: 'MISSING_CHECKSUM' },
-  { label: '缺置信度', value: 'MISSING_CONFIDENCE' },
-  { label: '专业待完善', value: 'MISSING_DISCIPLINE' },
-  { label: '版本缺失', value: 'MISSING_VERSION' },
-  { label: '路径缺失', value: 'MISSING_STORAGE_PATH' },
-  { label: '零大小', value: 'ZERO_SIZE_FILE' }
+const assetTabs = new Set(['dashboard', 'files', 'scans', 'mappings']);
+const moduleCards: Array<{
+  label: string;
+  group: string;
+  description: string;
+  name?: RouteRecordName;
+  tab?: string;
+}> = [
+  { label: '资产驾驶舱', group: '总览', description: '项目资产、容量、治理风险', tab: 'dashboard' },
+  { label: '文件管理', group: '文件', description: '目录树、文件表、预览和治理', tab: 'files' },
+  { label: '模型集成', group: '模型', description: '登记模型集成与发布状态', name: 'project-data-steward-models' },
+  { label: '管理对象', group: '对象', description: '设备、系统和构件台账', name: 'project-data-steward-objects' },
+  { label: '交付治理助手', group: '交付', description: '体检、缺失解释和人工确认补交', name: 'project-work-agent-governance' },
+  { label: '事项列表', group: '治理', description: '缺项、低置信和失败扫描', name: 'project-data-steward-issues' },
+  { label: '任务列表', group: '任务', description: '扫描、checksum 等后台任务', name: 'project-data-steward-tasks' },
+  { label: '导出列表', group: '交付', description: '文件清单和报表导出', name: 'project-data-steward-exports' },
+  { label: '文件服务', group: '服务', description: '预览、下载、权限与禁用写操作', name: 'project-data-steward-file-service' }
 ];
-
 const projectTitle = computed(() => {
   if (!project.value) return `项目 ${projectId.value}`;
   return `${project.value.code} ${project.value.name}`;
@@ -553,11 +687,13 @@ const projectSubTitle = computed(() => {
   if (!project.value) return '资产明细';
   return [project.value.projectStage, project.value.projectManagerName].filter(Boolean).join(' / ') || '资产明细';
 });
+const projectRootLabel = computed(() => project.value?.name ?? `项目 ${projectId.value}`);
 const detailTitle = computed(() => selectedFile.value ? `${selectedFile.value.fileName} - 文件详情` : '文件详情');
 const currentPreview = computed(() => {
   if (!selectedFile.value || selectedPreview.value?.fileId !== selectedFile.value.fileId) return null;
   return selectedPreview.value;
 });
+const catalogInitialQualityIssue = computed(() => queryString(route.query.qualityIssue) ?? 'ALL');
 const checksumJobTargetLabel = computed(() => {
   const file = selectedChecksumJobFile.value;
   if (!file) return '文件资产 checksum 计算';
@@ -569,8 +705,8 @@ const cards = computed(() => {
     { label: '文件总数', value: formatCount(item?.fileCount), unit: '份' },
     { label: '模型文件', value: formatCount(item?.modelFileCount), unit: '份' },
     { label: '图纸文件', value: formatCount(item?.drawingFileCount), unit: '份' },
+    { label: '文档文件', value: formatCount(documentFileCount.value), unit: '份' },
     { label: '项目容量', value: formatBytes(item?.totalSizeBytes), unit: '已登记' },
-    { label: '扫描任务', value: formatCount(projectScans.value.length), unit: '条' },
     { label: '路径映射', value: formatCount(pathMappings.value.length), unit: '条' }
   ];
 });
@@ -578,12 +714,43 @@ const projectScans = computed(() => {
   const code = project.value?.code;
   return scanTasks.value.filter((item) => item.projectId === projectId.value || (code && item.projectCode === code));
 });
+const recentScans = computed(() => [...projectScans.value]
+  .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  .slice(0, 5));
+const recentEvents = computed(() => qualityOverview.value?.recentEvents?.slice(0, 6) ?? []);
+const riskSignalCount = computed(() => Number(qualityOverview.value?.riskSignalCount ?? 0));
+const riskCards = computed(() => {
+  const item = qualityOverview.value;
+  return [
+    { key: 'missing-checksum', label: '缺 checksum', count: item?.missingChecksumCount ?? 0, helper: '影响重复识别', qualityIssue: 'MISSING_CHECKSUM', tab: 'files' },
+    { key: 'missing-discipline', label: '专业待完善', count: item?.missingDisciplineCount ?? 0, helper: '影响筛选统计', qualityIssue: 'MISSING_DISCIPLINE', tab: 'files' },
+    { key: 'missing-confidence', label: '缺置信度', count: item?.missingConfidenceCount ?? 0, helper: '需要人工确认', qualityIssue: 'MISSING_CONFIDENCE', tab: 'files' },
+    { key: 'pending-review', label: '待审核候选', count: item?.pendingReviewCount ?? 0, helper: '扫描后未确认', tab: 'scans' },
+    { key: 'failed-scan', label: '扫描失败', count: item?.failedScanCount ?? 0, helper: '需要排查路径', tab: 'scans' },
+    { key: 'running-scan', label: '运行中任务', count: item?.runningScanCount ?? 0, helper: '后台处理中', tab: 'scans' }
+  ];
+});
+const fileKindRows = computed(() => statistics.value?.byFileKind ?? []);
+const disciplineRows = computed(() => statistics.value?.byDiscipline ?? []);
+const maxFileKindSize = computed(() => Math.max(...fileKindRows.value.map((item) => item.totalSizeBytes), 0));
+const maxDisciplineSize = computed(() => Math.max(...disciplineRows.value.map((item) => item.totalSizeBytes), 0));
+const documentFileCount = computed(() => {
+  const kinds = new Set(['DOCUMENT', 'SPREADSHEET', 'PRESENTATION', 'ARCHIVE']);
+  return fileKindRows.value
+    .filter((item) => kinds.has(item.fileKind))
+    .reduce((sum, item) => sum + Number(item.fileCount ?? 0), 0);
+});
 
 watch(
-  () => [route.params.projectId, route.query.qualityIssue],
+  () => [route.params.projectId, route.query.qualityIssue, route.query.tab],
   () => {
-    filters.qualityIssue = queryString(route.query.qualityIssue) ?? 'ALL';
-    filePagination.pageNo = 1;
+    const nextTab = queryString(route.query.tab);
+    if (nextTab && assetTabs.has(nextTab)) {
+      activeTab.value = nextTab;
+    }
+    if (catalogInitialQualityIssue.value && catalogInitialQualityIssue.value !== 'ALL') {
+      activeTab.value = 'files';
+    }
     resetProjectData();
     void loadPage();
   },
@@ -599,20 +766,28 @@ async function loadPage() {
   const requestId = ++pageLoadRequestId;
   loading.value = true;
   try {
-    const [projects, nextStatistics, nextScans, nextMappings, nextDisciplines] = await Promise.all([
+    const [projectsResult, statisticsResult, qualityResult, scansResult, mappingsResult, disciplinesResult, recentFilesResult] =
+      await Promise.allSettled([
       fetchAssetProjects(),
       fetchAssetStatistics(projectId.value),
+      fetchAssetQualityOverview(projectId.value),
       fetchAssetScanTasks(),
       fetchAssetPathMappings(projectId.value),
-      fetchAssetDisciplines(projectId.value)
+      fetchAssetDisciplines(projectId.value),
+      fetchCatalogFiles({ projectId: projectId.value, page: 1, pageSize: 6 })
     ]);
     if (requestId !== pageLoadRequestId) return;
+    if (projectsResult.status === 'rejected' || statisticsResult.status === 'rejected') {
+      throw projectsResult.status === 'rejected' ? projectsResult.reason : statisticsResult.reason;
+    }
+    const projects = projectsResult.value;
     project.value = projects.find((item) => item.projectId === projectId.value) ?? null;
-    statistics.value = nextStatistics;
-    scanTasks.value = nextScans;
-    pathMappings.value = nextMappings;
-    disciplineOptions.value = nextDisciplines;
-    await loadFiles();
+    statistics.value = statisticsResult.value;
+    qualityOverview.value = qualityResult.status === 'fulfilled' ? qualityResult.value : null;
+    scanTasks.value = scansResult.status === 'fulfilled' ? scansResult.value : [];
+    pathMappings.value = mappingsResult.status === 'fulfilled' ? mappingsResult.value : [];
+    disciplineOptions.value = disciplinesResult.status === 'fulfilled' ? disciplinesResult.value : [];
+    recentFiles.value = recentFilesResult.status === 'fulfilled' ? recentFilesResult.value.rows : [];
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '项目资产加载失败');
   } finally {
@@ -622,56 +797,24 @@ async function loadPage() {
   }
 }
 
-async function loadFiles() {
-  const requestId = ++fileLoadRequestId;
-  fileLoading.value = true;
-  try {
-    const page = await fetchFileAssetsPage({
-      projectId: projectId.value,
-      fileKind: filters.fileKind === 'ALL' ? undefined : filters.fileKind,
-      discipline: filters.discipline.trim() || undefined,
-      fileExt: normalizeExt(filters.fileExt),
-      keyword: filters.keyword.trim() || undefined,
-      qualityIssue: filters.qualityIssue === 'ALL' ? undefined : filters.qualityIssue,
-      pageNo: filePagination.pageNo,
-      pageSize: filePagination.pageSize
-    });
-    if (requestId === fileLoadRequestId) {
-      files.value = page.rows;
-      filePagination.pageNo = page.page;
-      filePagination.pageSize = page.pageSize;
-      filePagination.total = page.total;
-    }
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '文件资产加载失败');
-  } finally {
-    if (requestId === fileLoadRequestId) {
-      fileLoading.value = false;
-    }
-  }
-}
-
-function reloadFilesFromFirstPage() {
-  filePagination.pageNo = 1;
-  void loadFiles();
-}
-
 function resetProjectData() {
   project.value = null;
   statistics.value = null;
-  files.value = [];
+  qualityOverview.value = null;
   scanTasks.value = [];
   pathMappings.value = [];
   disciplineOptions.value = [];
+  recentFiles.value = [];
   selectedFile.value = null;
   selectedPreview.value = null;
   selectedChecksumJob.value = null;
   selectedChecksumJobFile.value = null;
   detailDrawerVisible.value = false;
   previewDialogVisible.value = false;
+  hermesDrawerVisible.value = false;
+  hermesAssetId.value = undefined;
   checksumJobDialogVisible.value = false;
   stopChecksumJobPolling();
-  filePagination.total = 0;
 }
 
 async function openFileDetail(row: FileAsset) {
@@ -723,7 +866,7 @@ async function openFileAccess(action: 'PREVIEW' | 'DOWNLOAD') {
     return;
   }
   if (action === 'PREVIEW' && !canOpenPreview(preview)) {
-    ElMessage.warning(preview.accessPolicyMessage || '当前文件暂不可预览');
+    ElMessage.warning(previewActionHint(preview) || preview.accessPolicyMessage || '当前文件暂不可预览');
     return;
   }
   if (action === 'DOWNLOAD' && !preview.downloadAllowed) {
@@ -773,7 +916,7 @@ async function saveMetadata() {
     selectedFile.value = updated;
     metadataDialogVisible.value = false;
     ElMessage.success('治理结果已保存');
-    await loadFiles();
+    refreshFileBrowser();
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '保存治理结果失败');
   } finally {
@@ -795,6 +938,39 @@ async function createChecksum(row: FileAsset) {
     ElMessage.error(error instanceof Error ? error.message : '创建 checksum 任务失败');
   } finally {
     checksumCreating.value = false;
+  }
+}
+
+async function createBatchChecksumForProject() {
+  if (!Number.isFinite(projectId.value) || batchChecksumCreating.value) return;
+  try {
+    await ElMessageBox.confirm(
+      '平台会为当前项目最多 500 个缺 checksum 文件创建后台补算任务。这个操作只读取 NAS 文件并写回指纹，不会修改、移动或删除原文件。建议在网络和 NAS 负载较低时执行。',
+      '创建 checksum 补算任务',
+      {
+        confirmButtonText: '创建任务',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    );
+  } catch {
+    return;
+  }
+
+  batchChecksumCreating.value = true;
+  try {
+    const count = await createBatchChecksumJobs(projectId.value);
+    if (count > 0) {
+      ElMessage.success(`已创建 ${count} 个 checksum 后台任务`);
+    } else {
+      ElMessage.info('当前项目没有需要补算的 checksum 文件');
+    }
+    await loadPage();
+    refreshFileBrowser();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '批量创建 checksum 任务失败');
+  } finally {
+    batchChecksumCreating.value = false;
   }
 }
 
@@ -861,26 +1037,99 @@ async function refreshChecksumTarget(job: AssetJob) {
   if (job.targetId && selectedFile.value?.fileId === job.targetId) {
     selectedFile.value = await fetchFileAsset(job.targetId);
   }
-  await loadFiles();
+  refreshFileBrowser();
 }
 
 function isTerminalJobStatus(status: string) {
   return ['SUCCEEDED', 'FAILED', 'CANCELED'].includes(status);
 }
 
-async function copyPath(path: string) {
-  const copied = await copyText(path);
-  if (copied) {
-    ElMessage.success('路径已复制');
-    return;
+async function openPreviewById(fileId: number) {
+  try {
+    const file = await fetchFileAsset(fileId);
+    await openPreview(file);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '文件资产加载失败');
   }
-  ElMessage.error('路径复制失败，请手动选中路径复制');
 }
 
-function normalizeExt(value: string) {
-  const next = value.trim();
-  if (!next) return undefined;
-  return next.startsWith('.') ? next : `.${next}`;
+async function openFileDetailById(fileId: number) {
+  try {
+    const file = await fetchFileAsset(fileId);
+    await openFileDetail(file);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '文件资产加载失败');
+  }
+}
+
+async function openMetadataById(fileId: number) {
+  try {
+    const file = await fetchFileAsset(fileId);
+    openMetadataDialog(file);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '文件资产加载失败');
+  }
+}
+
+async function createChecksumById(fileId: number) {
+  try {
+    const file = await fetchFileAsset(fileId);
+    await createChecksum(file);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '文件资产加载失败');
+  }
+}
+
+function openRiskCard(risk: { tab: string; qualityIssue?: string }) {
+  activeTab.value = risk.tab;
+  if (risk.qualityIssue) {
+    void router.replace({
+      name: String(route.name),
+      params: route.params,
+      query: { ...route.query, qualityIssue: risk.qualityIssue }
+    });
+  }
+}
+
+function openModule(item: { name?: RouteRecordName; tab?: string }) {
+  if (item.tab) {
+    activeTab.value = item.tab;
+    return;
+  }
+  if (item.name) {
+    void router.push({ name: item.name, params: { projectId: projectId.value } });
+  }
+}
+
+function goAgentGovernance() {
+  void router.push({ name: 'project-work-agent-governance', params: { projectId: projectId.value } });
+}
+
+function openHermesForFile(fileId: number) {
+  hermesAssetId.value = fileId;
+  hermesDrawerVisible.value = true;
+}
+
+function pathMappingHint(row: AssetPathMapping) {
+  const provider = row.providerCode || 'NAS';
+  const strategy = row.matchStrategy || 'PREFIX';
+  return `${provider}/${strategy}/底层路径已隐藏`;
+}
+
+function scanProgressHint(item: AssetScanTask) {
+  const progress = safePathText(item.progressMessage);
+  if (progress && progress !== '-') {
+    return progress;
+  }
+  return item.lastScannedPath ? '扫描路径已隐藏，仅保留任务状态。' : '暂无进度说明';
+}
+
+function safePathText(value: string | null | undefined) {
+  if (!value) return '-';
+  if (/nas:\/\/|smb:\/\/|afp:\/\/|\/Volumes\/|\/Users\/|storage_path|storage_uri|storagePath|storageUri/i.test(value)) {
+    return '底层路径已隐藏';
+  }
+  return value;
 }
 
 function qualityFlags(file: FileAsset) {
@@ -911,6 +1160,10 @@ function queryString(value: unknown) {
   return value ? String(value) : undefined;
 }
 
+function refreshFileBrowser() {
+  fileBrowserRefreshKey.value += 1;
+}
+
 function formatCount(value: number | null | undefined) {
   return Number(value ?? 0).toLocaleString('zh-CN');
 }
@@ -928,6 +1181,27 @@ function formatBytes(value: number | null | undefined) {
   return `${next >= 100 || unit === 0 ? next.toFixed(0) : next.toFixed(2)} ${units[unit]}`;
 }
 
+function barWidth(value: number | null | undefined, max: number) {
+  if (!max) return '0%';
+  const percent = Math.max(4, Math.round((Number(value ?? 0) / max) * 100));
+  return `${Math.min(100, percent)}%`;
+}
+
+function fileKindLabel(value: string | null | undefined) {
+  const labels: Record<string, string> = {
+    MODEL: '模型',
+    DRAWING: '图纸',
+    DOCUMENT: '文档',
+    SPREADSHEET: '表格',
+    PRESENTATION: '汇报',
+    MODEL_VIEWER: '轻量化模型',
+    ARCHIVE: '归档包',
+    OTHER: '其他'
+  };
+  if (!value) return '未分类';
+  return labels[value] ?? value;
+}
+
 function formatDate(value: string | null | undefined) {
   if (!value) return '-';
   return new Intl.DateTimeFormat('zh-CN', {
@@ -937,62 +1211,6 @@ function formatDate(value: string | null | undefined) {
     hour: '2-digit',
     minute: '2-digit'
   }).format(new Date(value));
-}
-
-function fileKindTag(value: string) {
-  if (value === 'MODEL') return 'success';
-  if (value === 'DRAWING') return 'primary';
-  return 'info';
-}
-
-function previewStatusTag(value: string) {
-  if (value === 'AVAILABLE') return 'success';
-  if (value === 'NEEDS_CONVERSION') return 'warning';
-  if (value === 'BLOCKED') return 'danger';
-  return 'info';
-}
-
-function previewStatusLabel(value: string) {
-  const labels: Record<string, string> = {
-    AVAILABLE: '可接入预览',
-    NEEDS_CONVERSION: '需要转换',
-    UNSUPPORTED: '暂不支持',
-    BLOCKED: '暂不可用'
-  };
-  return labels[value] ?? value;
-}
-
-function previewModeLabel(value: string) {
-  const labels: Record<string, string> = {
-    BROWSER_NATIVE: '浏览器原生预览',
-    OFFICE_CONVERSION: 'Office 转换预览',
-    CAD_CONVERSION: 'CAD 转换预览',
-    BIM_LIGHTWEIGHT: 'BIM 轻量化预览',
-    DOWNLOAD_ONLY: '仅保留受控访问',
-    NONE: '暂无预览方式'
-  };
-  return labels[value] ?? value;
-}
-
-function conversionStatusLabel(value: string) {
-  const labels: Record<string, string> = {
-    NOT_REQUIRED: '不需要转换',
-    NOT_STARTED: '尚未开始',
-    NOT_SUPPORTED: '暂不支持'
-  };
-  return labels[value] ?? value;
-}
-
-function previewActionLabel(value: string) {
-  const labels: Record<string, string> = {
-    OPEN_PREVIEW_STATUS: '查看预览状态',
-    DOWNLOAD_VIA_PLATFORM: '后续接入平台下载',
-    REQUEST_CONVERSION: '后续创建转换任务',
-    VIEW_METADATA: '查看元数据',
-    VIEW_AUDIT: '查看审计',
-    FIX_METADATA: '补齐元数据'
-  };
-  return labels[value] ?? value;
 }
 
 function disciplineLabel(value: string | null | undefined) {
@@ -1059,12 +1277,296 @@ function scanProgressValue(task: AssetScanTask) {
   min-width: 0;
 }
 
+.asset-command-center {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 16px;
+  align-items: center;
+  padding: 18px 20px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(20, 184, 166, 0.06)),
+    #fbfdff;
+}
+
+.asset-command-center__copy {
+  min-width: 0;
+}
+
+.asset-command-center__copy > span {
+  display: inline-block;
+  margin-bottom: 6px;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.asset-command-center__copy h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.asset-command-center__copy p {
+  margin: 6px 0 0;
+  color: #64748b;
+}
+
+.asset-command-center__meta,
+.asset-command-center__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .asset-tabs {
   min-width: 0;
   padding: 16px;
   background: #ffffff;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 8px;
+}
+
+.asset-module-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.asset-module-card {
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  text-align: left;
+  cursor: pointer;
+}
+
+.asset-module-card:hover {
+  border-color: rgba(37, 99, 235, 0.36);
+  background: #f8fbff;
+}
+
+.asset-module-card span,
+.asset-module-card em {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.asset-module-card strong {
+  display: block;
+  margin: 5px 0 3px;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 14px;
+  min-width: 0;
+}
+
+.asset-dashboard-panel {
+  grid-column: span 6;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.asset-dashboard-panel--overview,
+.asset-dashboard-panel--events {
+  grid-column: span 12;
+}
+
+.asset-dashboard-panel__header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.asset-dashboard-panel__header h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.asset-dashboard-panel__header span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.asset-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.asset-kpi {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.asset-kpi span,
+.asset-kpi em {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.asset-kpi strong {
+  display: block;
+  margin: 6px 0 4px;
+  color: #0f172a;
+  font-size: 22px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.asset-risk-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.asset-risk-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.24);
+  border-radius: 8px;
+  background: #fffaf0;
+  color: #92400e;
+  text-align: left;
+  cursor: pointer;
+}
+
+.asset-risk-card:hover {
+  border-color: rgba(37, 99, 235, 0.32);
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.asset-risk-card span,
+.asset-risk-card em {
+  display: block;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.asset-risk-card strong {
+  display: block;
+  margin: 6px 0 4px;
+  color: #0f172a;
+  font-size: 22px;
+}
+
+.asset-bars,
+.asset-activity-list,
+.asset-event-list {
+  display: grid;
+  gap: 10px;
+}
+
+.asset-bar-row {
+  display: grid;
+  gap: 7px;
+}
+
+.asset-bar-row > div:first-child,
+.asset-activity-item {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.asset-bar-row strong,
+.asset-activity-item strong,
+.asset-event-item strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.asset-bar-row span,
+.asset-activity-item span,
+.asset-event-item span,
+.asset-event-item em {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.asset-bar-row__track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.asset-bar-row__track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+}
+
+.asset-bar-row__track--muted {
+  background: rgba(20, 184, 166, 0.12);
+}
+
+.asset-bar-row__track--muted span {
+  background: #0f766e;
+}
+
+.asset-activity-item,
+.asset-event-item {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.asset-activity-item > div,
+.asset-event-item {
+  min-width: 0;
+}
+
+.asset-activity-item strong,
+.asset-activity-item span,
+.asset-event-item strong,
+.asset-event-item span,
+.asset-event-item em {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-event-item {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) 140px;
+  gap: 12px;
+  align-items: center;
 }
 
 .asset-toolbar {
@@ -1182,12 +1684,43 @@ function scanProgressValue(task: AssetScanTask) {
 }
 
 @media (max-width: 1100px) {
+  .asset-command-center {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-command-center__meta,
+  .asset-command-center__actions {
+    justify-content: flex-start;
+  }
+
+  .asset-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .asset-module-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .asset-dashboard-panel {
+    grid-column: span 12;
+  }
+
   .asset-toolbar {
     grid-template-columns: 1fr 1fr;
   }
 }
 
 @media (max-width: 720px) {
+  .asset-kpi-grid,
+  .asset-module-grid,
+  .asset-risk-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-event-item {
+    grid-template-columns: 1fr;
+  }
+
   .asset-toolbar {
     grid-template-columns: 1fr;
   }

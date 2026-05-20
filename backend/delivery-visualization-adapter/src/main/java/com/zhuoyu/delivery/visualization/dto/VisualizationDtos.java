@@ -27,6 +27,50 @@ public final class VisualizationDtos {
     ) {
     }
 
+    public record LightweightStatusResponse(
+        Long projectId,
+        Long integrationId,
+        Long modelFileId,
+        String modelName,
+        String modelFormat,
+        String integrationStatus,
+        String engineMode,
+        Boolean engineConnected,
+        String lightweightStatus,
+        Boolean viewerAvailable,
+        String taskStatus,
+        Boolean conversionRequired,
+        String componentIndexStatus,
+        String previewMode,
+        String statusLabel,
+        String actionHint,
+        String blockedReason,
+        List<String> supportedOperations,
+        List<String> forbiddenOperations
+    ) {
+    }
+
+    public record LightweightPlanResponse(
+        Long projectId,
+        Long integrationId,
+        Long modelFileId,
+        String modelName,
+        String modelFormat,
+        String engineMode,
+        Boolean dryRun,
+        Boolean taskCreated,
+        Boolean engineBindingRequired,
+        Boolean realConversionExecuted,
+        Boolean nasFileTouched,
+        Boolean viewerAvailable,
+        List<String> requiredConditions,
+        List<String> futureSteps,
+        List<String> riskWarnings,
+        List<String> supportedOperations,
+        List<String> forbiddenOperations
+    ) {
+    }
+
     public record ManagedObjectContextItem(
         Long id,
         String code,

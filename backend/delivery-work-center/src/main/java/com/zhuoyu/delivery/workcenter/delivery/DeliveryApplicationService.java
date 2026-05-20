@@ -7,12 +7,23 @@ import com.zhuoyu.delivery.masterdata.nodetype.application.NodeTypeApplicationSe
 import com.zhuoyu.delivery.masterdata.section.application.SectionNodeApplicationService;
 import com.zhuoyu.delivery.masterdata.template.application.DirectoryTemplateApplicationService;
 import com.zhuoyu.delivery.shared.exception.BusinessException;
+import com.zhuoyu.delivery.shared.preview.FilePreviewPolicy;
+import com.zhuoyu.delivery.shared.preview.PreviewDecision;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.BatchDeliveryBindingRequest;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.BatchDeliveryBindingResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.BatchBindingRowResult;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.BatchBindingRowStatus;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DashboardSummaryResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryBindingRequest;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryBindingResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCompletenessResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCompletenessRow;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageSummaryResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageSummaryRow;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageViewSummary;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryViewResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.ExportPrecheckResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.ExportPrecheckRow;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.RejectRequest;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.ReviewRecordResponse;
 import java.util.ArrayList;
@@ -253,6 +264,122 @@ public class DeliveryApplicationService {
             true, List.of(), totalRequired, completedCount, missingCount, rate, result);
     }
 
+    // ---- batch binding ----
+
+    @Transactional
+    public BatchDeliveryBindingResponse createBatchBinding(Long userId, Long projectId, BatchDeliveryBindingRequest request) {
+        String viewType = normalizeViewType(request.viewType());
+        String expectedFileKind = expectedFileKind(viewType);
+        if (!deliveryBindingRepository.deliverableTypeExists(projectId, request.deliverableTypeId(), expectedFileKind)) {
+            throw new BusinessException("WORK_DELIVERABLE_TYPE_NOT_FOUND", "交付物类型不存在或文件类型不匹配", HttpStatus.NOT_FOUND);
+        }
+        requireSection(projectId, request.sectionNodeId());
+        requireObject(projectId, request.managedObjectId());
+        if (request.sectionNodeId() == null && request.managedObjectId() == null) {
+            throw new BusinessException("WORK_BINDING_TARGET_REQUIRED", "交付绑定必须选择部位或管理对象", HttpStatus.BAD_REQUEST);
+        }
+
+        String bindingStatus = defaultString(request.bindingStatus(), "BOUND");
+        String reviewStatus = defaultString(request.reviewStatus(), "PENDING");
+        String remark = blankToNull(request.remark());
+
+        List<DeliveryBindingResponse> createdBindings = new ArrayList<>();
+        List<BatchBindingRowResult> results = new ArrayList<>();
+        int createdCount = 0;
+        int skippedCount = 0;
+        int failedCount = 0;
+
+        for (Long fileResourceId : request.fileResourceIds()) {
+            try {
+                if (!deliveryBindingRepository.fileExists(projectId, fileResourceId, expectedFileKind)) {
+                    failedCount++;
+                    results.add(new BatchBindingRowResult(fileResourceId, BatchBindingRowStatus.FAILED, null,
+                        "文件不存在、类型不匹配或尚未处理完成"));
+                    continue;
+                }
+                if (deliveryBindingRepository.bindingExists(projectId, viewType, request.sectionNodeId(),
+                        request.managedObjectId(), request.deliverableTypeId(), fileResourceId)) {
+                    Long existingId = deliveryBindingRepository.findExistingBindingId(projectId, viewType,
+                        request.sectionNodeId(), request.managedObjectId(), request.deliverableTypeId(), fileResourceId);
+                    skippedCount++;
+                    results.add(new BatchBindingRowResult(fileResourceId, BatchBindingRowStatus.SKIPPED, existingId,
+                        "该文件已挂接到当前交付目标"));
+                    continue;
+                }
+                Long bindingId = deliveryBindingRepository.insert(
+                    projectId, viewType,
+                    request.sectionNodeId(), request.managedObjectId(),
+                    request.deliverableTypeId(), fileResourceId,
+                    bindingStatus, reviewStatus, 0, remark, userId);
+                createdCount++;
+                var binding = requireBinding(projectId, bindingId);
+                createdBindings.add(binding);
+                results.add(new BatchBindingRowResult(fileResourceId, BatchBindingRowStatus.CREATED, bindingId, "已挂接"));
+            } catch (BusinessException e) {
+                failedCount++;
+                results.add(new BatchBindingRowResult(fileResourceId, BatchBindingRowStatus.FAILED, null, e.getMessage()));
+            }
+        }
+
+        auditLogApplicationService.record(projectId, MODULE_CODE, "work.delivery-binding.batch-create", "DELIVERY_BINDING",
+            "batch-" + request.fileResourceIds().size(), userId,
+            Map.of("viewType", viewType, "requested", request.fileResourceIds().size(),
+                "created", createdCount, "skipped", skippedCount, "failed", failedCount));
+
+        return new BatchDeliveryBindingResponse(
+            projectId, viewType, request.fileResourceIds().size(),
+            createdCount, skippedCount, failedCount, createdBindings, results);
+    }
+
+    // ---- delivery package summary ----
+
+    public DeliveryPackageSummaryResponse deliveryPackageSummary(Long projectId, String viewType, String targetType) {
+        String normalizedTarget = normalizeTargetType(targetType);
+        List<String> viewTypes;
+        if (viewType == null || viewType.isBlank()) {
+            viewTypes = List.of("DOCUMENT", "DRAWING");
+        } else {
+            String normalized = normalizeViewType(viewType);
+            viewTypes = List.of(normalized);
+        }
+
+        List<DeliveryPackageSummaryRow> allRows = new ArrayList<>();
+        for (String vt : viewTypes) {
+            List<DeliveryPackageSummaryRow> boundRows = deliveryBindingRepository.findPackageSummaryRows(projectId, vt, normalizedTarget);
+            allRows.addAll(boundRows);
+            // Also include missing required rows
+            List<DeliveryCompletenessRow> missingRows = deliveryBindingRepository.findMissingRequiredRows(projectId, vt, normalizedTarget);
+            for (var mr : missingRows) {
+                allRows.add(new DeliveryPackageSummaryRow(
+                    mr.deliverableDefinitionId(), mr.deliverableDefinitionName(),
+                    mr.deliverableTypeId(), mr.deliverableTypeName(),
+                    mr.targetType(), mr.targetId(), mr.targetName(),
+                    null, null, null, mr.fileKind(), null, null, "MISSING"));
+            }
+        }
+
+        DeliveryPackageViewSummary docSummary = computePackageViewSummary(allRows, "DOCUMENT");
+        DeliveryPackageViewSummary drawingSummary = computePackageViewSummary(allRows, "DRAWING");
+
+        return new DeliveryPackageSummaryResponse(projectId, docSummary, drawingSummary, allRows.size(), allRows);
+    }
+
+    private DeliveryPackageViewSummary computePackageViewSummary(List<DeliveryPackageSummaryRow> rows, String fileKind) {
+        List<DeliveryPackageSummaryRow> kindRows = rows.stream()
+            .filter(r -> fileKind.equals(r.fileKind()))
+            .toList();
+        int totalRequired = kindRows.size();
+        int boundCount = (int) kindRows.stream().filter(r -> r.bindingId() != null).count();
+        int missingCount = totalRequired - boundCount;
+        int pendingReviewCount = (int) kindRows.stream().filter(r -> "PENDING_REVIEW".equals(r.readinessStatus())).count();
+        int approvedCount = (int) kindRows.stream().filter(r -> "READY".equals(r.readinessStatus())).count();
+        int rejectedCount = (int) kindRows.stream().filter(r -> "REJECTED".equals(r.readinessStatus())).count();
+        double rate = totalRequired == 0 ? 1.0 : (double) boundCount / totalRequired;
+        int reviewReadyCount = (int) kindRows.stream().filter(r -> "READY".equals(r.readinessStatus())).count();
+        return new DeliveryPackageViewSummary(totalRequired, boundCount, missingCount,
+            pendingReviewCount, approvedCount, rejectedCount, rate, reviewReadyCount);
+    }
+
     private String normalizeTargetType(String targetType) {
         if (targetType == null || targetType.isBlank()) return "SECTION";
         String normalized = targetType.trim().toUpperCase();
@@ -304,5 +431,118 @@ public class DeliveryApplicationService {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    // ---- export precheck ----
+
+    public ExportPrecheckResponse exportPrecheck(Long projectId, String viewType, String targetType) {
+        String normalizedTarget = normalizeTargetType(targetType);
+        List<String> viewTypes;
+        if (viewType == null || viewType.isBlank()) {
+            viewTypes = List.of("DOCUMENT", "DRAWING");
+        } else {
+            viewTypes = List.of(normalizeViewType(viewType));
+        }
+
+        List<ExportPrecheckRow> allRows = new ArrayList<>();
+        for (String vt : viewTypes) {
+            List<ExportPrecheckRow> boundRows = deliveryBindingRepository.findExportPrecheckBoundRows(projectId, vt, normalizedTarget);
+            for (ExportPrecheckRow row : boundRows) {
+                ExportPrecheckRow enriched = enrichPrecheckRow(row);
+                allRows.add(enriched);
+            }
+            // Also include missing required rows
+            List<DeliveryCompletenessRow> missingRows = deliveryBindingRepository.findMissingRequiredRows(projectId, vt, normalizedTarget);
+            for (var mr : missingRows) {
+                allRows.add(new ExportPrecheckRow(
+                    mr.deliverableDefinitionId(), mr.deliverableDefinitionName(),
+                    mr.deliverableTypeId(), mr.deliverableTypeName(),
+                    mr.targetType(), mr.targetId(), mr.targetName(),
+                    (Long) null, (Long) null, (String) null, mr.fileKind(), (String) null, (String) null,
+                    (String) null, "MISSING",
+                    "UNSUPPORTED", "NONE", "NOT_SUPPORTED", false,
+                    false, "缺失文件", "尚未挂接文件，无法判断在线预览能力。", "DANGER",
+                    "MISSING", "尚未挂接文件"
+                ));
+            }
+        }
+
+        String effectiveViewType = viewType != null && !viewType.isBlank() ? normalizeViewType(viewType) : "ALL";
+
+        int totalCount = allRows.size();
+        int readyCount = (int) allRows.stream().filter(r -> "READY".equals(r.exportStatus())).count();
+        int blockedCount = totalCount - readyCount;
+        int missingCount = (int) allRows.stream().filter(r -> "MISSING".equals(r.exportStatus())).count();
+        int pendingReviewCount = (int) allRows.stream().filter(r -> "REVIEW_REQUIRED".equals(r.exportStatus())).count();
+        int rejectedCount = (int) allRows.stream().filter(r -> "REJECTED".equals(r.exportStatus())).count();
+        int conversionRequiredCount = (int) allRows.stream().filter(r -> Boolean.TRUE.equals(r.conversionRequired())).count();
+        int unsupportedPreviewCount = (int) allRows.stream()
+            .filter(r -> r.fileResourceId() != null)
+            .filter(r -> "UNSUPPORTED".equals(r.previewStatus()))
+            .count();
+
+        return new ExportPrecheckResponse(
+            projectId, effectiveViewType, normalizedTarget,
+            true, false,
+            totalCount, readyCount, blockedCount, missingCount,
+            pendingReviewCount, rejectedCount, conversionRequiredCount, unsupportedPreviewCount,
+            allRows
+        );
+    }
+
+    private ExportPrecheckRow enrichPrecheckRow(ExportPrecheckRow row) {
+        String ext = normalizeFileExt(row.fileExt(), row.fileName());
+        PreviewDecision pd = FilePreviewPolicy.decide(ext, row.fileKind());
+        String readinessStatus = computeExportReadiness(row.reviewStatus(), row.bindingId() != null);
+        String exportStatus = computeExportStatus(readinessStatus);
+        String blockReason = computeBlockReason(exportStatus, row.reviewStatus(), pd);
+        return new ExportPrecheckRow(
+            row.deliverableDefinitionId(), row.deliverableDefinitionName(),
+            row.deliverableTypeId(), row.deliverableTypeName(),
+            row.targetType(), row.targetId(), row.targetName(),
+            row.bindingId(), row.fileResourceId(), row.fileName(),
+            row.fileKind(), row.versionNo(), row.fileExt(),
+            row.reviewStatus(), readinessStatus,
+            pd.previewStatus(), pd.previewMode(), pd.conversionStatus(), pd.conversionRequired(),
+            pd.downloadOnly(), pd.statusLabel(), pd.actionHint(), pd.riskLevel(),
+            exportStatus, blockReason
+        );
+    }
+
+    private String computeExportReadiness(String reviewStatus, boolean hasBinding) {
+        if (!hasBinding) return "MISSING";
+        if ("APPROVED".equals(reviewStatus)) return "READY";
+        if ("PENDING".equals(reviewStatus) || "DRAFT".equals(reviewStatus)) return "PENDING_REVIEW";
+        if ("REJECTED".equals(reviewStatus)) return "REJECTED";
+        return "PENDING_REVIEW";
+    }
+
+    private String computeExportStatus(String readiness) {
+        return switch (readiness) {
+            case "READY" -> "READY";
+            case "MISSING" -> "MISSING";
+            case "PENDING_REVIEW" -> "REVIEW_REQUIRED";
+            case "REJECTED" -> "REJECTED";
+            default -> "BLOCKED";
+        };
+    }
+
+    private String computeBlockReason(String exportStatus, String reviewStatus, PreviewDecision pd) {
+        if ("READY".equals(exportStatus)) return null;
+        if ("MISSING".equals(exportStatus)) return "尚未挂接文件";
+        if ("REVIEW_REQUIRED".equals(exportStatus)) return "文件已挂接但尚未通过审核（当前审核状态：" + (reviewStatus != null ? reviewStatus : "未知") + "）";
+        if ("REJECTED".equals(exportStatus)) return "审核已驳回，请处理整改后重新提交审核";
+        return "未知阻塞原因";
+    }
+
+    private String normalizeFileExt(String fileExt, String fileName) {
+        if (fileExt != null && !fileExt.isBlank()) {
+            String normalized = fileExt.trim().toLowerCase();
+            return normalized.startsWith(".") ? normalized : "." + normalized;
+        }
+        if (fileName != null && fileName.contains(".")) {
+            return "." + fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase();
+        }
+        return "";
     }
 }

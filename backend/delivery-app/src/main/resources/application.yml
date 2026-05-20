@@ -39,3 +39,15 @@ delivery:
       secret: ${DELIVERY_JWT_SECRET:delivery-platform-phase1-secret-key-change-me-2026}
       access-token-ttl: PT30M
       refresh-token-ttl: P7D
+  hermes-agent-gateway:
+    enabled: ${HERMES_AGENT_GATEWAY_ENABLED:false}
+    mode: ${HERMES_AGENT_GATEWAY_MODE:openai_compatible}
+    base-url: ${HERMES_AGENT_GATEWAY_BASE_URL:${HERMES_MEMORY_BASE_URL:http://127.0.0.1:8642}}
+    chat-path: ${HERMES_AGENT_GATEWAY_CHAT_PATH:/v1/chat/completions}
+    health-path: ${HERMES_AGENT_GATEWAY_HEALTH_PATH:/health}
+    model: ${HERMES_AGENT_GATEWAY_MODEL:hermes-agent}
+    timeout: ${HERMES_AGENT_GATEWAY_TIMEOUT:PT30S}
+    readonly: ${HERMES_AGENT_GATEWAY_READONLY:true}
+    catalog-only-default: ${HERMES_AGENT_GATEWAY_CATALOG_ONLY_DEFAULT:true}
+    contract-version: ${HERMES_AGENT_GATEWAY_CONTRACT_VERSION:delivery_platform.asset_views.v1.1}
+    service-token: ${HERMES_AGENT_GATEWAY_SERVICE_TOKEN:}
