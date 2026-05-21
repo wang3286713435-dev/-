@@ -1,5 +1,27 @@
 # 主 Agent 开发监控日志
 
+## 2026-05-21：UX1 紧急 UI / UX 修复首轮
+
+- M2B 已完成 Git checkpoint 并推送。
+- 已切出前端专项分支：`codex/ux1-frontend-routing-visual`。
+- 本轮先做 UX1 急救型修复，不作为完整 UX1 收口。
+- 已修改：
+  - `AppLayout.vue`：顶部补充当前工作上下文、页面标题和下一步说明。
+  - `ProjectWorkspaceNav.vue`：项目工作台导航从按钮堆叠优化为三段清晰分组。
+  - `AssetProjectDetailPage.vue`：checksum 后台任务默认收起，避免压过文件目录和文件列表。
+  - `index.css`：补充顶部上下文样式。
+- 未修改：
+  - `backend/**`
+  - `docs/**`
+  - 数据库迁移
+  - 权限规则
+  - Hermes / BIM / NAS 写能力边界
+- 验证：
+  - 前端构建通过，仅保留既有 Vite chunk size warning。
+  - 后端健康检查 `UP`。
+  - `git diff --check` 通过。
+- 急救报告：`handoff/main-agent/ux1-emergency-ui-fix-report.md`。
+
 ## 2026-05-21：M2B 受控 NAS 写操作真实项目灰度收口
 
 - 测试 agent 已完成 M2B 复核。

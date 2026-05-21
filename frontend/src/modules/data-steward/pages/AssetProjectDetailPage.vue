@@ -259,59 +259,76 @@
           <div class="asset-job-panel__header">
             <div>
               <h2>checksum 后台任务</h2>
-              <span>后台任务编号会和文件名、平台文件ID、状态、进度绑定展示。</span>
+              <span>默认收起，避免干扰文件目录。需要排查 checksum 时再展开查看任务编号、状态和失败原因。</span>
             </div>
-            <el-button size="small" :loading="checksumJobsLoading" @click="loadChecksumJobs(true)">刷新任务</el-button>
+            <div class="asset-job-panel__actions">
+              <el-tag size="small" type="info" effect="plain">{{ checksumJobs.length }} 条</el-tag>
+              <el-button size="small" @click="checksumJobsExpanded = !checksumJobsExpanded">
+                {{ checksumJobsExpanded ? '收起任务' : '查看任务' }}
+              </el-button>
+              <el-button
+                v-if="checksumJobsExpanded"
+                size="small"
+                :loading="checksumJobsLoading"
+                @click="loadChecksumJobs(true)"
+              >
+                刷新任务
+              </el-button>
+            </div>
           </div>
-          <el-table
-            v-loading="checksumJobsLoading"
-            :data="checksumJobs"
-            class="master-table asset-job-table"
-            empty-text="暂无 checksum 后台任务"
-          >
-            <el-table-column label="后台任务编号" width="130">
-              <template #default="{ row }">#{{ row.id }}</template>
-            </el-table-column>
-            <el-table-column label="对应文件" min-width="260" show-overflow-tooltip>
-              <template #default="{ row }">
-                <div class="asset-job-file">
-                  <strong>{{ checksumJobFileName(row) }}</strong>
-                  <span>平台文件ID：{{ row.targetId || '-' }}</span>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column label="状态" width="110">
-              <template #default="{ row }">
-                <el-tag :type="jobStatusTag(row.status)">{{ jobStatusLabel(row.status) }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="进度" width="160">
-              <template #default="{ row }">
-                <el-progress :percentage="jobProgressValue(row)" :stroke-width="8" />
-              </template>
-            </el-table-column>
-            <el-table-column label="失败原因" min-width="220" show-overflow-tooltip>
-              <template #default="{ row }">{{ safePathText(row.failureReason) }}</template>
-            </el-table-column>
-            <el-table-column label="更新时间" width="170">
-              <template #default="{ row }">{{ formatDate(row.updatedAt) }}</template>
-            </el-table-column>
-            <el-table-column label="操作" width="150" fixed="right">
-              <template #default="{ row }">
-                <el-button size="small" text @click="openChecksumJob(row)">查看</el-button>
-                <el-button
-                  v-if="row.status === 'FAILED'"
-                  size="small"
-                  text
-                  type="primary"
-                  :loading="checksumJobRetrying && selectedChecksumJob?.id === row.id"
-                  @click="retryChecksumJob(row)"
-                >
-                  重试
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
+          <el-collapse-transition>
+            <div v-show="checksumJobsExpanded" class="asset-job-panel__body">
+              <el-table
+                v-loading="checksumJobsLoading"
+                :data="checksumJobs"
+                class="master-table asset-job-table"
+                empty-text="暂无 checksum 后台任务"
+              >
+                <el-table-column label="后台任务编号" width="130">
+                  <template #default="{ row }">#{{ row.id }}</template>
+                </el-table-column>
+                <el-table-column label="对应文件" min-width="260" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <div class="asset-job-file">
+                      <strong>{{ checksumJobFileName(row) }}</strong>
+                      <span>平台文件ID：{{ row.targetId || '-' }}</span>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="状态" width="110">
+                  <template #default="{ row }">
+                    <el-tag :type="jobStatusTag(row.status)">{{ jobStatusLabel(row.status) }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="进度" width="160">
+                  <template #default="{ row }">
+                    <el-progress :percentage="jobProgressValue(row)" :stroke-width="8" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="失败原因" min-width="220" show-overflow-tooltip>
+                  <template #default="{ row }">{{ safePathText(row.failureReason) }}</template>
+                </el-table-column>
+                <el-table-column label="更新时间" width="170">
+                  <template #default="{ row }">{{ formatDate(row.updatedAt) }}</template>
+                </el-table-column>
+                <el-table-column label="操作" width="150" fixed="right">
+                  <template #default="{ row }">
+                    <el-button size="small" text @click="openChecksumJob(row)">查看</el-button>
+                    <el-button
+                      v-if="row.status === 'FAILED'"
+                      size="small"
+                      text
+                      type="primary"
+                      :loading="checksumJobRetrying && selectedChecksumJob?.id === row.id"
+                      @click="retryChecksumJob(row)"
+                    >
+                      重试
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </el-collapse-transition>
         </section>
       </el-tab-pane>
 
@@ -760,6 +777,7 @@ const checksumJobLoading = ref(false);
 const checksumJobRetrying = ref(false);
 const checksumJobsLoading = ref(false);
 const checksumJobs = ref<AssetJob[]>([]);
+const checksumJobsExpanded = ref(false);
 const checksumJobFileMap = ref<Record<number, FileAsset>>({});
 const selectedChecksumJob = ref<AssetJob | null>(null);
 const selectedChecksumJobFile = ref<FileAsset | null>(null);
@@ -1685,12 +1703,12 @@ function scanProgressValue(task: AssetScanTask) {
 
 .asset-job-panel {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   margin-top: 16px;
-  padding: 14px;
+  padding: 12px 14px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 8px;
-  background: #fbfdff;
+  background: #f8fafc;
 }
 
 .asset-job-panel__header {
@@ -1711,6 +1729,20 @@ function scanProgressValue(task: AssetScanTask) {
   margin-top: 3px;
   color: #64748b;
   font-size: 12px;
+}
+
+.asset-job-panel__actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.asset-job-panel__body {
+  min-width: 0;
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
 }
 
 .asset-job-table {

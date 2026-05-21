@@ -1,3 +1,97 @@
+# 开发 Agent 报告：UX1 紧急 UI / UX 修复首轮
+
+时间：2026-05-21
+
+`<promise>MAINLINE_UX1_EMERGENCY_UI_FIX_COMPLETE</promise>`
+
+## 1. 当前分支和基线
+
+- 当前分支：`codex/ux1-frontend-routing-visual`
+- UX1 基线 commit：`5cdc4d2`
+- M2B 已先于 UX1 完成提交并推送。
+
+## 2. 本轮目标
+
+本轮只做 UX1 的急救型前端修复，不是完整 UX1 收口。
+
+目标：
+
+- 让员工更清楚当前处在平台主入口、项目工作台还是管理中心。
+- 让项目工作台导航更清楚呈现 `项目资产 -> 工程主数据 -> 交付工作中心`。
+- 让文件管理优先展示目录和文件列表，checksum 后台任务默认收起。
+
+## 3. 改动文件
+
+- `frontend/src/modules/core/layout/AppLayout.vue`
+- `frontend/src/styles/index.css`
+- `frontend/src/modules/core/components/ProjectWorkspaceNav.vue`
+- `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
+- `handoff/main-agent/status.md`
+- `handoff/main-agent/development-log.md`
+- `handoff/main-agent/ux1-emergency-ui-fix-report.md`
+- `handoff/dev-agent/latest-report.md`
+
+## 4. 路由兼容策略
+
+本轮未改路由表，未删除旧路由。
+
+旧链接兼容跳转逻辑保持不变，后续完整 UX1 仍需专项浏览器回归。
+
+## 5. 项目工作台信息结构调整
+
+- 顶部增加当前工作上下文、页面标题和下一步说明。
+- 项目工作台导航保留三段主线：
+  - 项目资产
+  - 工程主数据
+  - 交付工作中心
+- 三段导航从按钮堆叠调整为更清晰的分组布局。
+- 工作中心继续展示主数据就绪状态。
+
+## 6. 文件管理体验调整
+
+checksum 后台任务区默认收起。
+
+用户需要排查 checksum 时，可以展开查看：
+
+- 后台任务编号
+- 对应文件
+- 状态
+- 进度
+- 失败原因
+- 更新时间
+- 重试操作
+
+这样文件目录和文件列表仍然是文件管理页的主视觉。
+
+## 7. 是否改动后端
+
+否。
+
+本轮未修改 `backend/**`，未修改数据库迁移，未改变接口语义或权限规则。
+
+## 8. 自测结果
+
+已执行：
+
+- `corepack pnpm --dir frontend build`
+- `curl -fsS http://127.0.0.1:8080/actuator/health`
+- `git diff --check`
+
+结果：
+
+- 前端构建通过。
+- 仅保留既有 Vite chunk size warning。
+- 后端健康检查 `UP`。
+- `git diff --check` 通过。
+
+## 9. 已知风险
+
+- 本轮未做完整 UX1，仅完成急救修复。
+- 旧 `/master-data/*`、`/work/*`、`/data-steward/models` 兼容跳转仍需浏览器专项验证。
+- 资产总览、工程主数据、交付工作中心的视觉统一仍需 Gemini 主导的完整 UX1 批次继续处理。
+
+---
+
 # 开发 Agent 报告：M2B 受控 NAS 写操作真实项目灰度试运行与安全开关
 
 时间：2026-05-21 18:31 CST

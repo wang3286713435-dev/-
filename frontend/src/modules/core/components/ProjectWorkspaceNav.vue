@@ -253,13 +253,13 @@ function isAssetTab(tab: string) {
 <style scoped>
 .project-workspace-nav {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
-  margin-bottom: 14px;
-  padding: 12px 16px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 8px;
-  background: #ffffff;
+  background: #fbfdff;
 }
 
 .project-workspace-nav__summary {
@@ -267,6 +267,8 @@ function isAssetTab(tab: string) {
   align-items: center;
   gap: 12px;
   min-width: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
 }
 
 .project-workspace-nav__project {
@@ -293,32 +295,33 @@ function isAssetTab(tab: string) {
 .project-workspace-nav__groups {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
 .project-workspace-nav__group {
-  display: flex;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 5px;
+  display: grid;
+  align-content: start;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 6px;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 12px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 8px;
-  background: #f8fafc;
+  background: #ffffff;
 }
 
 .project-workspace-nav__group-head {
-  display: flex;
-  flex: 0 0 128px;
-  flex-direction: column;
-  gap: 2px;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 4px 8px;
   min-width: 0;
-  padding-top: 2px;
+  padding-bottom: 4px;
 }
 
 .project-workspace-nav__group-head > span {
+  grid-row: span 2;
   color: #2563eb;
   font-size: 12px;
   font-weight: 700;
@@ -329,11 +332,28 @@ function isAssetTab(tab: string) {
   color: #303133;
   font-size: 13px;
   font-weight: 600;
+  line-height: 1.3;
   white-space: nowrap;
 }
 
+.project-workspace-nav__group :deep(.el-button) {
+  justify-content: flex-start;
+  min-width: 0;
+  min-height: 30px;
+  margin-left: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.project-workspace-nav__group :deep(.el-button--primary.is-text) {
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
 .project-workspace-nav__gate {
-  flex: 1 1 100%;
+  grid-column: 1 / -1;
   margin: 0;
   padding: 8px 10px;
   border: 1px solid rgba(245, 158, 11, 0.28);
@@ -345,6 +365,7 @@ function isAssetTab(tab: string) {
 }
 
 .project-workspace-nav__group-head small {
+  grid-column: 2 / -1;
   color: #64748b;
   font-size: 12px;
   line-height: 1.35;
@@ -356,7 +377,7 @@ function isAssetTab(tab: string) {
   }
 
   .project-workspace-nav__group-head {
-    flex-basis: 160px;
+    grid-template-columns: auto minmax(0, 1fr);
   }
 }
 
@@ -373,7 +394,7 @@ function isAssetTab(tab: string) {
   }
 
   .project-workspace-nav__group-head {
-    flex-basis: 100%;
+    grid-template-columns: auto minmax(0, 1fr);
   }
 }
 </style>
