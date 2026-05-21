@@ -3,18 +3,27 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+RUNTIME_DIR="${ROOT_DIR}/tmp/run-logs"
+APP_JAR="delivery-app/target/delivery-app-1.0.0-SNAPSHOT.jar"
+RUNTIME_JAR="${RUNTIME_DIR}/delivery-app-runtime.jar"
+
+run_app() {
+  mkdir -p "${RUNTIME_DIR}"
+  cp "${APP_JAR}" "${RUNTIME_JAR}"
+  exec java -jar "${RUNTIME_JAR}"
+}
 
 cd "${ROOT_DIR}/backend"
 
 if [[ -x "./mvnw" ]]; then
   ./mvnw -pl delivery-app -am -DskipTests package
-  java -jar delivery-app/target/delivery-app-1.0.0-SNAPSHOT.jar
+  run_app
   exit 0
 fi
 
 if command -v mvn >/dev/null 2>&1; then
   mvn -pl delivery-app -am -DskipTests package
-  java -jar delivery-app/target/delivery-app-1.0.0-SNAPSHOT.jar
+  run_app
   exit 0
 fi
 
@@ -29,4 +38,4 @@ docker run --rm \
   -v "${ROOT_DIR}/backend:/workspace" \
   -w /workspace \
   maven:3.9-eclipse-temurin-21 \
-  bash -lc 'mvn -pl delivery-app -am -DskipTests package && java -jar delivery-app/target/delivery-app-1.0.0-SNAPSHOT.jar'
+  bash -lc 'mvn -pl delivery-app -am -DskipTests package && cp delivery-app/target/delivery-app-1.0.0-SNAPSHOT.jar /tmp/delivery-app-runtime.jar && exec java -jar /tmp/delivery-app-runtime.jar'
