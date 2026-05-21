@@ -123,16 +123,21 @@ function isActiveAncestor(nodePath: string, activePath: string) {
 .directory-tree-node__toggle {
   border: 0;
   background: transparent;
-  color: #64748b;
+  color: var(--zy-subtle);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
+  transition: color var(--zy-duration-2) var(--zy-ease);
+}
+
+.directory-tree-node__toggle:hover {
+  color: var(--zy-blue-600);
 }
 
 .directory-tree-node__toggle-icon {
-  transition: transform 0.15s ease;
+  transition: transform var(--zy-duration-2) var(--zy-ease);
 }
 
 .directory-tree-node__toggle-icon.is-expanded {
@@ -142,24 +147,30 @@ function isActiveAncestor(nodePath: string, activePath: string) {
 .directory-tree-node__button {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--zy-sp-2);
   min-width: max-content;
   border: 0;
   background: transparent;
-  color: #475569;
+  color: var(--zy-text-soft);
   cursor: pointer;
-  padding: 6px 10px 6px 0;
-  border-radius: 6px;
+  padding: 5px 10px 5px 4px;
+  border-radius: var(--zy-radius-sm);
+  font-family: inherit;
+  font-size: var(--zy-fs-sm);
+  transition:
+    background var(--zy-duration-2) var(--zy-ease),
+    color var(--zy-duration-2) var(--zy-ease);
 }
 
 .directory-tree-node__button:hover {
-  background: rgba(59, 130, 246, 0.08);
+  background: var(--zy-blue-50);
+  color: var(--zy-blue-700);
 }
 
 .directory-tree-node__button.is-active {
-  background: rgba(59, 130, 246, 0.12);
-  color: #1d4ed8;
-  font-weight: 600;
+  background: var(--zy-blue-100);
+  color: var(--zy-blue-700);
+  font-weight: var(--zy-fw-semi);
 }
 
 .directory-tree-node__folder {

@@ -300,15 +300,15 @@ function flattenSections(nodes: SectionNode[], prefix = ''): Array<{ id: number;
 .object-summary-card {
   min-width: 0;
   padding: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 1px solid var(--zy-line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--zy-surface);
 }
 
 .object-summary-card span,
 .object-summary-card em {
   display: block;
-  color: #64748b;
+  color: var(--zy-muted);
   font-size: 12px;
   font-style: normal;
 }
@@ -316,7 +316,7 @@ function flattenSections(nodes: SectionNode[], prefix = ''): Array<{ id: number;
 .object-summary-card strong {
   display: block;
   margin: 6px 0 4px;
-  color: #0f172a;
+  color: var(--zy-ink);
   font-size: 22px;
   line-height: 1.15;
 }

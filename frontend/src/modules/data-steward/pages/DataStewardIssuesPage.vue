@@ -201,15 +201,15 @@ function severityLabel(value: IssueRow['severity']) {
 .issue-summary-card {
   min-width: 0;
   padding: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 1px solid var(--zy-line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--zy-surface);
 }
 
 .issue-summary-card span,
 .issue-summary-card em {
   display: block;
-  color: #64748b;
+  color: var(--zy-muted);
   font-size: 12px;
   font-style: normal;
 }
@@ -217,7 +217,7 @@ function severityLabel(value: IssueRow['severity']) {
 .issue-summary-card strong {
   display: block;
   margin: 6px 0 4px;
-  color: #0f172a;
+  color: var(--zy-ink);
   font-size: 22px;
   line-height: 1.15;
 }

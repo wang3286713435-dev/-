@@ -188,6 +188,6 @@ function handleExportCsv() {
 
 <style scoped>
 .mb {
-  margin-bottom: 16px;
+  margin-bottom: var(--zy-sp-4);
 }
 </style>

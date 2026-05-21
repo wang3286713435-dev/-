@@ -296,7 +296,7 @@ function severityTag(value: string) {
 }
 
 .quality-panel__header span {
-  color: #64748b;
+  color: var(--zy-muted);
   font-size: 13px;
 }
 
@@ -314,7 +314,7 @@ function severityTag(value: string) {
 }
 
 .quality-project-cell span {
-  color: #64748b;
+  color: var(--zy-muted);
 }
 
 @media (max-width: 1180px) {

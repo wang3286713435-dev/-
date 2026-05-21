@@ -1,5 +1,52 @@
 # 主 Agent 开发监控日志
 
+## 2026-05-22：UX2 前端使用逻辑重构专项待启动
+
+- 用户确认 UX2 方向：
+  - UX1 仍偏 UI 美化，没有彻底解决用户使用逻辑。
+  - UX2 要从“用户刚进入平台知道怎么用”出发，重排入口、字段、主次关系和下一步动作。
+  - 可以引入轻量拟态玻璃和 Apple 式卡片层级，但不能牺牲表格、权限、NAS 操作、交付审核的可读性。
+- 主 agent 裁决：
+  - UX2 必须等待 UX1 测试报告。
+  - 若 UX1 有 P0 / P1，先修 UX1。
+  - 当前仅准备 UX2 待启动计划和 prompt，不切换 `current-prompt.md`。
+- 已写入：
+  - UX2 计划：`handoff/main-agent/ux2-user-experience-refactor-plan.md`
+  - UX2 待启动 Claude prompt：`handoff/dev-agent/ux2-user-experience-refactor-prompt.md`
+  - UX2 待启动测试 prompt：`handoff/test-agent/ux2-user-experience-refactor-test-prompt.md`
+
+## 2026-05-21：UX1 正式进入 Claude Code 前端壳层重构
+
+- 用户确认执行 UX1 前端壳层重构专项计划。
+- 主 agent 已将当前开发 prompt 切换为 Claude Code 专用 UX1 prompt。
+- 本批由 `Claude Code` 主导开发，主 agent 负责监控、纠偏和验收判断。
+- 当前分支：`codex/ux1-frontend-routing-visual`。
+- 当前策略：
+  - 冻结后端功能开发。
+  - 不进入 M2C、8B、Hermes 新能力或任何后端新功能。
+  - 先重构前端壳层、路由、菜单、项目工作台和页面层级。
+- Claude 边界：
+  - 只允许修改 `frontend/**` 和 `handoff/dev-agent/latest-report.md`。
+  - 禁止修改 `backend/**`、数据库迁移、接口语义、权限规则和 `docs/**`。
+  - 如需要后端改动，必须停止并报告，不得自行修改。
+- 开发 prompt：`handoff/dev-agent/current-prompt.md`。
+
+## 2026-05-22：UX1 完整重构进入测试验收
+
+- Claude Code 报告 UX1 前端壳层完整重构已完成。
+- 主 agent 已读取 `handoff/dev-agent/latest-report.md`。
+- 初步审计：
+  - 改动集中在 `frontend/**` 与 handoff。
+  - `backend/**`、`docs/**`、数据库迁移未见修改。
+  - 发现未跟踪 `.claude/**`、`CLAUDE.md` 等非运行文件，后续收口前需决定清理或明确不纳入提交。
+- 已将测试 agent prompt 切换为 UX1 验收：
+  - 多分辨率视觉巡检。
+  - 项目间路由切换连续性。
+  - 旧链接兼容。
+  - 文件管理 / 工程主数据 / 交付工作中心主链路。
+  - M2B/M2A/M1F/M1E/M1D/M1C 回归。
+- 测试 prompt：`handoff/test-agent/current-prompt.md`。
+
 ## 2026-05-21：UX1 紧急 UI / UX 修复首轮
 
 - M2B 已完成 Git checkpoint 并推送。
@@ -3017,3 +3064,16 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
 - 主 agent 裁决：
   - G3 可以收口。
   - 下一阶段不自动进入 8B / 8C / 9A，需用户另行确认。
+
+## 2026-05-22 UX1 验收 P1 处理
+
+- 测试 agent 正式验收结论：UX1 不通过但无 P0，唯一 P1 为 `frontend/src/styles/tokens.css` 仍未跟踪。
+- 主 agent 已确认该文件是 `frontend/src/styles/index.css` 引用的运行期样式 token 文件，属于 UX1 必须交付内容。
+- 已将处理原则写入 `handoff/main-agent/status.md`：纳入 `frontend/src/styles/tokens.css`，不纳入 `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付文件；UX2 仍待 UX1 极短复验通过后再启动。
+
+## 2026-05-22 UX1 收口
+
+- 测试 agent 极短复验已确认 UX1 tokens.css P1 修复通过。
+- 当前 UX1 无 P0 / P1 / P2。
+- 主 agent 已写入 UX1 收口报告：`handoff/main-agent/ux1-frontend-routing-visual-closure.md`。
+- UX1 可正式收口；下一步建议先做 Git checkpoint，再进入 UX2 前端使用逻辑与体验重构专项。

@@ -3,16 +3,20 @@
     <aside class="app-layout__sidebar">
       <div class="app-layout__brand">
         <strong>数字化交付平台</strong>
-        <span>一期基础工程</span>
+        <span>ZHUOYU · BIM DELIVERY</span>
       </div>
       <SidebarMenu :menus="menus" />
+      <div class="app-layout__sidebar-foot">
+        <strong>BUILD · UX1</strong>
+        <span>前端壳层重构 / Phase 1</span>
+      </div>
     </aside>
 
     <div class="app-layout__main">
       <header class="app-layout__header">
         <div class="app-layout__header-left">
+          <span class="app-layout__route-eyebrow">{{ shellEyebrow }}</span>
           <div class="app-layout__route-context">
-            <span>{{ shellEyebrow }}</span>
             <strong>{{ shellTitle }}</strong>
             <small>{{ shellSubtitle }}</small>
           </div>
@@ -181,25 +185,41 @@ async function handleLogout() {
 <style scoped>
 .hermes-global-entry {
   align-items: center;
-  bottom: 22px;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
+  bottom: 24px;
+  box-shadow: var(--zy-shadow-md);
   display: inline-flex;
-  gap: 8px;
+  gap: 10px;
   max-width: calc(100vw - 32px);
   position: fixed;
   right: 24px;
   z-index: 40;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-weight: var(--zy-fw-semi);
+  letter-spacing: 0.02em;
+  transition:
+    transform var(--zy-duration-2) var(--zy-ease-out),
+    box-shadow var(--zy-duration-2) var(--zy-ease-out);
+}
+
+.hermes-global-entry:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--zy-shadow-lg);
 }
 
 .hermes-global-entry small {
-  border-left: 1px solid rgba(255, 255, 255, 0.36);
-  font-size: 12px;
+  border-left: 1px solid rgba(255, 255, 255, 0.32);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-medium);
+  letter-spacing: 0.04em;
   line-height: 1;
-  max-width: 120px;
+  max-width: 140px;
   overflow: hidden;
-  padding-left: 8px;
+  padding-left: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
+  opacity: 0.92;
 }
 
 @media (max-width: 720px) {

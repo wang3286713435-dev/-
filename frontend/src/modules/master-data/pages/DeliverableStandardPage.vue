@@ -762,29 +762,38 @@ function resetForm(kind: DialogKind) {
 <style scoped>
 .deliverable-layout {
   display: grid;
-  gap: 18px;
+  gap: var(--zy-sp-5);
 }
 
 .deliverable-panel {
   display: grid;
-  gap: 12px;
+  gap: var(--zy-sp-3);
+  padding: var(--zy-sp-5);
+  background: var(--zy-surface);
+  border: var(--zy-border);
+  border-radius: var(--zy-radius-base);
+  box-shadow: var(--zy-shadow-xs);
 }
 
 .deliverable-panel__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--zy-sp-3);
 }
 
 .deliverable-panel__header h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--zy-fs-xl);
+  font-weight: var(--zy-fw-semi);
+  color: var(--zy-ink);
+  letter-spacing: -0.01em;
 }
 
 .deliverable-panel__header p {
   margin: 4px 0 0;
-  color: var(--el-text-color-secondary);
-  line-height: 1.6;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-sm);
+  line-height: 1.65;
 }
 </style>

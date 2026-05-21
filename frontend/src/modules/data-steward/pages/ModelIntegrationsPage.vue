@@ -450,15 +450,15 @@ function formatDate(value: string | null | undefined) {
 .model-summary-card {
   min-width: 0;
   padding: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 1px solid var(--zy-line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--zy-surface);
 }
 
 .model-summary-card span,
 .model-summary-card em {
   display: block;
-  color: #64748b;
+  color: var(--zy-muted);
   font-size: 12px;
   font-style: normal;
 }
@@ -466,7 +466,7 @@ function formatDate(value: string | null | undefined) {
 .model-summary-card strong {
   display: block;
   margin: 6px 0 4px;
-  color: #0f172a;
+  color: var(--zy-ink);
   font-size: 22px;
   line-height: 1.15;
 }
@@ -479,13 +479,13 @@ function formatDate(value: string | null | undefined) {
 }
 
 .adapter-status strong {
-  color: #0f172a;
+  color: var(--zy-ink);
   font-size: 13px;
   line-height: 1.2;
 }
 
 .adapter-status span {
-  color: #64748b;
+  color: var(--zy-muted);
   font-size: 12px;
 }
 
@@ -497,9 +497,9 @@ function formatDate(value: string | null | undefined) {
 
 .lightweight-panel,
 .lightweight-plan article {
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 1px solid var(--zy-line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--zy-surface);
 }
 
 .lightweight-panel {
@@ -515,7 +515,7 @@ function formatDate(value: string | null | undefined) {
 
 .lightweight-head span {
   display: block;
-  color: #64748b;
+  color: var(--zy-muted);
   font-size: 12px;
 }
 
@@ -523,7 +523,7 @@ function formatDate(value: string | null | undefined) {
   display: block;
   margin-top: 4px;
   overflow: hidden;
-  color: #0f172a;
+  color: var(--zy-ink);
   font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -540,18 +540,18 @@ function formatDate(value: string | null | undefined) {
   min-width: 0;
   padding: 10px;
   border-radius: 8px;
-  background: #f8fafc;
+  background: var(--zy-bg);
 }
 
 .lightweight-facts dt {
-  color: #64748b;
+  color: var(--zy-muted);
   font-size: 12px;
 }
 
 .lightweight-facts dd {
   margin: 4px 0 0;
   overflow: hidden;
-  color: #0f172a;
+  color: var(--zy-ink);
   font-size: 13px;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -588,14 +588,14 @@ function formatDate(value: string | null | undefined) {
 
 .lightweight-plan h3 {
   margin: 0 0 8px;
-  color: #0f172a;
+  color: var(--zy-ink);
   font-size: 13px;
 }
 
 .lightweight-plan ul {
   margin: 0;
   padding-left: 18px;
-  color: #334155;
+  color: var(--zy-text-soft);
   font-size: 13px;
   line-height: 1.7;
 }

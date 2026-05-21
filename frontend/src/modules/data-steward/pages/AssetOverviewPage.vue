@@ -24,70 +24,77 @@
       </div>
     </div>
 
-    <section class="asset-governance-hero">
-      <div class="asset-governance-hero__intro">
-        <span>M1B 项目资产入口</span>
+    <section class="asset-hero">
+      <div class="asset-hero__intro">
+        <span class="asset-hero__eyebrow">
+          <span class="zy-code-chip">ASSETS · OVERVIEW</span>
+          <small>真实 NAS 项目优先 · 不读取文件正文 · 不触碰 NAS 文件</small>
+        </span>
         <h2>先选真实项目，再进入数字化交付工作区</h2>
         <p>
-          默认只看已经接管的真实 NAS 项目。先确认项目资产是否已登记，再进入接入评估、工程主数据、文档/图纸交付和整改闭环；平台只展示目录级治理线索，不读取文件正文，也不触碰 NAS 文件。
+          默认只看已经接管的真实 NAS 项目。先确认资产已登记，再进入接入评估、工程主数据、文档/图纸交付与整改闭环。
         </p>
       </div>
 
-      <div class="asset-governance-layer">
-        <header>
-          <strong>工作顺序</strong>
-          <span>普通员工可按这条路径推进，不需要先问 Hermes。</span>
+      <div class="asset-hero__workflow">
+        <header class="asset-hero__section-head">
+          <span class="zy-code-chip">FLOW</span>
+          <strong>三步工作链</strong>
+          <small>每一步都对应下方表格的「下一步动作」</small>
         </header>
-        <div class="asset-objective-track">
-          <article v-for="item in objectiveSteps" :key="item.label">
-            <strong>{{ item.label }}</strong>
-            <span>{{ item.description }}</span>
-          </article>
-        </div>
+        <ol class="asset-flow">
+          <li
+            v-for="(item, index) in objectiveSteps"
+            :key="item.label"
+            class="asset-flow__step"
+            :data-index="String(index + 1).padStart(2, '0')"
+          >
+            <div class="asset-flow__head">
+              <span class="asset-flow__num">{{ String(index + 1).padStart(2, '0') }}</span>
+              <strong>{{ item.label }}</strong>
+            </div>
+            <p>{{ item.description }}</p>
+            <button
+              v-if="actionForStep(index)"
+              class="asset-flow__cta"
+              type="button"
+              :disabled="!primaryActionProject"
+              @click="openHeroAction(actionForStep(index)!.key)"
+            >
+              {{ actionForStep(index)!.label }}
+              <span aria-hidden="true">→</span>
+            </button>
+          </li>
+        </ol>
       </div>
 
-      <div class="asset-governance-layer">
-        <header>
+      <div class="asset-hero__status">
+        <header class="asset-hero__section-head">
+          <span class="zy-code-chip">STATE</span>
           <strong>当前视图统计</strong>
-          <span>{{ statusScopeText }}</span>
+          <small>{{ statusScopeText }}</small>
         </header>
         <div class="asset-status-grid">
           <article v-for="item in statusCards" :key="item.label">
-            <span>{{ item.label }}</span>
-            <strong>{{ item.value }}</strong>
-            <em>{{ item.unit }}</em>
+            <span class="asset-status-grid__label">{{ item.label }}</span>
+            <strong class="asset-status-grid__value">{{ item.value }}</strong>
+            <em class="asset-status-grid__unit">{{ item.unit }}</em>
           </article>
         </div>
       </div>
 
-      <div class="asset-governance-layer">
-        <header>
-          <strong>下一步动作</strong>
-          <span>默认使用列表里的第一个真实项目；也可以在下方项目行里直接点下一步。</span>
-        </header>
-        <div class="asset-action-grid">
-          <button
-            v-for="item in actionItems"
-            :key="item.key"
-            class="asset-action-tile"
-            type="button"
-            :disabled="!primaryActionProject"
-            @click="openHeroAction(item.key)"
-          >
-            <strong>{{ item.label }}</strong>
-            <span>{{ item.description }}</span>
-          </button>
-        </div>
-      </div>
-
-      <div class="asset-governance-layer">
-        <header>
+      <div class="asset-hero__risk">
+        <header class="asset-hero__section-head">
+          <span class="zy-code-chip">ALERT</span>
           <strong>风险提醒</strong>
-          <span>这些问题会影响后续接入评估、交付缺失解释和人工挂接。</span>
+          <small>这些问题会影响后续接入评估、交付缺失解释和人工挂接</small>
         </header>
         <div class="asset-risk-strip">
           <article v-for="risk in riskSummaryCards" :key="risk.label" :class="{ 'is-warning': risk.count > 0 }">
-            <span>{{ risk.label }}</span>
+            <span class="asset-risk-strip__label">
+              <span class="zy-status-dot" :class="risk.count > 0 ? 'zy-status-dot--warning' : 'zy-status-dot--success'"></span>
+              {{ risk.label }}
+            </span>
             <strong>{{ formatCount(risk.count) }}</strong>
             <em>{{ risk.helper }}</em>
           </article>
@@ -349,6 +356,12 @@ function openHeroAction(action: typeof actionItems[number]['key']) {
   router.push({ name: 'project-work-document-delivery', params: { projectId: project.projectId } });
 }
 
+function actionForStep(index: number) {
+  const map: Array<typeof actionItems[number]['key']> = ['enter', 'master-data', 'delivery'];
+  const key = map[index];
+  return actionItems.find((item) => item.key === key) ?? null;
+}
+
 function openGovernanceNext(row: AssetProject) {
   const stage = governanceStage(row);
   if (stage.routeName === 'data-steward-asset-detail') {
@@ -504,173 +517,311 @@ function onboardingTagType(value?: string | null) {
   width: 130px;
 }
 
-.asset-governance-hero {
-  background: #fbfdfa;
-  border: 1px solid rgba(20, 184, 166, 0.2);
-  border-radius: 8px;
+/* ---- Hero ---- */
+.asset-hero {
+  background: var(--zy-surface);
+  border: var(--zy-border);
+  border-radius: var(--zy-radius-base);
   display: grid;
-  gap: 14px;
+  gap: var(--zy-sp-5);
   min-width: 0;
-  padding: 16px;
+  padding: var(--zy-sp-6);
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--zy-shadow-xs);
 }
 
-.asset-governance-hero__intro {
+.asset-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(37, 99, 235, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(37, 99, 235, 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+  mask-image: linear-gradient(to bottom, black 0%, transparent 70%);
+}
+
+.asset-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.asset-hero__intro {
   display: grid;
-  gap: 6px;
-  max-width: 860px;
+  gap: var(--zy-sp-2);
+  max-width: 880px;
 }
 
-.asset-governance-hero__intro span {
-  color: #0f766e;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.asset-governance-hero__intro h2 {
-  color: #0f172a;
-  font-size: 24px;
-  line-height: 1.25;
-  margin: 0;
-}
-
-.asset-governance-hero__intro p {
-  color: #475569;
-  line-height: 1.7;
-  margin: 0;
-}
-
-.asset-governance-layer {
-  border-top: 1px solid rgba(15, 118, 110, 0.12);
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-  padding-top: 12px;
-}
-
-.asset-governance-layer header {
-  align-items: baseline;
-  display: flex;
+.asset-hero__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zy-sp-2);
   flex-wrap: wrap;
-  gap: 8px 12px;
+}
+
+.asset-hero__eyebrow small {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  letter-spacing: 0;
+}
+
+.asset-hero__intro h2 {
+  margin: 0;
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-3xl);
+  font-weight: var(--zy-fw-semi);
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.asset-hero__intro p {
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: var(--zy-fs-sm);
+  line-height: 1.7;
+  max-width: 720px;
+}
+
+.asset-hero__section-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--zy-sp-2) var(--zy-sp-3);
   min-width: 0;
 }
 
-.asset-governance-layer header strong {
-  color: #0f172a;
-  font-size: 15px;
+.asset-hero__section-head strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-base);
+  font-weight: var(--zy-fw-semi);
 }
 
-.asset-governance-layer header span {
-  color: #64748b;
-  font-size: 13px;
+.asset-hero__section-head small {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
   line-height: 1.5;
 }
 
-.asset-objective-track,
-.asset-status-grid,
-.asset-action-grid,
-.asset-risk-strip {
+/* ---- Flow / 三步工作链 ---- */
+.asset-hero__workflow,
+.asset-hero__status,
+.asset-hero__risk {
   display: grid;
-  gap: 10px;
-  min-width: 0;
+  gap: var(--zy-sp-3);
 }
 
-.asset-objective-track {
+.asset-flow {
+  display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--zy-sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  position: relative;
 }
 
+.asset-flow__step {
+  position: relative;
+  background: var(--zy-surface-soft);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  padding: var(--zy-sp-4);
+  display: grid;
+  gap: var(--zy-sp-2);
+  align-content: start;
+  transition:
+    border-color var(--zy-duration-2) var(--zy-ease),
+    transform var(--zy-duration-2) var(--zy-ease);
+}
+
+.asset-flow__step::after {
+  content: "→";
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  background: var(--zy-bg);
+  border: var(--zy-border-soft);
+  border-radius: 999px;
+  color: var(--zy-subtle);
+  font-size: 11px;
+  z-index: 2;
+}
+
+.asset-flow__step:last-child::after {
+  display: none;
+}
+
+.asset-flow__step:hover {
+  border-color: rgba(37, 99, 235, 0.28);
+}
+
+.asset-flow__head {
+  display: flex;
+  align-items: center;
+  gap: var(--zy-sp-2);
+}
+
+.asset-flow__num {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-blue-50);
+  color: var(--zy-blue-700);
+  font-family: var(--zy-font-mono);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-bold);
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.asset-flow__head strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-base);
+  font-weight: var(--zy-fw-semi);
+}
+
+.asset-flow__step p {
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: var(--zy-fs-xs);
+  line-height: 1.7;
+}
+
+.asset-flow__cta {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--zy-blue-700);
+  font-family: inherit;
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-semi);
+  padding: 6px 0 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-self: start;
+  letter-spacing: 0.02em;
+  transition: gap var(--zy-duration-2) var(--zy-ease);
+}
+
+.asset-flow__cta:hover:not(:disabled) {
+  gap: 8px;
+}
+
+.asset-flow__cta:disabled {
+  color: var(--zy-subtle);
+  cursor: not-allowed;
+}
+
+.asset-flow__cta span {
+  font-family: var(--zy-font-mono);
+}
+
+/* ---- 当前视图统计 ---- */
 .asset-status-grid,
 .asset-risk-strip {
-  grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
-}
-
-.asset-action-grid {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-
-.asset-objective-track article,
-.asset-status-grid article,
-.asset-risk-strip article,
-.asset-action-tile {
-  background: #f8fafc;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 8px;
   display: grid;
-  gap: 5px;
+  gap: var(--zy-sp-2);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   min-width: 0;
-  padding: 12px;
-  text-align: left;
 }
 
-.asset-objective-track article {
-  background: #f0fdfa;
+.asset-status-grid article,
+.asset-risk-strip article {
+  background: var(--zy-surface);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  padding: var(--zy-sp-3) var(--zy-sp-4);
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  position: relative;
+  transition: border-color var(--zy-duration-2) var(--zy-ease);
 }
 
-.asset-action-tile {
-  color: inherit;
-  cursor: pointer;
+.asset-status-grid article:hover,
+.asset-risk-strip article:hover {
+  border-color: var(--zy-line);
 }
 
-.asset-action-tile:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
+.asset-status-grid__label,
+.asset-risk-strip__label {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  letter-spacing: 0;
+  display: flex;
+  align-items: center;
 }
 
-.asset-objective-track strong,
-.asset-action-tile strong {
-  color: #0f172a;
-  font-size: 14px;
-}
-
-.asset-objective-track span,
-.asset-action-tile span,
-.asset-risk-strip em,
-.asset-status-grid em {
-  color: #64748b;
-  font-size: 12px;
-  font-style: normal;
-  line-height: 1.5;
-}
-
-.asset-status-grid span,
-.asset-risk-strip span {
-  color: #64748b;
-  font-size: 12px;
-}
-
-.asset-status-grid strong,
+.asset-status-grid__value,
 .asset-risk-strip strong {
-  color: #0f172a;
-  font-size: 21px;
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-3xl);
+  font-weight: var(--zy-fw-bold);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.asset-status-grid__unit,
+.asset-risk-strip em {
+  color: var(--zy-muted);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.4;
 }
 
 .asset-risk-strip article.is-warning {
-  background: #fff7ed;
-  border-color: rgba(251, 146, 60, 0.28);
+  background: var(--zy-amber-50);
+  border-color: rgba(245, 158, 11, 0.28);
 }
 
+.asset-risk-strip article.is-warning strong {
+  color: #b45309;
+}
+
+.asset-risk-strip article.is-warning .asset-risk-strip__label {
+  color: #92400e;
+}
+
+/* ---- 表格内文案 ---- */
 .asset-title-cell {
   min-width: 0;
   display: grid;
-  gap: 4px;
+  gap: 2px;
 }
 
-.asset-title-cell strong,
+.asset-title-cell strong {
+  color: var(--zy-ink);
+  font-weight: var(--zy-fw-semi);
+  font-family: var(--zy-font-mono);
+  font-size: var(--zy-fs-xs);
+  letter-spacing: 0;
+}
+
 .asset-title-cell span {
+  color: var(--zy-text-soft);
+  font-size: var(--zy-fs-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.asset-title-cell span {
-  color: #64748b;
 }
 
 .asset-kind-tags,
 .asset-foundation-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -681,8 +832,9 @@ function onboardingTagType(value?: string | null) {
 }
 
 .asset-governance-cell small {
-  color: #64748b;
-  line-height: 1.45;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
@@ -694,36 +846,45 @@ function onboardingTagType(value?: string | null) {
 }
 
 .asset-governance-trail span {
-  background: #f1f5f9;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 6px;
-  color: #64748b;
-  font-size: 12px;
+  background: var(--zy-bg);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-sm);
+  color: var(--zy-muted);
+  font-size: 11px;
+  font-weight: var(--zy-fw-medium);
   line-height: 1;
-  padding: 5px 6px;
+  padding: 4px 6px;
 }
 
 .asset-governance-trail span.is-done {
-  background: #ecfdf5;
-  border-color: rgba(16, 185, 129, 0.22);
+  background: var(--zy-green-50);
+  border-color: rgba(34, 197, 94, 0.22);
   color: #047857;
 }
 
 .asset-governance-trail span.is-current {
-  background: #eff6ff;
+  background: var(--zy-blue-50);
   border-color: rgba(59, 130, 246, 0.26);
-  color: #1d4ed8;
-  font-weight: 700;
+  color: var(--zy-blue-700);
+  font-weight: var(--zy-fw-bold);
 }
 
 @media (max-width: 960px) {
+  .asset-hero {
+    padding: var(--zy-sp-4);
+  }
+
   .asset-search,
   .asset-sort {
     width: 100%;
   }
 
-  .asset-objective-track {
+  .asset-flow {
     grid-template-columns: 1fr;
+  }
+
+  .asset-flow__step::after {
+    display: none;
   }
 }
 </style>

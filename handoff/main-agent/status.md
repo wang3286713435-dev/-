@@ -1,5 +1,84 @@
 # 主 Agent 项目状态
 
+## 2026-05-22 UX1 收口
+
+- UX1 tokens.css P1 已完成极短复验并通过。
+- 当前 UX1 无 P0 / P1 / P2。
+- 已确认：
+  - `frontend/src/styles/tokens.css` 已纳入暂存范围，不再是未跟踪运行期样式文件。
+  - `frontend/src/styles/index.css` 仍正确引用 `./tokens.css`。
+  - 前端构建通过。
+  - `git diff --check` 通过。
+  - UX1 变更范围保持在 `frontend/**` 与 handoff 文件内，未发现 `backend/**`、数据库迁移、`docs/**` 被修改。
+- 主 agent 裁决：
+  - `UX1：前端路由逻辑与视觉体验专项优化` 可以正式收口。
+  - UX1 只代表前端壳层、路由、菜单、项目工作台与基础视觉优化收口，不代表 UX2 使用逻辑重构已启动。
+  - 下一步可在完成 Git checkpoint 后进入 `UX2：前端使用逻辑与体验重构专项`。
+
+## 2026-05-22 UX1 验收 P1 处理
+
+- UX1 测试 agent 已完成正式验收，结论：`不通过，但无 P0`。
+- 当前唯一阻塞项：`frontend/src/styles/tokens.css` 被 `frontend/src/styles/index.css` 作为运行期样式引用，但仍处于未跟踪状态。
+- 主 agent 判断：该文件属于 UX1 运行必需文件，必须纳入 UX1 提交；否则回滚、拉取仓库或新环境启动时会缺失样式 token。
+- 处理原则：
+  - 纳入 `frontend/src/styles/tokens.css`。
+  - 不纳入 `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付文件。
+  - UX2 仍保持待启动；必须等 UX1 极短复验通过后再切换当前 prompt。
+
+## 2026-05-22 UX2 前端使用逻辑重构待启动
+
+- 用户确认：UX1 主要改善了视觉 token、壳层样式和三段导航，但仍未真正解决“用户进入平台后不知道看什么、点什么、下一步做什么”的核心问题。
+- UX2 定位：`前端使用逻辑与体验重构专项`。
+- UX2 当前状态：`待启动`。
+- UX2 启动条件：
+  - UX1 测试 agent 报告已写入 `handoff/test-agent/latest-report.md`。
+  - UX1 无 P0 / P1。
+  - 若 UX1 有 P0 / P1，必须先由 Claude Code 修复 UX1 阻塞项，再进入 UX2。
+- UX2 开发方式仍由 `Claude Code` 主导，主 agent 监控。
+- UX2 只允许修改 `frontend/**` 和 `handoff/dev-agent/latest-report.md`。
+- UX2 禁止修改 `backend/**`、数据库迁移、接口语义、权限规则和 `docs/**`。
+- UX2 计划：`handoff/main-agent/ux2-user-experience-refactor-plan.md`。
+- UX2 待启动开发 prompt：`handoff/dev-agent/ux2-user-experience-refactor-prompt.md`。
+- UX2 待启动测试 prompt：`handoff/test-agent/ux2-user-experience-refactor-test-prompt.md`。
+- 在 UX1 测试报告返回前，不切换 `handoff/dev-agent/current-prompt.md`，不启动 UX2。
+
+## 2026-05-21 UX1 正式进入 Claude Code 前端壳层重构
+
+- 用户确认：冻结当前后端功能开发，先紧急修复前端框架，避免后续继续在混乱骨架上堆功能。
+- 当前 active 批次：`UX1：前端路由逻辑与视觉体验专项优化`。
+- 当前分支：`codex/ux1-frontend-routing-visual`。
+- UX1 开发 agent：`Claude Code`。
+- 主 agent 职责：监控 Claude、审计是否越界、维护 prompt、判断是否进入测试验收。
+- UX1 开发方式：分层重构。
+  - UX1.1：壳层、路由、菜单、项目工作台骨架。
+  - UX1.2：资产总览、项目详情、文件管理。
+  - UX1.3：工程主数据初始化、部位树、节点类型、交付物标准。
+  - UX1.4：文档交付、图纸交付、整改、交付包预检查。
+  - UX1.5：统一空状态、错误提示、按钮文案、表格工具栏、抽屉和弹窗样式。
+- UX1 禁止：
+  - 修改 `backend/**`。
+  - 修改数据库迁移。
+  - 新增或修改后端接口。
+  - 改变权限规则。
+  - 修改 `docs/**`。
+  - 引入 Hermes 新能力、BIM 轻量化、NAS 新写能力、文件正文读取或索引。
+- 当前开发 prompt 已写入：`handoff/dev-agent/current-prompt.md`。
+
+## 2026-05-22 UX1 进入测试验收
+
+- Claude Code 已完成 UX1 前端壳层完整重构，并写入 `handoff/dev-agent/latest-report.md`。
+- 主 agent 初步审计：
+  - 变更主要集中在 `frontend/**` 和 handoff 报告。
+  - 未发现 `backend/**`、`docs/**`、数据库迁移被修改。
+  - 存在未跟踪 `.claude/**`、`CLAUDE.md` 等非运行文件，测试 agent 需记录并由主 agent 决定是否清理或忽略，不能默认纳入 UX1 提交。
+- 测试重点：
+  - 浏览器多分辨率视觉巡检。
+  - 503/506 项目间路由切换连续性。
+  - 旧全局链接兼容跳转。
+  - 文件管理、工程主数据、交付工作中心入口清晰度。
+  - M2B/M2A/M1F/M1E/M1D/M1C 回归。
+- UX1 测试 prompt 已写入：`handoff/test-agent/current-prompt.md`。
+
 ## 2026-05-21 UX1 紧急 UI / UX 修复首轮
 
 - 已从 M2B 收口提交点切出前端专项分支：`codex/ux1-frontend-routing-visual`。
