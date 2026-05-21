@@ -1,5 +1,23 @@
 # 主 Agent 项目状态
 
+## 2026-05-21 M2B 收口
+
+- `M2B：受控 NAS 写操作真实项目灰度试运行与安全开关` 已通过测试 agent 复核并正式收口。
+- 当前无 P0 / P1 / P2。
+- 已验证：
+  - 默认无灰度配置时，真实项目写操作关闭。
+  - M2B 专项脚本连续两次通过，结果 `PASS=18 FAIL=0`。
+  - M2A / M1F / M1E / M1D / M1C 回归均通过。
+  - 真实项目 UI 只做只读冒烟，未触发真实业务目录写入。
+  - 未发现 raw NAS 路径、`storage_uri`、敏感字段、Hermes/G4/8B/8C/9A 扩展或 parser/indexing 边界突破。
+- 主 agent 裁决：
+  - M2B 可以正式收口。
+  - 主线健康度维持 `绿灯`。
+  - M2B 不代表默认开放真实项目 NAS 写操作；真实写入仍必须显式开启项目灰度并限制目录、角色和账号。
+  - 永久删除、跨项目移动、批量不可逆操作、Agent / Hermes 触发 NAS 写操作仍禁止。
+  - 下一步按既定顺序建议先做 Git checkpoint / push，再进入 `UX1：前端路由逻辑与视觉体验专项优化批次`。
+- 收口报告：`handoff/main-agent/m2b-nas-write-trial-closure.md`。
+
 ## 2026-05-21 M2B 启动
 
 - 用户确认：M2A 完整度可以进入 M2B，但需先完成 Git checkpoint / push。

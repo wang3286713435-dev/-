@@ -1137,6 +1137,32 @@ export interface NasQuarantineRecord {
   failureReason: string | null;
 }
 
+export interface NasWriteTrialStatus {
+  projectId: number;
+  enabled: boolean;
+  allowedRelativeRoots: string[];
+  allowedRoleCodes: string[];
+  allowedUserIds: number[];
+  trialModeNotice: string | null;
+  currentUserRoleCode: string;
+  roleAllowed: boolean;
+  accountAllowed: boolean;
+  directoryAllowed: boolean;
+  canWrite: boolean;
+  checkedDirectory: string;
+  disabledReason: string;
+  traceId: string;
+  updatedAt: string | null;
+}
+
+export interface NasWriteTrialConfigPayload {
+  enabled: boolean;
+  allowedRelativeRoots: string[];
+  allowedRoleCodes?: string[];
+  allowedUserIds?: number[];
+  trialModeNotice?: string;
+}
+
 export async function fetchCatalogProjects(assetSource?: string) {
   const { data } = await http.get<ApiResponse<CatalogProject[]>>('/api/data-steward/catalog/projects', {
     params: assetSource ? { assetSource } : undefined
@@ -1166,6 +1192,22 @@ export async function fetchCatalogFiles(params: CatalogFilesQuery = {}) {
     total: resp.data.data?.total ?? 0,
     rows: resp.data.data?.items ?? []
   };
+}
+
+export async function fetchNasWriteTrialStatus(projectId: number, directoryPath?: string) {
+  const { data } = await http.get<ApiResponse<NasWriteTrialStatus>>(
+    `/api/data-steward/projects/${projectId}/nas/write-trial`,
+    { params: { directoryPath: directoryPath || '' } }
+  );
+  return data.data;
+}
+
+export async function updateNasWriteTrialConfig(projectId: number, payload: NasWriteTrialConfigPayload) {
+  const { data } = await http.put<ApiResponse<NasWriteTrialStatus>>(
+    `/api/data-steward/projects/${projectId}/nas/write-trial`,
+    payload
+  );
+  return data.data;
 }
 
 export async function createNasDirectory(projectId: number, payload: { parentPath?: string; name: string }) {

@@ -1,5 +1,8 @@
 package com.zhuoyu.delivery.datasteward.nas.application;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhuoyu.delivery.core.audit.application.AuditLogApplicationService;
 import com.zhuoyu.delivery.core.project.application.ProjectAccessApplicationService;
 import com.zhuoyu.delivery.core.project.domain.AccessibleProject;
@@ -12,6 +15,8 @@ import com.zhuoyu.delivery.datasteward.nas.dto.ControlledNasDtos.DirectoryRename
 import com.zhuoyu.delivery.datasteward.nas.dto.ControlledNasDtos.FileMoveRequest;
 import com.zhuoyu.delivery.datasteward.nas.dto.ControlledNasDtos.FileQuarantineRequest;
 import com.zhuoyu.delivery.datasteward.nas.dto.ControlledNasDtos.FileRenameRequest;
+import com.zhuoyu.delivery.datasteward.nas.dto.ControlledNasDtos.NasWriteTrialConfigRequest;
+import com.zhuoyu.delivery.datasteward.nas.dto.ControlledNasDtos.NasWriteTrialStatusResponse;
 import com.zhuoyu.delivery.datasteward.nas.dto.ControlledNasDtos.NasOperationRecordResponse;
 import com.zhuoyu.delivery.datasteward.nas.dto.ControlledNasDtos.NasOperationResponse;
 import com.zhuoyu.delivery.datasteward.nas.dto.ControlledNasDtos.NasQuarantineRecordResponse;
@@ -19,6 +24,7 @@ import com.zhuoyu.delivery.datasteward.nas.repository.ControlledNasRepository;
 import com.zhuoyu.delivery.datasteward.nas.repository.ControlledNasRepository.DirectoryRecord;
 import com.zhuoyu.delivery.datasteward.nas.repository.ControlledNasRepository.FileRecord;
 import com.zhuoyu.delivery.datasteward.nas.repository.ControlledNasRepository.QuarantineRecord;
+import com.zhuoyu.delivery.datasteward.nas.repository.ControlledNasRepository.TrialConfigRecord;
 import com.zhuoyu.delivery.shared.exception.BusinessException;
 import com.zhuoyu.delivery.shared.trace.TraceIdHolder;
 import java.io.IOException;
@@ -31,6 +37,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -48,6 +55,11 @@ public class ControlledNasApplicationService {
     private static final String MODULE_CODE = "data-steward";
     private static final Set<String> WRITE_ROLES = Set.of("DELIVERY_ENGINEER", "PROJECT_ADMIN");
     private static final Set<String> ADMIN_ROLES = Set.of("PROJECT_ADMIN");
+    private static final List<String> DEFAULT_TRIAL_ROLES = List.of("DELIVERY_ENGINEER", "PROJECT_ADMIN");
+    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
+    };
+    private static final TypeReference<List<Long>> LONG_LIST_TYPE = new TypeReference<>() {
+    };
     private static final Set<String> FILE_KINDS = Set.of(
         "MODEL", "DRAWING", "DOCUMENT", "SPREADSHEET", "PRESENTATION", "ARCHIVE", "MODEL_VIEWER", "OTHER"
     );
@@ -57,26 +69,64 @@ public class ControlledNasApplicationService {
     private final AssetPathMappingRepository pathMappingRepository;
     private final ControlledNasRepository repository;
     private final AuditLogApplicationService auditLogApplicationService;
+    private final ObjectMapper objectMapper;
 
     public ControlledNasApplicationService(
         ProjectAccessApplicationService projectAccessApplicationService,
         AssetPathMappingRepository pathMappingRepository,
         ControlledNasRepository repository,
-        AuditLogApplicationService auditLogApplicationService
+        AuditLogApplicationService auditLogApplicationService,
+        ObjectMapper objectMapper
     ) {
         this.projectAccessApplicationService = projectAccessApplicationService;
         this.pathMappingRepository = pathMappingRepository;
         this.repository = repository;
         this.auditLogApplicationService = auditLogApplicationService;
+        this.objectMapper = objectMapper;
+    }
+
+    public NasWriteTrialStatusResponse getWriteTrialStatus(Long userId, Long projectId, String directoryPath) {
+        AccessibleProject project = projectAccessApplicationService.requireAccessibleProject(userId, projectId);
+        String checkedDirectory = normalizeRelativePath(directoryPath, true);
+        TrialConfig config = loadTrialConfig(projectId);
+        return toTrialStatus(userId, project, config, checkedDirectory);
+    }
+
+    @Transactional
+    public NasWriteTrialStatusResponse updateWriteTrialConfig(
+        Long userId,
+        Long projectId,
+        NasWriteTrialConfigRequest request
+    ) {
+        requireAdminRoleWithoutTrial(userId, projectId);
+        TrialConfig config = normalizeTrialConfig(projectId, request, userId);
+        repository.upsertTrialConfig(
+            projectId,
+            config.enabled(),
+            toJson(config.allowedRelativeRoots()),
+            toJson(config.allowedRoleCodes()),
+            toJson(config.allowedUserIds()),
+            config.trialModeNotice(),
+            userId
+        );
+        auditLogApplicationService.record(projectId, MODULE_CODE, "nas.write.trial.update", "NAS_WRITE_TRIAL",
+            String.valueOf(projectId), userId, Map.of(
+                "enabled", config.enabled(),
+                "allowedRelativeRoots", config.allowedRelativeRoots(),
+                "allowedRoleCodes", config.allowedRoleCodes(),
+                "allowedUserIds", config.allowedUserIds()
+            ));
+        AccessibleProject project = projectAccessApplicationService.requireAccessibleProject(userId, projectId);
+        return toTrialStatus(userId, project, loadTrialConfig(projectId), "");
     }
 
     @Transactional
     public NasOperationResponse createDirectory(Long userId, Long projectId, DirectoryCreateRequest request) {
-        requireWriteRole(userId, projectId);
-        ProjectRoot root = resolveProjectRoot(projectId);
         String parentPath = normalizeRelativePath(request == null ? null : request.parentPath(), true);
         String name = normalizeName(request == null ? null : request.name(), "NAS_DIRECTORY_NAME_REQUIRED", "文件夹名称不能为空");
         String targetRelativePath = joinRelative(parentPath, name);
+        requireTrialWriteAllowed(userId, projectId, WRITE_ROLES, List.of(targetRelativePath));
+        ProjectRoot root = resolveProjectRoot(projectId);
         Path parent = resolveExistingDirectory(root, parentPath);
         Path target = resolveNewChild(root, parent, name);
         ensureTargetAvailable(target, "NAS_DIRECTORY_ALREADY_EXISTS", "同名文件夹已存在");
@@ -100,19 +150,19 @@ public class ControlledNasApplicationService {
         String versionNo,
         MultipartFile file
     ) {
-        requireWriteRole(userId, projectId);
         if (file == null || file.isEmpty()) {
             throw new BusinessException("NAS_UPLOAD_FILE_REQUIRED", "请选择要上传的文件", HttpStatus.BAD_REQUEST);
         }
-        ProjectRoot root = resolveProjectRoot(projectId);
         String normalizedParentPath = normalizeRelativePath(parentPath, true);
         String fileName = normalizeUploadName(file.getOriginalFilename());
+        String targetRelativePath = joinRelative(normalizedParentPath, fileName);
+        requireTrialWriteAllowed(userId, projectId, WRITE_ROLES, List.of(targetRelativePath));
+        ProjectRoot root = resolveProjectRoot(projectId);
         Path parent = resolveExistingDirectory(root, normalizedParentPath);
         Path target = resolveNewChild(root, parent, fileName);
         ensureTargetAvailable(target, "NAS_UPLOAD_FILE_EXISTS", "同名文件已存在，当前批次不覆盖文件");
         try (InputStream inputStream = file.getInputStream()) {
             Files.copy(inputStream, target);
-            String targetRelativePath = joinRelative(normalizedParentPath, fileName);
             Long fileId = repository.insertUploadedFile(
                 projectId,
                 fileName,
@@ -135,12 +185,13 @@ public class ControlledNasApplicationService {
 
     @Transactional
     public NasOperationResponse renameFile(Long userId, Long projectId, Long fileId, FileRenameRequest request) {
-        requireWriteRole(userId, projectId);
+        requireWriteRoleWithoutTrial(userId, projectId);
         ProjectRoot root = resolveProjectRoot(projectId);
         FileRecord file = requireFile(projectId, fileId);
         Path source = resolveExistingFileFromRecord(root, file);
         String newName = normalizeName(request == null ? null : request.newName(), "NAS_FILE_NAME_REQUIRED", "文件名称不能为空");
         Path target = resolveNewChild(root, source.getParent(), newName);
+        requireTrialWriteAllowed(userId, projectId, WRITE_ROLES, List.of(root.relativePath(source), root.relativePath(target)));
         ensureTargetAvailable(target, "NAS_FILE_RENAME_EXISTS", "同名文件已存在，当前批次不覆盖文件");
         try {
             Files.move(source, target);
@@ -155,13 +206,14 @@ public class ControlledNasApplicationService {
 
     @Transactional
     public NasOperationResponse moveFile(Long userId, Long projectId, Long fileId, FileMoveRequest request) {
-        requireWriteRole(userId, projectId);
+        requireWriteRoleWithoutTrial(userId, projectId);
         ProjectRoot root = resolveProjectRoot(projectId);
         FileRecord file = requireFile(projectId, fileId);
         Path source = resolveExistingFileFromRecord(root, file);
         String targetDirectory = normalizeRelativePath(request == null ? null : request.targetDirectory(), true);
         Path targetParent = resolveExistingDirectory(root, targetDirectory);
         Path target = resolveNewChild(root, targetParent, file.originalName());
+        requireTrialWriteAllowed(userId, projectId, WRITE_ROLES, List.of(root.relativePath(source), root.relativePath(target)));
         ensureTargetAvailable(target, "NAS_FILE_MOVE_EXISTS", "目标目录已有同名文件，当前批次不覆盖文件");
         try {
             Files.move(source, target);
@@ -176,7 +228,7 @@ public class ControlledNasApplicationService {
 
     @Transactional
     public NasOperationResponse quarantineFile(Long userId, Long projectId, Long fileId, FileQuarantineRequest request) {
-        requireAdminRole(userId, projectId);
+        requireAdminRoleWithoutTrial(userId, projectId);
         ProjectRoot root = resolveProjectRoot(projectId);
         FileRecord file = requireFile(projectId, fileId);
         if ("QUARANTINED".equalsIgnoreCase(file.processStatus())) {
@@ -184,6 +236,7 @@ public class ControlledNasApplicationService {
         }
         Path source = resolveExistingFileFromRecord(root, file);
         String originalRelativePath = root.relativePath(source);
+        requireTrialWriteAllowed(userId, projectId, ADMIN_ROLES, List.of(originalRelativePath));
         Path quarantineTarget = quarantineTarget(root, file.originalName());
         try {
             Files.createDirectories(quarantineTarget.getParent());
@@ -204,16 +257,19 @@ public class ControlledNasApplicationService {
 
     @Transactional
     public NasOperationResponse renameDirectory(Long userId, Long projectId, DirectoryRenameRequest request) {
-        requireWriteRole(userId, projectId);
-        ProjectRoot root = resolveProjectRoot(projectId);
         String sourceRelativePath = normalizeRelativePath(request == null ? null : request.sourcePath(), false);
         String newName = normalizeName(request == null ? null : request.newName(), "NAS_DIRECTORY_NAME_REQUIRED", "文件夹名称不能为空");
+        String targetRelativePath = parentPath(sourceRelativePath).isBlank()
+            ? newName
+            : parentPath(sourceRelativePath) + "/" + newName;
+        requireTrialWriteAllowed(userId, projectId, WRITE_ROLES, List.of(sourceRelativePath, targetRelativePath));
+        ProjectRoot root = resolveProjectRoot(projectId);
         Path source = resolveExistingDirectory(root, sourceRelativePath);
         Path target = resolveNewChild(root, source.getParent(), newName);
         ensureTargetAvailable(target, "NAS_DIRECTORY_RENAME_EXISTS", "同名文件夹已存在");
         try {
             Files.move(source, target);
-            String targetRelativePath = root.relativePath(target);
+            targetRelativePath = root.relativePath(target);
             updateDirectoryMetadata(projectId, sourceRelativePath, targetRelativePath, newName, userId);
             repository.updateFilePrefix(projectId, storageUri(source), storageUri(target),
                 logicalPath(source), logicalPath(target), "PROCESSED", userId);
@@ -227,14 +283,14 @@ public class ControlledNasApplicationService {
 
     @Transactional
     public NasOperationResponse moveDirectory(Long userId, Long projectId, DirectoryMoveRequest request) {
-        requireWriteRole(userId, projectId);
-        ProjectRoot root = resolveProjectRoot(projectId);
         String sourceRelativePath = normalizeRelativePath(request == null ? null : request.sourcePath(), false);
         String targetParentRelativePath = normalizeRelativePath(request == null ? null : request.targetDirectory(), true);
         String displayName = leafName(sourceRelativePath);
+        String targetRelativePath = joinRelative(targetParentRelativePath, displayName);
+        requireTrialWriteAllowed(userId, projectId, WRITE_ROLES, List.of(sourceRelativePath, targetRelativePath));
+        ProjectRoot root = resolveProjectRoot(projectId);
         Path source = resolveExistingDirectory(root, sourceRelativePath);
         Path targetParent = resolveExistingDirectory(root, targetParentRelativePath);
-        String targetRelativePath = joinRelative(targetParentRelativePath, displayName);
         if (sameOrChild(targetRelativePath, sourceRelativePath)) {
             throw new BusinessException("NAS_DIRECTORY_MOVE_INTO_SELF", "不能把文件夹移动到自身或子文件夹内", HttpStatus.BAD_REQUEST);
         }
@@ -255,9 +311,9 @@ public class ControlledNasApplicationService {
 
     @Transactional
     public NasOperationResponse quarantineDirectory(Long userId, Long projectId, DirectoryQuarantineRequest request) {
-        requireAdminRole(userId, projectId);
-        ProjectRoot root = resolveProjectRoot(projectId);
         String sourceRelativePath = normalizeRelativePath(request == null ? null : request.sourcePath(), false);
+        requireTrialWriteAllowed(userId, projectId, ADMIN_ROLES, List.of(sourceRelativePath));
+        ProjectRoot root = resolveProjectRoot(projectId);
         String displayName = leafName(sourceRelativePath);
         Path source = resolveExistingDirectory(root, sourceRelativePath);
         Path quarantineTarget = quarantineTarget(root, displayName);
@@ -282,13 +338,14 @@ public class ControlledNasApplicationService {
 
     @Transactional
     public NasOperationResponse restoreQuarantine(Long userId, Long projectId, Long quarantineRecordId) {
-        requireAdminRole(userId, projectId);
+        requireAdminRoleWithoutTrial(userId, projectId);
         ProjectRoot root = resolveProjectRoot(projectId);
         QuarantineRecord record = repository.findQuarantineRecord(projectId, quarantineRecordId)
             .orElseThrow(() -> new BusinessException("NAS_QUARANTINE_NOT_FOUND", "隔离记录不存在", HttpStatus.NOT_FOUND));
         if (!"QUARANTINED".equalsIgnoreCase(record.status())) {
             throw new BusinessException("NAS_QUARANTINE_STATUS_INVALID", "当前隔离记录不能恢复", HttpStatus.BAD_REQUEST);
         }
+        requireTrialWriteAllowed(userId, projectId, ADMIN_ROLES, List.of(record.originalRelativePath()));
         Path source = resolveExistingPath(root, record.quarantineRelativePath());
         Path target = resolveTargetPath(root, record.originalRelativePath());
         if (Files.exists(target)) {
@@ -378,18 +435,211 @@ public class ControlledNasApplicationService {
         return "nas." + operationType.toLowerCase(Locale.ROOT).replace('_', '.');
     }
 
-    private AccessibleProject requireWriteRole(Long userId, Long projectId) {
-        AccessibleProject project = projectAccessApplicationService.requireAccessibleProject(userId, projectId);
-        if (!WRITE_ROLES.contains(project.roleCode())) {
-            throw new BusinessException("NAS_WRITE_FORBIDDEN", "当前项目角色只能查看，不能操作公司 NAS 文件", HttpStatus.FORBIDDEN);
+    private TrialConfig normalizeTrialConfig(Long projectId, NasWriteTrialConfigRequest request, Long operatorId) {
+        boolean enabled = request != null && Boolean.TRUE.equals(request.enabled());
+        List<String> roots = normalizeTrialRoots(request == null ? null : request.allowedRelativeRoots());
+        List<String> roleCodes = normalizeTrialRoleCodes(request == null ? null : request.allowedRoleCodes());
+        List<Long> userIds = normalizeTrialUserIds(request == null ? null : request.allowedUserIds());
+        String notice = blankToNull(request == null ? null : request.trialModeNotice());
+        if (notice != null && notice.length() > 512) {
+            throw new BusinessException("NAS_WRITE_TRIAL_NOTICE_TOO_LONG", "灰度提示不能超过 512 个字符", HttpStatus.BAD_REQUEST);
         }
-        return project;
+        return new TrialConfig(projectId, enabled, roots, roleCodes, userIds, notice, Instant.now(), operatorId);
     }
 
-    private AccessibleProject requireAdminRole(Long userId, Long projectId) {
+    private NasWriteTrialStatusResponse toTrialStatus(
+        Long userId,
+        AccessibleProject project,
+        TrialConfig config,
+        String checkedDirectory
+    ) {
+        boolean baseRoleAllowed = WRITE_ROLES.contains(project.roleCode());
+        boolean roleAllowed = config.allowedRoleCodes().contains(project.roleCode());
+        boolean accountAllowed = config.allowedUserIds().isEmpty() || config.allowedUserIds().contains(userId);
+        boolean directoryAllowed = isAllowedByTrialRoots(checkedDirectory, config.allowedRelativeRoots());
+        boolean canWrite = config.enabled() && baseRoleAllowed && roleAllowed && accountAllowed && directoryAllowed;
+        return new NasWriteTrialStatusResponse(
+            project.id(),
+            config.enabled(),
+            config.allowedRelativeRoots(),
+            config.allowedRoleCodes(),
+            config.allowedUserIds(),
+            config.trialModeNotice(),
+            project.roleCode(),
+            roleAllowed,
+            accountAllowed,
+            directoryAllowed,
+            canWrite,
+            checkedDirectory,
+            trialDisabledReason(config, baseRoleAllowed, roleAllowed, accountAllowed, directoryAllowed),
+            TraceIdHolder.getTraceId(),
+            config.updatedAt()
+        );
+    }
+
+    private String trialDisabledReason(
+        TrialConfig config,
+        boolean baseRoleAllowed,
+        boolean roleAllowed,
+        boolean accountAllowed,
+        boolean directoryAllowed
+    ) {
+        if (!config.enabled()) return "当前项目未开启真实 NAS 写入灰度。";
+        if (!baseRoleAllowed) return "当前项目角色只能查看，不能操作公司 NAS 文件。";
+        if (!roleAllowed) return "当前项目角色未纳入 NAS 写入灰度角色范围。";
+        if (!accountAllowed) return "当前账号未纳入 NAS 写入灰度账号范围。";
+        if (!directoryAllowed) return "当前目录不在本项目 NAS 写入灰度允许范围内。";
+        return "";
+    }
+
+    private List<String> normalizeTrialRoots(List<String> roots) {
+        if (roots == null || roots.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        for (String root : roots) {
+            normalized.add(normalizeRelativePath(root, true));
+        }
+        return List.copyOf(normalized);
+    }
+
+    private List<String> normalizeTrialRoleCodes(List<String> roleCodes) {
+        if (roleCodes == null || roleCodes.isEmpty()) {
+            return DEFAULT_TRIAL_ROLES;
+        }
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        for (String roleCode : roleCodes) {
+            String next = roleCode == null ? "" : roleCode.trim().toUpperCase(Locale.ROOT);
+            if (!WRITE_ROLES.contains(next)) {
+                throw new BusinessException("NAS_WRITE_TRIAL_ROLE_INVALID", "灰度角色只能是 DELIVERY_ENGINEER 或 PROJECT_ADMIN", HttpStatus.BAD_REQUEST);
+            }
+            normalized.add(next);
+        }
+        return List.copyOf(normalized);
+    }
+
+    private List<Long> normalizeTrialUserIds(List<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<Long> normalized = new LinkedHashSet<>();
+        for (Long userId : userIds) {
+            if (userId == null || userId <= 0) {
+                throw new BusinessException("NAS_WRITE_TRIAL_USER_INVALID", "灰度账号 ID 不合法", HttpStatus.BAD_REQUEST);
+            }
+            normalized.add(userId);
+        }
+        return List.copyOf(normalized);
+    }
+
+    private void requireTrialWriteAllowed(Long userId, Long projectId, Set<String> baseRoles, List<String> relativePaths) {
+        AccessibleProject project = requireBaseRole(userId, projectId, baseRoles);
+        TrialConfig config = loadTrialConfig(projectId);
+        if (!config.enabled()) {
+            throw new BusinessException("NAS_WRITE_TRIAL_DISABLED", "当前项目未开启真实 NAS 写入灰度，平台未执行任何 NAS 写操作", HttpStatus.FORBIDDEN);
+        }
+        if (!config.allowedRoleCodes().contains(project.roleCode())) {
+            throw new BusinessException("NAS_WRITE_TRIAL_ROLE_FORBIDDEN", "当前项目角色未纳入 NAS 写入灰度范围", HttpStatus.FORBIDDEN);
+        }
+        if (!config.allowedUserIds().isEmpty() && !config.allowedUserIds().contains(userId)) {
+            throw new BusinessException("NAS_WRITE_TRIAL_ACCOUNT_FORBIDDEN", "当前账号未纳入 NAS 写入灰度范围", HttpStatus.FORBIDDEN);
+        }
+        for (String path : relativePaths == null ? List.<String>of() : relativePaths) {
+            String normalized = normalizeRelativePath(path, true);
+            if (!isAllowedByTrialRoots(normalized, config.allowedRelativeRoots())) {
+                throw new BusinessException("NAS_WRITE_TRIAL_DIRECTORY_FORBIDDEN", "目标目录不在本项目 NAS 写入灰度允许范围内", HttpStatus.FORBIDDEN);
+            }
+        }
+    }
+
+    private boolean isAllowedByTrialRoots(String relativePath, List<String> allowedRoots) {
+        if (allowedRoots == null || allowedRoots.isEmpty()) {
+            return false;
+        }
+        String normalized = normalizeRelativePath(relativePath, true);
+        for (String root : allowedRoots) {
+            if (root == null) continue;
+            String allowedRoot = normalizeRelativePath(root, true);
+            if (allowedRoot.isBlank() || sameOrChild(normalized, allowedRoot)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private TrialConfig loadTrialConfig(Long projectId) {
+        return repository.findTrialConfig(projectId)
+            .map(this::toTrialConfig)
+            .orElseGet(() -> new TrialConfig(
+                projectId,
+                false,
+                List.of(),
+                DEFAULT_TRIAL_ROLES,
+                List.of(),
+                "当前项目未开启真实 NAS 写入灰度。",
+                null,
+                null
+            ));
+    }
+
+    private TrialConfig toTrialConfig(TrialConfigRecord record) {
+        return new TrialConfig(
+            record.projectId(),
+            record.enabled(),
+            parseStringList(record.allowedRelativeRootsJson()),
+            parseStringList(record.allowedRoleCodesJson()),
+            parseLongList(record.allowedUserIdsJson()),
+            record.trialModeNotice(),
+            record.updatedAt(),
+            record.updatedBy()
+        );
+    }
+
+    private List<String> parseStringList(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(raw, STRING_LIST_TYPE);
+        } catch (JsonProcessingException exception) {
+            throw new BusinessException("NAS_WRITE_TRIAL_CONFIG_INVALID", "NAS 写入灰度配置格式错误", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private List<Long> parseLongList(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(raw, LONG_LIST_TYPE);
+        } catch (JsonProcessingException exception) {
+            throw new BusinessException("NAS_WRITE_TRIAL_CONFIG_INVALID", "NAS 写入灰度配置格式错误", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException exception) {
+            throw new BusinessException("NAS_WRITE_TRIAL_CONFIG_SERIALIZE_FAILED", "NAS 写入灰度配置保存失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private AccessibleProject requireWriteRoleWithoutTrial(Long userId, Long projectId) {
+        return requireBaseRole(userId, projectId, WRITE_ROLES);
+    }
+
+    private AccessibleProject requireAdminRoleWithoutTrial(Long userId, Long projectId) {
+        return requireBaseRole(userId, projectId, ADMIN_ROLES);
+    }
+
+    private AccessibleProject requireBaseRole(Long userId, Long projectId, Set<String> allowedRoles) {
         AccessibleProject project = projectAccessApplicationService.requireAccessibleProject(userId, projectId);
-        if (!ADMIN_ROLES.contains(project.roleCode())) {
+        if (allowedRoles.equals(ADMIN_ROLES) && !ADMIN_ROLES.contains(project.roleCode())) {
             throw new BusinessException("NAS_ADMIN_WRITE_FORBIDDEN", "删除到隔离区和恢复仅限项目管理员", HttpStatus.FORBIDDEN);
+        }
+        if (!allowedRoles.equals(ADMIN_ROLES) && !allowedRoles.contains(project.roleCode())) {
+            throw new BusinessException("NAS_WRITE_FORBIDDEN", "当前项目角色只能查看，不能操作公司 NAS 文件", HttpStatus.FORBIDDEN);
         }
         return project;
     }
@@ -645,6 +895,18 @@ public class ControlledNasApplicationService {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private record TrialConfig(
+        Long projectId,
+        boolean enabled,
+        List<String> allowedRelativeRoots,
+        List<String> allowedRoleCodes,
+        List<Long> allowedUserIds,
+        String trialModeNotice,
+        Instant updatedAt,
+        Long updatedBy
+    ) {
     }
 
     private record ProjectRoot(Path realRoot) {

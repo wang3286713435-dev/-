@@ -24,6 +24,56 @@ public class ControlledNasRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    public Optional<TrialConfigRecord> findTrialConfig(Long projectId) {
+        List<TrialConfigRecord> rows = jdbcTemplate.query("""
+            SELECT id, project_id, enabled, allowed_relative_roots_json,
+                   allowed_role_codes_json, allowed_user_ids_json,
+                   trial_mode_notice, updated_at, updated_by
+            FROM data_nas_write_trial_configs
+            WHERE project_id = :projectId
+              AND deleted = 0
+            LIMIT 1
+            """, new MapSqlParameterSource()
+            .addValue("projectId", projectId), ControlledNasRepository::mapTrialConfig);
+        return rows.stream().findFirst();
+    }
+
+    public void upsertTrialConfig(
+        Long projectId,
+        boolean enabled,
+        String allowedRelativeRootsJson,
+        String allowedRoleCodesJson,
+        String allowedUserIdsJson,
+        String trialModeNotice,
+        Long operatorId
+    ) {
+        jdbcTemplate.update("""
+            INSERT INTO data_nas_write_trial_configs (
+                project_id, enabled, allowed_relative_roots_json,
+                allowed_role_codes_json, allowed_user_ids_json,
+                trial_mode_notice, created_by, updated_by
+            ) VALUES (
+                :projectId, :enabled, :allowedRelativeRootsJson,
+                :allowedRoleCodesJson, :allowedUserIdsJson,
+                :trialModeNotice, :operatorId, :operatorId
+            )
+            ON DUPLICATE KEY UPDATE
+                enabled = VALUES(enabled),
+                allowed_relative_roots_json = VALUES(allowed_relative_roots_json),
+                allowed_role_codes_json = VALUES(allowed_role_codes_json),
+                allowed_user_ids_json = VALUES(allowed_user_ids_json),
+                trial_mode_notice = VALUES(trial_mode_notice),
+                updated_by = VALUES(updated_by)
+            """, new MapSqlParameterSource()
+            .addValue("projectId", projectId)
+            .addValue("enabled", enabled ? 1 : 0)
+            .addValue("allowedRelativeRootsJson", allowedRelativeRootsJson)
+            .addValue("allowedRoleCodesJson", allowedRoleCodesJson)
+            .addValue("allowedUserIdsJson", allowedUserIdsJson)
+            .addValue("trialModeNotice", blankToNull(trialModeNotice))
+            .addValue("operatorId", operatorId));
+    }
+
     public Long insertDirectory(
         Long projectId,
         String relativePath,
@@ -527,6 +577,22 @@ public class ControlledNasRepository {
         );
     }
 
+    private static TrialConfigRecord mapTrialConfig(ResultSet rs, int rowNum) throws SQLException {
+        Timestamp updatedAt = rs.getTimestamp("updated_at");
+        Long updatedBy = rs.getObject("updated_by") == null ? null : rs.getLong("updated_by");
+        return new TrialConfigRecord(
+            rs.getLong("id"),
+            rs.getLong("project_id"),
+            rs.getBoolean("enabled"),
+            rs.getString("allowed_relative_roots_json"),
+            rs.getString("allowed_role_codes_json"),
+            rs.getString("allowed_user_ids_json"),
+            rs.getString("trial_mode_notice"),
+            updatedAt == null ? null : updatedAt.toInstant(),
+            updatedBy
+        );
+    }
+
     private static FileRecord mapFile(ResultSet rs, int rowNum) throws SQLException {
         return new FileRecord(
             rs.getLong("id"),
@@ -631,6 +697,19 @@ public class ControlledNasRepository {
         String parentRelativePath,
         String status,
         Long quarantineRecordId
+    ) {
+    }
+
+    public record TrialConfigRecord(
+        Long id,
+        Long projectId,
+        boolean enabled,
+        String allowedRelativeRootsJson,
+        String allowedRoleCodesJson,
+        String allowedUserIdsJson,
+        String trialModeNotice,
+        Instant updatedAt,
+        Long updatedBy
     ) {
     }
 

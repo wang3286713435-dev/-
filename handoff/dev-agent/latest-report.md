@@ -1,12 +1,14 @@
-# 开发 Agent 报告：M2A NAS 受控文件操作安全底座
+# 开发 Agent 报告：M2B 受控 NAS 写操作真实项目灰度试运行与安全开关
 
-时间：2026-05-21 16:49 CST
+时间：2026-05-21 18:31 CST
+
+`<promise>MAINLINE_M2B_NAS_WRITE_TRIAL_COMPLETE</promise>`
 
 ## 1. 本轮目标
 
-完成 M2A：在已完成 M1F 的基础上，补齐真实项目 NAS 受控文件操作安全底座第一批能力。
+完成 M2B：在 M2A 受控 NAS 写操作底座之上，增加真实项目灰度试运行安全开关。
 
-本轮仅开放低风险受控写操作：项目内新建文件夹、上传文件、重命名、移动、删除到隔离区、从隔离区恢复、操作记录与元数据同步。未开放永久删除、批量操作、跨项目移动、parser / writer / indexing、Hermes 扩展、生产发布。
+本轮只做“是否允许真实项目执行 M2A 写接口”的服务端闸门与前端状态提示，不新增永久删除、批量操作、跨项目移动、Agent/Hermes 写入、parser / writer / indexing，也不做生产发布。
 
 ## 2. 读取与审计
 
@@ -16,28 +18,25 @@
 - `handoff/main-agent/status.md`
 - `handoff/main-agent/development-log.md`
 - `handoff/main-agent/phase2-current-roadmap.md`
-- `handoff/main-agent/mainline-git-governance-and-hermes-freeze.md`
-- `handoff/main-agent/m2a-controlled-nas-write-plan.md`
+- `handoff/main-agent/m2b-nas-write-trial-plan.md`
+- `handoff/main-agent/m2a-controlled-nas-write-closure.md`
+- `handoff/main-agent/m2a-current-project-context-bugfix-report.md`
 - `handoff/dev-agent/latest-report.md`
 - `handoff/test-agent/latest-report.md`
-- `docs/07-complete-delivery-prd.md`
-- `docs/08-acceptance-and-agent-integration.md`
-- `docs/10-phase2-development-roadmap.md`
 
 工作区审计结果：
 
 - 当前分支：`codex/platform-m1e-file-task-continuity`
-- 基线提交：`4a58365`
-- M1F 员工注册、权限管理与局域网试运行相关改动已在工作区内存在，本轮未回退。
-- 本轮新增 M2A 文件与改动均保持在 NAS 受控操作范围内。
+- 当前提交基线：`1e4f9e3`
 - 未修改 `docs/**`。
+- 本轮未创建子 agent，未调用 Claude。
+- 现有 `tmp/**` 运行日志和临时文件为既有/运行态未跟踪文件，本轮未纳入交付。
 
 ## 3. 改动文件列表
 
 后端：
 
-- `backend/delivery-app/src/main/resources/db/migration/V22__m2a_controlled_nas_write_foundation.sql`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/CatalogApplicationService.java`
+- `backend/delivery-app/src/main/resources/db/migration/V23__m2b_nas_write_trial_config.sql`
 - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/controller/ControlledNasController.java`
 - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/application/ControlledNasApplicationService.java`
 - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/repository/ControlledNasRepository.java`
@@ -51,158 +50,204 @@
 脚本：
 
 - `scripts/dev/check-m2a-controlled-nas-write.sh`
+- `scripts/dev/check-m2b-nas-write-trial.sh`
 
 ## 4. 数据库迁移
 
-新增 `V22__m2a_controlled_nas_write_foundation.sql`，未修改旧 Flyway migration。
+新增 `V23__m2b_nas_write_trial_config.sql`，未修改旧 Flyway migration。
 
 新增表：
 
-- `data_nas_directory_records`：记录平台创建和管理的目录，使用项目内相对路径、路径哈希和状态，不保存前端可见真实绝对路径。
-- `data_nas_quarantine_records`：记录隔离区删除与恢复状态。
-- `data_nas_operation_records`：记录受控 NAS 操作、操作人、目标类型、安全展示路径、traceId 和状态。
+- `data_nas_write_trial_configs`
 
-本地第一次迁移因 MySQL 索引长度限制失败，已将目录唯一索引改为生成列 `relative_path_hash` 后重新执行，当前 V21 / V22 Flyway 状态均为成功。
+保存内容：
 
-## 5. 新增后端接口
+- 项目 ID。
+- 灰度开关 `enabled`。
+- 允许写入的项目内相对根目录列表。
+- 允许角色列表。
+- 可选允许用户 ID 列表。
+- 试运行提示文案。
+- 审计时间和操作者。
 
-新增受控 NAS 接口：
+表内不保存真实 NAS 绝对路径，不保存 `storage_path`，不保存 `storage_uri`。
 
-- `POST /api/data-steward/projects/{projectId}/nas/directories`
-- `PATCH /api/data-steward/projects/{projectId}/nas/directories:rename`
-- `POST /api/data-steward/projects/{projectId}/nas/directories:move`
-- `POST /api/data-steward/projects/{projectId}/nas/directories:quarantine`
-- `POST /api/data-steward/projects/{projectId}/nas/files:upload`
-- `PATCH /api/data-steward/projects/{projectId}/nas/files/{fileId}:rename`
-- `POST /api/data-steward/projects/{projectId}/nas/files/{fileId}:move`
-- `POST /api/data-steward/projects/{projectId}/nas/files/{fileId}:quarantine`
-- `POST /api/data-steward/projects/{projectId}/nas/quarantine/{recordId}:restore`
-- `GET /api/data-steward/projects/{projectId}/nas/quarantine`
-- `GET /api/data-steward/projects/{projectId}/nas/operations`
+## 5. 新增 / 修改后端接口
 
-权限规则：
+新增：
 
-- `DELIVERY_ENGINEER` / `PROJECT_ADMIN`：新建文件夹、上传、重命名、移动。
-- `PROJECT_ADMIN`：删除到隔离区、从隔离区恢复。
-- 普通查看者和未授权用户拒绝。
-- 项目上下文由服务端校验，不信任前端项目范围。
+- `GET /api/data-steward/projects/{projectId}/nas/write-trial?directoryPath=...`
+- `PUT /api/data-steward/projects/{projectId}/nas/write-trial`
 
-安全规则：
+灰度状态响应包含：
 
-- 禁止 `..`、绝对路径、`~`、`:`、空字节、重复分隔符、保留目录 `.delivery-quarantine`。
-- 禁止跨项目移动。
-- 冲突时不覆盖现有文件或目录。
-- 隔离删除只移动到项目内 `.delivery-quarantine`，不做永久删除。
-- 上传只写入用户选择的文件字节并登记目录元数据，不读取 PDF / Office / DWG / RVT 正文，不做解析、不做索引。
-- 响应只返回项目内展示路径、操作编号、traceId、状态等安全字段，不返回真实 NAS 绝对路径。
+- `projectId`
+- `enabled`
+- `canWrite`
+- `directoryAllowed`
+- `roleAllowed`
+- `userAllowed`
+- `allowedRelativeRoots`
+- `allowedRoleCodes`
+- `allowedUserIds`
+- `disabledReason`
+- `trialModeNotice`
+- `traceId`
+
+所有 M2A 写操作已接入灰度闸门：
+
+- 创建目录。
+- 上传文件。
+- 文件重命名 / 移动 / 隔离。
+- 目录重命名 / 移动 / 隔离。
+- 隔离区恢复。
+
+服务端规则：
+
+- 默认无配置时 `enabled=false`，真实 NAS 写入关闭。
+- `PROJECT_ADMIN` / `DELIVERY_ENGINEER` 仍需满足 M2A 基础角色规则。
+- 灰度开启后，还必须同时满足允许角色、允许用户、允许项目内相对目录范围。
+- 每个受影响路径都要落在允许相对根目录内。
+- 不信任前端项目范围，仍使用服务端项目 ID 和角色校验。
+- 响应只返回项目内展示路径、相对目录、安全状态和 traceId，不返回真实物理路径。
 
 ## 6. 前端改动
 
-文件管理页新增 M2A 入口：
+文件管理页新增真实 NAS 写入灰度状态提示：
 
-- 上传文件
-- 新建文件夹
-- 重命名当前文件夹
-- 移动当前文件夹
-- 删除到隔离区
-- 隔离区
-- 操作记录
-- 文件行级重命名 / 移动 / 删除到隔离区
+- 未开启时显示“真实 NAS 写入灰度未开启”。
+- 开启时显示“真实 NAS 写入灰度已开启”。
+- 展示允许角色、可写范围、禁用原因。
+- 加载失败时按不可写处理。
 
-前端行为：
+写操作入口已叠加灰度判断：
 
-- 按当前项目角色显示或禁用操作。
-- 写操作前弹出确认，明确“将直接操作公司 NAS 文件；不会读取文件正文；不会永久删除；不会展示真实 NAS 绝对路径”。
-- 成功后展示操作编号和 traceId。
-- 隔离区与操作记录抽屉只显示脱敏路径。
-- UI 冒烟已确认项目 503 文件管理页入口存在；操作记录抽屉文案显示“不展示真实 NAS 绝对路径”。未在真实项目 UI 上触发任何写操作。
+- 上传文件。
+- 新建文件夹。
+- 重命名当前文件夹。
+- 移动当前文件夹。
+- 删除到隔离区。
+- 隔离区恢复。
 
-## 7. 脚本验证
+UI 冒烟结果：
 
-新增 `scripts/dev/check-m2a-controlled-nas-write.sh`。
+- 已在 `http://127.0.0.1:5173/data-steward/assets/503?tab=files` 登录 `platform.admin` 查看真实项目 503。
+- 文件管理页正常展示真实文件列表。
+- 页面提示“真实 NAS 写入灰度未开启”。
+- 上传、新建文件夹、重命名、移动等按钮均为禁用状态。
+- 未在真实项目页面触发任何写操作。
 
-脚本使用独立临时项目和临时目录，不触碰真实项目 NAS 数据，覆盖：
+## 7. M2A 脚本兼容修复
+
+由于 M2B 默认关闭真实 NAS 写入，已同步更新 `scripts/dev/check-m2a-controlled-nas-write.sh`：
+
+- 脚本创建独立临时项目后，为该临时项目写入启用状态的灰度配置。
+- 允许根目录为项目根。
+- 允许角色为 `DELIVERY_ENGINEER`、`PROJECT_ADMIN`。
+- 脚本清理时软删除对应灰度配置。
+
+更新后 M2A 仍可验证底层受控写能力，同时不改变真实项目默认关闭策略。
+
+## 8. M2B 专项脚本
+
+新增 `scripts/dev/check-m2b-nas-write-trial.sh`。
+
+覆盖项：
 
 - 管理员登录。
-- 创建测试项目与路径映射。
-- 创建文件夹。
-- 上传文件。
-- 文件重命名、移动、删除到隔离区、恢复。
-- 目录重命名、移动、删除到隔离区、恢复。
-- 查看者写操作拒绝。
-- 未授权用户拒绝。
-- 路径穿越拒绝。
-- 操作记录和隔离区响应 forbidden-field scan。
-- 审计记录检查。
-- 恢复后文件状态回到 `PROCESSED`。
+- 创建独立临时项目和临时 NAS 根目录。
+- 默认无灰度配置时写入被拒绝，磁盘无新增。
+- 管理员开启项目灰度配置。
+- 仅允许 `trial-zone` 项目内相对目录。
+- 根目录状态不可写。
+- 允许目录内创建目录和上传文件。
+- 允许目录外创建、移动被拒绝。
+- 查看者被拒绝。
+- 关闭开关后写入再次被拒绝。
+- 响应 forbidden-field scan。
+- 审计记录存在。
 
-结果：`PASS=20 FAIL=0`。
+结果：`PASS=18 FAIL=0`。
 
-## 8. 自测命令与结果
+## 9. 自测命令与结果
 
 - `cd backend && ./mvnw -pl delivery-app -am -DskipTests package`：通过。
 - `corepack pnpm --dir frontend build`：通过。
 - `curl -fsS http://127.0.0.1:8080/actuator/health`：`{"status":"UP"}`。
-- `bash scripts/dev/check-m2a-controlled-nas-write.sh`：`PASS=20 FAIL=0`。
+- `bash scripts/dev/check-m2b-nas-write-trial.sh`：`PASS=18 FAIL=0`。
+- `bash scripts/dev/check-m2a-controlled-nas-write.sh`：`PASS=21 FAIL=0`。
 - `bash scripts/dev/check-m1f-employee-access-control.sh`：`PASS=20 FAIL=0`。
 - `bash scripts/dev/check-m1e-file-task-continuity.sh`：`PASS=10 FAIL=0`。
 - `bash scripts/dev/check-m1d-standard-delivery-loop.sh`：`PASS=29 FAIL=0`。
 - `bash scripts/dev/check-m1c-real-project-masterdata.sh`：`PASS=14 FAIL=0`。
-- `bash scripts/dev/check-phase2-batch4-file-access.sh`：`PASS=18 FAIL=0`。
 - `git diff --check`：通过。
 
-## 9. raw path / forbidden-field scan
+后端当前已重新启动并通过健康检查。
 
-脚本执行过程中曾发现目录响应里把 `/private/tmp/...` 识别成可展示路径的风险，已修复路径判定规则，将 `/Users/`、`/tmp/`、`/private/`、`/var/` 等本机物理路径纳入物理路径识别。
+## 10. raw path / forbidden-field scan
 
-最终结果：
+M2B 专项脚本对灰度状态、操作记录、隔离区响应执行 forbidden-field scan。
 
-- M2A 操作记录响应：未发现 raw path / storage path / NAS 绝对路径 / SQL / secret。
-- M2A 隔离区响应：未发现 raw path / storage path / NAS 绝对路径 / SQL / secret。
-- 前端只显示 `displayPath` / 项目内相对路径。
+结果：
 
-说明：平台既有 `data_file_resources` 内部仍保存 `storage_uri` 作为资产元数据模型的一部分，本轮未重构该历史内部存储；M2A 新接口和文件管理展示不把它返回到前端。
+- 未发现 raw path。
+- 未发现 `storage_path`。
+- 未发现 `storage_uri`。
+- 未发现 NAS 绝对路径。
+- 未发现 SQL。
+- 未发现 raw DB row。
+- 未发现 secret / token / password 真值。
 
-## 10. 边界确认
+前端真实项目 503 冒烟只显示项目内目录名、文件名、平台文件 ID、灰度状态和相对可写范围；未展示真实 NAS 绝对路径。
 
-- 是否触碰真实项目 NAS 文件：否，验证只使用临时目录。
-- 是否开放真实项目受控 NAS 写接口：是，仅限 M2A 允许的低风险操作。
+## 11. 边界确认
+
+- 是否触碰真实项目 NAS 文件：否。
+- 是否对真实项目默认开放写入：否，默认关闭。
+- 是否新增可控灰度开关：是。
+- 是否允许配置项目内相对写入范围：是。
+- 是否保留 M2A 角色边界：是。
 - 是否永久删除：否。
 - 是否批量操作：否。
 - 是否跨项目移动：否。
-- 是否读取文件正文：否。
+- 是否读取 PDF / Office / DWG / RVT 正文：否。
 - 是否 parser / writer / indexing：否。
 - 是否修改 Hermes：否。
+- 是否开放 Agent/Hermes 写操作：否。
 - 是否修改 `docs/**`：否。
 - 是否生产发布：否。
 
-## 11. 已知风险
+## 12. 已知风险
 
-- 当前 M2A 是受控写操作底座，不代表生产 rollout；真实项目试用前仍建议由主 agent 和测试 agent 明确项目、账号、角色、可操作目录和回滚方式。
-- 有多个路径映射的项目会按启用映射的排序选择根目录，正式放开前建议复核真实项目路径映射配置。
-- 既有扫描导入的空物理目录如果没有文件元数据，只有被平台创建或登记后才会稳定出现在目录树。
-- 隔离恢复遇到目标路径冲突会拒绝，需要人工处理冲突。
-- 旧批次中已有删除审批等能力仍保留；M2A 新接口没有新增永久删除入口。
+- M2B 只是灰度试运行安全闸门，不代表生产 rollout。
+- 真实项目要开放写入前，需要主 agent 明确项目、账号、角色、可写相对目录和回滚方式。
+- 当前前端只展示灰度状态，不提供完整配置管理台；灰度配置接口和脚本已具备，后续可由管理中心补 UI。
+- 如果允许根目录尚不存在，前端在项目根目录处会因当前目录不可写而不能直接创建该根目录；真实试运行建议先配置已有安全目录，或由管理员按计划临时放宽后再收紧。
+- 既有 M2A 操作仍会真实修改被允许目录内的 NAS 文件，因此测试 agent 不应在真实业务目录上随意做写入验证。
 
-## 12. 未完成事项
+## 13. 未完成事项
 
 - 未做永久删除。
 - 未做批量上传 / 批量移动 / 批量删除。
-- 未做目录级细粒度权限。
+- 未做目录级细粒度权限模型。
+- 未做灰度配置管理前端页面。
 - 未做 NAS 扫描任务扩展。
 - 未做 parser / writer / indexing。
 - 未做 Hermes、G4、8B、8C、9A。
 - 未做生产部署。
 
-## 13. 建议给测试 Agent 的重点
+## 14. 建议给测试 Agent 的重点
 
-请测试 agent 使用真实后端和前端复核 M2A，但所有写操作优先使用脚本创建的临时项目或专门测试目录，不要在真实业务目录上直接做破坏性验证。
+请测试 agent 按 M2B 范围复核，不要把 M2B 解释为真实项目全量开放 NAS 写入。
 
-重点复核：
+重点：
 
-- M2A 脚本 `PASS=20 FAIL=0` 可重复运行。
-- 管理员、交付工程师、查看者、未授权用户权限边界。
-- 上传、新建目录、重命名、移动、隔离、恢复的文件系统结果和数据库元数据同步。
-- 操作记录、隔离区、文件管理页不展示真实 NAS 绝对路径。
-- 禁止路径穿越、跨项目移动、覆盖冲突。
-- M1F / M1E / M1D / M1C / Phase2 batch4 回归不退化。
+- `scripts/dev/check-m2b-nas-write-trial.sh` 可重复运行并保持 `PASS=18 FAIL=0`。
+- 默认无灰度配置时，真实项目写操作全部关闭。
+- 灰度开启后，只有允许角色、允许用户、允许相对目录同时满足时才允许写。
+- 目录外写入、移动到目录外、查看者写入、关闭开关后写入均被拒绝。
+- M2A 脚本仍可通过，证明底层受控写能力未回归。
+- M1F / M1E / M1D / M1C 回归不退化。
+- 前端文件管理页能清楚显示灰度状态、可写范围和禁用原因。
+- 真实项目 UI 冒烟只读查看，不触发真实写操作。
+- 所有响应 forbidden-field scan 不出现 raw path / `storage_path` / `storage_uri` / NAS 绝对路径 / SQL / raw DB row / secret。

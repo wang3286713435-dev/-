@@ -174,6 +174,7 @@ switch_project() {
 cleanup() {
   if [[ -n "${PROJECT_ID}" ]]; then
     mysql_exec "UPDATE data_nas_operation_records SET message=message WHERE project_id=${PROJECT_ID};" >/dev/null 2>&1 || true
+    mysql_exec "UPDATE data_nas_write_trial_configs SET deleted=1, delete_token=id WHERE project_id=${PROJECT_ID};" >/dev/null 2>&1 || true
     mysql_exec "UPDATE data_file_resources SET deleted=1, delete_token=id WHERE project_id=${PROJECT_ID};" >/dev/null 2>&1 || true
     mysql_exec "UPDATE data_nas_directory_records SET deleted=1, delete_token=id WHERE project_id=${PROJECT_ID};" >/dev/null 2>&1 || true
     mysql_exec "UPDATE data_asset_project_path_mappings SET deleted=1, delete_token=id WHERE project_id=${PROJECT_ID};" >/dev/null 2>&1 || true
@@ -195,6 +196,13 @@ VALUES ('${PROJECT_CODE}', '${PROJECT_NAME}', 'BIM', 'SMOKE', 'M2A', 'ACTIVE', '
 PROJECT_ID="$(mysql_exec "SELECT id FROM core_projects WHERE code='${PROJECT_CODE}' AND deleted=0 ORDER BY id DESC LIMIT 1;")"
 mysql_exec "INSERT INTO data_asset_project_path_mappings (project_id, provider_code, nas_path, match_strategy, enabled, sort_order, remark, created_by, updated_by)
 VALUES (${PROJECT_ID}, 'NAS', '${NAS_ROOT}', 'PREFIX', 1, -100, 'M2A smoke isolated root', 1, 1);"
+mysql_exec "INSERT INTO data_nas_write_trial_configs (
+  project_id, enabled, allowed_relative_roots_json, allowed_role_codes_json,
+  allowed_user_ids_json, trial_mode_notice, created_by, updated_by
+) VALUES (
+  ${PROJECT_ID}, 1, JSON_ARRAY(''), JSON_ARRAY('DELIVERY_ENGINEER', 'PROJECT_ADMIN'),
+  JSON_ARRAY(), 'M2A regression enables the isolated temporary project root only.', 1, 1
+);"
 mysql_exec "INSERT INTO core_user_project_roles (user_id, project_id, role_id)
 SELECT u.id, ${PROJECT_ID}, r.id FROM core_users u JOIN core_roles r ON r.code='PROJECT_ADMIN'
 WHERE u.username='${ADMIN_USER}'

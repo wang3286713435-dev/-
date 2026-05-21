@@ -12,6 +12,8 @@ import com.zhuoyu.delivery.datasteward.nas.dto.ControlledNasDtos.FileRenameReque
 import com.zhuoyu.delivery.datasteward.nas.dto.ControlledNasDtos.NasOperationRecordResponse;
 import com.zhuoyu.delivery.datasteward.nas.dto.ControlledNasDtos.NasOperationResponse;
 import com.zhuoyu.delivery.datasteward.nas.dto.ControlledNasDtos.NasQuarantineRecordResponse;
+import com.zhuoyu.delivery.datasteward.nas.dto.ControlledNasDtos.NasWriteTrialConfigRequest;
+import com.zhuoyu.delivery.datasteward.nas.dto.ControlledNasDtos.NasWriteTrialStatusResponse;
 import com.zhuoyu.delivery.shared.api.ApiResponse;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -38,6 +41,26 @@ public class ControlledNasController {
     ) {
         this.securityPrincipalAccessor = securityPrincipalAccessor;
         this.controlledNasApplicationService = controlledNasApplicationService;
+    }
+
+    @GetMapping("/write-trial")
+    public ApiResponse<NasWriteTrialStatusResponse> getWriteTrialStatus(
+        @PathVariable Long projectId,
+        @RequestParam(required = false) String directoryPath
+    ) {
+        var principal = requirePrincipal();
+        return ApiResponse.success(controlledNasApplicationService.getWriteTrialStatus(
+            principal.userId(), projectId, directoryPath));
+    }
+
+    @PutMapping("/write-trial")
+    public ApiResponse<NasWriteTrialStatusResponse> updateWriteTrialConfig(
+        @PathVariable Long projectId,
+        @RequestBody(required = false) NasWriteTrialConfigRequest request
+    ) {
+        var principal = requirePrincipal();
+        return ApiResponse.success(controlledNasApplicationService.updateWriteTrialConfig(
+            principal.userId(), projectId, request));
     }
 
     @PostMapping("/directories")

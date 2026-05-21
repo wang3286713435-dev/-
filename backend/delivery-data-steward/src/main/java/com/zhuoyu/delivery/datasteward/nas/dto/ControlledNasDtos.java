@@ -54,6 +54,34 @@ public final class ControlledNasDtos {
     ) {
     }
 
+    public record NasWriteTrialConfigRequest(
+        Boolean enabled,
+        List<String> allowedRelativeRoots,
+        List<String> allowedRoleCodes,
+        List<Long> allowedUserIds,
+        String trialModeNotice
+    ) {
+    }
+
+    public record NasWriteTrialStatusResponse(
+        Long projectId,
+        boolean enabled,
+        List<String> allowedRelativeRoots,
+        List<String> allowedRoleCodes,
+        List<Long> allowedUserIds,
+        String trialModeNotice,
+        String currentUserRoleCode,
+        boolean roleAllowed,
+        boolean accountAllowed,
+        boolean directoryAllowed,
+        boolean canWrite,
+        String checkedDirectory,
+        String disabledReason,
+        String traceId,
+        Instant updatedAt
+    ) {
+    }
+
     public record NasOperationResponse(
         Long operationId,
         Long projectId,

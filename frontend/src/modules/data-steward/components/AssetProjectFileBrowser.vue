@@ -91,6 +91,18 @@
         </div>
       </div>
 
+      <el-alert
+        class="file-browser__trial-alert"
+        :type="nasTrialAlertType"
+        show-icon
+        :closable="false"
+      >
+        <template #title>
+          <strong>{{ nasTrialTitle }}</strong>
+          <span>{{ nasTrialSummary }}</span>
+        </template>
+      </el-alert>
+
       <div class="file-browser__continuity" data-m1e-continuity-bar>
         <div>
           <strong>{{ continuityTitle }}</strong>
@@ -263,7 +275,7 @@
           <el-button
             size="small"
             type="primary"
-            :disabled="item.status !== 'QUARANTINED' || !canAdminNas || nasBusy"
+            :disabled="item.status !== 'QUARANTINED' || !canAdminNasProjectTrial || nasBusy"
             @click="restoreQuarantineItem(item.quarantineRecordId)"
           >
             恢复
@@ -285,6 +297,7 @@ import {
   createNasDirectory,
   fetchCatalogDirectories,
   fetchCatalogFiles,
+  fetchNasWriteTrialStatus,
   fetchNasOperations,
   fetchNasQuarantine,
   moveNasDirectory,
@@ -299,7 +312,8 @@ import {
   type CatalogFile,
   type AssetDiscipline,
   type NasOperationRecord,
-  type NasQuarantineRecord
+  type NasQuarantineRecord,
+  type NasWriteTrialStatus
 } from '@/modules/data-steward/api/dataSteward';
 import DirectoryTreePanel from '@/modules/data-steward/components/DirectoryTreePanel.vue';
 import { useAuthStore } from '@/stores/auth';
@@ -352,6 +366,7 @@ const directories = ref<CatalogDirectory[]>([]);
 const files = ref<CatalogFile[]>([]);
 const nasOperations = ref<NasOperationRecord[]>([]);
 const nasQuarantine = ref<NasQuarantineRecord[]>([]);
+const nasTrialStatus = ref<NasWriteTrialStatus | null>(null);
 const activeDir = ref('');
 const expandedDirs = ref<string[]>([]);
 const lastFileId = ref<number | null>(null);
@@ -365,6 +380,8 @@ const operationsDrawerVisible = ref(false);
 const quarantineDrawerVisible = ref(false);
 const operationsLoading = ref(false);
 const quarantineLoading = ref(false);
+const nasTrialLoading = ref(false);
+const nasTrialLoadFailed = ref(false);
 const advancedSearchVisible = ref(false);
 const treeWidth = ref(DEFAULT_TREE_WIDTH);
 const resizingTree = ref(false);
@@ -433,26 +450,57 @@ const currentProjectRole = computed(() => {
   return current?.roleCode ?? authStore.currentUser?.currentProject?.roleCode ?? '';
 });
 
-const canWriteNas = computed(() => ['DELIVERY_ENGINEER', 'PROJECT_ADMIN'].includes(currentProjectRole.value));
-const canAdminNas = computed(() => currentProjectRole.value === 'PROJECT_ADMIN');
+const hasNasWriteRole = computed(() => ['DELIVERY_ENGINEER', 'PROJECT_ADMIN'].includes(currentProjectRole.value));
+const canWriteNas = computed(() => hasNasWriteRole.value && Boolean(nasTrialStatus.value?.canWrite));
+const canAdminNasProjectTrial = computed(() => currentProjectRole.value === 'PROJECT_ADMIN'
+  && Boolean(nasTrialStatus.value?.enabled)
+  && Boolean(nasTrialStatus.value?.roleAllowed)
+  && Boolean(nasTrialStatus.value?.accountAllowed));
+const canAdminNas = computed(() => currentProjectRole.value === 'PROJECT_ADMIN' && Boolean(nasTrialStatus.value?.canWrite));
 const canOperateActiveDirectory = computed(() => canWriteNas.value && Boolean(activeDir.value));
 const canQuarantineActiveDirectory = computed(() => canAdminNas.value && Boolean(activeDir.value));
 
 const nasWriteActionTip = computed(() => {
-  if (canWriteNas.value) return '将直接操作公司 NAS 文件，平台会做权限、路径和审计校验。';
-  return '当前项目角色只能查看，不能操作公司 NAS 文件。';
+  if (nasTrialLoading.value) return '正在读取真实 NAS 写入灰度状态。';
+  if (canWriteNas.value) return '当前目录已开启真实 NAS 写入灰度，平台会做权限、路径和审计校验。';
+  if (!hasNasWriteRole.value) return '当前项目角色只能查看，不能操作公司 NAS 文件。';
+  return nasTrialStatus.value?.disabledReason || '当前目录暂不可执行真实 NAS 写操作。';
 });
 
 const activeDirectoryActionTip = computed(() => {
-  if (!canWriteNas.value) return '当前项目角色只能查看，不能操作公司 NAS 文件。';
+  if (!canWriteNas.value) return nasWriteActionTip.value;
   if (!activeDir.value) return '请先在左侧选择一个项目内文件夹。';
   return '将直接操作当前文件夹，平台会校验路径不越出项目。';
 });
 
 const quarantineActionTip = computed(() => {
-  if (!canAdminNas.value) return '删除到隔离区和恢复仅限项目管理员。';
+  if (currentProjectRole.value !== 'PROJECT_ADMIN') return '删除到隔离区和恢复仅限项目管理员。';
+  if (!canAdminNas.value) return nasTrialStatus.value?.disabledReason || '当前目录暂不可执行真实 NAS 写操作。';
   if (!activeDir.value) return '请先选择要隔离的文件夹。';
   return '删除只会移入隔离区，不提供永久删除。';
+});
+
+const nasTrialAlertType = computed(() => {
+  if (nasTrialLoadFailed.value) return 'error';
+  if (!nasTrialStatus.value?.enabled) return 'info';
+  return canWriteNas.value ? 'warning' : 'info';
+});
+
+const nasTrialTitle = computed(() => {
+  if (nasTrialLoadFailed.value) return '真实 NAS 写入灰度状态加载失败';
+  if (!nasTrialStatus.value?.enabled) return '真实 NAS 写入灰度未开启';
+  return '真实 NAS 写入灰度已开启';
+});
+
+const nasTrialSummary = computed(() => {
+  if (nasTrialLoadFailed.value) return '为避免误操作，当前页面已禁用真实 NAS 写按钮；请稍后刷新。';
+  if (!nasTrialStatus.value) return '正在确认当前项目的灰度开关、可写目录和账号边界。';
+  const roots = nasTrialStatus.value.allowedRelativeRoots.length
+    ? nasTrialStatus.value.allowedRelativeRoots.map(formatAllowedRoot).join('、')
+    : '未配置可写目录';
+  const roles = nasTrialStatus.value.allowedRoleCodes.join('、') || '未配置角色';
+  const reason = nasTrialStatus.value.canWrite ? '当前目录允许操作。' : nasTrialStatus.value.disabledReason;
+  return `可写范围：${roots}；允许角色：${roles}；${reason}`;
 });
 
 const continuityTitle = computed(() => lastFileId.value ? '已恢复项目文件管理位置' : '文件管理会记住本项目位置');
@@ -509,10 +557,18 @@ watch(
   () => [props.projectId, props.initialQualityIssue] as const,
   () => {
     initializeBrowserState();
+    void loadNasWriteTrialStatus();
     void loadDirectories();
     void loadFiles();
   },
   { immediate: true }
+);
+
+watch(
+  () => [props.projectId, activeDir.value] as const,
+  () => {
+    void loadNasWriteTrialStatus();
+  }
 );
 
 watch(
@@ -678,6 +734,21 @@ function resetViewState() {
   ElMessage.success('文件管理视图已重置');
 }
 
+async function loadNasWriteTrialStatus() {
+  if (!Number.isFinite(props.projectId)) return;
+  nasTrialLoading.value = true;
+  nasTrialLoadFailed.value = false;
+  try {
+    nasTrialStatus.value = await fetchNasWriteTrialStatus(props.projectId, activeDir.value);
+  } catch (error) {
+    nasTrialStatus.value = null;
+    nasTrialLoadFailed.value = true;
+    ElMessage.error(error instanceof Error ? error.message : '真实 NAS 写入灰度状态加载失败');
+  } finally {
+    nasTrialLoading.value = false;
+  }
+}
+
 async function loadDirectories() {
   if (!Number.isFinite(props.projectId)) return;
   const requestId = ++directoryRequestId;
@@ -740,7 +811,7 @@ async function runNasOperation(action: () => Promise<{ operationId: number; mess
   try {
     const result = await action();
     ElMessage.success(`${result.message}。操作编号 ${result.operationId}，traceId ${result.traceId}`);
-    await Promise.all([loadDirectories(), loadFiles(), loadNasOperations(false), loadNasQuarantine(false)]);
+    await Promise.all([loadNasWriteTrialStatus(), loadDirectories(), loadFiles(), loadNasOperations(false), loadNasQuarantine(false)]);
     return true;
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '真实 NAS 操作失败，平台未执行永久删除');
@@ -1092,6 +1163,10 @@ function pathLeaf(path: string) {
   return parts.at(-1) ?? '项目根目录';
 }
 
+function formatAllowedRoot(path: string) {
+  return path ? path : '项目根目录';
+}
+
 function parentPath(path: string) {
   const parts = splitPath(path);
   return parts.length <= 1 ? '' : parts.slice(0, -1).join('/');
@@ -1301,6 +1376,26 @@ function formatDate(value: string | null | undefined) {
 
 .file-browser__search .el-input {
   width: 240px;
+}
+
+.file-browser__trial-alert {
+  margin-bottom: 12px;
+}
+
+.file-browser__trial-alert :deep(.el-alert__title) {
+  display: grid;
+  gap: 4px;
+  line-height: 1.5;
+}
+
+.file-browser__trial-alert strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.file-browser__trial-alert span {
+  color: #475569;
+  font-size: 12px;
 }
 
 .file-browser__chevron {
