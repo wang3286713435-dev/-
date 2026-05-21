@@ -56,7 +56,7 @@ const context = ref<VisualizationContext | null>(null);
 const selectedObjectId = ref<number | null>(null);
 
 const projectId = computed(() => authStore.currentProjectId);
-const projectLabel = computed(() => authStore.currentUser?.currentProject.name ?? '等待项目上下文');
+const projectLabel = computed(() => authStore.currentUser?.currentProject?.name ?? '等待项目上下文');
 
 watch(projectId, () => loadPage(), { immediate: true });
 

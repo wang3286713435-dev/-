@@ -1,239 +1,208 @@
-# 开发 Agent 报告：M1E 文件管理连续工作体验与后台任务可追踪性收口
+# 开发 Agent 报告：M2A NAS 受控文件操作安全底座
 
-时间：2026-05-20
+时间：2026-05-21 16:49 CST
 
 ## 1. 本轮目标
 
-本轮按 `handoff/dev-agent/current-prompt.md` 执行 `M1E：文件管理连续工作体验与后台任务可追踪性收口`。
+完成 M2A：在已完成 M1F 的基础上，补齐真实项目 NAS 受控文件操作安全底座第一批能力。
 
-目标：
+本轮仅开放低风险受控写操作：项目内新建文件夹、上传文件、重命名、移动、删除到隔离区、从隔离区恢复、操作记录与元数据同步。未开放永久删除、批量操作、跨项目移动、parser / writer / indexing、Hermes 扩展、生产发布。
 
-- 文件管理按项目记住目录、筛选、分页、展开目录和最近文件。
-- 文件 ID、项目内部 ID、checksum 任务 ID 改成业务可理解文案。
-- checksum 后台任务在项目文件管理页可见、可理解、可重试。
-- 任务详情、失败原因、文件详情继续脱敏，不暴露真实 NAS 路径。
+## 2. 读取与审计
 
-完成承诺：
-
-`<promise>MAINLINE_M1E_FILE_TASK_CONTINUITY_COMPLETE</promise>`
-
-## 2. Git 与路线边界
-
-- 当前分支：`codex/platform-m1e-file-task-continuity`
-- 当前基线提交：`d2d8006`
-- 当前 active 批次：确认是 `M1E`
-- G4 / Hermes / 8B / 8C / 9A：确认冻结，未扩展
-- 未修改 `docs/**`
-- 未新增数据库迁移
-- 未读取 PDF / Office / DWG / RVT / IFC 正文
-- 未做 BIM 轻量化、构件解析、selective indexing
-- 未触碰真实 NAS 增删改查
-- 未写 Hermes memory / OpenSearch / Qdrant / MinIO documents/chunks
-- 未创建子 agent，未调用 Claude Code
-
-## 3. 读取材料
+已读取并对齐：
 
 - `handoff/dev-agent/current-prompt.md`
 - `handoff/main-agent/status.md`
 - `handoff/main-agent/development-log.md`
 - `handoff/main-agent/phase2-current-roadmap.md`
 - `handoff/main-agent/mainline-git-governance-and-hermes-freeze.md`
-- `handoff/main-agent/m1d-standard-delivery-loop-closure.md`
-- `handoff/main-agent/m1e-file-task-continuity-plan.md`
+- `handoff/main-agent/m2a-controlled-nas-write-plan.md`
 - `handoff/dev-agent/latest-report.md`
 - `handoff/test-agent/latest-report.md`
 - `docs/07-complete-delivery-prd.md`
 - `docs/08-acceptance-and-agent-integration.md`
 - `docs/10-phase2-development-roadmap.md`
 
-## 4. 文件管理状态记忆
+工作区审计结果：
 
-实现方式：
+- 当前分支：`codex/platform-m1e-file-task-continuity`
+- 基线提交：`4a58365`
+- M1F 员工注册、权限管理与局域网试运行相关改动已在工作区内存在，本轮未回退。
+- 本轮新增 M2A 文件与改动均保持在 NAS 受控操作范围内。
+- 未修改 `docs/**`。
 
-- URL query 保存可恢复关键状态：
-  - `tab=files`
-  - `fileDir`
-  - `fileKeyword`
-  - `fileKind`
-  - `discipline`
-  - `fileExt`
-  - `qualityIssue`
-  - `filePage`
-  - `filePageSize`
-  - `lastFileId`
-- localStorage 按项目保存完整最近状态：
-  - 当前目录
-  - 搜索关键词
-  - 文件类型、专业、扩展名、质量问题
-  - 页码、页大小
-  - 展开的目录
-  - 最近打开的文件 ID 和文件名
-
-前端新增：
-
-- 文件管理状态条：说明当前恢复的目录、筛选、页码和最近文件。
-- `打开最近文件` 入口。
-- `重置视图` 入口，清空 query 和 localStorage 中该项目的文件管理状态。
-- 目录树展开状态受控化，活动目录的父级会自动展开。
-
-## 5. ID 文案业务化
-
-- 文件表格从 `文件ID` 改为 `平台文件ID`。
-- 文件详情抽屉展示 `平台文件ID`、文件名、项目编码 / 名称、`项目平台内部ID`。
-- 项目工作台顶部如展示项目数字 ID，标注为 `平台内部ID`。
-- checksum 任务统一展示为 `后台任务编号 #xxx`。
-- checksum 任务始终绑定文件名和 `平台文件ID` 展示。
-
-## 6. checksum 任务可追踪
-
-项目文件管理页新增轻量任务区域：
-
-- 展示最近 checksum 后台任务。
-- 展示后台任务编号、对应文件、平台文件 ID、状态、进度、失败原因、更新时间。
-- 失败任务可直接重试。
-- 点击“查看”打开任务详情弹窗。
-
-任务详情弹窗补齐：
-
-- 后台任务编号。
-- 对应文件名。
-- 平台文件 ID。
-- 状态。
-- 进度。
-- 创建时间、更新时间、开始时间、完成时间。
-- 脱敏失败原因。
-- 失败任务重试入口。
-
-后端补齐：
-
-- 新增 `AssetJobResponseSanitizer`。
-- `JobApplicationService` 的任务列表和任务详情返回脱敏结果。
-- `ChecksumApplicationService` 创建 checksum 任务后返回脱敏任务。
-- `AgentApplicationService` 的任务列表、详情和触发 checksum 返回也复用脱敏结果。
-- DB 内部任务 payload 仍供 worker 使用，API response 不返回 raw storage path。
-
-## 7. 路径脱敏
-
-前端：
-
-- 文件详情不再展示 `logicalPath` 原文；改为 `path_hint` 文案。
-- 存储路径继续显示为“底层路径已隐藏，请使用平台受控预览或下载入口”。
-- 任务失败原因通过 `safePathText` 脱敏。
+## 3. 改动文件列表
 
 后端：
 
-- 任务 `requestPayload` 返回为脱敏占位：
-  - `{"sanitized":true,"reason":"path_not_exposable"}`
-- 任务 `failureReason` 如包含底层路径，返回：
-  - `文件不存在，底层路径已隐藏`
-  - 或等价脱敏说明
+- `backend/delivery-app/src/main/resources/db/migration/V22__m2a_controlled_nas_write_foundation.sql`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/CatalogApplicationService.java`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/controller/ControlledNasController.java`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/application/ControlledNasApplicationService.java`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/repository/ControlledNasRepository.java`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/dto/ControlledNasDtos.java`
 
-已验证 response 与前端可见文本未发现：
+前端：
 
-- raw NAS path
-- `/Volumes`
-- `/Users`
-- `/tmp`
-- `nas://`
-- `smb://`
-- `storage_path`
-- `storage_uri`
-- `storagePath`
-- `storageUri`
-- raw row
-- SQL
-- token / secret / password
-
-## 8. 105/503 与 93/506 抽查
-
-浏览器抽查：
-
-- `/data-steward/assets/503?tab=files`
-  - checksum 后台任务区可见。
-  - 文件管理状态条可见。
-  - 搜索关键词写入 URL query。
-  - 离开文件管理再回来可恢复关键词。
-  - 点击目录树目录后，`fileDir` 写入 URL query。
-  - 离开后再回到文件管理，可恢复目录上下文。
-  - 重置视图可清除关键词和 query。
-- `/data-steward/assets/506?tab=files`
-  - checksum 后台任务区可见。
-  - 文件管理状态条可见。
-  - 页面可见文本未发现路径泄露。
-
-写链路使用隔离测试文件资源验证，没有对真实项目执行 NAS 写操作。
-
-## 9. 修改文件清单
-
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/AgentApplicationService.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/ChecksumApplicationService.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/JobApplicationService.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/AssetJobResponseSanitizer.java`
+- `frontend/src/modules/data-steward/api/dataSteward.ts`
 - `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
-- `frontend/src/modules/data-steward/components/DirectoryTreePanel.vue`
-- `frontend/src/modules/data-steward/components/DirectoryTreeNodeItem.vue`
-- `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
-- `scripts/dev/check-m1e-file-task-continuity.sh`
-- `scripts/dev/check-checksum-job-visibility.sh`
-- `handoff/dev-agent/latest-report.md`
 
-注意：
+脚本：
 
-- `handoff/dev-agent/real-nas-100-employee-flow.md` 是本轮开始前已存在的未跟踪文件，不属于 M1E 代码改动。
-- `tmp/**` 下未跟踪文件为本机运行态残留，本轮未纳入交付。
+- `scripts/dev/check-m2a-controlled-nas-write.sh`
 
-## 10. 自测结果
+## 4. 数据库迁移
 
-- 后端构建：通过
-  - `cd backend && ./mvnw -pl delivery-app -am -DskipTests package`
-- 前端构建：通过
-  - `corepack pnpm --dir frontend build`
-  - 仅有既存 Vite chunk size warning
-- 后端健康检查：通过
-  - `curl -fsS http://127.0.0.1:8080/actuator/health`
-  - 返回 `{"status":"UP"}`
-- M1E 专项脚本：通过
-  - `bash scripts/dev/check-m1e-file-task-continuity.sh`
-  - `PASS=10 FAIL=0`
-- Batch4 文件访问回归：通过
-  - `PASS=18 FAIL=0`
-- Batch5B 数据管家模块回归：通过
-  - `PASS=16 FAIL=0`
-- M1C 真实项目主数据回归：通过
-  - `PASS=14 FAIL=0`
-- M1D 标准驱动交付回归：通过
-  - `PASS=29 FAIL=0`
-- checksum 任务可见性脚本：通过
-  - 已更新为失败原因脱敏口径
-- 脚本语法检查：通过
-  - `bash -n scripts/dev/check-m1e-file-task-continuity.sh scripts/dev/check-checksum-job-visibility.sh`
-- 浏览器抽查：通过
-  - `browser-m1e-ok`
-  - `browser-m1e-directory-ok`
-- `git diff --check`：通过
+新增 `V22__m2a_controlled_nas_write_foundation.sql`，未修改旧 Flyway migration。
 
-当前本地服务：
+新增表：
 
-- 后端：`127.0.0.1:8080`
-- 前端：`127.0.0.1:5173`，screen 会话 `frontend-m1e`
+- `data_nas_directory_records`：记录平台创建和管理的目录，使用项目内相对路径、路径哈希和状态，不保存前端可见真实绝对路径。
+- `data_nas_quarantine_records`：记录隔离区删除与恢复状态。
+- `data_nas_operation_records`：记录受控 NAS 操作、操作人、目标类型、安全展示路径、traceId 和状态。
 
-## 11. P0 / P1 / P2
+本地第一次迁移因 MySQL 索引长度限制失败，已将目录唯一索引改为生成列 `relative_path_hash` 后重新执行，当前 V21 / V22 Flyway 状态均为成功。
 
-P0：
+## 5. 新增后端接口
 
-- 暂无。
+新增受控 NAS 接口：
 
-P1：
+- `POST /api/data-steward/projects/{projectId}/nas/directories`
+- `PATCH /api/data-steward/projects/{projectId}/nas/directories:rename`
+- `POST /api/data-steward/projects/{projectId}/nas/directories:move`
+- `POST /api/data-steward/projects/{projectId}/nas/directories:quarantine`
+- `POST /api/data-steward/projects/{projectId}/nas/files:upload`
+- `PATCH /api/data-steward/projects/{projectId}/nas/files/{fileId}:rename`
+- `POST /api/data-steward/projects/{projectId}/nas/files/{fileId}:move`
+- `POST /api/data-steward/projects/{projectId}/nas/files/{fileId}:quarantine`
+- `POST /api/data-steward/projects/{projectId}/nas/quarantine/{recordId}:restore`
+- `GET /api/data-steward/projects/{projectId}/nas/quarantine`
+- `GET /api/data-steward/projects/{projectId}/nas/operations`
 
-- 暂无。
+权限规则：
 
-P2：
+- `DELIVERY_ENGINEER` / `PROJECT_ADMIN`：新建文件夹、上传、重命名、移动。
+- `PROJECT_ADMIN`：删除到隔离区、从隔离区恢复。
+- 普通查看者和未授权用户拒绝。
+- 项目上下文由服务端校验，不信任前端项目范围。
 
-- 前端构建仍有既存 chunk size warning，本轮未处理。
-- 文件管理视图模式仍是现有表格视图；本轮只收口连续工作状态和任务追踪，没有扩展图标视图或多视图切换。
+安全规则：
 
-## 12. 是否建议进入 M1E 测试验收
+- 禁止 `..`、绝对路径、`~`、`:`、空字节、重复分隔符、保留目录 `.delivery-quarantine`。
+- 禁止跨项目移动。
+- 冲突时不覆盖现有文件或目录。
+- 隔离删除只移动到项目内 `.delivery-quarantine`，不做永久删除。
+- 上传只写入用户选择的文件字节并登记目录元数据，不读取 PDF / Office / DWG / RVT 正文，不做解析、不做索引。
+- 响应只返回项目内展示路径、操作编号、traceId、状态等安全字段，不返回真实 NAS 绝对路径。
 
-建议进入测试 agent 验收。
+## 6. 前端改动
 
-本轮开发侧自测已通过，但不自行宣布 M1E 最终收口；最终是否收口由主 agent 和测试 agent 判断。
+文件管理页新增 M2A 入口：
+
+- 上传文件
+- 新建文件夹
+- 重命名当前文件夹
+- 移动当前文件夹
+- 删除到隔离区
+- 隔离区
+- 操作记录
+- 文件行级重命名 / 移动 / 删除到隔离区
+
+前端行为：
+
+- 按当前项目角色显示或禁用操作。
+- 写操作前弹出确认，明确“将直接操作公司 NAS 文件；不会读取文件正文；不会永久删除；不会展示真实 NAS 绝对路径”。
+- 成功后展示操作编号和 traceId。
+- 隔离区与操作记录抽屉只显示脱敏路径。
+- UI 冒烟已确认项目 503 文件管理页入口存在；操作记录抽屉文案显示“不展示真实 NAS 绝对路径”。未在真实项目 UI 上触发任何写操作。
+
+## 7. 脚本验证
+
+新增 `scripts/dev/check-m2a-controlled-nas-write.sh`。
+
+脚本使用独立临时项目和临时目录，不触碰真实项目 NAS 数据，覆盖：
+
+- 管理员登录。
+- 创建测试项目与路径映射。
+- 创建文件夹。
+- 上传文件。
+- 文件重命名、移动、删除到隔离区、恢复。
+- 目录重命名、移动、删除到隔离区、恢复。
+- 查看者写操作拒绝。
+- 未授权用户拒绝。
+- 路径穿越拒绝。
+- 操作记录和隔离区响应 forbidden-field scan。
+- 审计记录检查。
+- 恢复后文件状态回到 `PROCESSED`。
+
+结果：`PASS=20 FAIL=0`。
+
+## 8. 自测命令与结果
+
+- `cd backend && ./mvnw -pl delivery-app -am -DskipTests package`：通过。
+- `corepack pnpm --dir frontend build`：通过。
+- `curl -fsS http://127.0.0.1:8080/actuator/health`：`{"status":"UP"}`。
+- `bash scripts/dev/check-m2a-controlled-nas-write.sh`：`PASS=20 FAIL=0`。
+- `bash scripts/dev/check-m1f-employee-access-control.sh`：`PASS=20 FAIL=0`。
+- `bash scripts/dev/check-m1e-file-task-continuity.sh`：`PASS=10 FAIL=0`。
+- `bash scripts/dev/check-m1d-standard-delivery-loop.sh`：`PASS=29 FAIL=0`。
+- `bash scripts/dev/check-m1c-real-project-masterdata.sh`：`PASS=14 FAIL=0`。
+- `bash scripts/dev/check-phase2-batch4-file-access.sh`：`PASS=18 FAIL=0`。
+- `git diff --check`：通过。
+
+## 9. raw path / forbidden-field scan
+
+脚本执行过程中曾发现目录响应里把 `/private/tmp/...` 识别成可展示路径的风险，已修复路径判定规则，将 `/Users/`、`/tmp/`、`/private/`、`/var/` 等本机物理路径纳入物理路径识别。
+
+最终结果：
+
+- M2A 操作记录响应：未发现 raw path / storage path / NAS 绝对路径 / SQL / secret。
+- M2A 隔离区响应：未发现 raw path / storage path / NAS 绝对路径 / SQL / secret。
+- 前端只显示 `displayPath` / 项目内相对路径。
+
+说明：平台既有 `data_file_resources` 内部仍保存 `storage_uri` 作为资产元数据模型的一部分，本轮未重构该历史内部存储；M2A 新接口和文件管理展示不把它返回到前端。
+
+## 10. 边界确认
+
+- 是否触碰真实项目 NAS 文件：否，验证只使用临时目录。
+- 是否开放真实项目受控 NAS 写接口：是，仅限 M2A 允许的低风险操作。
+- 是否永久删除：否。
+- 是否批量操作：否。
+- 是否跨项目移动：否。
+- 是否读取文件正文：否。
+- 是否 parser / writer / indexing：否。
+- 是否修改 Hermes：否。
+- 是否修改 `docs/**`：否。
+- 是否生产发布：否。
+
+## 11. 已知风险
+
+- 当前 M2A 是受控写操作底座，不代表生产 rollout；真实项目试用前仍建议由主 agent 和测试 agent 明确项目、账号、角色、可操作目录和回滚方式。
+- 有多个路径映射的项目会按启用映射的排序选择根目录，正式放开前建议复核真实项目路径映射配置。
+- 既有扫描导入的空物理目录如果没有文件元数据，只有被平台创建或登记后才会稳定出现在目录树。
+- 隔离恢复遇到目标路径冲突会拒绝，需要人工处理冲突。
+- 旧批次中已有删除审批等能力仍保留；M2A 新接口没有新增永久删除入口。
+
+## 12. 未完成事项
+
+- 未做永久删除。
+- 未做批量上传 / 批量移动 / 批量删除。
+- 未做目录级细粒度权限。
+- 未做 NAS 扫描任务扩展。
+- 未做 parser / writer / indexing。
+- 未做 Hermes、G4、8B、8C、9A。
+- 未做生产部署。
+
+## 13. 建议给测试 Agent 的重点
+
+请测试 agent 使用真实后端和前端复核 M2A，但所有写操作优先使用脚本创建的临时项目或专门测试目录，不要在真实业务目录上直接做破坏性验证。
+
+重点复核：
+
+- M2A 脚本 `PASS=20 FAIL=0` 可重复运行。
+- 管理员、交付工程师、查看者、未授权用户权限边界。
+- 上传、新建目录、重命名、移动、隔离、恢复的文件系统结果和数据库元数据同步。
+- 操作记录、隔离区、文件管理页不展示真实 NAS 绝对路径。
+- 禁止路径穿越、跨项目移动、覆盖冲突。
+- M1F / M1E / M1D / M1C / Phase2 batch4 回归不退化。

@@ -35,6 +35,18 @@ public class PermissionRepository {
         return jdbcTemplate.query(sql, parameters, PERMISSION_ROW_MAPPER);
     }
 
+    public List<PermissionGrant> findByUser(Long userId) {
+        String sql = """
+            SELECT DISTINCT p.code, p.name
+            FROM core_user_project_roles upr
+            JOIN core_role_permissions rp ON rp.role_id = upr.role_id AND rp.deleted = 0
+            JOIN core_permissions p ON p.id = rp.permission_id AND p.deleted = 0
+            WHERE upr.user_id = :userId AND upr.deleted = 0
+            ORDER BY p.code
+            """;
+        return jdbcTemplate.query(sql, new MapSqlParameterSource("userId", userId), PERMISSION_ROW_MAPPER);
+    }
+
     private static PermissionGrant mapPermission(ResultSet resultSet, int rowNum) throws SQLException {
         return new PermissionGrant(resultSet.getString("code"), resultSet.getString("name"));
     }

@@ -100,7 +100,7 @@ const globalHermesProject = computed(() => {
   const projectId = globalHermesProjectId.value;
   if (!projectId || !authStore.currentUser) return null;
   return authStore.currentUser.projects.find((item) => item.id === projectId)
-    ?? (authStore.currentUser.currentProject.id === projectId ? authStore.currentUser.currentProject : null);
+    ?? (authStore.currentUser.currentProject?.id === projectId ? authStore.currentUser.currentProject : null);
 });
 
 const showHermesEntry = computed(() => {

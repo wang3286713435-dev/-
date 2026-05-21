@@ -73,6 +73,14 @@ body {
   margin-top: 8px;
 }
 
+.login-helper {
+  align-items: center;
+  color: #64748b;
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
 .app-layout {
   min-height: 100vh;
   display: grid;
@@ -534,6 +542,60 @@ body {
   gap: 10px;
 }
 
+.access-pending-page {
+  min-height: calc(100vh - 120px);
+  place-items: center;
+}
+
+.access-pending-panel {
+  width: min(640px, 100%);
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  padding: 18px;
+}
+
+.access-pending-copy {
+  color: #475569;
+  display: grid;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.access-pending-copy p {
+  margin: 0;
+}
+
+.employee-search {
+  width: 220px;
+}
+
+.employee-status-filter {
+  width: 130px;
+}
+
+.employee-drawer {
+  display: grid;
+  gap: 18px;
+}
+
+.employee-drawer__toolbar,
+.employee-drawer__footer {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.employee-drawer__footer {
+  justify-content: flex-end;
+}
+
+.employee-project-select,
+.employee-role-select {
+  width: 100%;
+}
+
 @media (max-width: 960px) {
   .app-layout {
     grid-template-columns: 1fr;
@@ -584,5 +646,10 @@ body {
 
   .workflow-guide {
     grid-template-columns: 1fr;
+  }
+
+  .employee-search,
+  .employee-status-filter {
+    width: 100%;
   }
 }

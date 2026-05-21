@@ -39,26 +39,38 @@
     <section class="file-browser__table">
       <div class="file-browser__actionbar">
         <div class="file-browser__safe-actions">
-          <el-tooltip :content="readonlyActionTip" placement="top">
+          <input ref="uploadInputRef" class="file-browser__upload-input" type="file" @change="handleUploadFilePicked" />
+          <el-tooltip :content="nasWriteActionTip" placement="top">
             <span>
-              <el-button type="primary" disabled :icon="Upload">上传文件</el-button>
+              <el-button type="primary" :disabled="!canWriteNas || nasBusy" :loading="uploadingNasFile" :icon="Upload" @click="openUploadPicker">
+                上传文件
+              </el-button>
             </span>
           </el-tooltip>
-          <el-tooltip :content="readonlyActionTip" placement="top">
+          <el-tooltip :content="nasWriteActionTip" placement="top">
             <span>
-              <el-button disabled :icon="FolderAdd">新建文件夹</el-button>
+              <el-button :disabled="!canWriteNas || nasBusy" :icon="FolderAdd" @click="createDirectoryAction">新建文件夹</el-button>
             </span>
           </el-tooltip>
-          <el-tooltip :content="readonlyActionTip" placement="top">
+          <el-tooltip :content="activeDirectoryActionTip" placement="top">
             <span>
-              <el-button disabled>导入文件目录</el-button>
+              <el-button :disabled="!canOperateActiveDirectory || nasBusy" @click="renameActiveDirectory">重命名当前文件夹</el-button>
             </span>
           </el-tooltip>
-          <el-tooltip :content="readonlyActionTip" placement="top">
+          <el-tooltip :content="activeDirectoryActionTip" placement="top">
             <span>
-              <el-button disabled>引入目录模板</el-button>
+              <el-button :disabled="!canOperateActiveDirectory || nasBusy" @click="moveActiveDirectory">移动当前文件夹</el-button>
             </span>
           </el-tooltip>
+          <el-tooltip :content="quarantineActionTip" placement="top">
+            <span>
+              <el-button type="danger" plain :disabled="!canQuarantineActiveDirectory || nasBusy" @click="quarantineActiveDirectory">
+                删除到隔离区
+              </el-button>
+            </span>
+          </el-tooltip>
+          <el-button :loading="quarantineLoading" @click="openQuarantineDrawer">隔离区</el-button>
+          <el-button :loading="operationsLoading" @click="openOperationsDrawer">操作记录</el-button>
         </div>
         <div class="file-browser__search">
           <el-input
@@ -192,8 +204,9 @@
                   <el-dropdown-item command="detail">详情</el-dropdown-item>
                   <el-dropdown-item command="metadata">治理</el-dropdown-item>
                   <el-dropdown-item command="checksum">补 checksum</el-dropdown-item>
-                  <el-dropdown-item disabled divided>移动</el-dropdown-item>
-                  <el-dropdown-item disabled>删除</el-dropdown-item>
+                  <el-dropdown-item :disabled="!canWriteNas || nasBusy" command="rename-file" divided>重命名</el-dropdown-item>
+                  <el-dropdown-item :disabled="!canWriteNas || nasBusy" command="move-file">移动</el-dropdown-item>
+                  <el-dropdown-item :disabled="!canAdminNas || nasBusy" command="quarantine-file">删除到隔离区</el-dropdown-item>
                   <el-dropdown-item disabled>更新版本</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -213,23 +226,83 @@
         />
       </div>
     </section>
+
+    <el-drawer v-model="operationsDrawerVisible" title="真实 NAS 操作记录" size="520px" @open="loadNasOperations">
+      <el-alert
+        class="file-browser__drawer-alert"
+        type="info"
+        show-icon
+        :closable="false"
+        title="这里仅展示受控操作记录，不展示真实 NAS 绝对路径。"
+      />
+      <div v-loading="operationsLoading" class="file-browser__drawer-list">
+        <article v-for="item in nasOperations" :key="item.operationId" class="file-browser__drawer-item">
+          <strong>{{ operationLabel(item.operationType) }} / {{ item.status }}</strong>
+          <span>{{ item.targetDisplayPath || item.sourceDisplayPath || '项目根目录' }}</span>
+          <em>操作编号 {{ item.operationId }} / traceId {{ item.traceId || '-' }} / {{ formatDate(item.createdAt) }}</em>
+        </article>
+        <el-empty v-if="!operationsLoading && nasOperations.length === 0" description="暂无受控 NAS 操作记录" :image-size="64" />
+      </div>
+    </el-drawer>
+
+    <el-drawer v-model="quarantineDrawerVisible" title="隔离区" size="560px" @open="loadNasQuarantine">
+      <el-alert
+        class="file-browser__drawer-alert"
+        type="warning"
+        show-icon
+        :closable="false"
+        title="隔离区支持恢复，不提供永久删除；列表不展示真实 NAS 绝对路径。"
+      />
+      <div v-loading="quarantineLoading" class="file-browser__drawer-list">
+        <article v-for="item in nasQuarantine" :key="item.quarantineRecordId" class="file-browser__drawer-item">
+          <div>
+            <strong>{{ item.displayName }} / {{ item.targetType }}</strong>
+            <span>{{ item.originalDisplayPath }}</span>
+            <em>隔离编号 {{ item.quarantineRecordId }} / {{ formatDate(item.createdAt) }}</em>
+          </div>
+          <el-button
+            size="small"
+            type="primary"
+            :disabled="item.status !== 'QUARANTINED' || !canAdminNas || nasBusy"
+            @click="restoreQuarantineItem(item.quarantineRecordId)"
+          >
+            恢复
+          </el-button>
+        </article>
+        <el-empty v-if="!quarantineLoading && nasQuarantine.length === 0" description="暂无隔离项" :image-size="64" />
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowDown, Document, FolderAdd, MoreFilled, Search, Upload } from '@element-plus/icons-vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import {
+  createNasDirectory,
   fetchCatalogDirectories,
   fetchCatalogFiles,
+  fetchNasOperations,
+  fetchNasQuarantine,
+  moveNasDirectory,
+  moveNasFile,
+  quarantineNasDirectory,
+  quarantineNasFile,
+  renameNasDirectory,
+  renameNasFile,
+  restoreNasQuarantine,
+  uploadNasFile,
   type CatalogDirectory,
   type CatalogFile,
-  type AssetDiscipline
+  type AssetDiscipline,
+  type NasOperationRecord,
+  type NasQuarantineRecord
 } from '@/modules/data-steward/api/dataSteward';
 import DirectoryTreePanel from '@/modules/data-steward/components/DirectoryTreePanel.vue';
+import { useAuthStore } from '@/stores/auth';
 
 const props = defineProps<{
   projectId: number;
@@ -271,10 +344,14 @@ const QUERY_KEYS = [
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
 const browserRef = ref<HTMLElement | null>(null);
 const tableRef = ref<{ doLayout?: () => void } | null>(null);
+const uploadInputRef = ref<HTMLInputElement | null>(null);
 const directories = ref<CatalogDirectory[]>([]);
 const files = ref<CatalogFile[]>([]);
+const nasOperations = ref<NasOperationRecord[]>([]);
+const nasQuarantine = ref<NasQuarantineRecord[]>([]);
 const activeDir = ref('');
 const expandedDirs = ref<string[]>([]);
 const lastFileId = ref<number | null>(null);
@@ -282,6 +359,12 @@ const lastFileName = ref('');
 const fileLoading = ref(false);
 const dirLoading = ref(false);
 const dirLoadFailed = ref(false);
+const nasBusy = ref(false);
+const uploadingNasFile = ref(false);
+const operationsDrawerVisible = ref(false);
+const quarantineDrawerVisible = ref(false);
+const operationsLoading = ref(false);
+const quarantineLoading = ref(false);
 const advancedSearchVisible = ref(false);
 const treeWidth = ref(DEFAULT_TREE_WIDTH);
 const resizingTree = ref(false);
@@ -316,8 +399,6 @@ const fileKindOptions = [
   { label: '归档包', value: 'ARCHIVE' }
 ];
 
-const readonlyActionTip = '当前阶段只读接管 NAS 资产，不写入真实目录；新建、上传、移动、删除将在受控写操作阶段开放。';
-
 const qualityIssueOptions = [
   { label: '全部质量', value: 'ALL' },
   { label: '缺 checksum', value: 'MISSING_CHECKSUM' },
@@ -346,6 +427,33 @@ type FileBrowserState = {
 const fileBrowserStyle = computed(() => ({
   '--tree-width': `${treeWidth.value}px`
 }));
+
+const currentProjectRole = computed(() => {
+  const current = authStore.currentUser?.projects.find((project) => project.id === props.projectId);
+  return current?.roleCode ?? authStore.currentUser?.currentProject?.roleCode ?? '';
+});
+
+const canWriteNas = computed(() => ['DELIVERY_ENGINEER', 'PROJECT_ADMIN'].includes(currentProjectRole.value));
+const canAdminNas = computed(() => currentProjectRole.value === 'PROJECT_ADMIN');
+const canOperateActiveDirectory = computed(() => canWriteNas.value && Boolean(activeDir.value));
+const canQuarantineActiveDirectory = computed(() => canAdminNas.value && Boolean(activeDir.value));
+
+const nasWriteActionTip = computed(() => {
+  if (canWriteNas.value) return '将直接操作公司 NAS 文件，平台会做权限、路径和审计校验。';
+  return '当前项目角色只能查看，不能操作公司 NAS 文件。';
+});
+
+const activeDirectoryActionTip = computed(() => {
+  if (!canWriteNas.value) return '当前项目角色只能查看，不能操作公司 NAS 文件。';
+  if (!activeDir.value) return '请先在左侧选择一个项目内文件夹。';
+  return '将直接操作当前文件夹，平台会校验路径不越出项目。';
+});
+
+const quarantineActionTip = computed(() => {
+  if (!canAdminNas.value) return '删除到隔离区和恢复仅限项目管理员。';
+  if (!activeDir.value) return '请先选择要隔离的文件夹。';
+  return '删除只会移入隔离区，不提供永久删除。';
+});
 
 const continuityTitle = computed(() => lastFileId.value ? '已恢复项目文件管理位置' : '文件管理会记住本项目位置');
 const continuitySummary = computed(() => {
@@ -626,6 +734,176 @@ async function loadFiles() {
   }
 }
 
+async function runNasOperation(action: () => Promise<{ operationId: number; message: string; traceId: string }>) {
+  if (nasBusy.value) return false;
+  nasBusy.value = true;
+  try {
+    const result = await action();
+    ElMessage.success(`${result.message}。操作编号 ${result.operationId}，traceId ${result.traceId}`);
+    await Promise.all([loadDirectories(), loadFiles(), loadNasOperations(false), loadNasQuarantine(false)]);
+    return true;
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '真实 NAS 操作失败，平台未执行永久删除');
+    return false;
+  } finally {
+    nasBusy.value = false;
+    uploadingNasFile.value = false;
+  }
+}
+
+async function confirmNasOperation(actionLabel: string, targetLabel: string) {
+  await ElMessageBox.confirm(
+    `将直接操作公司 NAS 文件：${actionLabel}。项目：${props.rootLabel}。目标：${targetLabel || '项目根目录'}。平台不会读取文件正文，不会永久删除，也不会展示真实 NAS 绝对路径。`,
+    '确认真实 NAS 操作',
+    {
+      type: 'warning',
+      confirmButtonText: '确认执行',
+      cancelButtonText: '取消'
+    }
+  );
+}
+
+async function createDirectoryAction() {
+  if (!canWriteNas.value) return;
+  const { value } = await ElMessageBox.prompt('请输入新文件夹名称', '新建文件夹', {
+    confirmButtonText: '确认创建',
+    cancelButtonText: '取消',
+    inputPattern: /^(?!\.{1,2}$)[^/\\:]+$/,
+    inputErrorMessage: '名称不能包含路径分隔符或特殊符号'
+  });
+  await confirmNasOperation('新建文件夹', activeDir.value || '项目根目录');
+  await runNasOperation(() => createNasDirectory(props.projectId, { parentPath: activeDir.value, name: value }));
+}
+
+function openUploadPicker() {
+  if (!canWriteNas.value || nasBusy.value) return;
+  uploadInputRef.value?.click();
+}
+
+async function handleUploadFilePicked(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  uploadingNasFile.value = true;
+  try {
+    await confirmNasOperation('上传文件', activeDir.value || '项目根目录');
+    await runNasOperation(() => uploadNasFile(props.projectId, { parentPath: activeDir.value, file }));
+  } catch {
+    uploadingNasFile.value = false;
+  }
+}
+
+async function renameActiveDirectory() {
+  if (!canOperateActiveDirectory.value) return;
+  const { value } = await ElMessageBox.prompt('请输入新的文件夹名称', '重命名当前文件夹', {
+    inputValue: pathLeaf(activeDir.value),
+    confirmButtonText: '确认重命名',
+    cancelButtonText: '取消',
+    inputPattern: /^(?!\.{1,2}$)[^/\\:]+$/,
+    inputErrorMessage: '名称不能包含路径分隔符或特殊符号'
+  });
+  await confirmNasOperation('重命名文件夹', activeDir.value);
+  const previousDir = activeDir.value;
+  const ok = await runNasOperation(() => renameNasDirectory(props.projectId, { sourcePath: previousDir, newName: value }));
+  if (ok) selectDir(parentPath(previousDir) ? `${parentPath(previousDir)}/${value}` : value);
+}
+
+async function moveActiveDirectory() {
+  if (!canOperateActiveDirectory.value) return;
+  const { value } = await ElMessageBox.prompt('请输入目标文件夹相对路径，留空表示项目根目录', '移动当前文件夹', {
+    confirmButtonText: '确认移动',
+    cancelButtonText: '取消'
+  });
+  await confirmNasOperation('移动文件夹', `${activeDir.value} -> ${value || '项目根目录'}`);
+  const previousDir = activeDir.value;
+  const ok = await runNasOperation(() => moveNasDirectory(props.projectId, { sourcePath: previousDir, targetDirectory: value }));
+  if (ok) selectDir(value ? `${value}/${pathLeaf(previousDir)}` : pathLeaf(previousDir));
+}
+
+async function quarantineActiveDirectory() {
+  if (!canQuarantineActiveDirectory.value) return;
+  const { value } = await ElMessageBox.prompt('可填写隔离原因', '删除到隔离区', {
+    confirmButtonText: '确认移入隔离区',
+    cancelButtonText: '取消',
+    inputPlaceholder: '例如：误传资料，待管理员复核'
+  });
+  await confirmNasOperation('删除到隔离区', activeDir.value);
+  const previousDir = activeDir.value;
+  const ok = await runNasOperation(() => quarantineNasDirectory(props.projectId, { sourcePath: previousDir, reason: value }));
+  if (ok) selectDir(parentPath(previousDir));
+}
+
+async function renameFileAction(row: CatalogFile) {
+  const { value } = await ElMessageBox.prompt('请输入新的文件名', '重命名文件', {
+    inputValue: row.fileName,
+    confirmButtonText: '确认重命名',
+    cancelButtonText: '取消',
+    inputPattern: /^(?!\.{1,2}$)[^/\\:]+$/,
+    inputErrorMessage: '名称不能包含路径分隔符或特殊符号'
+  });
+  await confirmNasOperation('重命名文件', row.fileName);
+  await runNasOperation(() => renameNasFile(props.projectId, row.fileId, value));
+}
+
+async function moveFileAction(row: CatalogFile) {
+  const { value } = await ElMessageBox.prompt('请输入目标文件夹相对路径，留空表示项目根目录', '移动文件', {
+    confirmButtonText: '确认移动',
+    cancelButtonText: '取消'
+  });
+  await confirmNasOperation('移动文件', `${row.fileName} -> ${value || '项目根目录'}`);
+  await runNasOperation(() => moveNasFile(props.projectId, row.fileId, value));
+}
+
+async function quarantineFileAction(row: CatalogFile) {
+  const { value } = await ElMessageBox.prompt('可填写隔离原因', '删除文件到隔离区', {
+    confirmButtonText: '确认移入隔离区',
+    cancelButtonText: '取消',
+    inputPlaceholder: '例如：误传资料，待管理员复核'
+  });
+  await confirmNasOperation('删除文件到隔离区', row.fileName);
+  await runNasOperation(() => quarantineNasFile(props.projectId, row.fileId, value));
+}
+
+async function openOperationsDrawer() {
+  operationsDrawerVisible.value = true;
+  await loadNasOperations();
+}
+
+async function openQuarantineDrawer() {
+  quarantineDrawerVisible.value = true;
+  await loadNasQuarantine();
+}
+
+async function loadNasOperations(showError = true) {
+  if (!Number.isFinite(props.projectId)) return;
+  operationsLoading.value = true;
+  try {
+    nasOperations.value = await fetchNasOperations(props.projectId, 50);
+  } catch (error) {
+    if (showError) ElMessage.error(error instanceof Error ? error.message : '操作记录加载失败');
+  } finally {
+    operationsLoading.value = false;
+  }
+}
+
+async function loadNasQuarantine(showError = true) {
+  if (!Number.isFinite(props.projectId)) return;
+  quarantineLoading.value = true;
+  try {
+    nasQuarantine.value = await fetchNasQuarantine(props.projectId, undefined, 50);
+  } catch (error) {
+    if (showError) ElMessage.error(error instanceof Error ? error.message : '隔离区加载失败');
+  } finally {
+    quarantineLoading.value = false;
+  }
+}
+
+async function restoreQuarantineItem(recordId: number) {
+  await confirmNasOperation('恢复隔离项', `隔离编号 ${recordId}`);
+  await runNasOperation(() => restoreNasQuarantine(props.projectId, recordId));
+}
+
 function selectDir(dirPath: string) {
   activeDir.value = dirPath;
   rememberExpandedAncestors(dirPath);
@@ -780,6 +1058,12 @@ function handleRowCommand(command: string | number | object, row: CatalogFile) {
     emit('open-metadata', row.fileId);
   } else if (action === 'checksum') {
     emit('create-checksum', row.fileId);
+  } else if (action === 'rename-file') {
+    void renameFileAction(row);
+  } else if (action === 'move-file') {
+    void moveFileAction(row);
+  } else if (action === 'quarantine-file') {
+    void quarantineFileAction(row);
   }
 }
 
@@ -806,6 +1090,26 @@ function joinPath(parts: string[], hasLeadingSlash: boolean) {
 function pathLeaf(path: string) {
   const parts = splitPath(path);
   return parts.at(-1) ?? '项目根目录';
+}
+
+function parentPath(path: string) {
+  const parts = splitPath(path);
+  return parts.length <= 1 ? '' : parts.slice(0, -1).join('/');
+}
+
+function operationLabel(value: string) {
+  const labels: Record<string, string> = {
+    DIRECTORY_CREATE: '新建文件夹',
+    FILE_UPLOAD: '上传文件',
+    FILE_RENAME: '重命名文件',
+    FILE_MOVE: '移动文件',
+    FILE_QUARANTINE: '删除文件到隔离区',
+    DIRECTORY_RENAME: '重命名文件夹',
+    DIRECTORY_MOVE: '移动文件夹',
+    DIRECTORY_QUARANTINE: '删除文件夹到隔离区',
+    QUARANTINE_RESTORE: '恢复隔离项'
+  };
+  return labels[value] ?? value;
 }
 
 function projectStateKey() {
@@ -986,6 +1290,10 @@ function formatDate(value: string | null | undefined) {
   display: inline-flex;
 }
 
+.file-browser__upload-input {
+  display: none;
+}
+
 .file-browser__search {
   min-width: min(100%, 520px);
   justify-content: flex-end;
@@ -1137,6 +1445,58 @@ function formatDate(value: string | null | undefined) {
   display: flex;
   justify-content: flex-end;
   margin-top: 14px;
+}
+
+.file-browser__drawer-alert {
+  margin-bottom: 12px;
+}
+
+.file-browser__drawer-list {
+  display: grid;
+  gap: 10px;
+}
+
+.file-browser__drawer-item {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.file-browser__drawer-item > div {
+  min-width: 0;
+}
+
+.file-browser__drawer-item strong,
+.file-browser__drawer-item span,
+.file-browser__drawer-item em {
+  display: block;
+  min-width: 0;
+}
+
+.file-browser__drawer-item strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.file-browser__drawer-item span {
+  margin-top: 4px;
+  overflow: hidden;
+  color: #475569;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-browser__drawer-item em {
+  margin-top: 4px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-style: normal;
 }
 
 @media (max-width: 900px) {

@@ -5,6 +5,9 @@ public record UserAccount(
     String username,
     String passwordHash,
     String displayName,
-    String status
+    String status,
+    String phoneNumber,
+    String departmentName,
+    java.time.Instant lastLoginAt
 ) {
 }

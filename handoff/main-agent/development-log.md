@@ -1,5 +1,120 @@
 # 主 Agent 开发监控日志
 
+## 2026-05-21：M2B 受控 NAS 写操作真实项目灰度启动
+
+- 用户确认：M2A 完整度可以进入 M2B。
+- 主 agent 复查：
+  - 后端健康检查 `UP`。
+  - `git diff --check` 通过。
+  - M2A 专项脚本通过，结果 `PASS=21 FAIL=0`。
+  - M2A bugfix 已覆盖“项目工作台路由项目可直接执行 NAS 操作，不要求 JWT 当前项目先切换”。
+- 主 agent 裁决：
+  - M2A 功能完整度足够进入 M2B。
+  - M2B 不是继续扩展完整 NAS CRUD，而是给真实项目试运行增加灰度开关、可写目录范围和安全提示。
+  - 进入 M2B 前必须完成当前成果 Git checkpoint / push。
+- 已写入：
+  - M2B 计划：`handoff/main-agent/m2b-nas-write-trial-plan.md`
+  - M2B 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - M2B 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-05-21：UX1 前端路由逻辑与视觉体验专项批次冻结
+
+- 用户反馈：当前平台核心功能做得不错且基本完善，但可用性、跳转逻辑、用户使用方式和视觉质感较差。
+- 用户裁决：
+  - 当前批次收口并推送 Git 后，主线后续需要新开一个专门优化前端路由逻辑和视觉的批次。
+  - UX1 由 `Gemini` 主导开发，主 agent 负责监控、审计、纠偏和最终收口判断。
+  - UX1 可以调整前端路由、菜单、组件布局、样式和交互文案。
+  - UX1 不得修改后端任何功能实现。
+  - 旧链接必须兼容跳转，不能直接删除导致用户书签或测试脚本失效。
+- 主 agent 裁决：
+  - UX1 不抢占 M2B 命名。
+  - 批次顺序固定为：`M2A 当前 bugfix 收口并推送 Git -> M2B 受控 NAS 写操作真实项目灰度 -> UX1 前端路由与视觉体验优化`。
+  - UX1 视觉方向为 `精致企业中后台`，保留 Vue 3 + Element Plus 体系，不做炫酷大屏化。
+  - UX1 只做前端，不修改 `backend/**`、数据库迁移、接口语义或权限规则。
+- 已写入：
+  - UX1 计划：`handoff/main-agent/ux1-frontend-routing-visual-plan.md`
+  - UX1 Gemini 开发 prompt：`handoff/dev-agent/ux1-gemini-frontend-routing-visual-prompt.md`
+  - UX1 测试 prompt：`handoff/test-agent/ux1-frontend-routing-visual-test-prompt.md`
+
+## 2026-05-21：M2A 新增文件夹误报当前项目缺陷修复
+
+- 用户反馈：真实使用 M2A 新增文件夹时，页面提示 `请先切换到当前项目`。
+- 根因确认：
+  - 项目文件管理页使用 `/data-steward/assets/{projectId}?tab=files` 路由项目作为上下文。
+  - M2A 后端 `ControlledNasController` 额外强制 `JWT currentProjectId == 路由 projectId`。
+  - 当用户有该项目权限但全局当前项目未切换时，会误报 `CORE_PROJECT_CONTEXT_MISMATCH`。
+- 修复动作：
+  - `ControlledNasController` 不再调用 `ProjectContextApplicationService.requireCurrentProject(...)`。
+  - Controller 只获取当前登录 principal。
+  - 项目权限、角色权限、路径安全和写操作权限仍由 `ControlledNasApplicationService` 基于 `projectId` 校验。
+- 回归保护：
+  - `scripts/dev/check-m2a-controlled-nas-write.sh` 增加断言：不先切换 JWT 当前项目，也能在项目工作台路由项目上新建文件夹。
+- 验证：
+  - 后端构建通过。
+  - M2A 专项脚本通过，结果 `PASS=21 FAIL=0`。
+- 修复报告：`handoff/main-agent/m2a-current-project-context-bugfix-report.md`。
+
+## 2026-05-21：M2A NAS 受控文件操作安全底座收口
+
+- 测试 agent 已完成 M2A 复核。
+- 结论：通过，当前无 P0 / P1 / P2。
+- 已确认：
+  - M2A 专项脚本 `scripts/dev/check-m2a-controlled-nas-write.sh` 通过，结果 `PASS=20 FAIL=0`。
+  - M1F / M1E / M1D / M1C / Phase2 batch4 回归均通过。
+  - 项目内新建文件夹、上传、重命名、移动、删除到隔离区、恢复、操作记录、审计和元数据同步均在隔离测试项目内通过。
+  - 查看者写操作被拒绝，未授权用户写操作被拒绝，路径穿越被拒绝。
+  - 自动化写操作只发生在脚本创建的 `/tmp` 隔离项目根目录内。
+  - 真实项目页面只读检查了 `隔离区` 和 `操作记录` 抽屉，未在真实业务 NAS 目录执行上传、移动、删除、重命名等写操作。
+  - 未发现 raw NAS 路径、`storage_uri`、`storage_path`、raw row、SQL、token、secret、password 泄露。
+- 主 agent 裁决：
+  - M2A 可以正式收口。
+  - 主线继续保持 `绿灯可继续主线开发`。
+  - M2A 只是安全底座通过，不代表全量开放完整 NAS CRUD。
+  - 永久删除、跨项目移动、批量不可逆操作、Agent / Hermes 触发 NAS 写操作仍禁止。
+  - 下一步建议为 `M2B：受控 NAS 写操作真实项目灰度试运行与安全开关`，需用户确认后再启动。
+- 收口报告：`handoff/main-agent/m2a-controlled-nas-write-closure.md`。
+
+## 2026-05-21：M2A NAS 受控文件操作安全底座启动
+
+- 用户确认希望开放真实项目的 NAS 增删改查能力，即可以通过平台直接操作 NAS 里的真实数据。
+- 主 agent 裁决：
+  - 不能一次性开放完整 CRUD。
+  - 当前 active 批次固定为 `M2A：NAS 受控文件操作安全底座`。
+  - M2A 第一批只做 `低风险写操作 + 删除到隔离区，不开放永久删除与批量操作`。
+  - 本批必须先建立权限、路径、审计、隔离和恢复边界。
+- 允许范围：
+  - 项目内新建文件夹、上传、重命名、移动。
+  - 删除到隔离区、隔离区恢复。
+  - 操作记录、审计和元数据同步。
+- 当前禁止：
+  - 永久物理删除、跨项目移动、批量不可逆操作。
+  - Agent / Hermes 触发 NAS 写操作。
+  - 前端传入或展示真实 NAS 绝对路径。
+  - 文件正文读取、真实 BIM 轻量化、构件解析。
+  - G4 / Hermes 新能力 / 8B / 8C / 9A。
+- 已写入：
+  - M2A 计划：`handoff/main-agent/m2a-controlled-nas-write-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-05-21：M1F 员工注册、项目权限管理与局域网试运行收口
+
+- 测试 agent 已完成 M1F 复核。
+- 结论：通过，当前无 P0 / P1 / P2。
+- 已确认：
+  - 员工手机号注册可用。
+  - 无项目授权员工进入等待授权。
+  - 管理员可管理员工启停 / 删除 / 授权。
+  - 普通员工越权拒绝。
+  - 停用 / 删除后不可继续使用。
+  - 局域网 `*:5173` 监听与 `192.168.1.66:5173` 访问可用。
+  - M1C / M1D / M1E 回归通过。
+  - 未触碰真实 NAS 文件，未修改 `docs/**`。
+- 主 agent 裁决：
+  - M1F 可以收口。
+  - 主线继续保持 `绿灯可继续主线开发`。
+  - 下一步可进入 M2A，但 M2A 必须以受控 NAS 写操作安全底座开局，不能直接开放完整 CRUD。
+
 ## 2026-05-21：M1E 文件管理连续工作体验与后台任务可追踪性收口
 
 - 测试 agent 已完成 M1E 验收。
@@ -17,7 +132,7 @@
   - M1E 可以收口。
   - 主线继续保持 `绿灯可继续主线开发`。
   - M1A-M1E 已形成 M1 平台本体稳定期的完整阶段成果。
-  - 下一步建议：`M1 阶段复盘与 M2A 准备`，需用户确认后再启动。
+  - 历史下一步建议：`M1 阶段复盘与 M2A 准备`；现已由 M1F 收口和 M2A 启动取代。
 - 收口报告：`handoff/main-agent/m1e-file-task-continuity-closure.md`。
 
 ## 2026-05-20：M1E 文件管理连续工作体验与后台任务可追踪性启动

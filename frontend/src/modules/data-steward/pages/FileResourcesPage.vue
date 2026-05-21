@@ -123,7 +123,7 @@ const fileKindCreateOptions = fileKindOptions.filter((item) => item.value !== 'A
 const processStatusOptions = ['PENDING', 'PROCESSING', 'PROCESSED', 'FAILED'];
 
 const projectId = computed(() => authStore.currentProjectId);
-const projectLabel = computed(() => authStore.currentUser?.currentProject.name ?? '等待项目上下文');
+const projectLabel = computed(() => authStore.currentUser?.currentProject?.name ?? '等待项目上下文');
 
 watch(projectId, () => {
   pagination.pageNo = 1;

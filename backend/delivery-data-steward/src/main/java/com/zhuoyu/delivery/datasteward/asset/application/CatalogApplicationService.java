@@ -149,8 +149,25 @@ public class CatalogApplicationService {
                 rs.getLong("total_size_bytes")
             );
         });
-        // Deduplicate by safe path: merge file counts and sizes for paths that collapsed to the same safe path
-        return deduplicateDirectories(directories);
+        Map<String, DirectoryAccumulator> byPath = new LinkedHashMap<>();
+        for (CatalogDirectoryResponse directory : deduplicateDirectories(directories)) {
+            putDirectory(byPath, directory.directoryPath(), directory.projectId(), directory.projectCode(),
+                directory.fileCount(), directory.totalSizeBytes());
+        }
+        jdbcTemplate.query("""
+            SELECT relative_path
+            FROM data_nas_directory_records
+            WHERE project_id = :projectId
+              AND status = 'ACTIVE'
+              AND deleted = 0
+            ORDER BY relative_path ASC
+            """, params, (rs, rowNum) -> rs.getString("relative_path")).forEach(relativePath ->
+            putDirectory(byPath, normalizeCatalogDirectoryPath(relativePath), projectId,
+                directories.stream().findFirst().map(CatalogDirectoryResponse::projectCode).orElse(null), 0, 0L));
+        return byPath.values().stream()
+            .sorted(Comparator.comparing(DirectoryAccumulator::directoryPath))
+            .map(DirectoryAccumulator::toResponse)
+            .toList();
     }
 
     // ===== catalog files =====
@@ -716,7 +733,7 @@ public class CatalogApplicationService {
     private String lifecycleExpression(String alias) {
         return "CASE " +
             "WHEN UPPER(COALESCE(" + alias + ".process_status, '')) IN ('ARCHIVED') THEN 'archived' " +
-            "WHEN UPPER(COALESCE(" + alias + ".process_status, '')) IN ('DELETE_REQUESTED', 'DELETED', 'PENDING_DELETE') THEN 'deleted_candidate' " +
+            "WHEN UPPER(COALESCE(" + alias + ".process_status, '')) IN ('DELETE_REQUESTED', 'DELETED', 'PENDING_DELETE', 'QUARANTINED') THEN 'deleted_candidate' " +
             "WHEN " + alias + ".last_verified_at IS NULL AND UPPER(COALESCE(" + alias + ".source_type, '')) IN ('NAS_SCAN', 'REVIEW') THEN 'stale_unverified' " +
             "WHEN " + alias + ".process_status IS NULL THEN 'unknown' " +
             "ELSE 'active' END";
@@ -991,6 +1008,10 @@ public class CatalogApplicationService {
 
     private boolean looksLikePhysicalPath(String path) {
         return path.startsWith("/Volumes/")
+            || path.startsWith("/Users/")
+            || path.startsWith("/tmp/")
+            || path.startsWith("/private/")
+            || path.startsWith("/var/")
             || path.startsWith("/mnt/")
             || path.startsWith("/data/")
             || path.startsWith("//")

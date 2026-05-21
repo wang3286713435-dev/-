@@ -4,7 +4,7 @@
       <div class="login-brand">
         <span class="login-brand__eyebrow">数字化交付平台 v1</span>
         <h1>登录平台</h1>
-        <p>进入样板项目，验证一期基础工程链路。</p>
+        <p>员工可用手机号注册账号，登录后等待管理员分配项目权限。</p>
       </div>
 
       <el-alert type="info" :closable="false" show-icon>
@@ -41,6 +41,11 @@
           登录
         </el-button>
       </el-form>
+
+      <div class="login-helper">
+        <span>还没有账号？</span>
+        <el-button text type="primary" @click="router.push({ name: 'register' })">手机号注册</el-button>
+      </div>
     </section>
   </div>
 </template>
@@ -71,7 +76,8 @@ async function handleSubmit() {
   try {
     await authStore.signIn(form.username, form.password);
     ElMessage.success('登录成功');
-    router.push({ name: 'data-steward-assets' });
+    const target = authStore.currentUser?.projects.length === 0 ? 'access-pending' : 'data-steward-assets';
+    router.push({ name: target });
   } catch (error) {
     const message = error instanceof Error ? error.message : '登录失败';
     ElMessage.error(message);

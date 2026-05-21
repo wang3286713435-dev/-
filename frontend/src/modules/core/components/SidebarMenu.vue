@@ -33,7 +33,8 @@ import {
   Picture,
   Search,
   Warning,
-  Tickets
+  Tickets,
+  User
 } from '@element-plus/icons-vue';
 import { useRoute } from 'vue-router';
 
@@ -58,7 +59,8 @@ const icons = {
   Picture,
   Search,
   Warning,
-  Tickets
+  Tickets,
+  User
 };
 
 function resolveIcon(icon: string) {

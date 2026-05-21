@@ -660,7 +660,7 @@ const targetModeOptions = [
 ];
 
 const projectId = computed(() => authStore.currentProjectId);
-const projectLabel = computed(() => authStore.currentUser?.currentProject.name ?? '等待项目上下文');
+const projectLabel = computed(() => authStore.currentUser?.currentProject?.name ?? '等待项目上下文');
 const viewLabel = computed(() => (props.viewType === 'DOCUMENT' ? '文档' : '图纸'));
 const deliverableTypes = computed(() => allTypes.value.filter((type) => type.fileKind === props.viewType));
 const sectionOptions = computed(() => flattenSections(sections.value));

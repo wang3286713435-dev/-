@@ -4,6 +4,8 @@ import com.zhuoyu.delivery.core.auth.application.AuthApplicationService;
 import com.zhuoyu.delivery.core.auth.application.SecurityPrincipalAccessor;
 import com.zhuoyu.delivery.core.auth.dto.LoginRequest;
 import com.zhuoyu.delivery.core.auth.dto.RefreshTokenRequest;
+import com.zhuoyu.delivery.core.auth.dto.RegisterRequest;
+import com.zhuoyu.delivery.core.auth.dto.RegisterResponse;
 import com.zhuoyu.delivery.core.auth.dto.SessionTokenResponse;
 import com.zhuoyu.delivery.shared.api.ApiResponse;
 import jakarta.validation.Valid;
@@ -36,6 +38,11 @@ public class AuthController {
     @PostMapping("/auth/login")
     public ApiResponse<SessionTokenResponse> login(@Valid @RequestBody LoginRequest request) {
         return ApiResponse.success(authApplicationService.login(request));
+    }
+
+    @PostMapping("/auth/register")
+    public ApiResponse<RegisterResponse> register(@Valid @RequestBody RegisterRequest request) {
+        return ApiResponse.success(authApplicationService.register(request));
     }
 
     @PostMapping("/auth/refresh")

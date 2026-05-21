@@ -30,7 +30,7 @@ const authStore = useAuthStore();
 const summary = ref<DashboardSummary | null>(null);
 
 const projectId = computed(() => authStore.currentProjectId);
-const projectLabel = computed(() => authStore.currentUser?.currentProject.name ?? '等待项目上下文');
+const projectLabel = computed(() => authStore.currentUser?.currentProject?.name ?? '等待项目上下文');
 const cards = computed(() => {
   const item = summary.value;
   if (!item) return [];

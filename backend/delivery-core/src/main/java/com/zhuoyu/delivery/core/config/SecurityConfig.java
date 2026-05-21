@@ -6,8 +6,11 @@ import com.zhuoyu.delivery.shared.api.ApiResponse;
 import jakarta.servlet.Filter;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -36,6 +39,9 @@ public class SecurityConfig {
     @Autowired(required = false)
     private Filter agentApiKeyFilter;
 
+    @Value("${delivery.cors.allowed-origins:}")
+    private String configuredCorsAllowedOrigins;
+
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
                           ObjectMapper objectMapper) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
@@ -50,6 +56,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
                     "/api/core/auth/login",
+                    "/api/core/auth/register",
                     "/api/core/auth/refresh",
                     "/api/core/system/health",
                     "/api/data-steward/assets/file-access/**",
@@ -81,13 +88,30 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:5173", "http://127.0.0.1:5173"));
+        configuration.setAllowedOriginPatterns(corsAllowedOriginPatterns());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setExposedHeaders(List.of("X-Trace-Id"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
+    }
+
+    private List<String> corsAllowedOriginPatterns() {
+        List<String> patterns = new ArrayList<>(List.of(
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://10.*.*.*:5173",
+            "http://172.*.*.*:5173",
+            "http://192.168.*.*:5173"
+        ));
+        if (configuredCorsAllowedOrigins != null && !configuredCorsAllowedOrigins.isBlank()) {
+            Arrays.stream(configuredCorsAllowedOrigins.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .forEach(patterns::add);
+        }
+        return patterns;
     }
 
     private void writeError(HttpServletResponse response, HttpStatus status, String code, String message) throws IOException {
