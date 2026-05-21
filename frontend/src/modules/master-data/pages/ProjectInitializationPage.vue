@@ -21,6 +21,18 @@
       </el-tag>
     </section>
 
+    <section class="masterdata-next-action">
+      <div>
+        <span>先定义规则</span>
+        <strong>接入向导只生成草案，真正交付前还要复核三类规则</strong>
+        <p>先确认部位树，再锁定节点类型，最后配置交付物标准。规则稳定后，文档 / 图纸交付页面才会准确计算应交和缺失。</p>
+      </div>
+      <div class="masterdata-next-action__actions">
+        <el-button type="primary" @click="router.push({ name: 'project-master-data-sections', params: { projectId } })">查看部位树</el-button>
+        <el-button @click="router.push({ name: 'project-master-data-deliverable-standard', params: { projectId } })">查看交付物标准</el-button>
+      </div>
+    </section>
+
     <div class="initialization-status">
       <article
         v-for="item in statusCards"

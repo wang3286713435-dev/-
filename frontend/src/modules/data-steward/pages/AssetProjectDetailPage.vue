@@ -2,7 +2,14 @@
   <section class="mvp-page asset-page">
     <ProjectWorkspaceNav v-if="Number.isFinite(projectId)" :project-id="projectId" />
 
-    <header class="asset-command-center">
+    <header ref="commandRef" class="asset-command-center">
+      <div class="zy-hero-lightfield" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <div class="zy-spotlight" aria-hidden="true"></div>
+      <ParticleField :count="12" :speed="0.18" :link-distance="120" />
       <div class="asset-command-center__copy">
         <span>项目工作台</span>
         <h1>{{ projectTitle }}</h1>
@@ -48,47 +55,79 @@
       </div>
     </section>
 
-    <section class="asset-module-sections" aria-label="项目工作台模块">
-      <article
-        v-for="section in moduleSections"
-        :key="section.phase"
-        class="asset-module-section"
-        :class="{ 'is-gated': section.phase === 'WORK_CENTER' && !masterDataReady }"
-      >
-        <header>
-          <span>{{ section.order }}</span>
-          <div>
-            <strong>{{ section.label }}</strong>
-            <small>{{ section.description }}</small>
-          </div>
-          <el-tag
-            v-if="section.phase === 'WORK_CENTER'"
-            size="small"
-            :type="masterDataReady ? 'success' : 'warning'"
-            effect="plain"
-          >
-            {{ masterDataReady ? '可进入交付' : '先确认主数据' }}
-          </el-tag>
-        </header>
-        <p v-if="section.phase === 'WORK_CENTER' && !masterDataReady">
-          请先完成真实项目接入评估、工程主数据草案确认、部位树、节点类型和交付物标准，再进入文档/图纸交付。
-        </p>
-        <div class="asset-module-grid">
-          <button
-            v-for="item in section.items"
-            :key="item.name ?? item.tab ?? item.label"
-            class="asset-module-card"
-            :class="{ 'is-gated': Boolean(item.requiresMasterData && !masterDataReady) }"
-            type="button"
-            @click="openModule(item)"
-          >
-            <span>{{ item.group }}</span>
-            <strong>{{ item.label }}</strong>
-            <em>{{ item.requiresMasterData && !masterDataReady ? '需先生成 / 确认工程主数据草案' : item.description }}</em>
-          </button>
+    <section class="asset-next-actions" aria-label="推荐下一步动作">
+      <header>
+        <div>
+          <span class="zy-code-chip">NEXT</span>
+          <strong>下一步动作</strong>
+          <p>按“看资产 -> 定规则 -> 做交付 -> 查整改”的顺序推进，常用入口放在这里。</p>
         </div>
-      </article>
+        <el-tag :type="masterDataReady ? 'success' : 'warning'" effect="plain">
+          {{ masterDataReady ? '可以进入交付' : '先确认工程主数据' }}
+        </el-tag>
+      </header>
+      <div class="asset-next-actions__grid">
+        <button
+          v-for="item in primaryWorkspaceCards"
+          :key="item.name ?? item.tab ?? item.label"
+          class="asset-next-card"
+          :class="{ 'is-gated': Boolean(item.requiresMasterData && !masterDataReady) }"
+          type="button"
+          @click="openModule(item)"
+        >
+          <span>{{ item.group }}</span>
+          <strong>{{ item.label }}</strong>
+          <em>{{ item.requiresMasterData && !masterDataReady ? '需先生成 / 确认工程主数据草案' : item.description }}</em>
+        </button>
+      </div>
     </section>
+
+    <el-collapse v-model="moreToolsActive" class="asset-more-tools">
+      <el-collapse-item name="tools">
+        <template #title>
+          <span class="asset-more-tools__title">更多工具</span>
+          <small>模型集成、管理对象、文件服务、交付驾驶舱等低频入口</small>
+        </template>
+        <section class="asset-module-sections" aria-label="项目工作台更多工具">
+          <article
+            v-for="section in secondaryModuleSections"
+            :key="section.phase"
+            class="asset-module-section"
+            :class="{ 'is-gated': section.phase === 'WORK_CENTER' && !masterDataReady }"
+          >
+            <header>
+              <span>{{ section.order }}</span>
+              <div>
+                <strong>{{ section.label }}</strong>
+                <small>{{ section.description }}</small>
+              </div>
+              <el-tag
+                v-if="section.phase === 'WORK_CENTER'"
+                size="small"
+                :type="masterDataReady ? 'success' : 'warning'"
+                effect="plain"
+              >
+                {{ masterDataReady ? '可进入交付' : '先确认主数据' }}
+              </el-tag>
+            </header>
+            <div class="asset-module-grid">
+              <button
+                v-for="item in section.items"
+                :key="item.name ?? item.tab ?? item.label"
+                class="asset-module-card"
+                :class="{ 'is-gated': Boolean(item.requiresMasterData && !masterDataReady) }"
+                type="button"
+                @click="openModule(item)"
+              >
+                <span>{{ item.group }}</span>
+                <strong>{{ item.label }}</strong>
+                <em>{{ item.requiresMasterData && !masterDataReady ? '需先生成 / 确认工程主数据草案' : item.description }}</em>
+              </button>
+            </div>
+          </article>
+        </section>
+      </el-collapse-item>
+    </el-collapse>
 
     <el-tabs v-model="activeTab" class="asset-tabs">
       <el-tab-pane label="资产驾驶舱" name="dashboard">
@@ -734,6 +773,8 @@ import {
 } from '@/modules/data-steward/api/dataSteward';
 import AssetProjectFileBrowser from '@/modules/data-steward/components/AssetProjectFileBrowser.vue';
 import DataStewardPanel from '@/modules/data-steward/components/DataStewardPanel.vue';
+import ParticleField from '@/modules/core/components/ParticleField.vue';
+import { useSpotlight } from '@/modules/core/composables/useSpotlight';
 import {
   conversionStatusLabel,
   previewActionHint,
@@ -749,6 +790,9 @@ import { fetchInitializationStatus, type InitializationStatus } from '@/modules/
 const route = useRoute();
 const router = useRouter();
 const projectId = computed(() => Number(route.params.projectId));
+
+const commandRef = ref<HTMLElement | null>(null);
+useSpotlight(commandRef);
 
 const loading = ref(false);
 const activeTab = ref('dashboard');
@@ -772,6 +816,7 @@ const accessActionLoading = ref<'PREVIEW' | 'DOWNLOAD' | null>(null);
 const selectedPreview = ref<FilePreview | null>(null);
 const hermesDrawerVisible = ref(false);
 const hermesAssetId = ref<number | undefined>();
+const moreToolsActive = ref<string[]>([]);
 const checksumJobDialogVisible = ref(false);
 const checksumJobLoading = ref(false);
 const checksumJobRetrying = ref(false);
@@ -844,6 +889,19 @@ const moduleCards: ModuleCard[] = [
   { label: '整改闭环', group: '交付工作中心', description: '跟踪审核驳回、整改和复核', phase: 'WORK_CENTER', name: 'project-work-rectifications', requiresMasterData: true },
   { label: '交付驾驶舱', group: '交付工作中心', description: '查看交付数量、绑定和工作中心状态', phase: 'WORK_CENTER', name: 'project-work-dashboard', requiresMasterData: true }
 ];
+
+const primaryWorkspaceKeys = new Set([
+  'files',
+  'project-master-data-initialization',
+  'project-work-document-delivery',
+  'project-work-drawing-delivery',
+  'project-work-rectifications'
+]);
+
+const primaryWorkspaceCards = computed(() =>
+  moduleCards.filter((item) => primaryWorkspaceKeys.has(moduleCardKey(item)))
+);
+
 const moduleSections = computed(() => [
   {
     phase: 'ASSET' as WorkspacePhase,
@@ -867,6 +925,15 @@ const moduleSections = computed(() => [
     items: moduleCards.filter((item) => item.phase === 'WORK_CENTER')
   }
 ]);
+
+const secondaryModuleSections = computed(() =>
+  moduleSections.value
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => !primaryWorkspaceKeys.has(moduleCardKey(item)))
+    }))
+    .filter((section) => section.items.length > 0)
+);
 const projectTitle = computed(() => {
   if (!project.value) return `项目 ${projectId.value}`;
   return `${project.value.code} ${project.value.name}`;
@@ -1372,6 +1439,10 @@ function openModule(item: ModuleCard) {
   }
 }
 
+function moduleCardKey(item: ModuleCard) {
+  return String(item.name ?? item.tab ?? item.label);
+}
+
 function openModuleByName(name: RouteRecordName) {
   void router.push({ name, params: { projectId: projectId.value } });
 }
@@ -1602,12 +1673,21 @@ function scanProgressValue(task: AssetScanTask) {
   gap: var(--zy-sp-4);
   align-items: center;
   padding: var(--zy-sp-5) var(--zy-sp-6);
-  border: var(--zy-border);
-  border-radius: var(--zy-radius-base);
-  background: var(--zy-surface);
-  box-shadow: var(--zy-shadow-xs);
+  border: 1px solid color-mix(in srgb, var(--zy-line) 72%, transparent);
+  border-radius: var(--zy-radius-lg);
+  background: var(--zy-panel-tint);
+  -webkit-backdrop-filter: blur(14px) saturate(1.04);
+  backdrop-filter: blur(14px) saturate(1.04);
+  box-shadow: var(--zy-shadow-soft);
   position: relative;
   overflow: hidden;
+  isolation: isolate;
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .asset-command-center {
+    background: var(--zy-surface);
+  }
 }
 
 .asset-command-center::before {
@@ -1618,6 +1698,7 @@ function scanProgressValue(task: AssetScanTask) {
   bottom: 0;
   width: 3px;
   background: var(--zy-blue-500);
+  z-index: 1;
 }
 
 .asset-command-center::after {
@@ -1625,17 +1706,20 @@ function scanProgressValue(task: AssetScanTask) {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(to right, rgba(37, 99, 235, 0.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(37, 99, 235, 0.04) 1px, transparent 1px);
+    linear-gradient(to right, rgba(37, 99, 235, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(37, 99, 235, 0.045) 1px, transparent 1px);
   background-size: 32px 32px;
   pointer-events: none;
   mask-image: linear-gradient(to right, black 0%, transparent 65%);
   opacity: 0.7;
+  z-index: 0;
 }
 
-.asset-command-center > * {
+.asset-command-center__copy,
+.asset-command-center__meta,
+.asset-command-center__actions {
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .asset-command-center__copy {
@@ -1889,6 +1973,144 @@ function scanProgressValue(task: AssetScanTask) {
 }
 
 /* ---- 模块分组 ---- */
+.asset-next-actions {
+  display: grid;
+  gap: var(--zy-sp-3);
+  min-width: 0;
+  padding: var(--zy-sp-4) var(--zy-sp-5);
+  border: var(--zy-border);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+  box-shadow: var(--zy-shadow-xs);
+}
+
+.asset-next-actions > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--zy-sp-4);
+  min-width: 0;
+  padding-bottom: var(--zy-sp-3);
+  border-bottom: var(--zy-border-soft);
+}
+
+.asset-next-actions > header > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.asset-next-actions > header strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-lg);
+  font-weight: var(--zy-fw-semi);
+  line-height: 1.4;
+}
+
+.asset-next-actions > header p {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  line-height: 1.6;
+}
+
+.asset-next-actions__grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--zy-sp-2);
+  min-width: 0;
+}
+
+.asset-next-card {
+  appearance: none;
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface-soft);
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: var(--zy-sp-4);
+  position: relative;
+  text-align: left;
+  transition:
+    border-color var(--zy-duration-2) var(--zy-ease),
+    background var(--zy-duration-2) var(--zy-ease),
+    transform var(--zy-duration-2) var(--zy-ease);
+}
+
+.asset-next-card:hover {
+  background: var(--zy-blue-50);
+  border-color: rgba(37, 99, 235, 0.32);
+  transform: translateY(-1px);
+}
+
+.asset-next-card.is-gated {
+  background: var(--zy-amber-50);
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+.asset-next-card span,
+.asset-next-card em {
+  color: var(--zy-muted);
+  display: block;
+  font-size: var(--zy-fs-xs);
+  font-style: normal;
+  line-height: 1.55;
+}
+
+.asset-next-card span {
+  color: var(--zy-blue-700);
+  font-family: var(--zy-font-mono);
+  font-size: 11px;
+  font-weight: var(--zy-fw-bold);
+}
+
+.asset-next-card strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-base);
+  font-weight: var(--zy-fw-semi);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-more-tools {
+  border: var(--zy-border);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+  box-shadow: var(--zy-shadow-xs);
+  overflow: hidden;
+}
+
+.asset-more-tools :deep(.el-collapse),
+.asset-more-tools :deep(.el-collapse-item__wrap) {
+  border: 0;
+}
+
+.asset-more-tools :deep(.el-collapse-item__header) {
+  min-height: 54px;
+  padding: 0 var(--zy-sp-5);
+  border: 0;
+  color: var(--zy-ink);
+  font-weight: var(--zy-fw-semi);
+}
+
+.asset-more-tools :deep(.el-collapse-item__content) {
+  padding: 0 var(--zy-sp-5) var(--zy-sp-5);
+}
+
+.asset-more-tools__title {
+  margin-right: var(--zy-sp-2);
+}
+
+.asset-more-tools small {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-regular);
+}
+
 .asset-module-sections {
   display: grid;
   gap: var(--zy-sp-3);
@@ -2028,6 +2250,23 @@ function scanProgressValue(task: AssetScanTask) {
   font-weight: var(--zy-fw-semi);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (max-width: 1280px) {
+  .asset-next-actions__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .asset-next-actions > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .asset-next-actions__grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ---- 资产驾驶舱网格 ---- */

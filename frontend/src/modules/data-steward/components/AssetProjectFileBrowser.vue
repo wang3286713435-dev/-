@@ -88,6 +88,9 @@
               <ArrowDown />
             </el-icon>
           </el-button>
+          <el-button text @click="diagnosticInfoVisible = !diagnosticInfoVisible">
+            {{ diagnosticInfoVisible ? '收起技术信息' : '技术信息' }}
+          </el-button>
         </div>
       </div>
 
@@ -161,13 +164,12 @@
         class="master-table"
         empty-text="暂无文件资产"
       >
-        <el-table-column label="名称 / 平台文件ID" min-width="320" show-overflow-tooltip>
+        <el-table-column label="文件名" min-width="320" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="file-browser__name-cell">
               <el-icon><Document /></el-icon>
               <div>
                 <strong>{{ row.fileName }}</strong>
-                <span>平台文件ID: {{ row.fileId }}</span>
               </div>
             </div>
           </template>
@@ -177,31 +179,33 @@
             <el-tag :type="fileKindTag(row.fileKind)">{{ row.fileKind }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="fileExt" label="扩展名" width="90" />
+        <el-table-column prop="version" label="版本" width="90" />
+        <el-table-column label="大小" width="120" align="right">
+          <template #default="{ row }">{{ formatBytes(row.sizeBytes) }}</template>
+        </el-table-column>
         <el-table-column label="专业" width="120" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag type="info">{{ row.disciplineName || disciplineLabel(row.disciplineCode) || '-' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="version" label="版本" width="90" />
-        <el-table-column label="大小" width="120" align="right">
-          <template #default="{ row }">{{ formatBytes(row.sizeBytes) }}</template>
-        </el-table-column>
-        <el-table-column prop="confidenceLevel" label="置信度" width="100">
+        <el-table-column label="状态" width="150">
           <template #default="{ row }">
-            <el-tag :type="row.confidenceLevel === 'HIGH' ? 'success' : 'warning'">
-              {{ row.confidenceLevel ?? '-' }}
-            </el-tag>
+            <div class="file-browser__status-cell">
+              <el-tag v-if="!row.qualityFlags || row.qualityFlags.length === 0" type="success" size="small">正常</el-tag>
+              <el-tag v-else type="warning" size="small">{{ row.qualityFlags.length }} 项待处理</el-tag>
+              <span>{{ row.confidenceLevel === 'HIGH' ? '高置信度' : '需复核' }}</span>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="质量问题" width="130">
+        <el-table-column v-if="diagnosticInfoVisible" label="技术信息 / 诊断" min-width="260">
           <template #default="{ row }">
-            <el-tag v-if="!row.qualityFlags || row.qualityFlags.length === 0" type="success" size="small">正常</el-tag>
-            <el-tag v-else type="warning" size="small">{{ row.qualityFlags.length }} 项</el-tag>
+            <div class="file-browser__diagnostic-cell">
+              <span>平台文件ID：{{ row.fileId }}</span>
+              <span>扩展名：{{ row.fileExt || '-' }}</span>
+              <span>置信度：{{ row.confidenceLevel ?? '-' }}</span>
+              <span>更新时间：{{ formatDate(row.updatedAt) }}</span>
+            </div>
           </template>
-        </el-table-column>
-        <el-table-column label="更新时间" width="170">
-          <template #default="{ row }">{{ formatDate(row.updatedAt) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
@@ -383,6 +387,7 @@ const quarantineLoading = ref(false);
 const nasTrialLoading = ref(false);
 const nasTrialLoadFailed = ref(false);
 const advancedSearchVisible = ref(false);
+const diagnosticInfoVisible = ref(false);
 const treeWidth = ref(DEFAULT_TREE_WIDTH);
 const resizingTree = ref(false);
 let resizePointerId: number | null = null;
@@ -1567,6 +1572,26 @@ function formatDate(value: string | null | undefined) {
   margin-top: 2px;
   color: var(--zy-muted);
   font-size: var(--zy-fs-xs);
+}
+
+.file-browser__status-cell,
+.file-browser__diagnostic-cell {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.file-browser__status-cell span,
+.file-browser__diagnostic-cell span {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  line-height: 1.45;
+}
+
+.file-browser__diagnostic-cell span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-browser__pagination {

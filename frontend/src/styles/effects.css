@@ -1,0 +1,348 @@
+/* ============================================================
+ * UX2 视觉效果 — 与 zhuoyusmart.top 视觉对齐的克制版
+ *   - 全局 96×96 蓝灰网格底纹 + 双 radial aura
+ *   - 拟态玻璃 header / panel
+ *   - Hero 光场（radial + conic 极光 + floating spans）
+ *   - 鼠标追踪光斑 (--pointer-x/y, --spot-x/y)
+ *   - 卡片 hover lift / shimmer / 数字 entrance
+ * 所有动效在 prefers-reduced-motion 下自动停止。
+ * ============================================================ */
+
+/* ---- 全局底层 ---- */
+body {
+  background:
+    linear-gradient(90deg, var(--zy-grid-line) 1px, transparent 1px),
+    linear-gradient(180deg, var(--zy-grid-line) 1px, transparent 1px),
+    var(--zy-bg-page);
+  background-size: var(--zy-grid-size) var(--zy-grid-size);
+  position: relative;
+  isolation: isolate;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(980px circle at 50% -10%, color-mix(in srgb, var(--zy-brand) 5%, transparent), transparent 72%),
+    radial-gradient(720px circle at 82% 16%, color-mix(in srgb, var(--zy-accent) 3%, transparent), transparent 76%);
+  opacity: 0.38;
+}
+
+[data-theme="dark"] body::before {
+  background:
+    radial-gradient(980px circle at 50% -10%, color-mix(in srgb, var(--zy-brand) 12%, transparent), transparent 70%),
+    radial-gradient(720px circle at 82% 16%, color-mix(in srgb, var(--zy-accent) 8%, transparent), transparent 76%);
+  opacity: 0.5;
+}
+
+/* ---- 拟态玻璃 ---- */
+.zy-glass {
+  background: var(--zy-panel-tint);
+  -webkit-backdrop-filter: blur(16px) saturate(1.05);
+  backdrop-filter: blur(16px) saturate(1.05);
+  border: 1px solid color-mix(in srgb, var(--zy-line) 72%, transparent);
+}
+
+.zy-glass--header {
+  background: var(--zy-header-bg);
+  -webkit-backdrop-filter: blur(16px) saturate(1.05);
+  backdrop-filter: blur(16px) saturate(1.05);
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .zy-glass,
+  .zy-glass--header {
+    background: var(--zy-surface);
+  }
+}
+
+/* ---- Hero 光场（克制版极光） ---- */
+.zy-hero-lightfield {
+  position: absolute;
+  inset: -10% -8% -8%;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  contain: paint;
+  opacity: 0.55;
+  mix-blend-mode: multiply;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 14%, #000 72%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 14%, #000 72%, transparent 100%);
+}
+
+[data-theme="dark"] .zy-hero-lightfield {
+  opacity: 0.45;
+  mix-blend-mode: screen;
+}
+
+.zy-hero-lightfield::before,
+.zy-hero-lightfield::after,
+.zy-hero-lightfield span {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 43%;
+  border-radius: 999px;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.zy-hero-lightfield::before {
+  left: 50%;
+  top: 68%;
+  width: min(1480px, 112vw);
+  height: min(560px, 56vh);
+  background:
+    radial-gradient(ellipse at 50% 66%, rgba(255, 255, 255, 0.46) 0 14%, rgba(219, 234, 254, 0.28) 31%, rgba(125, 211, 252, 0.16) 48%, rgba(37, 99, 235, 0.08) 64%, transparent 80%),
+    radial-gradient(ellipse at 30% 58%, rgba(20, 184, 200, 0.14), transparent 50%),
+    radial-gradient(ellipse at 68% 55%, rgba(168, 85, 247, 0.09), transparent 48%),
+    conic-gradient(from 218deg at 50% 66%, rgba(37, 99, 235, 0), rgba(20, 184, 200, 0.12), rgba(255, 255, 255, 0.18), rgba(168, 85, 247, 0.08), rgba(74, 222, 128, 0.045), rgba(37, 99, 235, 0));
+  filter: blur(40px) saturate(1.06);
+  opacity: 0.52;
+  transform: translate3d(-52%, -48%, 0) rotate(-3deg) scale(1.02);
+  animation: zyPrismDrift 30s cubic-bezier(0.45, 0, 0.2, 1) infinite alternate;
+}
+
+.zy-hero-lightfield::after {
+  left: 52%;
+  top: 66%;
+  width: min(1320px, 104vw);
+  height: min(220px, 22vh);
+  background:
+    linear-gradient(100deg, transparent 0%, rgba(37, 99, 235, 0.05) 16%, rgba(20, 184, 200, 0.1) 38%, rgba(255, 255, 255, 0.18) 50%, rgba(168, 85, 247, 0.07) 66%, rgba(37, 99, 235, 0.045) 84%, transparent 100%);
+  filter: blur(30px);
+  opacity: 0.42;
+  transform: translate3d(-55%, -50%, 0) rotate(-2deg) scale(1.04);
+  animation: zyPrismBand 24s cubic-bezier(0.45, 0, 0.2, 1) infinite alternate;
+}
+
+[data-theme="dark"] .zy-hero-lightfield::after {
+  background: linear-gradient(100deg, transparent 0%, rgba(110, 168, 255, 0.08) 18%, rgba(56, 213, 232, 0.1) 40%, rgba(255, 255, 255, 0.065) 50%, rgba(168, 85, 247, 0.07) 66%, transparent 100%);
+}
+
+.zy-hero-lightfield span {
+  width: min(640px, 52vw);
+  height: min(300px, 30vh);
+  filter: blur(46px);
+  opacity: 0.22;
+  transform: translate3d(-50%, -50%, 0);
+  animation: zyPrismFloat 32s cubic-bezier(0.45, 0, 0.2, 1) infinite alternate;
+}
+
+.zy-hero-lightfield span:nth-child(1) {
+  left: 12%;
+  top: 64%;
+  background: radial-gradient(closest-side, rgba(10, 132, 255, 0.16), transparent 70%);
+  animation-delay: -8s;
+}
+
+.zy-hero-lightfield span:nth-child(2) {
+  left: 92%;
+  top: 58%;
+  width: min(580px, 46vw);
+  background: radial-gradient(closest-side, rgba(20, 184, 200, 0.13), transparent 72%);
+  animation: zyPrismFloatReverse 28s cubic-bezier(0.45, 0, 0.2, 1) infinite alternate;
+  animation-delay: -14s;
+}
+
+.zy-hero-lightfield span:nth-child(3) {
+  left: 50%;
+  top: 92%;
+  width: min(820px, 64vw);
+  height: min(220px, 22vh);
+  background: radial-gradient(closest-side, rgba(168, 85, 247, 0.08), rgba(74, 222, 128, 0.045) 58%, transparent 78%);
+  animation: zyPrismFloatLower 36s cubic-bezier(0.45, 0, 0.2, 1) infinite alternate;
+  animation-delay: -21s;
+}
+
+@keyframes zyPrismDrift {
+  0%   { transform: translate3d(-52%, -48%, 0) rotate(-3deg) scale(1.02); }
+  50%  { transform: translate3d(-48%, -50%, 0) rotate(1deg)  scale(1.06); }
+  100% { transform: translate3d(-54%, -46%, 0) rotate(-5deg) scale(1.0); }
+}
+
+@keyframes zyPrismBand {
+  0%   { transform: translate3d(-55%, -50%, 0) rotate(-2deg) scale(1.04); opacity: 0.42; }
+  100% { transform: translate3d(-50%, -48%, 0) rotate(2deg)  scale(1.06); opacity: 0.5; }
+}
+
+@keyframes zyPrismFloat {
+  0%   { transform: translate3d(-50%, -50%, 0) scale(1);    opacity: 0.18; }
+  100% { transform: translate3d(-42%, -56%, 0) scale(1.12); opacity: 0.26; }
+}
+
+@keyframes zyPrismFloatReverse {
+  0%   { transform: translate3d(-50%, -50%, 0) scale(1);    opacity: 0.18; }
+  100% { transform: translate3d(-58%, -44%, 0) scale(1.1);  opacity: 0.24; }
+}
+
+@keyframes zyPrismFloatLower {
+  0%   { transform: translate3d(-50%, -50%, 0) scale(1);    opacity: 0.16; }
+  100% { transform: translate3d(-50%, -44%, 0) scale(1.08); opacity: 0.22; }
+}
+
+/* ---- 鼠标追踪光斑 (--spot-x/y) ---- */
+.zy-spotlight {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(520px circle at var(--spot-x) var(--spot-y), color-mix(in srgb, var(--zy-brand) 5%, transparent), transparent 72%),
+    radial-gradient(360px circle at calc(var(--spot-x) + 120px) calc(var(--spot-y) + 90px), color-mix(in srgb, var(--zy-accent) 4%, transparent), transparent 74%);
+  transition: background 320ms ease-out;
+}
+
+[data-theme="dark"] .zy-spotlight {
+  background:
+    radial-gradient(520px circle at var(--spot-x) var(--spot-y), color-mix(in srgb, var(--zy-brand) 14%, transparent), transparent 72%),
+    radial-gradient(360px circle at calc(var(--spot-x) + 120px) calc(var(--spot-y) + 90px), color-mix(in srgb, var(--zy-accent) 9%, transparent), transparent 74%);
+}
+
+/* ---- 卡片 hover lift（统一微交互） ---- */
+.zy-lift,
+.zy-card.zy-lift,
+.metric-card.zy-lift,
+.asset-module-card,
+.asset-risk-card,
+.template-card,
+.onboarding-clue-grid article,
+.delivery-state-grid article {
+  transition:
+    transform var(--zy-duration-3) var(--zy-ease-out),
+    border-color var(--zy-duration-3) var(--zy-ease-out),
+    box-shadow var(--zy-duration-3) var(--zy-ease-out);
+}
+
+.zy-lift:hover,
+.zy-card.zy-lift:hover,
+.metric-card.zy-lift:hover,
+.asset-module-card:hover,
+.template-card:hover,
+.onboarding-clue-grid article:hover,
+.delivery-state-grid article:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    var(--zy-shadow-md),
+    0 1px 0 color-mix(in srgb, var(--zy-brand) 16%, transparent) inset;
+}
+
+.asset-risk-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    var(--zy-shadow-md),
+    0 0 0 1px var(--zy-blue-500) inset;
+}
+
+/* ---- 数字 entrance 渐入 ---- */
+@keyframes zyValueEntrance {
+  0%   { opacity: 0; transform: translateY(8px); filter: blur(4px); }
+  100% { opacity: 1; transform: translateY(0);    filter: blur(0); }
+}
+
+.zy-value-in,
+.asset-kpi strong,
+.asset-status-grid__value,
+.metric-card__value,
+.mvp-stat strong,
+.delivery-state-grid strong,
+.metric-panel strong,
+.initialization-status__card strong,
+.onboarding-summary__card strong {
+  animation: zyValueEntrance 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--zy-stagger, 0) * 40ms);
+}
+
+/* ---- Shimmer 骨架闪烁 ---- */
+@keyframes zyShimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.zy-shimmer {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--zy-bg-soft) 60%, transparent) 0%,
+    color-mix(in srgb, var(--zy-blue-50) 60%, transparent) 50%,
+    color-mix(in srgb, var(--zy-bg-soft) 60%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: zyShimmer 1.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  border-radius: var(--zy-radius-base);
+}
+
+/* ---- 表格行 hover 左竖条（公司规范 §7.4 线条核心资产） ---- */
+.master-table :deep(.el-table__row),
+.master-table .el-table__row {
+  position: relative;
+}
+
+.master-table :deep(.el-table__row td:first-child::before),
+.master-table .el-table__row td:first-child::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 0;
+  height: 0;
+  background: var(--zy-blue-500);
+  transition:
+    width var(--zy-duration-2) var(--zy-ease),
+    height var(--zy-duration-2) var(--zy-ease),
+    top var(--zy-duration-2) var(--zy-ease);
+}
+
+.master-table :deep(.el-table__row:hover td:first-child::before),
+.master-table .el-table__row:hover td:first-child::before {
+  width: 3px;
+  height: 60%;
+  top: 20%;
+}
+
+/* ---- 链接 hover 蓝光下划线 ---- */
+.zy-text-link {
+  color: var(--zy-blue-700);
+  background-image: linear-gradient(currentColor, currentColor);
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  background-size: 0% 1px;
+  transition: background-size var(--zy-duration-3) var(--zy-ease-out);
+}
+
+.zy-text-link:hover {
+  background-size: 100% 1px;
+}
+
+/* ---- Reduced motion: 关闭所有 UX2 装饰动画 ---- */
+@media (prefers-reduced-motion: reduce) {
+  .zy-hero-lightfield,
+  .zy-hero-lightfield::before,
+  .zy-hero-lightfield::after,
+  .zy-hero-lightfield span,
+  .zy-shimmer,
+  .zy-value-in,
+  .asset-kpi strong,
+  .asset-status-grid__value,
+  .metric-card__value,
+  .mvp-stat strong,
+  .delivery-state-grid strong,
+  .metric-panel strong,
+  .initialization-status__card strong,
+  .onboarding-summary__card strong {
+    animation: none !important;
+  }
+
+  .zy-lift:hover,
+  .asset-module-card:hover,
+  .template-card:hover,
+  .asset-risk-card:hover {
+    transform: none !important;
+  }
+
+  .zy-spotlight {
+    transition: none !important;
+  }
+}

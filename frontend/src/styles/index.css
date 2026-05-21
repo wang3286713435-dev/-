@@ -1,4 +1,5 @@
 @import './tokens.css';
+@import './effects.css';
 
 /* ============================================================
  * 基础与版式 — 公司规范 §6
@@ -79,14 +80,23 @@ a:hover {
 
 .login-panel {
   position: relative;
+  z-index: 2;
   width: min(460px, 100%);
-  background: var(--zy-surface);
-  border: var(--zy-border);
+  background: var(--zy-panel-tint);
+  -webkit-backdrop-filter: blur(20px) saturate(1.08);
+  backdrop-filter: blur(20px) saturate(1.08);
+  border: 1px solid color-mix(in srgb, var(--zy-line) 70%, transparent);
   border-radius: var(--zy-radius-lg);
   padding: var(--zy-sp-8);
-  box-shadow: var(--zy-shadow-lg);
+  box-shadow: var(--zy-shadow-soft);
   display: grid;
   gap: var(--zy-sp-5);
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .login-panel {
+    background: var(--zy-surface);
+  }
 }
 
 .login-brand {
@@ -298,13 +308,23 @@ a:hover {
   max-width: 100%;
   min-height: var(--zy-header-h);
   padding: 0 var(--zy-content-pad);
-  background: var(--zy-surface);
-  border-bottom: var(--zy-border-soft);
+  background: var(--zy-header-bg);
+  -webkit-backdrop-filter: blur(16px) saturate(1.05);
+  backdrop-filter: blur(16px) saturate(1.05);
+  border-bottom: 1px solid color-mix(in srgb, var(--zy-line) 72%, transparent);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--zy-sp-6);
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .app-layout__header {
+    background: var(--zy-surface);
+  }
 }
 
 .app-layout__header::after {
@@ -650,6 +670,56 @@ a:hover {
   gap: 6px;
   font-size: var(--zy-fs-sm);
   line-height: 1.6;
+}
+
+.masterdata-next-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zy-sp-4);
+  min-width: 0;
+  padding: var(--zy-sp-4) var(--zy-sp-5);
+  border: var(--zy-border);
+  border-left: 3px solid var(--zy-blue-500);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+  box-shadow: var(--zy-shadow-xs);
+}
+
+.masterdata-next-action > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.masterdata-next-action span {
+  color: var(--zy-blue-700);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.masterdata-next-action strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-lg);
+  font-weight: var(--zy-fw-semi);
+  line-height: 1.35;
+}
+
+.masterdata-next-action p {
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: var(--zy-fs-sm);
+  line-height: 1.65;
+}
+
+.masterdata-next-action__actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: var(--zy-sp-2);
+  justify-content: flex-end;
 }
 
 .field-hint {
@@ -1061,6 +1131,15 @@ a:hover {
 
   .workflow-guide {
     grid-template-columns: 1fr;
+  }
+
+  .masterdata-next-action {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .masterdata-next-action__actions {
+    justify-content: flex-start;
   }
 
   .employee-search,

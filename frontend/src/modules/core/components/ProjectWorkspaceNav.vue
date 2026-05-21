@@ -72,6 +72,7 @@
           </el-button>
         </div>
         <div class="project-workspace-nav__secondary">
+          <span class="project-workspace-nav__more-label">更多工具</span>
           <el-button
             text
             size="small"
@@ -203,6 +204,7 @@
           </el-button>
         </div>
         <div class="project-workspace-nav__secondary">
+          <span class="project-workspace-nav__more-label">更多工具</span>
           <el-button
             text
             size="small"
@@ -495,10 +497,21 @@ function isAssetTab(tab: string) {
 
 .project-workspace-nav__secondary {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 4px var(--zy-sp-1);
   min-width: 0;
   padding-top: 2px;
+}
+
+.project-workspace-nav__more-label {
+  flex: 0 0 auto;
+  color: var(--zy-subtle);
+  font-size: 11px;
+  font-weight: var(--zy-fw-semi);
+  letter-spacing: 0.06em;
+  margin-right: 2px;
+  text-transform: uppercase;
 }
 
 .project-workspace-nav__secondary :deep(.el-button) {

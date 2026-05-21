@@ -1,5 +1,74 @@
 # 主 Agent 项目状态
 
+## 2026-05-22 UX2 启动
+
+- 当前 active 批次：`UX2：前端使用逻辑与体验重构专项`。
+- 当前分支：`codex/ux2-user-experience-refactor`。
+- 启动依据：
+  - UX1 已收口，无 P0 / P1 / P2。
+  - UX1 Git checkpoint 已推送。
+  - 用户确认进入 UX2。
+- UX2 开发 agent：`Claude Code`，由用户在 CLI 中启动。
+- 主 agent 职责：维护 prompt、监控边界、审计是否越界、安排测试 agent 验收和最终收口判断。
+- 当前开发 prompt：`handoff/dev-agent/current-prompt.md`。
+- 当前测试 prompt：`handoff/test-agent/current-prompt.md`。
+- UX2 目标：优化前端使用逻辑、信息层级、字段减负、下一步动作提示和视觉体验，让普通员工进入平台后能看懂、会用、用得舒服。
+- UX2 边界：
+  - 允许修改 `frontend/**` 和 `handoff/dev-agent/latest-report.md`。
+  - 禁止修改 `backend/**`、数据库迁移、接口语义、权限规则和 `docs/**`。
+  - 禁止新增 Hermes、BIM 轻量化、NAS 写能力、文件正文读取、索引、parser。
+  - 旧路由必须兼容跳转，不允许删除导致书签或测试脚本失效。
+
+## 2026-05-22 UX2 续接安排
+
+- Claude Code 已完成 UX2 视觉子批次：登录页、资产总览、项目工作台命令中心的官网风格 lightfield / spotlight / 粒子 / glass-lite 升级。
+- 用户确认：UX2 后续功能由原 Codex 开发 agent 继续完成，完善 UX2 后再进入整体验收。
+- 主 agent 判断：
+  - Claude 视觉升级不等于 UX2 收口。
+  - 后续重点回到 UX2 原目标：使用逻辑、字段减负、下一步动作、低频入口降级。
+  - 当前不能只按视觉升级进入最终验收。
+- 已将 `handoff/dev-agent/current-prompt.md` 改为 Codex 开发 agent 续接任务。
+- 续接任务要求：
+  - 保留 Claude 已完成的视觉升级，不得无故回滚。
+  - 继续优化资产总览、项目工作台、文件管理、工程主数据、文档 / 图纸交付的用户理解路径。
+  - 继续保持前端专项边界，不修改后端、数据库迁移、接口语义、权限规则或 `docs/**`。
+
+## 2026-05-22 UX2 进入整体验收
+
+- Codex 开发 agent 已完成 UX2 使用逻辑与字段减负续接，并写入 `handoff/dev-agent/latest-report.md`。
+- 开发报告显示：
+  - 保留 Claude 视觉升级。
+  - 资产总览改为项目入口台。
+  - 项目工作台前置推荐下一步动作。
+  - 文件管理默认隐藏平台 ID、扩展名、置信度、更新时间等技术字段。
+  - 工程主数据补齐“先定义规则，再按规则交付”的提示。
+  - 整改中心补齐闭环说明。
+  - 旧链接抽查未白屏。
+- 主 agent 初审：
+  - 变更范围仍集中在 `frontend/**` 和 handoff 文件。
+  - 未发现 `backend/**`、数据库迁移、`docs/**` 改动。
+  - 可以进入 UX2 测试 agent 整体验收。
+
+## 2026-05-22 UX2 收口
+
+- UX2 测试 agent 已完成整体验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 结论：`通过`。
+- 当前无 P0 / P1。
+- 已验证：
+  - 后端构建、前端构建、健康检查通过。
+  - M2B / M2A / M1F / M1E / M1D / M1C 回归通过。
+  - `git diff --check` 通过。
+  - 资产总览、503 / 506 项目工作台、文件管理、工程主数据、交付工作中心、旧链接兼容和多分辨率检查通过。
+  - 未发现真实 NAS 路径、`storage_uri`、raw row、SQL、token、secret 泄露。
+  - 未发现 `backend/**`、数据库迁移、`docs/**` 变更。
+- P2：
+  - 既有 Vite chunk size warning。
+  - 项目工作台仍有少量偏技术字段显眼，例如 `平台内部ID`、`NAS_REAL_PILOT`、`ACTIVE`。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 仍为非交付未跟踪文件，收口提交时继续排除。
+- 主 agent 裁决：
+  - `UX2：前端使用逻辑与体验重构专项` 可以正式收口。
+  - UX2 收口不代表 UI/UX 完全终局，P2 可后续在 UX polish 或客户演示前继续打磨。
+
 ## 2026-05-22 UX1 收口
 
 - UX1 tokens.css P1 已完成极短复验并通过。

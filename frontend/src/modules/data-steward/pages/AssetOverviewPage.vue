@@ -24,7 +24,14 @@
       </div>
     </div>
 
-    <section class="asset-hero">
+    <section ref="heroRef" class="asset-hero">
+      <div class="zy-hero-lightfield" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <div class="zy-spotlight" aria-hidden="true"></div>
+      <ParticleField :count="14" :speed="0.2" :link-distance="120" />
       <div class="asset-hero__intro">
         <span class="asset-hero__eyebrow">
           <span class="zy-code-chip">ASSETS · OVERVIEW</span>
@@ -102,13 +109,79 @@
       </div>
     </section>
 
-    <el-table
-      v-loading="loading"
-      :data="sortedProjects"
-      class="master-table"
-      empty-text="暂无资产项目"
-      @row-dblclick="openDetail"
-    >
+    <section class="asset-entry-lanes" aria-label="项目入口台">
+      <article class="asset-entry-card asset-entry-card--primary">
+        <span class="asset-entry-card__eyebrow">推荐进入</span>
+        <template v-if="recommendedProject">
+          <strong>{{ recommendedProject.code }} {{ recommendedProject.name }}</strong>
+          <p>{{ governanceStage(recommendedProject).hint }}</p>
+          <div class="asset-entry-card__meta">
+            <el-tag size="small" :type="sourceTagType(recommendedProject.projectSource, recommendedProject.projectCategory)">
+              {{ projectSourceText(recommendedProject.projectSource, recommendedProject.projectCategory) }}
+            </el-tag>
+            <el-tag size="small" :type="onboardingTagType(recommendedProject.onboardingStatus)">
+              {{ onboardingStatusText(recommendedProject.onboardingStatus) }}
+            </el-tag>
+          </div>
+          <div class="asset-entry-card__actions">
+            <el-button type="primary" size="small" @click="openDetail(recommendedProject)">进入项目工作台</el-button>
+            <el-button size="small" @click="openGovernanceNext(recommendedProject)">
+              {{ governanceStage(recommendedProject).actionLabel }}
+            </el-button>
+          </div>
+        </template>
+        <template v-else>
+          <strong>暂无可进入项目</strong>
+          <p>当前筛选下没有项目。可以切换到“全部”或联系管理员确认项目权限。</p>
+        </template>
+      </article>
+
+      <article class="asset-entry-card">
+        <span class="asset-entry-card__eyebrow">待处理项目</span>
+        <strong>{{ pendingProjects.length ? '先补齐底座' : '暂无明显阻塞' }}</strong>
+        <div v-if="pendingProjects.length" class="asset-entry-list">
+          <button v-for="row in pendingProjects" :key="`pending-${row.projectId}`" type="button" @click="openGovernanceNext(row)">
+            <span>{{ row.name }}</span>
+            <em>{{ governanceStage(row).actionLabel }}</em>
+          </button>
+        </div>
+        <p v-else>真实项目暂无主数据或交付标准阻塞，可继续查看交付状态。</p>
+      </article>
+
+      <article class="asset-entry-card">
+        <span class="asset-entry-card__eyebrow">最近进入</span>
+        <strong>{{ recentProjects.length ? '继续上次项目' : '还没有最近项目' }}</strong>
+        <div v-if="recentProjects.length" class="asset-entry-list">
+          <button v-for="row in recentProjects" :key="`recent-${row.projectId}`" type="button" @click="openDetail(row)">
+            <span>{{ row.name }}</span>
+            <em>进入工作台</em>
+          </button>
+        </div>
+        <p v-else>进入项目工作台后，这里会记录最近打开的项目。</p>
+      </article>
+    </section>
+
+    <section class="asset-table-section" aria-label="项目列表">
+      <div class="asset-table-section__header">
+        <div>
+          <span class="zy-code-chip">PROJECTS</span>
+          <strong>项目列表</strong>
+          <p>默认只保留员工做下一步判断需要的字段；统计和底座细节可按需展开。</p>
+        </div>
+        <el-switch
+          v-model="detailColumnsVisible"
+          active-text="显示详细字段"
+          inactive-text="收起详细字段"
+        />
+      </div>
+
+      <el-table
+        v-loading="loading"
+        :data="sortedProjects"
+        class="master-table"
+        empty-text="暂无资产项目"
+        @row-dblclick="openDetail"
+      >
       <el-table-column label="项目" min-width="260">
         <template #default="{ row }">
           <div class="asset-title-cell">
@@ -131,7 +204,7 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="projectStage" label="阶段" width="120" show-overflow-tooltip />
+      <el-table-column v-if="detailColumnsVisible" prop="projectStage" label="阶段" width="120" show-overflow-tooltip />
       <el-table-column prop="projectManagerName" label="负责人" width="130" show-overflow-tooltip />
       <el-table-column label="下一步动作" min-width="320">
         <template #default="{ row }">
@@ -155,10 +228,10 @@
       <el-table-column label="文件数" width="100" align="right">
         <template #default="{ row }">{{ formatCount(row.fileCount) }}</template>
       </el-table-column>
-      <el-table-column label="模型数" width="110" align="right">
+      <el-table-column v-if="detailColumnsVisible" label="模型数" width="110" align="right">
         <template #default="{ row }">{{ formatCount(row.modelCount) }}</template>
       </el-table-column>
-      <el-table-column label="主要类型" min-width="160">
+      <el-table-column v-if="detailColumnsVisible" label="主要类型" min-width="160">
         <template #default="{ row }">
           <div class="asset-kind-tags">
             <el-tag
@@ -173,13 +246,13 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="模型容量" width="130" align="right">
+      <el-table-column v-if="detailColumnsVisible" label="模型容量" width="130" align="right">
         <template #default="{ row }">{{ formatBytes(row.totalSizeBytes) }}</template>
       </el-table-column>
       <el-table-column label="最近扫描/更新" width="170">
         <template #default="{ row }">{{ formatDate(row.lastScanAt || row.lastModelUpdatedAt) }}</template>
       </el-table-column>
-      <el-table-column label="底座" width="160">
+      <el-table-column v-if="detailColumnsVisible" label="底座" width="160">
         <template #default="{ row }">
           <div class="asset-foundation-tags">
             <el-tag size="small" :type="row.hasMasterData ? 'success' : 'info'">主数据</el-tag>
@@ -187,7 +260,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="100">
+      <el-table-column v-if="detailColumnsVisible" label="状态" width="100">
         <template #default="{ row }">
           <el-tag :type="row.assetStatus === 'ACTIVE' ? 'success' : 'info'">{{ row.assetStatus }}</el-tag>
         </template>
@@ -197,7 +270,8 @@
           <el-button text :icon="ArrowRight" @click="openDetail(row)">详情</el-button>
         </template>
       </el-table-column>
-    </el-table>
+      </el-table>
+    </section>
   </section>
 </template>
 
@@ -207,6 +281,8 @@ import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { ArrowRight, Refresh, Search } from '@element-plus/icons-vue';
 
+import ParticleField from '@/modules/core/components/ParticleField.vue';
+import { useSpotlight } from '@/modules/core/composables/useSpotlight';
 import {
   fetchAssetProjects,
   fetchAssetQualityOverview,
@@ -216,14 +292,19 @@ import {
   type AssetStatistics
 } from '@/modules/data-steward/api/dataSteward';
 
+const heroRef = ref<HTMLElement | null>(null);
+useSpotlight(heroRef);
+
 const router = useRouter();
 const loading = ref(false);
 const keyword = ref('');
 const sourceFilter = ref('REAL_NAS');
 const projectSortOrder = ref<'ASC' | 'DESC'>('ASC');
+const detailColumnsVisible = ref(false);
 const projects = ref<AssetProject[]>([]);
 const statistics = ref<AssetStatistics | null>(null);
 const qualityOverview = ref<AssetQualityOverview | null>(null);
+const recentProjectIds = ref<number[]>(readRecentProjectIds());
 const sourceOptions = [
   { label: '真实项目', value: 'REAL_NAS' },
   { label: '未完成接入', value: 'UNFINISHED_ONBOARDING' },
@@ -244,6 +325,19 @@ const realNasProjects = computed(() => projects.value.filter(isRealNasProject));
 const primaryActionProject = computed(() => {
   return visibleProjects.value.find(isRealNasProject) ?? realNasProjects.value[0] ?? visibleProjects.value[0] ?? null;
 });
+
+const pendingProjects = computed(() => sortedProjects.value
+  .filter((item) => isRealNasProject(item) && (!item.hasMasterData || !item.hasDeliveryStandard || item.onboardingStatus !== 'GOVERNANCE_READY'))
+  .slice(0, 3));
+
+const recentProjects = computed(() => recentProjectIds.value
+  .map((id) => projects.value.find((item) => item.projectId === id))
+  .filter((item): item is AssetProject => Boolean(item))
+  .slice(0, 3));
+
+const recommendedProject = computed(() =>
+  pendingProjects.value[0] ?? recentProjects.value[0] ?? primaryActionProject.value
+);
 
 const statusCards = computed(() => {
   const rows = visibleProjects.value;
@@ -335,6 +429,7 @@ async function loadPage() {
 }
 
 function openDetail(row: AssetProject) {
+  rememberProject(row.projectId);
   router.push({ name: 'data-steward-asset-detail', params: { projectId: row.projectId } });
 }
 
@@ -435,6 +530,28 @@ function isRealNasProject(row: AssetProject) {
   return row.projectCategory === 'REAL_NAS_PROJECT' || row.projectSource === 'REAL_NAS';
 }
 
+function readRecentProjectIds() {
+  try {
+    const raw = window.localStorage.getItem('delivery.recentProjectIds');
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.map((item) => Number(item)).filter((item) => Number.isFinite(item)).slice(0, 5)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberProject(projectId: number) {
+  const next = [projectId, ...recentProjectIds.value.filter((item) => item !== projectId)].slice(0, 5);
+  recentProjectIds.value = next;
+  try {
+    window.localStorage.setItem('delivery.recentProjectIds', JSON.stringify(next));
+  } catch {
+    // Browser storage can be unavailable in private mode; recent projects are only a convenience.
+  }
+}
+
 function formatCount(value: number | null | undefined) {
   return Number(value ?? 0).toLocaleString('zh-CN');
 }
@@ -519,22 +636,32 @@ function onboardingTagType(value?: string | null) {
 
 /* ---- Hero ---- */
 .asset-hero {
-  background: var(--zy-surface);
-  border: var(--zy-border);
-  border-radius: var(--zy-radius-base);
+  background: var(--zy-panel-tint);
+  -webkit-backdrop-filter: blur(14px) saturate(1.04);
+  backdrop-filter: blur(14px) saturate(1.04);
+  border: 1px solid color-mix(in srgb, var(--zy-line) 72%, transparent);
+  border-radius: var(--zy-radius-lg);
   display: grid;
   gap: var(--zy-sp-5);
   min-width: 0;
   padding: var(--zy-sp-6);
   position: relative;
   overflow: hidden;
-  box-shadow: var(--zy-shadow-xs);
+  box-shadow: var(--zy-shadow-soft);
+  isolation: isolate;
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .asset-hero {
+    background: var(--zy-surface);
+  }
 }
 
 .asset-hero::before {
   content: "";
   position: absolute;
   inset: 0;
+  z-index: 0;
   background-image:
     linear-gradient(to right, rgba(37, 99, 235, 0.04) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(37, 99, 235, 0.04) 1px, transparent 1px);
@@ -543,9 +670,12 @@ function onboardingTagType(value?: string | null) {
   mask-image: linear-gradient(to bottom, black 0%, transparent 70%);
 }
 
-.asset-hero > * {
+.asset-hero__intro,
+.asset-hero__workflow,
+.asset-hero__status,
+.asset-hero__risk {
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .asset-hero__intro {
@@ -794,6 +924,155 @@ function onboardingTagType(value?: string | null) {
   color: #92400e;
 }
 
+/* ---- 项目入口台 ---- */
+.asset-entry-lanes {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.2fr) repeat(2, minmax(220px, 1fr));
+  gap: var(--zy-sp-4);
+  min-width: 0;
+}
+
+.asset-entry-card {
+  display: grid;
+  align-content: start;
+  gap: var(--zy-sp-3);
+  min-width: 0;
+  padding: var(--zy-sp-4);
+  border: var(--zy-border);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+  box-shadow: var(--zy-shadow-xs);
+  position: relative;
+  overflow: hidden;
+}
+
+.asset-entry-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: var(--zy-sp-4);
+  bottom: var(--zy-sp-4);
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--zy-blue-500);
+}
+
+.asset-entry-card--primary {
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.78), rgba(255, 255, 255, 0.94)),
+    var(--zy-surface);
+}
+
+.asset-entry-card__eyebrow {
+  color: var(--zy-blue-700);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.asset-entry-card strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-lg);
+  font-weight: var(--zy-fw-semi);
+  line-height: 1.35;
+}
+
+.asset-entry-card p {
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: var(--zy-fs-sm);
+  line-height: 1.7;
+}
+
+.asset-entry-card__meta,
+.asset-entry-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zy-sp-2);
+  min-width: 0;
+}
+
+.asset-entry-list {
+  display: grid;
+  gap: var(--zy-sp-2);
+  min-width: 0;
+}
+
+.asset-entry-list button {
+  appearance: none;
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface-soft);
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: var(--zy-sp-2) var(--zy-sp-3);
+  text-align: left;
+  transition:
+    border-color var(--zy-duration-2) var(--zy-ease),
+    background var(--zy-duration-2) var(--zy-ease);
+}
+
+.asset-entry-list button:hover {
+  background: var(--zy-blue-50);
+  border-color: rgba(37, 99, 235, 0.24);
+}
+
+.asset-entry-list span {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-sm);
+  font-weight: var(--zy-fw-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-entry-list em {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  font-style: normal;
+}
+
+.asset-table-section {
+  display: grid;
+  gap: var(--zy-sp-3);
+  min-width: 0;
+}
+
+.asset-table-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zy-sp-4);
+  min-width: 0;
+  padding: var(--zy-sp-4);
+  border: var(--zy-border);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+}
+
+.asset-table-section__header > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.asset-table-section__header strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-lg);
+  font-weight: var(--zy-fw-semi);
+}
+
+.asset-table-section__header p {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  line-height: 1.6;
+}
+
 /* ---- 表格内文案 ---- */
 .asset-title-cell {
   min-width: 0;
@@ -874,6 +1153,10 @@ function onboardingTagType(value?: string | null) {
     padding: var(--zy-sp-4);
   }
 
+  .asset-entry-lanes {
+    grid-template-columns: 1fr;
+  }
+
   .asset-search,
   .asset-sort {
     width: 100%;
@@ -885,6 +1168,11 @@ function onboardingTagType(value?: string | null) {
 
   .asset-flow__step::after {
     display: none;
+  }
+
+  .asset-table-section__header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

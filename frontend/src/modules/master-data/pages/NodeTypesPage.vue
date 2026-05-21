@@ -55,6 +55,20 @@
       </p>
     </el-alert>
 
+    <section class="masterdata-next-action">
+      <div>
+        <span>下一步</span>
+        <strong>{{ lockStatus?.allNodeTypesLocked ? '继续配置交付物标准' : '先锁定节点类型，再配置交付标准' }}</strong>
+        <p>节点类型锁定后，平台才会把部位树当作稳定规则，用来计算文档/图纸页面的应交和缺失。</p>
+      </div>
+      <div class="masterdata-next-action__actions">
+        <el-button type="primary" :disabled="!lockStatus?.allNodeTypesLocked" @click="goDeliverableStandard">
+          去交付物标准
+        </el-button>
+        <el-button @click="goSections">返回部位树</el-button>
+      </div>
+    </section>
+
     <el-table v-loading="loading" :data="nodeTypes" class="master-table" empty-text="暂无节点类型">
       <el-table-column prop="name" label="名称" min-width="180" />
       <el-table-column prop="code" label="编码" width="180" />
@@ -107,6 +121,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Refresh } from '@element-plus/icons-vue';
 
@@ -126,6 +141,7 @@ import {
 import { useAuthStore } from '@/stores/auth';
 
 const authStore = useAuthStore();
+const router = useRouter();
 const loading = ref(false);
 const saving = ref(false);
 const dialogVisible = ref(false);
@@ -281,5 +297,15 @@ async function handleLockAll() {
       ElMessage.error(error.message);
     }
   }
+}
+
+function goDeliverableStandard() {
+  if (!currentProjectId.value) return;
+  router.push({ name: 'project-master-data-deliverable-standard', params: { projectId: currentProjectId.value } });
+}
+
+function goSections() {
+  if (!currentProjectId.value) return;
+  router.push({ name: 'project-master-data-sections', params: { projectId: currentProjectId.value } });
 }
 </script>

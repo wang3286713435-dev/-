@@ -3077,3 +3077,46 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
 - 当前 UX1 无 P0 / P1 / P2。
 - 主 agent 已写入 UX1 收口报告：`handoff/main-agent/ux1-frontend-routing-visual-closure.md`。
 - UX1 可正式收口；下一步建议先做 Git checkpoint，再进入 UX2 前端使用逻辑与体验重构专项。
+
+## 2026-05-22 UX2 启动
+
+- 用户确认进入 UX2。
+- 已从 UX1 收口提交后切出分支：`codex/ux2-user-experience-refactor`。
+- 已将 `handoff/dev-agent/current-prompt.md` 切换为 UX2 当前开发任务。
+- 已将 `handoff/test-agent/current-prompt.md` 切换为 UX2 验收任务。
+- UX2 仍由 Claude Code 主导开发，主 agent 负责监控和审计。
+- UX2 只做前端使用逻辑、信息层级、字段减负、下一步动作提示和视觉体验，不改后端业务逻辑。
+
+## 2026-05-22 UX2 续接安排
+
+- Claude Code 已完成 UX2 视觉子批次，并在 `handoff/dev-agent/latest-report.md` 顶部追加报告。
+- 用户确认：UX2 后续功能由原 Codex 开发 agent 继续完成，完善 UX2 后再进入整体验收。
+- 主 agent 已将 `handoff/dev-agent/current-prompt.md` 改为 Codex 开发 agent 续接任务。
+- 续接重点：
+  - 保留 Claude 视觉升级。
+  - 继续完成资产总览入口逻辑、项目工作台下一步引导、文件管理字段减负、工程主数据和交付页业务解释。
+  - 不修改后端、数据库迁移、接口语义、权限规则和 `docs/**`。
+
+## 2026-05-22 UX2 开发完成，进入整体验收
+
+- Codex 开发 agent 已完成 UX2 使用逻辑与字段减负续接，并更新 `handoff/dev-agent/latest-report.md`。
+- 主 agent 已核对开发报告和变更清单：
+  - 改动集中在 `frontend/**` 和 handoff 文件。
+  - 未发现 `backend/**`、数据库迁移、`docs/**` 变更。
+  - 前端新增运行期文件需纳入交付范围，测试 prompt 已补充“运行期前端文件不得保持未跟踪”的 P1 检查，避免重复 UX1 tokens.css 问题。
+- 当前建议：进入 UX2 测试 agent 整体验收。
+
+## 2026-05-22 UX2 收口
+
+- UX2 测试 agent 整体验收通过，报告已写入 `handoff/test-agent/latest-report.md`。
+- 当前无 P0 / P1。
+- 已确认：
+  - 资产总览、503 / 506 项目工作台、文件管理、工程主数据、交付工作中心、旧链接兼容和多分辨率检查通过。
+  - M2B / M2A / M1F / M1E / M1D / M1C 回归通过。
+  - 未发现 `backend/**`、数据库迁移、`docs/**` 改动。
+  - 未发现真实 NAS 路径或敏感字段泄露。
+- P2 后续打磨项：
+  - 既有 Vite chunk size warning。
+  - 项目工作台少量技术字段仍偏显眼。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 非交付未跟踪文件继续排除。
+- 主 agent 裁决：UX2 可以正式收口，下一步建议做 Git checkpoint。

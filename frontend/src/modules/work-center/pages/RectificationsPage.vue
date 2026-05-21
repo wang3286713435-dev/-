@@ -22,6 +22,21 @@
       </el-select>
     </div>
 
+    <section class="workflow-guide">
+      <div class="workflow-guide__main">
+        <span class="workflow-guide__step">整改闭环</span>
+        <h2>审核驳回后，在这里处理原因并关闭问题</h2>
+        <p>
+          整改项来自文档 / 图纸交付审核。先看来源文件、交付类型和驳回原因，处理后标记已处理，再由负责人关闭或重新打开。
+        </p>
+      </div>
+      <ol class="workflow-guide__steps">
+        <li>待处理：说明审核已经驳回，需要项目成员处理。</li>
+        <li>处理中 / 已处理：用于记录处理进度和说明。</li>
+        <li>已关闭：代表本轮整改被确认完成；如仍有问题可重新打开。</li>
+      </ol>
+    </section>
+
     <el-table v-loading="loading" :data="items" class="master-table" empty-text="暂无整改项">
       <el-table-column prop="bindingFileName" label="来源文件" min-width="180" />
       <el-table-column prop="bindingDeliverableTypeName" label="交付类型" min-width="140" />

@@ -36,6 +36,18 @@
       </ol>
     </section>
 
+    <section class="masterdata-next-action">
+      <div>
+        <span>下一步</span>
+        <strong>部位树确认后，去锁定节点类型</strong>
+        <p>节点类型会告诉平台哪些层级可以生成应交项。部位树还没稳定时，先不要急着进入文档/图纸交付。</p>
+      </div>
+      <div class="masterdata-next-action__actions">
+        <el-button type="primary" @click="goNodeTypes">去节点类型</el-button>
+        <el-button @click="goDeliverableStandard">查看交付物标准</el-button>
+      </div>
+    </section>
+
     <el-table
       v-loading="loading"
       :data="sectionTree"
@@ -93,6 +105,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Refresh } from '@element-plus/icons-vue';
 
@@ -109,6 +122,7 @@ import {
 import { useAuthStore } from '@/stores/auth';
 
 const authStore = useAuthStore();
+const router = useRouter();
 const loading = ref(false);
 const saving = ref(false);
 const sectionTree = ref<SectionNode[]>([]);
@@ -249,5 +263,15 @@ function findNode(nodes: SectionNode[], nodeId: number | null): SectionNode | nu
     }
   }
   return null;
+}
+
+function goNodeTypes() {
+  if (!currentProjectId.value) return;
+  router.push({ name: 'project-master-data-node-types', params: { projectId: currentProjectId.value } });
+}
+
+function goDeliverableStandard() {
+  if (!currentProjectId.value) return;
+  router.push({ name: 'project-master-data-deliverable-standard', params: { projectId: currentProjectId.value } });
 }
 </script>

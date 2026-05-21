@@ -7,8 +7,8 @@
       </div>
       <SidebarMenu :menus="menus" />
       <div class="app-layout__sidebar-foot">
-        <strong>BUILD · UX1</strong>
-        <span>前端壳层重构 / Phase 1</span>
+        <strong>BUILD · UX2</strong>
+        <span>使用路径重构 / Field relief</span>
       </div>
     </aside>
 

@@ -312,3 +312,175 @@
     "tnum";
   font-variant-numeric: tabular-nums;
 }
+
+/* ============================================================
+ * UX2 升级 — 与公司官网 zhuoyusmart.top 视觉对齐
+ *   1. 拟态玻璃 header + panel
+ *   2. Hero 光场（radial + conic 极光）
+ *   3. 全局网格底纹 + radial aura
+ *   4. light / dark 双主题
+ *   5. 鼠标追踪光斑 (--pointer-x/y, --spot-x/y)
+ * ============================================================ */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* 官网语义 token —— 用于 hero / glass / aura */
+  --zy-bg-page:        var(--zy-bg);
+  --zy-bg-section:     var(--zy-surface);
+  --zy-bg-soft:        #f3f7fb;
+  --zy-surface-raised: var(--zy-surface);
+
+  --zy-text-primary:   var(--zy-ink);
+  --zy-text-secondary: var(--zy-text-soft);
+
+  --zy-line-strong:    #bfd0e5;
+
+  --zy-brand:          var(--zy-blue-600);
+  --zy-brand-strong:   var(--zy-blue-700);
+  --zy-accent:         var(--zy-cyan-500);
+
+  /* 拟态玻璃 / panel tint */
+  --zy-header-bg:      rgba(255, 255, 255, 0.86);
+  --zy-panel-tint:     rgba(255, 255, 255, 0.86);
+  --zy-panel-ink:      var(--zy-ink);
+
+  /* hero base */
+  --zy-hero-base:      var(--zy-surface);
+  --zy-hero-ink:       #061326;
+  --zy-hero-muted:     #42617e;
+
+  /* 网格底纹 */
+  --zy-grid-line:      rgba(37, 99, 235, 0.045);
+  --zy-grid-size:      96px;
+
+  /* 官网风更厚柔阴影（cards / drawers / dialog） */
+  --zy-shadow-soft:    0 22px 58px rgba(15, 23, 42, 0.052);
+  --zy-shadow-strong:  0 34px 86px rgba(15, 23, 42, 0.11);
+
+  /* 鼠标追踪光斑默认位置 */
+  --pointer-x:         50%;
+  --pointer-y:         28%;
+  --spot-x:            50%;
+  --spot-y:            24%;
+
+  --zy-image-filter:   saturate(0.95) contrast(1.02);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* 官网 dark token */
+  --zy-bg:             #050b14;
+  --zy-bg-page:        #050b14;
+  --zy-bg-section:     #07111f;
+  --zy-bg-soft:        #0d1b2e;
+  --zy-bg-deep:        #050b14;
+  --zy-surface:        #0f1f35;
+  --zy-surface-soft:   #0d1b2e;
+  --zy-surface-raised: #132842;
+
+  --zy-ink:            #eef6ff;
+  --zy-text:           #c7d5e7;
+  --zy-text-primary:   #eef6ff;
+  --zy-text-soft:      #c7d5e7;
+  --zy-text-secondary: #c7d5e7;
+  --zy-muted:          #91a4bb;
+  --zy-subtle:         #6e8398;
+
+  --zy-line:           rgba(184, 205, 230, 0.18);
+  --zy-line-soft:      rgba(184, 205, 230, 0.10);
+  --zy-line-strong:    rgba(184, 205, 230, 0.32);
+
+  --zy-brand:          #6ea8ff;
+  --zy-brand-strong:   #8fc0ff;
+  --zy-blue-700:       #8fc0ff;
+  --zy-blue-600:       #6ea8ff;
+  --zy-blue-500:       #4d8eef;
+  --zy-blue-200:       rgba(110, 168, 255, 0.36);
+  --zy-blue-100:       rgba(110, 168, 255, 0.22);
+  --zy-blue-50:        rgba(110, 168, 255, 0.12);
+  --zy-accent:         #38d5e8;
+  --zy-cyan-500:       #38d5e8;
+
+  --zy-green-500:      #4ade80;
+  --zy-green-50:       rgba(74, 222, 128, 0.14);
+  --zy-amber-500:      #fbbf24;
+  --zy-amber-50:       rgba(251, 191, 36, 0.14);
+  --zy-red-500:        #fb7185;
+  --zy-red-50:         rgba(251, 113, 133, 0.14);
+
+  --zy-shadow-xs:      0 1px 2px rgba(0, 0, 0, 0.4);
+  --zy-shadow-sm:      0 2px 8px rgba(0, 0, 0, 0.4);
+  --zy-shadow-md:      0 12px 32px rgba(0, 0, 0, 0.42);
+  --zy-shadow-lg:      0 28px 72px rgba(0, 0, 0, 0.5);
+  --zy-shadow-soft:    0 26px 72px rgba(0, 0, 0, 0.3);
+  --zy-shadow-strong:  0 38px 104px rgba(0, 0, 0, 0.44);
+
+  --zy-header-bg:      rgba(5, 11, 20, 0.76);
+  --zy-panel-tint:     rgba(15, 31, 53, 0.84);
+  --zy-panel-ink:      #eef6ff;
+  --zy-hero-base:      #06101e;
+  --zy-hero-ink:       #eef6ff;
+  --zy-hero-muted:     #a7bbd3;
+  --zy-grid-line:      rgba(110, 168, 255, 0.075);
+
+  --zy-image-filter:   saturate(0.82) contrast(0.96) brightness(0.72);
+}
+
+/* dark theme 下 EP 默认变量也跟着切 */
+[data-theme="dark"] {
+  --el-color-primary:           var(--zy-brand);
+  --el-color-primary-light-3:   #87b6ff;
+  --el-color-primary-light-5:   #a6cbff;
+  --el-color-primary-light-7:   #c4dcff;
+  --el-color-primary-light-8:   rgba(110, 168, 255, 0.24);
+  --el-color-primary-light-9:   rgba(110, 168, 255, 0.14);
+  --el-color-primary-dark-2:    #8fc0ff;
+
+  --el-bg-color:           var(--zy-surface);
+  --el-bg-color-page:      var(--zy-bg);
+  --el-bg-color-overlay:   var(--zy-surface);
+  --el-fill-color-blank:   var(--zy-surface);
+  --el-fill-color-light:   var(--zy-surface-soft);
+  --el-fill-color-lighter: var(--zy-bg-soft);
+
+  --el-text-color-primary:     var(--zy-text-primary);
+  --el-text-color-regular:     var(--zy-text-soft);
+  --el-text-color-secondary:   var(--zy-muted);
+  --el-text-color-placeholder: var(--zy-subtle);
+  --el-text-color-disabled:    rgba(238, 246, 255, 0.32);
+
+  --el-border-color:         var(--zy-line);
+  --el-border-color-light:   var(--zy-line-soft);
+  --el-border-color-lighter: var(--zy-line-soft);
+}
+
+/* Dark theme EP 表格表头 */
+[data-theme="dark"] .el-table {
+  --el-table-bg-color:        var(--zy-surface);
+  --el-table-tr-bg-color:     var(--zy-surface);
+  --el-table-header-bg-color: var(--zy-bg-soft);
+  --el-table-row-hover-bg-color: rgba(110, 168, 255, 0.06);
+  --el-table-border-color:    var(--zy-line);
+}
+
+[data-theme="dark"] .el-table th.el-table__cell {
+  color: var(--zy-muted);
+  background: var(--zy-bg-soft);
+}
+
+[data-theme="dark"] ::selection {
+  background: rgba(110, 168, 255, 0.24);
+  color: var(--zy-text-primary);
+}
+
+/* Reduced motion 全局覆盖（已在 index.css 设过；保留兜底） */
+@media (prefers-reduced-motion: reduce) {
+  .zy-hero-lightfield,
+  .zy-hero-lightfield *,
+  .zy-particle-field {
+    animation: none !important;
+  }
+}

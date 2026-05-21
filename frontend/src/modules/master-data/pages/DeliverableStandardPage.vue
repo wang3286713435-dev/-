@@ -39,6 +39,18 @@
       </ol>
     </section>
 
+    <section class="masterdata-next-action">
+      <div>
+        <span>下一步</span>
+        <strong>标准确认后，进入文档 / 图纸交付</strong>
+        <p>交付物定义和类型会直接生成应交项。缺失项不是错误，而是提示员工需要选择哪个文件补交。</p>
+      </div>
+      <div class="masterdata-next-action__actions">
+        <el-button type="primary" @click="goDocumentDelivery">进入文档交付</el-button>
+        <el-button @click="goDrawingDelivery">进入图纸交付</el-button>
+      </div>
+    </section>
+
     <el-alert v-if="!canWrite" class="node-type-lock" type="warning" :closable="false" show-icon>
       <template #title>请先锁定节点类型</template>
       <p class="status-helper">节点类型锁定后，平台才能确认交付标准绑定在哪些部位层级上。</p>
@@ -293,6 +305,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Delete, Edit, Plus, Refresh } from '@element-plus/icons-vue';
 
@@ -328,6 +341,7 @@ import { useAuthStore } from '@/stores/auth';
 type DialogKind = 'definition' | 'type' | 'attribute' | 'template';
 
 const authStore = useAuthStore();
+const router = useRouter();
 const loading = ref(false);
 const loadingTypes = ref(false);
 const loadingAttributes = ref(false);
@@ -756,6 +770,16 @@ function resetForm(kind: DialogKind) {
       status: 'ACTIVE'
     });
   }
+}
+
+function goDocumentDelivery() {
+  if (!currentProjectId.value) return;
+  router.push({ name: 'project-work-document-delivery', params: { projectId: currentProjectId.value } });
+}
+
+function goDrawingDelivery() {
+  if (!currentProjectId.value) return;
+  router.push({ name: 'project-work-drawing-delivery', params: { projectId: currentProjectId.value } });
 }
 </script>
 
