@@ -10,6 +10,7 @@ import com.zhuoyu.delivery.datasteward.asset.hermes.HermesGatewayDtos.HermesCapa
 import com.zhuoyu.delivery.datasteward.asset.hermes.HermesGatewayDtos.HermesChatRequest;
 import com.zhuoyu.delivery.datasteward.asset.hermes.HermesGatewayDtos.HermesChatResponse;
 import com.zhuoyu.delivery.datasteward.asset.hermes.HermesGatewayDtos.HermesCitation;
+import com.zhuoyu.delivery.datasteward.asset.hermes.HermesGatewayDtos.HermesAuthorityHealth;
 import com.zhuoyu.delivery.datasteward.asset.hermes.HermesGatewayDtos.HermesHealthResponse;
 import com.zhuoyu.delivery.datasteward.asset.hermes.HermesGatewayDtos.HermesMissingEvidence;
 import com.zhuoyu.delivery.datasteward.asset.hermes.HermesGatewayDtos.HermesOperationAction;
@@ -49,6 +50,14 @@ public class AgentGatewayApplicationService {
     private static final Pattern SECRET_PATTERN = Pattern.compile("(?i)(bearer\\s+)?(token|secret)\\s*[:=]\\s*[^\\s\"'<>]+");
     private static final Pattern INTERNAL_FIELD_PATTERN = Pattern.compile("(?i)\\b(storage_path|storage_uri|storagePath|storageUri|raw row|request_id|trace_id|trace id)\\b");
     private static final Pattern SQL_PATTERN = Pattern.compile("(?i)\\b(select\\s+.+?\\s+from|insert\\s+into|update\\s+.+?\\s+set|delete\\s+from)\\b");
+    private static final Pattern HIGH_RISK_FORBIDDEN_PATTERN = Pattern.compile(
+        "(?is)(nas://[^\\s\"'<>]+|smb://[^\\s\"'<>]+|/Volumes/[^\\s\"'<>]+|/(Users|mnt|private|var|etc|home|opt|srv|data|share)/[^\\s\"'<>]+|"
+            + "[a-z]:\\\\[^\\s\"'<>]+|\\\\\\\\[^\\s\"'<>]+\\\\[^\\s\"'<>]+|\\b(storage_path|storage_uri|storagePath|storageUri|raw row|raw file content)\\b|"
+            + "\\bbearer\\s+[^\\s\"'<>]+|"
+            + "(token|secret|password|credential|api[_-]?key)\\s*[:=]\\s*[^\\s\"'<>]+|"
+            + "\\bsql\\b|\\bselect\\s+.+?\\s+from\\b|\\binsert\\s+into\\b|\\bupdate\\s+.+?\\s+set\\b|\\bdelete\\s+from\\b)"
+    );
+    private static final Pattern SAFE_REF_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9_-]*:[a-zA-Z0-9:._-]{1,180}$");
 
     private final HermesGatewayProperties properties;
     private final AgentAssetContextResolver assetContextResolver;
@@ -82,7 +91,8 @@ public class AgentGatewayApplicationService {
             "catalog_only",
             properties.getContractVersion(),
             new HermesSupports(true, true, true, false, false, false, false, false),
-            new HermesSafety(true, true, true)
+            new HermesSafety(true, true, true),
+            wrappedAuthorityHealth()
         );
     }
 
@@ -101,7 +111,8 @@ public class AgentGatewayApplicationService {
             false,
             available,
             available ? "" : sanitizeText(probe.unavailableReason()),
-            Instant.now()
+            Instant.now(),
+            wrappedAuthorityHealth()
         );
     }
 
@@ -116,7 +127,11 @@ public class AgentGatewayApplicationService {
             context = assetContextResolver.resolve(request);
             proof = permissionProofService.build(principal.userId(), context);
             if (!proof.allowed()) {
-                response = denied(requestId, context, proof);
+                response = denied(requestId, request, context, proof);
+                return response;
+            }
+            if (containsForbiddenHighRisk(request.question())) {
+                response = failClosedForbiddenResponse(requestId, request, context, proof, "USER_PROMPT_FORBIDDEN_FIELD_DETECTED");
                 return response;
             }
             pathContext = projectPathContext(context.projectId(), request.question());
@@ -127,7 +142,7 @@ public class AgentGatewayApplicationService {
             if (externalResponse != null) {
                 response = asksForContent(request.question())
                     ? localCatalogOnlyFallback(requestId, request, context, proof, pathContext)
-                    : sanitizeExternalResponse(requestId, externalResponse, context, proof, pathContext);
+                    : sanitizeExternalResponse(requestId, request, externalResponse, context, proof, pathContext);
                 return response;
             }
             if (properties.isEnabled()) {
@@ -159,6 +174,12 @@ public class AgentGatewayApplicationService {
         pageContext.put("project_code_hint", sanitizeText(request.projectCode()));
         pageContext.put("project_name_hint", sanitizeText(request.projectName()));
         pageContext.put("project_scope_generated_by", "platform_gateway");
+        pageContext.put("session_ref", sessionRef(request, context, requestId));
+        pageContext.put("thread_ref", threadRef(request, context, requestId));
+        pageContext.put("previous_response_ref", previousResponseRef(request));
+        pageContext.put("sanitized_context_refs", sanitizedContextRefs(request, context, proof, requestId));
+        pageContext.put("session_continuity_mode", "reserved_openai_compatible_gateway_wrapped");
+        pageContext.put("native_runtime_enabled", false);
         pageContext.put("catalog_summary", catalogSummary(principal.userId(), context.projectId(), request.question()));
         if (pathContext.query() && !pathContext.paths().isEmpty()) {
             pageContext.put("project_path_context", Map.of(
@@ -181,6 +202,8 @@ public class AgentGatewayApplicationService {
         responseRequirements.put("must_not_expose_secret", true);
         responseRequirements.put("must_not_use_catalog_as_content_evidence", true);
         responseRequirements.put("must_not_execute_actions", true);
+        responseRequirements.put("native_session_lifecycle_enabled", false);
+        responseRequirements.put("memory_write_enabled", false);
 
         return new HermesOutboundRequest(
             requestId,
@@ -210,8 +233,9 @@ public class AgentGatewayApplicationService {
         );
     }
 
-    private HermesChatResponse denied(String requestId, AgentAssetContext context, PermissionProof proof) {
+    private HermesChatResponse denied(String requestId, HermesChatRequest request, AgentAssetContext context, PermissionProof proof) {
         return new HermesChatResponse(
+            responseId(requestId),
             "denied",
             "missing_evidence",
             true,
@@ -226,12 +250,19 @@ public class AgentGatewayApplicationService {
             permission("denied", true, proof.permissionTagsChecked(), true, proof.denialReasonCode()),
             List.of(new HermesMissingEvidence("permission_denied", safeReason(proof.denialReasonText()))),
             operationPlan(false),
-            trace(requestId)
+            trace(requestId),
+            sessionRef(request, context, requestId),
+            threadRef(request, context, requestId),
+            previousResponseRef(request),
+            wrappedAuthorityHealth(),
+            List.of(),
+            sanitizedContextRefs(request, context, proof, requestId)
         );
     }
 
-    private HermesChatResponse errorFallback(String requestId, AgentAssetContext context, PermissionProof proof) {
+    private HermesChatResponse errorFallback(String requestId, HermesChatRequest request, AgentAssetContext context, PermissionProof proof) {
         return new HermesChatResponse(
+            responseId(requestId),
             "error",
             "missing_evidence",
             true,
@@ -246,7 +277,46 @@ public class AgentGatewayApplicationService {
             permission("allowed", true, proof.permissionTagsChecked(), true, null),
             List.of(new HermesMissingEvidence("agent_unavailable", "无法取得可引用证据，请稍后重试。")),
             operationPlan(false),
-            trace(requestId)
+            trace(requestId),
+            sessionRef(request, context, requestId),
+            threadRef(request, context, requestId),
+            previousResponseRef(request),
+            wrappedAuthorityHealth(),
+            List.of(),
+            sanitizedContextRefs(request, context, proof, requestId)
+        );
+    }
+
+    private HermesChatResponse failClosedForbiddenResponse(
+        String requestId,
+        HermesChatRequest request,
+        AgentAssetContext context,
+        PermissionProof proof,
+        String reasonCode
+    ) {
+        return new HermesChatResponse(
+            responseId(requestId),
+            "error",
+            "missing_evidence",
+            true,
+            requestId,
+            requestId,
+            context == null ? "" : context.sourceView(),
+            fileId(context),
+            modelId(context),
+            List.of(),
+            "Hermes 返回或请求内容命中 Gateway 安全红线，平台已 fail closed，未继续输出该回答。",
+            List.of(),
+            permission("allowed", true, proof.permissionTagsChecked(), true, reasonCode),
+            List.of(new HermesMissingEvidence("forbidden_field_detected", "检测到原始路径、存储字段、查询语句、内部行数据或密钥类内容，已按安全策略中止。")),
+            operationPlan(false),
+            trace(requestId, "openai_compatible_catalog_only"),
+            sessionRef(request, context, requestId),
+            threadRef(request, context, requestId),
+            previousResponseRef(request),
+            wrappedAuthorityHealth(),
+            List.of(),
+            sanitizedContextRefs(request, context, proof, requestId)
         );
     }
 
@@ -272,6 +342,7 @@ public class AgentGatewayApplicationService {
             ? pageGuidanceAnswer(request, context)
             : "Hermes 当前回答仅基于资产目录和权限上下文，不包含文件正文证据。";
         return new HermesChatResponse(
+            responseId(requestId),
             status,
             status,
             true,
@@ -293,7 +364,13 @@ public class AgentGatewayApplicationService {
             permission("allowed", true, proof.permissionTagsChecked(), false, null),
             missingEvidence(request.question(), contentQuestion, active, catalogOnly, unknownConfidentiality, missingPath),
             operationPlan(true),
-            trace(requestId)
+            trace(requestId),
+            sessionRef(request, context, requestId),
+            threadRef(request, context, requestId),
+            previousResponseRef(request),
+            wrappedAuthorityHealth(),
+            List.of(),
+            sanitizedContextRefs(request, context, proof, requestId)
         );
     }
 
@@ -330,15 +407,20 @@ public class AgentGatewayApplicationService {
 
     private HermesChatResponse sanitizeExternalResponse(
         String requestId,
+        HermesChatRequest request,
         HermesChatResponse response,
         AgentAssetContext context,
         PermissionProof proof,
         ProjectPathContext pathContext
     ) {
+        if (containsForbiddenHighRisk(response)) {
+            return failClosedForbiddenResponse(requestId, request, context, proof, "HERMES_RESPONSE_FORBIDDEN_FIELD_DETECTED");
+        }
         String status = safeStatus(response.status());
         String evidenceMode = safeEvidenceMode(response.evidenceMode());
         String answer = appendProjectPathsIfNeeded(sanitizeText(response.answer(), pathContext.allowedPathValues()), pathContext);
         return new HermesChatResponse(
+            responseId(requestId),
             status,
             evidenceMode,
             true,
@@ -361,7 +443,13 @@ public class AgentGatewayApplicationService {
                 ),
             sanitizeMissingEvidence(response.missingEvidence(), pathContext),
             sanitizeOperationPlan(response.operationPlan()),
-            trace(requestId, "openai_compatible_catalog_only")
+            trace(requestId, "openai_compatible_catalog_only"),
+            sessionRef(request, context, requestId),
+            threadRef(request, context, requestId),
+            previousResponseRef(request),
+            wrappedAuthorityHealth(),
+            List.of(),
+            sanitizedContextRefs(request, context, proof, requestId)
         );
     }
 
@@ -419,6 +507,105 @@ public class AgentGatewayApplicationService {
         return new HermesOperationPlan(true, true, actions.isEmpty() ? List.of(new HermesOperationAction("manual_review_required", "draft_only")) : actions);
     }
 
+    private static String sessionRef(HermesChatRequest request, AgentAssetContext context, String requestId) {
+        String provided = safeExternalRef(request == null ? "" : request.sessionId(), "session");
+        if (!provided.isBlank()) {
+            return provided;
+        }
+        return "session:platform-gateway:project:" + safeProjectId(request, context, requestId);
+    }
+
+    private static String threadRef(HermesChatRequest request, AgentAssetContext context, String requestId) {
+        String provided = safeExternalRef(request == null ? "" : request.threadId(), "thread");
+        if (!provided.isBlank()) {
+            return provided;
+        }
+        return "thread:platform-gateway:project:" + safeProjectId(request, context, requestId)
+            + ":" + safeRefSegment(request == null ? "" : request.pageType(), "data_steward");
+    }
+
+    private static String previousResponseRef(HermesChatRequest request) {
+        return safeExternalRef(request == null ? "" : request.previousResponseId(), "response");
+    }
+
+    private static List<Map<String, Object>> sanitizedContextRefs(
+        HermesChatRequest request,
+        AgentAssetContext context,
+        PermissionProof proof,
+        String requestId
+    ) {
+        List<Map<String, Object>> refs = new ArrayList<>();
+        String projectId = safeProjectId(request, context, requestId);
+        Map<String, Object> projectRef = new LinkedHashMap<>();
+        projectRef.put("refType", "project");
+        projectRef.put("ref", "project:" + projectId);
+        projectRef.put("source", "platform_gateway");
+        projectRef.put("revalidation", "required_on_project_switch");
+        refs.add(projectRef);
+
+        Map<String, Object> pageRef = new LinkedHashMap<>();
+        pageRef.put("refType", "page");
+        pageRef.put("ref", "page:" + safeRefSegment(request == null ? "" : request.pageType(), "data_steward"));
+        pageRef.put("source", "platform_gateway");
+        pageRef.put("nativeRuntimeEnabled", false);
+        refs.add(pageRef);
+
+        Long assetId = context == null ? request == null ? null : request.assetId() : context.assetId();
+        if (assetId != null) {
+            Map<String, Object> assetRef = new LinkedHashMap<>();
+            assetRef.put("refType", "asset");
+            assetRef.put("ref", "asset:" + assetId);
+            assetRef.put("source", "platform_gateway");
+            assetRef.put("sourceView", sanitizeText(context == null ? request.sourceView() : context.sourceView()));
+            refs.add(assetRef);
+        }
+
+        Map<String, Object> permissionRef = new LinkedHashMap<>();
+        permissionRef.put("refType", "permission");
+        permissionRef.put("ref", "permission:gateway:" + (requestId == null || requestId.isBlank() ? "unknown" : requestId));
+        permissionRef.put("source", "platform_gateway");
+        permissionRef.put("status", proof == null || proof.allowed() ? "allowed" : "denied");
+        refs.add(permissionRef);
+
+        Map<String, Object> lifecycleRef = new LinkedHashMap<>();
+        lifecycleRef.put("refType", "session_lifecycle");
+        lifecycleRef.put("ref", sessionRef(request, context, requestId));
+        lifecycleRef.put("threadRef", threadRef(request, context, requestId));
+        lifecycleRef.put("mode", "reserved_openai_compatible_gateway_wrapped");
+        lifecycleRef.put("memoryWriteEnabled", false);
+        refs.add(lifecycleRef);
+        return refs;
+    }
+
+    private static String safeExternalRef(String value, String expectedPrefix) {
+        String sanitized = sanitizeText(value).trim();
+        if (sanitized.isBlank()
+            || sanitized.length() > 200
+            || containsForbiddenHighRisk(sanitized)
+            || !sanitized.startsWith(expectedPrefix + ":")
+            || !SAFE_REF_PATTERN.matcher(sanitized).matches()) {
+            return "";
+        }
+        return sanitized;
+    }
+
+    private static String safeProjectId(HermesChatRequest request, AgentAssetContext context, String requestId) {
+        Long projectId = context == null ? request == null ? null : request.projectId() : context.projectId();
+        if (projectId != null) {
+            return String.valueOf(projectId);
+        }
+        return requestId == null || requestId.isBlank() ? "unknown" : requestId;
+    }
+
+    private static String safeRefSegment(String value, String fallback) {
+        String segment = sanitizeText(value).trim().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]+", "_");
+        segment = segment.replaceAll("^_+|_+$", "");
+        if (segment.isBlank()) {
+            return fallback;
+        }
+        return segment.length() > 48 ? segment.substring(0, 48) : segment;
+    }
+
     private void recordHermesAudit(
         AuthenticatedPrincipal principal,
         HermesChatRequest request,
@@ -446,6 +633,15 @@ public class AgentGatewayApplicationService {
         details.put("assetRef", request.assetId() == null ? "" : "asset:" + request.assetId());
         details.put("questionLength", request.question() == null ? 0 : request.question().length());
         details.put("contentQuestion", asksForContent(request.question()));
+        details.put("sessionRef", response == null ? "" : sanitizeText(response.sessionRef()));
+        details.put("threadRef", response == null ? "" : sanitizeText(response.threadRef()));
+        details.put("previousResponseRef", response == null ? "" : sanitizeText(response.previousResponseRef()));
+        details.put("sanitizedContextRefCount", response == null || response.sanitizedContextRefs() == null
+            ? 0
+            : response.sanitizedContextRefs().size());
+        details.put("safeMemoryCandidateCount", response == null || response.safeMemoryCandidates() == null
+            ? 0
+            : response.safeMemoryCandidates().size());
 
         auditLogApplicationService.record(
             projectId,
@@ -775,6 +971,108 @@ public class AgentGatewayApplicationService {
             return "";
         }
         return sanitizeText(value.trim());
+    }
+
+    private static boolean containsForbiddenHighRisk(HermesChatResponse response) {
+        if (response == null) {
+            return false;
+        }
+        if (containsForbiddenHighRisk(response.answer())
+            || containsForbiddenHighRisk(response.status())
+            || containsForbiddenHighRisk(response.evidenceMode())
+            || containsForbiddenHighRisk(response.sourceView())
+            || containsForbiddenHighRisk(response.sessionRef())
+            || containsForbiddenHighRisk(response.threadRef())
+            || containsForbiddenHighRisk(response.previousResponseRef())) {
+            return true;
+        }
+        if (containsForbiddenHighRisk(response.sanitizedContextRefs())) {
+            return true;
+        }
+        if (containsForbiddenHighRisk(response.safeMemoryCandidates())) {
+            return true;
+        }
+        if (response.permission() != null
+            && (containsForbiddenHighRisk(response.permission().permissionStatus())
+                || containsForbiddenHighRisk(response.permission().reasonCode()))) {
+            return true;
+        }
+        if (response.pathHints() != null) {
+            for (HermesPathHint pathHint : response.pathHints()) {
+                if (pathHint != null
+                    && (containsForbiddenHighRisk(pathHint.displayPath())
+                        || containsForbiddenHighRisk(pathHint.pathHint())
+                        || containsForbiddenHighRisk(pathHint.provider())
+                        || containsForbiddenHighRisk(pathHint.matchStrategy()))) {
+                    return true;
+                }
+            }
+        }
+        if (response.citations() != null) {
+            for (HermesCitation citation : response.citations()) {
+                if (citation != null
+                    && (containsForbiddenHighRisk(citation.citationType())
+                        || containsForbiddenHighRisk(citation.sourceView())
+                        || containsForbiddenHighRisk(citation.assetRef())
+                        || containsForbiddenHighRisk(citation.projectRef())
+                        || containsForbiddenHighRisk(citation.displayLabel()))) {
+                    return true;
+                }
+            }
+        }
+        if (response.missingEvidence() != null) {
+            for (HermesMissingEvidence item : response.missingEvidence()) {
+                if (item != null
+                    && (containsForbiddenHighRisk(item.reason())
+                        || containsForbiddenHighRisk(item.message()))) {
+                    return true;
+                }
+            }
+        }
+        if (response.operationPlan() != null && response.operationPlan().actions() != null) {
+            for (HermesOperationAction action : response.operationPlan().actions()) {
+                if (action != null
+                    && (containsForbiddenHighRisk(action.actionType())
+                        || containsForbiddenHighRisk(action.status()))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean containsForbiddenHighRisk(String value) {
+        return value != null && HIGH_RISK_FORBIDDEN_PATTERN.matcher(value).find();
+    }
+
+    private static boolean containsForbiddenHighRisk(List<Map<String, Object>> refs) {
+        if (refs == null || refs.isEmpty()) {
+            return false;
+        }
+        for (Map<String, Object> ref : refs) {
+            if (ref == null) {
+                continue;
+            }
+            for (Object value : ref.values()) {
+                if (value instanceof String text && containsForbiddenHighRisk(text)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static String responseId(String requestId) {
+        return requestId == null || requestId.isBlank() ? "" : "response:" + requestId;
+    }
+
+    private static HermesAuthorityHealth wrappedAuthorityHealth() {
+        return new HermesAuthorityHealth(
+            "green",
+            "staged",
+            "orange",
+            "openai_compatible_gateway_wrapped"
+        );
     }
 
     private HermesPermissionResult permission(

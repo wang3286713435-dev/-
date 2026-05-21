@@ -368,12 +368,12 @@
             下载文件
           </el-button>
           <el-button :disabled="Boolean(selectedFile.checksum)" @click="createChecksum(selectedFile)">创建 checksum 任务</el-button>
-          <el-button :icon="ChatDotRound" @click="openHermesForFile(selectedFile.fileId)">问 Hermes</el-button>
+          <el-button :icon="ChatDotRound" @click="openHermesForFile(selectedFile.fileId)">问 Hermes 助手</el-button>
         </section>
       </template>
     </el-drawer>
 
-    <el-drawer v-model="hermesDrawerVisible" title="Hermes 数据管家" size="520px">
+    <HermesWorkspaceDrawer v-model="hermesDrawerVisible">
       <DataStewardPanel
         v-if="Number.isFinite(projectId)"
         :project-id="projectId"
@@ -386,7 +386,7 @@
         page-title="项目工作台"
       />
       <el-empty v-else description="请先选择项目" :image-size="56" />
-    </el-drawer>
+    </HermesWorkspaceDrawer>
 
     <el-dialog v-model="previewDialogVisible" title="文件预览状态" width="640px">
       <div v-loading="previewLoading" class="preview-dialog-body">
@@ -596,6 +596,7 @@ import {
 } from '@/modules/data-steward/api/dataSteward';
 import AssetProjectFileBrowser from '@/modules/data-steward/components/AssetProjectFileBrowser.vue';
 import DataStewardPanel from '@/modules/data-steward/components/DataStewardPanel.vue';
+import HermesWorkspaceDrawer from '@/modules/data-steward/components/HermesWorkspaceDrawer.vue';
 import {
   conversionStatusLabel,
   previewActionHint,

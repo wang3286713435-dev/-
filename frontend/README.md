@@ -12,16 +12,22 @@
 
 ## 本地运行
 
-优先使用 [`scripts/dev/start-frontend.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/start-frontend.sh)。
+优先使用 [`scripts/dev/start-frontend.sh`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/start-frontend.sh)。
 
-Windows PowerShell 优先使用 [`scripts/dev/start-frontend.ps1`](/Users/vc/Documents/数字化交付平台/scripts/dev/start-frontend.ps1)。
+Windows PowerShell 优先使用 [`scripts/dev/start-frontend.ps1`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/start-frontend.ps1)。
+
+Hermes 分支默认在 `5174` 端口启动，并将 `/api` 代理到 `http://localhost:18080`，用于隔离平台主线前端和后端。需要改目标时设置：
+
+```bash
+VITE_API_PROXY_TARGET=http://localhost:18080 bash scripts/dev/start-frontend.sh
+```
 
 手动命令：
 
 ```bash
 cd frontend
 corepack pnpm install
-corepack pnpm dev --host 0.0.0.0
+VITE_FRONTEND_PORT=5174 corepack pnpm dev --host 0.0.0.0 --port 5174 --strictPort
 ```
 
 Windows 手动命令：
@@ -29,5 +35,6 @@ Windows 手动命令：
 ```powershell
 cd frontend
 corepack pnpm install
-corepack pnpm dev --host 0.0.0.0
+$env:VITE_FRONTEND_PORT = "5174"
+corepack pnpm dev --host 0.0.0.0 --port 5174 --strictPort
 ```

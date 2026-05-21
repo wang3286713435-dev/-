@@ -9,6 +9,7 @@ export const useAuthStore = defineStore('auth', () => {
   const session = ref<SessionTokens | null>(readSession());
   const currentUser = ref<CurrentUser | null>(null);
   const bootstrapped = ref(false);
+  const hermesContextVersion = ref(0);
 
   const isAuthenticated = computed(() => Boolean(session.value?.accessToken));
   const currentProjectId = computed(() => currentUser.value?.currentProject.id ?? session.value?.currentProjectId ?? null);
@@ -51,6 +52,7 @@ export const useAuthStore = defineStore('auth', () => {
       refreshToken: tokenResponse.refreshToken,
       currentProjectId: tokenResponse.currentProjectId
     });
+    invalidateHermesContext(projectId);
     return loadCurrentUser();
   }
 
@@ -75,10 +77,23 @@ export const useAuthStore = defineStore('auth', () => {
     bootstrapped.value = false;
   }
 
+  function invalidateHermesContext(projectId: number | null) {
+    hermesContextVersion.value += 1;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('hermes-context-invalidated', {
+        detail: {
+          projectId,
+          reason: 'project_switch'
+        }
+      }));
+    }
+  }
+
   return {
     session,
     currentUser,
     bootstrapped,
+    hermesContextVersion,
     isAuthenticated,
     currentProjectId,
     hydrate,

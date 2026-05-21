@@ -1,311 +1,76 @@
 <template>
-  <section class="data-steward-panel">
+  <section ref="panelRef" class="data-steward-panel">
     <header class="data-steward-panel__head">
       <div>
-        <h3>Hermes 数据管家</h3>
-        <p>只基于资产目录、受控项目路径、权限证明和当前项目上下文回答。</p>
+        <h3>Hermes 企业 Agent</h3>
+        <p>平台只是 Hermes 的一个受控 UI；当前仅开放 catalog-only 安全接入。</p>
       </div>
       <div class="data-steward-panel__badges">
-        <EvidenceModeBadge mode="catalog_only" />
+        <el-tag size="small" type="info">平台 UI</el-tag>
+        <el-tag size="small" type="warning">共享工作区规划</el-tag>
         <el-tag :type="healthTagType(health)" size="small">{{ healthLabel(health) }}</el-tag>
       </div>
     </header>
 
-    <el-alert
-      type="info"
-      title="当前不读取 PDF、Office、CAD、BIM 正文，不执行数据库或 NAS 写操作。"
-      :closable="false"
-      show-icon
-    />
-
     <section class="data-steward-panel__context" aria-label="当前页面上下文">
       <div>
-        <span>当前上下文</span>
+        <span>Agent 上下文</span>
         <strong>{{ contextTitle }}</strong>
+        <el-tag size="small" type="info">project scoped</el-tag>
+        <el-tag v-if="conversationTurnCount" size="small" type="success">
+          {{ conversationTurnCount }} 条会话
+        </el-tag>
       </div>
       <p>{{ contextDescription }}</p>
+      <small>会话引用已保留，native runtime 未启用；项目、权限或角色切换时会失效并等待 Gateway 重新校验。</small>
     </section>
-
-    <div class="data-steward-panel__status">
-      <div class="data-steward-panel__status-item">
-        <span>当前模式</span>
-        <strong>资产目录辅助</strong>
-      </div>
-      <div class="data-steward-panel__status-item">
-        <span>正文问答</span>
-        <strong>未开放</strong>
-      </div>
-      <div class="data-steward-panel__status-item">
-        <span>项目路径</span>
-        <strong>受控查询</strong>
-      </div>
-      <div class="data-steward-panel__status-item">
-        <span>写操作</span>
-        <strong>不会执行</strong>
-      </div>
-      <div class="data-steward-panel__status-item">
-        <span>生产发布</span>
-        <strong>未开放</strong>
-      </div>
-    </div>
-
-    <el-descriptions v-if="capabilities" :column="1" border size="small">
-      <el-descriptions-item label="能力名称">{{ capabilities.agentName }}</el-descriptions-item>
-      <el-descriptions-item label="模式">{{ modeLabel(capabilities.mode) }}</el-descriptions-item>
-      <el-descriptions-item label="合同">{{ capabilities.contractVersion }}</el-descriptions-item>
-      <el-descriptions-item v-if="health" label="网关状态">
-        {{ health.status === 'ok' ? '正常' : '降级运行' }}
-      </el-descriptions-item>
-      <el-descriptions-item v-if="health" label="Hermes连接">
-        {{ healthLabel(health) }}
-      </el-descriptions-item>
-      <el-descriptions-item v-if="health" label="运行模式">{{ modeLabel(health.mode) }}</el-descriptions-item>
-      <el-descriptions-item v-if="health" label="运行时写入">
-        {{ health.runtimeWriteEnabled ? '已开放' : '未开放' }}
-      </el-descriptions-item>
-      <el-descriptions-item v-if="health" label="Hermes真实回答">
-        {{ health.agentAnswerIntegrationEnabled ? '已接入' : '未接入' }}
-      </el-descriptions-item>
-      <el-descriptions-item label="目录辅助">
-        {{ capabilities.supports.catalogQuery ? '可用' : '未开放' }}
-      </el-descriptions-item>
-      <el-descriptions-item label="正文问答">
-        {{ capabilities.supports.documentContentAnswer ? '可用' : '未开放' }}
-      </el-descriptions-item>
-      <el-descriptions-item label="数据库 / NAS 写操作">
-        {{ capabilities.supports.dbCrud || capabilities.supports.nasCrud ? '可用' : '不会执行' }}
-      </el-descriptions-item>
-      <el-descriptions-item label="生产发布">
-        {{ capabilities.supports.productionRollout ? '可用' : '未开放' }}
-      </el-descriptions-item>
-      <el-descriptions-item v-if="health?.unavailableReason" label="不可用原因">
-        {{ health.unavailableReason }}
-      </el-descriptions-item>
-    </el-descriptions>
-
-    <section class="data-steward-panel__action-center" aria-label="Hermes Action Center">
-      <header>
-        <div>
-          <strong>Hermes Action Center</strong>
-          <span>通过平台受控接口生成计划，只有人工确认后才会执行挂接。</span>
-        </div>
-        <el-tag size="small" type="info">G3 read-only controlled MVP</el-tag>
-      </header>
-
-      <el-tabs v-model="actionCenterTab" class="data-steward-panel__tabs">
-        <el-tab-pane label="回答" name="answer">
-          <div class="data-steward-panel__answer-state">
-            <strong>自然语言回答</strong>
-            <span>下方输入问题后，Hermes 会按 catalog-only / Missing Evidence 边界回答。</span>
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="操作草案" name="draft">
-          <div class="data-steward-panel__tool-row">
-            <el-button
-              size="small"
-              type="primary"
-              plain
-              :loading="masterPlanLoading"
-              :disabled="actionBusy || !Number.isFinite(projectId)"
-              @click="generateMasterDataPlan"
-            >
-              生成主数据补齐计划
-            </el-button>
-            <el-segmented v-model="actionViewType" :options="actionViewOptions" size="small" />
-            <el-button
-              size="small"
-              type="primary"
-              plain
-              :loading="missingPlanLoading"
-              :disabled="actionBusy || !Number.isFinite(projectId)"
-              @click="generateMissingDeliveryPlan"
-            >
-              生成缺失交付方案
-            </el-button>
-          </div>
-
-          <el-empty
-            v-if="!masterDataPlan && !missingDeliveryPlan"
-            description="可先生成主数据计划或缺失交付方案。这里只产生草案，不创建主数据，不读取文件正文。"
-          />
-
-          <article v-if="masterDataPlan" class="data-steward-panel__plan">
-            <div class="data-steward-panel__plan-head">
-              <h4>工程主数据补齐计划</h4>
-              <el-tag size="small" type="success">操作草案</el-tag>
-            </div>
-            <div class="data-steward-panel__plan-grid">
-              <div>
-                <span>接入状态</span>
-                <strong>{{ masterDataPlan.onboardingStatus }}</strong>
-              </div>
-              <div>
-                <span>部位树</span>
-                <strong>{{ masterDataPlan.sectionTreeStatus }}</strong>
-              </div>
-              <div>
-                <span>节点类型</span>
-                <strong>{{ masterDataPlan.nodeTypeStatus }}</strong>
-              </div>
-              <div>
-                <span>交付标准</span>
-                <strong>{{ masterDataPlan.deliverableStandardStatus }}</strong>
-              </div>
-              <div>
-                <span>文档准备度</span>
-                <strong>{{ masterDataPlan.documentReadiness }}</strong>
-              </div>
-              <div>
-                <span>图纸准备度</span>
-                <strong>{{ masterDataPlan.drawingReadiness }}</strong>
-              </div>
-            </div>
-            <ul class="data-steward-panel__compact-list">
-              <li v-for="item in masterDataPlan.nextSteps" :key="item">{{ item }}</li>
-            </ul>
-            <div class="data-steward-panel__entrances">
-              <el-tag v-for="item in masterDataPlan.entrances" :key="item" size="small" type="info">{{ item }}</el-tag>
-            </div>
-          </article>
-
-          <article v-if="missingDeliveryPlan" class="data-steward-panel__plan">
-            <div class="data-steward-panel__plan-head">
-              <h4>{{ viewTypeLabel(missingDeliveryPlan.viewType) }}缺失交付方案</h4>
-              <el-tag size="small" type="warning">待人工确认</el-tag>
-            </div>
-            <p class="data-steward-panel__plan-copy">
-              共 {{ missingDeliveryPlan.totalMissing }} 个缺失项，已生成 {{ missingDeliveryPlan.recommendationCount }}
-              条候选推荐。推荐只依据当前项目元数据，低置信或元数据不完整时应先治理文件信息。
-            </p>
-            <ul class="data-steward-panel__compact-list">
-              <li v-for="item in missingDeliveryPlan.previewRows" :key="item.missingItemKey">
-                {{ item.targetName }} 缺少 {{ item.deliverableTypeName }}，{{ item.explanation }}
-              </li>
-            </ul>
-          </article>
-        </el-tab-pane>
-
-        <el-tab-pane label="待人工确认" name="confirm">
-          <el-alert
-            type="warning"
-            title="这里不会自动挂接。必须勾选推荐、勾选人工确认，再由平台后端二次校验后执行。"
-            :closable="false"
-            show-icon
-          />
-
-          <el-empty
-            v-if="actionRecommendations.length === 0"
-            description="暂无待确认推荐，请先在“操作草案”中生成缺失交付方案。"
-          />
-
-          <div v-else class="data-steward-panel__recommendations">
-            <el-checkbox-group v-model="selectedRecommendationIds" class="data-steward-panel__recommendation-list">
-              <el-checkbox
-                v-for="item in actionRecommendations"
-                :key="item.recommendationId"
-                :label="item.recommendationId"
-                class="data-steward-panel__recommendation"
-              >
-                <div>
-                  <strong>{{ item.targetName }} · {{ item.deliverableTypeName }}</strong>
-                  <span>{{ item.fileName }} · {{ item.versionNo || '无版本' }}</span>
-                  <small>
-                    {{ item.recommendationReason }}
-                    <template v-if="item.riskWarnings.length">；{{ item.riskWarnings.join('；') }}</template>
-                    <template v-if="item.metadataGovernanceRequired">；建议先治理元数据</template>
-                  </small>
-                </div>
-                <el-tag :type="confidenceTag(item.confidence)" size="small">{{ confidenceLabel(item.confidence) }}</el-tag>
-              </el-checkbox>
-            </el-checkbox-group>
-
-            <div class="data-steward-panel__confirm-bar">
-              <el-checkbox v-model="actionConfirmed">
-                我已人工核对所选推荐，确认调用平台挂接能力。
-              </el-checkbox>
-              <div>
-                <span>已选 {{ selectedActionRecommendations.length }} 条</span>
-                <el-button
-                  type="success"
-                  size="small"
-                  :loading="actionApplyLoading"
-                  :disabled="!actionConfirmed || selectedActionRecommendations.length === 0 || actionApplyLoading"
-                  @click="applyActionRecommendations"
-                >
-                  确认执行
-                </el-button>
-              </div>
-            </div>
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="执行结果" name="result">
-          <el-empty v-if="!actionApplyResult" description="尚无执行结果。未确认前不会产生任何挂接写入。" />
-          <section v-else class="data-steward-panel__result">
-            <div class="data-steward-panel__result-tags">
-              <el-tag type="success">创建 {{ actionApplyResult.createdCount }}</el-tag>
-              <el-tag type="warning">跳过 {{ actionApplyResult.skippedCount }}</el-tag>
-              <el-tag type="danger">失败 {{ actionApplyResult.failedCount }}</el-tag>
-            </div>
-            <div class="data-steward-panel__result-list">
-              <div v-for="item in actionApplyResult.results" :key="`${item.fileResourceId}-${item.recommendationId}`">
-                <strong>{{ resultStatusLabel(item.status) }}</strong>
-                <span>文件 {{ item.fileResourceId }}：{{ item.message }}</span>
-              </div>
-            </div>
-          </section>
-        </el-tab-pane>
-      </el-tabs>
-    </section>
-
-    <el-input
-      v-model="question"
-      type="textarea"
-      :rows="4"
-      maxlength="500"
-      show-word-limit
-      :disabled="asking"
-      placeholder="问 Hermes，例如：这个项目路径在哪里？这个项目有哪些已登记文件？哪些资料缺少可引用证据？"
-    />
-
-    <div class="data-steward-panel__quick">
-      <el-button
-        v-for="item in quickQuestions"
-        :key="item"
-        size="small"
-        :disabled="asking || !Number.isFinite(projectId)"
-        @click="askQuickQuestion(item)"
-      >
-        {{ item }}
-      </el-button>
-    </div>
-
-    <div class="data-steward-panel__actions">
-      <el-button type="primary" :loading="asking" :disabled="!canAsk || asking" @click="submitQuestion">
-        问 Hermes
-      </el-button>
-      <el-button :loading="capabilityLoading" @click="loadCapabilities">刷新能力</el-button>
-    </div>
 
     <el-alert
       v-if="asking"
       class="data-steward-panel__thinking"
       type="info"
-      title="真实 Hermes 正在组织回答，可能需要 10-30 秒。平台未执行任何写操作。"
+      title="Hermes catalog-only 通道正在组织回答，可能需要 10-30 秒。平台未执行任何写操作。"
       :closable="false"
       show-icon
     />
 
-    <DataStewardAnswerCard v-if="answer" :response="answer" />
+    <section class="data-steward-panel__conversation" aria-label="Hermes 会话流">
+      <el-empty
+        v-if="!conversationEntries.length && !asking"
+        description="Hermes 会话还没有开始"
+      />
+      <article
+        v-for="entry in conversationEntries"
+        :key="entry.id"
+        :class="['data-steward-panel__turn', `data-steward-panel__turn--${entry.role}`]"
+      >
+        <template v-if="entry.role === 'user'">
+          <div class="data-steward-panel__turn-meta">
+            <span>你</span>
+            <small v-if="entry.previousResponseRef">追问 {{ compactRef(entry.previousResponseRef) }}</small>
+          </div>
+          <p>{{ entry.content }}</p>
+        </template>
+        <template v-else-if="entry.role === 'assistant'">
+          <div class="data-steward-panel__turn-meta">
+            <span>Hermes</span>
+            <small>{{ compactRef(entry.response.responseId) }}</small>
+          </div>
+          <DataStewardAnswerCard :response="entry.response" />
+        </template>
+        <template v-else>
+          <div class="data-steward-panel__system-note">{{ entry.content }}</div>
+        </template>
+      </article>
+    </section>
 
     <section v-if="catalogLoading || catalogPreview" class="data-steward-panel__catalog">
       <header>
         <div>
-          <strong>资产目录预览</strong>
-          <span>仅展示目录元数据，不代表已读取文件正文。</span>
+          <strong>相关资产目录</strong>
+          <span>这些是目录命中，不代表 Hermes 已读取文件正文。</span>
         </div>
-        <el-tag size="small" type="info">asset_catalog_preview</el-tag>
+        <el-tag size="small" type="info">catalog-only</el-tag>
       </header>
 
       <el-skeleton v-if="catalogLoading" :rows="3" animated />
@@ -332,11 +97,115 @@
         </article>
       </div>
     </section>
+
+    <el-collapse v-if="capabilities" class="data-steward-panel__capabilities">
+      <el-collapse-item name="capabilities">
+        <template #title>
+          <span class="data-steward-panel__capability-title">Hermes 能力披露与安全边界</span>
+        </template>
+        <p class="data-steward-panel__capability-copy">
+          当前平台只开放安全只读表面；Hermes 独立 Agent 内核、共享工作区、证据检索和记忆连续性按契约逐步接入。
+        </p>
+        <div class="data-steward-panel__roadmap">
+          <article v-for="item in capabilityRoadmap" :key="item.title">
+            <div>
+              <strong>{{ item.title }}</strong>
+              <span>{{ item.description }}</span>
+            </div>
+            <el-tag :type="item.type" size="small">{{ item.status }}</el-tag>
+          </article>
+        </div>
+        <el-descriptions :column="1" border size="small">
+          <el-descriptions-item label="平台当前开放">{{ modeLabel(capabilities.mode) }}</el-descriptions-item>
+          <el-descriptions-item label="Hermes 身份">企业 Agent 内核，不是平台插件</el-descriptions-item>
+          <el-descriptions-item label="共享工作区">规划接入独立 Hermes workspace / session / context</el-descriptions-item>
+          <el-descriptions-item label="合同">{{ capabilities.contractVersion }}</el-descriptions-item>
+          <el-descriptions-item v-if="health" label="网关状态">
+            {{ health.status === 'ok' ? '正常' : '降级运行' }}
+          </el-descriptions-item>
+          <el-descriptions-item v-if="health" label="Hermes连接">
+            {{ healthLabel(health) }}
+          </el-descriptions-item>
+          <el-descriptions-item v-if="health" label="运行模式">{{ modeLabel(health.mode) }}</el-descriptions-item>
+          <el-descriptions-item v-if="health" label="运行时写入">
+            {{ health.runtimeWriteEnabled ? '已开放' : '未开放' }}
+          </el-descriptions-item>
+          <el-descriptions-item v-if="health" label="Platform Gateway 通道">
+            {{ health.agentAnswerIntegrationEnabled ? 'catalog-only 已接入' : '未接入' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="authorityHealth">
+            {{ capabilities.authorityHealth.architectureAuthorityHealth }} / {{ capabilities.authorityHealth.mode }}
+          </el-descriptions-item>
+          <el-descriptions-item label="目录辅助">
+            {{ capabilities.supports.catalogQuery ? '可用' : '未开放' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="正文问答">
+            {{ capabilities.supports.documentContentAnswer ? '可用' : '未开放' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="数据库 / NAS 写操作">
+            {{ capabilities.supports.dbCrud || capabilities.supports.nasCrud ? '可用' : '不会执行' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="生产发布">
+            {{ capabilities.supports.productionRollout ? '可用' : '未开放' }}
+          </el-descriptions-item>
+          <el-descriptions-item v-if="health?.unavailableReason" label="不可用原因">
+            {{ health.unavailableReason }}
+          </el-descriptions-item>
+        </el-descriptions>
+      </el-collapse-item>
+    </el-collapse>
+
+    <section class="data-steward-panel__ask" aria-label="向 Hermes 提问">
+      <header>
+        <div>
+          <strong>和 Hermes 对话</strong>
+          <span>当前平台通道按 catalog-only 边界回答；这不代表 Hermes 本体只能 catalog-only。</span>
+        </div>
+        <el-button :loading="capabilityLoading" size="small" text @click="loadCapabilities">刷新状态</el-button>
+      </header>
+
+      <el-input
+        v-model="question"
+        type="textarea"
+        :rows="3"
+        maxlength="500"
+        show-word-limit
+        :disabled="asking"
+        placeholder="继续问 Hermes，或基于上一轮追问。"
+      />
+
+      <div class="data-steward-panel__quick">
+        <el-button
+          v-for="item in quickQuestions"
+          :key="item"
+          size="small"
+          :disabled="asking || !Number.isFinite(projectId)"
+          @click="askQuickQuestion(item)"
+        >
+          {{ item }}
+        </el-button>
+      </div>
+
+      <div class="data-steward-panel__actions">
+        <span v-if="previousResponseRef" class="data-steward-panel__followup-hint">
+          将作为追问发送：{{ compactRef(previousResponseRef) }}
+        </span>
+        <span v-else class="data-steward-panel__followup-hint">
+          当前项目会话可被所有 Hermes 入口共享
+        </span>
+        <el-button :disabled="asking || !conversationEntries.length" size="small" text @click="clearHermesContext">
+          清空上下文
+        </el-button>
+        <el-button type="primary" :loading="asking" :disabled="!canAsk || asking" @click="submitQuestion">
+          问 Hermes
+        </el-button>
+      </div>
+    </section>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
   askHermes,
@@ -348,23 +217,9 @@ import {
   type HermesChatResponse,
   type HermesHealth
 } from '@/modules/data-steward/api/dataSteward';
-import {
-  fetchOnboardingAssessment,
-  type OnboardingAssessment
-} from '@/modules/master-data/api/masterData';
-import {
-  applyAgentGovernanceRecommendations,
-  fetchAgentGovernanceMissingItems,
-  fetchAgentGovernanceOverview,
-  recommendAgentGovernanceBindings,
-  type AgentBindingRecommendation,
-  type AgentGovernanceDeliveryStatus,
-  type AgentGovernanceMissingItem,
-  type AgentGovernanceOverview,
-  type ApplyAgentRecommendationsResponse
-} from '@/modules/work-center/api/delivery';
 import DataStewardAnswerCard from '@/modules/data-steward/components/DataStewardAnswerCard.vue';
-import EvidenceModeBadge from '@/modules/data-steward/components/EvidenceModeBadge.vue';
+import { useHermesConversationStore } from '@/modules/data-steward/stores/hermesConversation';
+import { useAuthStore } from '@/stores/auth';
 
 const props = defineProps<{
   projectId: number;
@@ -377,6 +232,8 @@ const props = defineProps<{
   pageTitle?: string;
 }>();
 
+const authStore = useAuthStore();
+const panelRef = ref<HTMLElement | null>(null);
 const question = ref('');
 const capabilities = ref<HermesCapabilities | null>(null);
 const health = ref<HermesHealth | null>(null);
@@ -385,43 +242,43 @@ const catalogPreview = ref<CatalogSearchResponse | null>(null);
 const asking = ref(false);
 const catalogLoading = ref(false);
 const capabilityLoading = ref(false);
-type ActionCenterTab = 'answer' | 'draft' | 'confirm' | 'result';
-type ActionViewType = 'DOCUMENT' | 'DRAWING';
-
-interface MasterDataActionPlan {
-  onboardingStatus: string;
-  sectionTreeStatus: string;
-  nodeTypeStatus: string;
-  deliverableStandardStatus: string;
-  documentReadiness: string;
-  drawingReadiness: string;
-  nextSteps: string[];
-  entrances: string[];
-}
-
-interface MissingDeliveryActionPlan {
-  viewType: ActionViewType;
-  totalMissing: number;
-  recommendationCount: number;
-  previewRows: AgentGovernanceMissingItem[];
-}
-
-const actionCenterTab = ref<ActionCenterTab>('answer');
-const actionViewType = ref<ActionViewType>('DOCUMENT');
-const actionViewOptions = [
-  { label: '文档', value: 'DOCUMENT' },
-  { label: '图纸', value: 'DRAWING' }
-];
-const masterPlanLoading = ref(false);
-const missingPlanLoading = ref(false);
-const actionApplyLoading = ref(false);
-const masterDataPlan = ref<MasterDataActionPlan | null>(null);
-const missingDeliveryPlan = ref<MissingDeliveryActionPlan | null>(null);
-const actionRecommendations = ref<AgentBindingRecommendation[]>([]);
-const selectedRecommendationIds = ref<string[]>([]);
-const actionConfirmed = ref(false);
-const actionApplyResult = ref<ApplyAgentRecommendationsResponse | null>(null);
+const hermesConversationStore = useHermesConversationStore();
+const projectConversation = computed(() => hermesConversationStore.ensureProjectSession(props.projectId));
+const sessionRef = computed(() => projectConversation.value.sessionRef);
+const previousResponseRef = computed(() => projectConversation.value.previousResponseRef);
+const conversationEntries = computed(() => projectConversation.value.entries);
+const conversationTurnCount = computed(() => {
+  return conversationEntries.value.filter((entry) => entry.role !== 'system').length;
+});
 const contextTitle = computed(() => props.pageTitle || pageTypeLabel(props.pageType));
+const threadRef = computed(() => {
+  return `thread:platform-ui:project:${safeProjectSegment(props.projectId)}:${safeRefSegment(props.pageType, 'data_steward')}`;
+});
+const sanitizedContextRefs = computed<Record<string, unknown>[]>(() => {
+  const refs: Record<string, unknown>[] = [
+    {
+      refType: 'project',
+      ref: `project:${safeProjectSegment(props.projectId)}`,
+      source: 'platform_ui',
+      revalidation: 'gateway_required'
+    },
+    {
+      refType: 'page',
+      ref: `page:${safeRefSegment(props.pageType, 'data_steward')}`,
+      source: 'platform_ui',
+      nativeRuntimeEnabled: false
+    }
+  ];
+  if (Number.isFinite(props.assetId)) {
+    refs.push({
+      refType: 'asset',
+      ref: `asset:${props.assetId}`,
+      source: 'platform_ui',
+      sourceView: safeRefSegment(props.sourceView || 'ProjectAssetView', 'project_asset_view')
+    });
+  }
+  return refs;
+});
 const projectLabel = computed(() => {
   if (props.projectCode || props.projectName) {
     return [props.projectCode, props.projectName].filter(Boolean).join(' ');
@@ -434,40 +291,104 @@ const contextDescription = computed(() => {
 });
 const quickQuestions = computed(() => {
   const items = [
-    '这个页面是干什么的？',
-    '我下一步应该做什么？',
-    '这个项目路径在哪里？',
+    '这个项目有哪些上下文？',
+    '当前平台开放了哪些 Hermes 能力？',
     '这个项目有哪些已登记文件？',
-    '哪些资料缺少可引用证据？'
+    '哪些资料缺少可引用证据？',
+    '后续如何进入证据检索和记忆连续性？'
   ];
   if (props.pageType.includes('governance')) {
-    items.splice(2, 0, '交付治理助手能做什么？');
+    items.splice(2, 0, '交付治理需要哪些 Hermes 上下文？');
   }
   if (props.pageType.includes('initialization') || props.pageType.includes('onboarding')) {
-    items.splice(2, 0, '为什么模板只是草案？');
+    items.splice(2, 0, '真实项目接入需要哪些证据？');
   }
   return items;
 });
 
 const canAsk = computed(() => Number.isFinite(props.projectId) && question.value.trim().length > 0);
-const actionBusy = computed(() => masterPlanLoading.value || missingPlanLoading.value || actionApplyLoading.value);
-const selectedActionRecommendations = computed(() => {
-  const selected = new Set(selectedRecommendationIds.value);
-  return actionRecommendations.value.filter((item) => selected.has(item.recommendationId));
-});
+const capabilityRoadmap = [
+  {
+    title: 'Catalog Layer',
+    status: '平台当前开放',
+    type: 'success' as const,
+    description: '通过 Gateway 只读查询资产目录、权限、Missing Evidence 和安全引用。'
+  },
+  {
+    title: 'Agent Context',
+    status: '必要上下文',
+    type: 'warning' as const,
+    description: '平台传入项目、页面、资产和权限上下文；切换项目后必须失效重校。'
+  },
+  {
+    title: 'Shared Workspace',
+    status: '规划保留',
+    type: 'info' as const,
+    description: '后续与独立 Hermes Agent 共享 workspace、session、thread 和任务状态。'
+  },
+  {
+    title: 'Evidence Layer',
+    status: '后续解锁',
+    type: 'info' as const,
+    description: '只对已授权、已解析、已索引的内容开放证据检索和 citation。'
+  },
+  {
+    title: 'Memory Layer',
+    status: '低敏规划',
+    type: 'info' as const,
+    description: '只记录 query/trace、related ids、反馈和偏好，不写正文或 raw path。'
+  },
+  {
+    title: 'NAS Governance',
+    status: '未来接口',
+    type: 'info' as const,
+    description: '预留授权小批读取、解析、索引、引用和临时副本治理能力。'
+  }
+];
 
 watch(
-  () => [props.projectId, props.assetId, props.sourceView] as const,
+  () => props.projectId,
+  (next, previous) => {
+    if (previous !== undefined && next !== previous) {
+      question.value = '';
+      resetHermesContext('项目上下文已切换，Hermes 项目会话已失效，下一次提问将由 Gateway 重新校验。');
+    }
+  }
+);
+
+watch(
+  () => authStore.hermesContextVersion,
+  () => {
+    question.value = '';
+    resetHermesContext('项目、权限或角色已切换，Hermes 项目会话已失效。');
+  }
+);
+
+watch(
+  () => projectConversation.value.resetVersion,
   () => {
     answer.value = null;
     catalogPreview.value = null;
-    resetActionCenter();
+    question.value = '';
   }
 );
 
 onMounted(() => {
   void loadCapabilities();
 });
+
+function resetHermesContext(message = '') {
+  answer.value = null;
+  catalogPreview.value = null;
+  hermesConversationStore.resetProject(props.projectId, message);
+}
+
+async function clearHermesContext() {
+  if (asking.value) return;
+  question.value = '';
+  resetHermesContext('当前项目的 Hermes 上下文已清空。所有入口都会从新的项目会话继续。');
+  await scrollConversationToLatest('smooth');
+}
 
 async function loadCapabilities() {
   capabilityLoading.value = true;
@@ -479,7 +400,7 @@ async function loadCapabilities() {
     capabilities.value = capabilityResult;
     health.value = healthResult;
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '数据管家能力加载失败');
+    ElMessage.error(error instanceof Error ? error.message : 'Hermes 能力状态加载失败');
   } finally {
     capabilityLoading.value = false;
   }
@@ -490,8 +411,14 @@ async function submitQuestion() {
   asking.value = true;
   catalogLoading.value = true;
   const text = question.value.trim();
+  const previousRefForRequest = previousResponseRef.value;
+  const userEntry = hermesConversationStore.createUserEntry(text, previousRefForRequest);
+  hermesConversationStore.removeSystemEntries(props.projectId);
+  hermesConversationStore.appendEntry(props.projectId, userEntry);
+  question.value = '';
   answer.value = null;
   catalogPreview.value = null;
+  void scrollConversationToLatest('smooth');
   try {
     const [answerResult, catalogResult] = await Promise.allSettled([
       askHermes({
@@ -503,6 +430,10 @@ async function submitQuestion() {
         projectCode: props.projectCode,
         projectName: props.projectName,
         pageTitle: props.pageTitle,
+        sessionId: sessionRef.value,
+        threadId: threadRef.value,
+        previousResponseId: previousRefForRequest,
+        sanitizedContextRefs: sanitizedContextRefs.value,
         question: text
       }),
       searchCatalogPreview({
@@ -521,6 +452,12 @@ async function submitQuestion() {
 
     if (answerResult.status === 'fulfilled') {
       answer.value = answerResult.value;
+      hermesConversationStore.setPreviousResponseRef(props.projectId, answerResult.value.responseId);
+      hermesConversationStore.appendEntry(
+        props.projectId,
+        hermesConversationStore.createAssistantEntry(answerResult.value)
+      );
+      void scrollConversationToLatest('smooth');
     } else {
       throw answerResult.reason;
     }
@@ -533,129 +470,28 @@ async function submitQuestion() {
   }
 }
 
+async function scrollConversationToLatest(behavior: ScrollBehavior = 'auto') {
+  await nextTick();
+  const panel = panelRef.value;
+  if (!panel) return;
+  panel.scrollTo({
+    top: panel.scrollHeight,
+    behavior
+  });
+}
+
 function hermesErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : '';
   if (/timeout|exceeded|ECONNABORTED/i.test(message)) {
-    return '真实 Hermes 回答超时，请稍后重试；平台未执行任何写操作。';
+    return 'Hermes catalog-only 回答超时，请稍后重试；平台未执行任何写操作。';
   }
-  return message || '真实 Hermes 暂时无法回答，请稍后重试；平台未执行任何写操作。';
+  return message || 'Hermes catalog-only 通道暂时无法回答，请稍后重试；平台未执行任何写操作。';
 }
 
 async function askQuickQuestion(value: string) {
   if (asking.value) return;
   question.value = value;
   await submitQuestion();
-}
-
-async function generateMasterDataPlan() {
-  if (!Number.isFinite(props.projectId) || actionBusy.value) return;
-  masterPlanLoading.value = true;
-  try {
-    const [assessment, overview] = await Promise.all([
-      fetchOnboardingAssessment(props.projectId),
-      fetchAgentGovernanceOverview(props.projectId)
-    ]);
-    masterDataPlan.value = buildMasterDataPlan(assessment, overview);
-    actionCenterTab.value = 'draft';
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '工程主数据计划生成失败');
-  } finally {
-    masterPlanLoading.value = false;
-  }
-}
-
-async function generateMissingDeliveryPlan() {
-  if (!Number.isFinite(props.projectId) || actionBusy.value) return;
-  missingPlanLoading.value = true;
-  actionConfirmed.value = false;
-  selectedRecommendationIds.value = [];
-  actionApplyResult.value = null;
-  try {
-    const [missingResult, recommendationResult] = await Promise.all([
-      fetchAgentGovernanceMissingItems(props.projectId, actionViewType.value, 'SECTION'),
-      recommendAgentGovernanceBindings(props.projectId, {
-        viewType: actionViewType.value,
-        targetType: 'SECTION',
-        limitPerMissingItem: 3
-      })
-    ]);
-    missingDeliveryPlan.value = {
-      viewType: actionViewType.value,
-      totalMissing: missingResult.totalCount,
-      recommendationCount: recommendationResult.totalCount,
-      previewRows: missingResult.rows.slice(0, 5)
-    };
-    actionRecommendations.value = recommendationResult.rows;
-    actionCenterTab.value = recommendationResult.rows.length > 0 ? 'confirm' : 'draft';
-    if (recommendationResult.rows.length === 0) {
-      ElMessage.info('当前没有可推荐的候选文件，请先补齐文件元数据。');
-    }
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '缺失交付方案生成失败');
-  } finally {
-    missingPlanLoading.value = false;
-  }
-}
-
-async function applyActionRecommendations() {
-  if (!Number.isFinite(props.projectId) || !actionConfirmed.value || selectedActionRecommendations.value.length === 0) return;
-  actionApplyLoading.value = true;
-  try {
-    const selectedRows = selectedActionRecommendations.value;
-    actionApplyResult.value = await applyAgentGovernanceRecommendations(props.projectId, {
-      confirmed: true,
-      viewType: selectedRows[0]?.viewType ?? actionViewType.value,
-      targetType: 'SECTION',
-      items: selectedRows.map((item) => ({
-        recommendationId: item.recommendationId,
-        missingItemKey: item.missingItemKey,
-        targetType: item.targetType,
-        targetId: item.targetId,
-        deliverableTypeId: item.deliverableTypeId,
-        fileResourceId: item.fileResourceId
-      }))
-    });
-    actionCenterTab.value = 'result';
-    actionRecommendations.value = [];
-    selectedRecommendationIds.value = [];
-    actionConfirmed.value = false;
-    ElMessage.success('已按人工确认结果调用平台挂接能力');
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '确认执行失败');
-  } finally {
-    actionApplyLoading.value = false;
-  }
-}
-
-function buildMasterDataPlan(
-  assessment: OnboardingAssessment,
-  overview: AgentGovernanceOverview
-): MasterDataActionPlan {
-  const standard = overview.standardStatus;
-  return {
-    onboardingStatus: onboardingStatusLabel(assessment.onboardingStatus),
-    sectionTreeStatus: standard.hasSectionTree ? `已建立 ${standard.sectionNodeCount} 个节点` : '未建立，需先补部位树',
-    nodeTypeStatus: standard.hasNodeTypes
-      ? `${standard.nodeTypeCount} 个节点类型，${standard.nodeTypesLocked ? '已锁定' : '未锁定'}`
-      : '未建立，需先定义节点类型',
-    deliverableStandardStatus: standard.deliverableStandardReady
-      ? `已就绪，${standard.deliverableDefinitionCount} 个定义 / ${standard.deliverableTypeCount} 个类型`
-      : '待补齐交付定义、交付类型或目录模板',
-    documentReadiness: deliveryReadiness(overview.documentDelivery),
-    drawingReadiness: deliveryReadiness(overview.drawingDelivery),
-    nextSteps: uniqueStrings([...assessment.nextActions, ...overview.nextActions]).slice(0, 6),
-    entrances: ['真实项目接入向导', '部位树', '节点类型', '交付物标准', '文档交付', '图纸交付']
-  };
-}
-
-function resetActionCenter() {
-  masterDataPlan.value = null;
-  missingDeliveryPlan.value = null;
-  actionRecommendations.value = [];
-  selectedRecommendationIds.value = [];
-  actionConfirmed.value = false;
-  actionApplyResult.value = null;
-  actionCenterTab.value = 'answer';
 }
 
 function fileKindLabel(value: string) {
@@ -671,57 +507,10 @@ function fileKindLabel(value: string) {
   return labels[value] ?? value;
 }
 
-function viewTypeLabel(value: string) {
-  return value === 'DRAWING' ? '图纸' : '文档';
-}
-
-function deliveryReadiness(item: AgentGovernanceDeliveryStatus) {
-  return `${Math.round((item.completionRate ?? 0) * 100)}%，缺 ${item.missingCount} 项，待审 ${item.pendingReviewCount} 项`;
-}
-
-function onboardingStatusLabel(value: string) {
-  const labels: Record<string, string> = {
-    ASSET_READY: '资产目录已就绪',
-    MASTER_DATA_READY: '工程主数据已初始化',
-    GOVERNANCE_READY: '可进入交付治理',
-    NEEDS_MASTER_DATA: '待补齐工程主数据',
-    NEEDS_ASSET: '待接入资产目录'
-  };
-  return labels[value] ?? value;
-}
-
-function uniqueStrings(values: string[]) {
-  return Array.from(new Set(values.filter((item) => item && item.trim().length > 0)));
-}
-
-function confidenceLabel(value: string) {
-  const labels: Record<string, string> = {
-    HIGH: '高置信',
-    MEDIUM: '中置信',
-    LOW: '低置信'
-  };
-  return labels[value] ?? value;
-}
-
-function confidenceTag(value: string) {
-  if (value === 'HIGH') return 'success';
-  if (value === 'MEDIUM') return 'warning';
-  return 'info';
-}
-
-function resultStatusLabel(value: string) {
-  const labels: Record<string, string> = {
-    CREATED: '已创建',
-    SKIPPED: '已跳过',
-    FAILED: '失败'
-  };
-  return labels[value] ?? value;
-}
-
 function modeLabel(mode: string) {
   const labels: Record<string, string> = {
-    catalog_only: '资产目录辅助',
-    read_only_gateway: '只读网关'
+    catalog_only: '平台 catalog-only 安全开放',
+    read_only_gateway: 'Platform Gateway 只读包装'
   };
   return labels[mode] ?? mode;
 }
@@ -736,6 +525,24 @@ function pageTypeLabel(value: string) {
     'agent-governance': '交付治理助手'
   };
   return labels[value] ?? value;
+}
+
+function compactRef(value: string) {
+  if (!value) return '-';
+  return value.length > 18 ? `...${value.slice(-12)}` : value;
+}
+
+function safeProjectSegment(projectId: number) {
+  return Number.isFinite(projectId) ? String(projectId) : 'unknown';
+}
+
+function safeRefSegment(value: string, fallback: string) {
+  const segment = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return segment ? segment.slice(0, 48) : fallback;
 }
 
 function healthLabel(value: HermesHealth | null) {
@@ -757,6 +564,11 @@ function healthTagType(value: HermesHealth | null) {
 .data-steward-panel {
   display: grid;
   gap: 14px;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 20px 0 24px;
+  scroll-padding-bottom: 220px;
 }
 
 .data-steward-panel__head {
@@ -818,30 +630,10 @@ function healthTagType(value: HermesHealth | null) {
   overflow-wrap: anywhere;
 }
 
-.data-steward-panel__status {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.data-steward-panel__status-item {
-  background: var(--el-fill-color-lighter);
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  padding: 10px 12px;
-}
-
-.data-steward-panel__status-item span {
+.data-steward-panel__context small {
   color: var(--el-text-color-secondary);
   font-size: 12px;
-}
-
-.data-steward-panel__status-item strong {
-  color: var(--el-text-color-primary);
-  font-size: 14px;
+  line-height: 1.5;
 }
 
 .data-steward-panel__quick {
@@ -852,21 +644,28 @@ function healthTagType(value: HermesHealth | null) {
 }
 
 .data-steward-panel__actions {
+  align-items: center;
   display: flex;
   gap: 8px;
   justify-content: flex-end;
 }
 
-.data-steward-panel__action-center {
+.data-steward-panel__ask {
+  background: color-mix(in srgb, var(--el-fill-color-blank) 94%, #e8f3ff 6%);
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 8px;
+  bottom: 0;
+  box-shadow: 0 -12px 24px rgb(15 23 42 / 0.08);
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  margin: 2px -20px 0 -24px;
   min-width: 0;
-  padding: 12px;
+  padding: 12px 20px 14px 24px;
+  position: sticky;
+  z-index: 4;
 }
 
-.data-steward-panel__action-center > header {
+.data-steward-panel__ask > header {
   align-items: flex-start;
   display: flex;
   gap: 10px;
@@ -874,90 +673,35 @@ function healthTagType(value: HermesHealth | null) {
   min-width: 0;
 }
 
-.data-steward-panel__action-center > header > div,
-.data-steward-panel__answer-state,
-.data-steward-panel__plan-head {
+.data-steward-panel__ask > header > div {
   display: grid;
   gap: 4px;
   min-width: 0;
 }
 
-.data-steward-panel__action-center span,
-.data-steward-panel__answer-state span,
-.data-steward-panel__plan-copy {
+.data-steward-panel__ask strong,
+.data-steward-panel__catalog strong {
+  color: var(--el-text-color-primary);
+}
+
+.data-steward-panel__ask span {
   color: var(--el-text-color-secondary);
   font-size: 12px;
   line-height: 1.5;
 }
 
-.data-steward-panel__tabs {
-  min-width: 0;
-}
-
-.data-steward-panel__tool-row {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-width: 0;
-}
-
-.data-steward-panel__plan {
-  background: var(--el-fill-color-lighter);
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  display: grid;
-  gap: 10px;
-  margin-top: 10px;
-  min-width: 0;
-  padding: 12px;
-}
-
-.data-steward-panel__plan-head {
-  align-items: flex-start;
-  display: flex;
-  justify-content: space-between;
-}
-
-.data-steward-panel__plan-head h4 {
-  color: var(--el-text-color-primary);
-  font-size: 14px;
-  margin: 0;
-}
-
-.data-steward-panel__plan-grid {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.data-steward-panel__plan-grid div {
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 6px;
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  padding: 8px;
-}
-
-.data-steward-panel__plan-grid span,
-.data-steward-panel__compact-list,
-.data-steward-panel__recommendation small,
-.data-steward-panel__confirm-bar span,
-.data-steward-panel__result-list span {
+.data-steward-panel__followup-hint {
   color: var(--el-text-color-secondary);
+  flex: 1;
   font-size: 12px;
-  line-height: 1.5;
-}
-
-.data-steward-panel__plan-grid strong,
-.data-steward-panel__recommendation strong,
-.data-steward-panel__result-list strong {
-  color: var(--el-text-color-primary);
-  font-size: 13px;
-  line-height: 1.4;
+  min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.data-steward-panel__compact-list {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .data-steward-panel__compact-list {
@@ -969,96 +713,80 @@ function healthTagType(value: HermesHealth | null) {
   margin-top: 4px;
 }
 
-.data-steward-panel__entrances,
-.data-steward-panel__result-tags {
+.data-steward-panel__catalog-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
 }
 
-.data-steward-panel__recommendations,
-.data-steward-panel__recommendation-list,
-.data-steward-panel__result {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-}
-
-.data-steward-panel__recommendation {
-  align-items: flex-start;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  display: flex;
-  height: auto;
-  margin-right: 0;
-  padding: 10px;
-  white-space: normal;
-  width: 100%;
-}
-
-.data-steward-panel__recommendation :deep(.el-checkbox__label) {
-  display: grid;
-  flex: 1;
-  gap: 8px;
-  grid-template-columns: minmax(0, 1fr) auto;
-  min-width: 0;
-  padding-left: 8px;
-  width: 100%;
-}
-
-.data-steward-panel__recommendation :deep(.el-checkbox__label > div) {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.data-steward-panel__recommendation span {
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.data-steward-panel__confirm-bar {
-  align-items: center;
-  background: var(--el-fill-color-lighter);
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  display: flex;
-  gap: 10px;
-  justify-content: space-between;
-  min-width: 0;
-  padding: 10px;
-}
-
-.data-steward-panel__confirm-bar > div {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.data-steward-panel__result-list {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.data-steward-panel__result-list div {
-  background: var(--el-fill-color-lighter);
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 6px;
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  padding: 8px;
-}
-
 .data-steward-panel__thinking {
   min-width: 0;
+}
+
+.data-steward-panel__conversation {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.data-steward-panel__turn {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.data-steward-panel__turn--user {
+  justify-items: end;
+}
+
+.data-steward-panel__turn--assistant {
+  justify-items: stretch;
+}
+
+.data-steward-panel__turn-meta {
+  align-items: center;
+  color: var(--el-text-color-secondary);
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.data-steward-panel__turn-meta span {
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.data-steward-panel__turn-meta small {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.data-steward-panel__turn--user p {
+  background: #e8f3ff;
+  border: 1px solid #c7e0ff;
+  border-radius: 8px;
+  color: var(--el-text-color-primary);
+  line-height: 1.6;
+  margin: 0;
+  max-width: min(560px, 88%);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+}
+
+.data-steward-panel__system-note {
+  background: #fff8e6;
+  border: 1px solid #f2dfaa;
+  border-radius: 8px;
+  color: #7a5b10;
+  font-size: 12px;
+  line-height: 1.6;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
 }
 
 .data-steward-panel__catalog {
@@ -1119,23 +847,79 @@ function healthTagType(value: HermesHealth | null) {
   font-size: 12px;
 }
 
-.data-steward-panel__catalog-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.data-steward-panel__capabilities {
+  --el-collapse-header-height: 36px;
+}
+
+.data-steward-panel__capability-title {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.data-steward-panel__capability-copy {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0 0 10px;
+}
+
+.data-steward-panel__roadmap {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.data-steward-panel__roadmap article {
+  align-items: flex-start;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.data-steward-panel__roadmap article > div {
+  display: grid;
+  gap: 3px;
   min-width: 0;
 }
 
+.data-steward-panel__roadmap strong {
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+}
+
+.data-steward-panel__roadmap span {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 @media (max-width: 640px) {
-  .data-steward-panel__status,
-  .data-steward-panel__plan-grid {
-    grid-template-columns: 1fr;
+  .data-steward-panel {
+    padding: 14px 14px 0;
   }
 
-  .data-steward-panel__action-center > header,
-  .data-steward-panel__confirm-bar {
+  .data-steward-panel__ask > header,
+  .data-steward-panel__catalog header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .data-steward-panel__ask {
+    margin: 0 -14px;
+    padding: 12px 14px 14px;
+  }
+
+  .data-steward-panel__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .data-steward-panel__roadmap article {
+    grid-template-columns: 1fr;
   }
 }
 </style>

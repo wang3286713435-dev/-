@@ -1005,7 +1005,16 @@ public final class AssetDtos {
         String evidenceMode,
         List<CatalogSearchResult> results,
         String nextCursor,
-        CatalogSearchSafety safety
+        CatalogSearchSafety safety,
+        CatalogAuthorityHealth authorityHealth
+    ) {
+    }
+
+    public record CatalogAuthorityHealth(
+        String safetyHealth,
+        String capabilityHealth,
+        String architectureAuthorityHealth,
+        String mode
     ) {
     }
 

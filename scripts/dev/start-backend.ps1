@@ -4,6 +4,9 @@ $repoRoot = Get-RepoRoot
 $backendDir = Join-Path $repoRoot "backend"
 $wrapperCmd = Join-Path $backendDir "mvnw.cmd"
 $m2Dir = Join-Path $HOME ".m2"
+if (-not $env:SERVER_PORT) {
+  $env:SERVER_PORT = "18080"
+}
 
 Set-Location $backendDir
 
@@ -38,7 +41,8 @@ if (-not $dockerCmd) {
 & docker run --rm `
   --name delivery-backend-dev `
   --network infra_default `
-  -p 8080:8080 `
+  -p "${env:SERVER_PORT}:${env:SERVER_PORT}" `
+  -e SERVER_PORT="${env:SERVER_PORT}" `
   -e DELIVERY_DB_URL="jdbc:mysql://mysql:3306/delivery_platform?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8" `
   -e DELIVERY_DB_USERNAME="delivery" `
   -e DELIVERY_DB_PASSWORD="delivery123" `

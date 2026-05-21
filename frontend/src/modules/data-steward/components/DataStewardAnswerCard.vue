@@ -8,7 +8,15 @@
       <el-tag size="small" :type="answerSourceTagType">{{ answerSourceLabel }}</el-tag>
     </header>
 
-    <p class="data-steward-answer__text">{{ response.answer }}</p>
+    <section class="data-steward-answer__body" aria-label="Hermes 回答">
+      <div class="data-steward-answer__body-head">
+        <strong>回答</strong>
+        <span>按 catalog-only 边界渲染 Markdown，不代表已读取文件正文。</span>
+      </div>
+      <SafeMarkdownRenderer :content="response.answer" />
+    </section>
+
+    <MissingEvidenceNotice :items="response.missingEvidence" />
 
     <section v-if="response.pathHints?.length" class="data-steward-answer__paths">
       <header>
@@ -25,37 +33,38 @@
       </div>
     </section>
 
-    <el-descriptions :column="1" border size="small">
-      <el-descriptions-item label="权限">
-        <el-tag :type="response.permission.permissionStatus === 'allowed' ? 'success' : 'danger'" size="small">
-          {{ response.permission.permissionStatus === 'allowed' ? '允许' : '拒绝' }}
-        </el-tag>
-      </el-descriptions-item>
-      <el-descriptions-item label="证据模式">
-        {{ response.assetCatalogOnly ? 'catalog-only' : response.evidenceMode }}
-      </el-descriptions-item>
-      <el-descriptions-item label="资产来源">
-        {{ response.sourceView || '-' }}
-      </el-descriptions-item>
-      <el-descriptions-item label="项目范围">
-        {{ response.permission.projectScopeChecked ? '已校验' : '未校验' }}
-      </el-descriptions-item>
-      <el-descriptions-item label="权限标签">
-        {{ response.permission.permissionTagsChecked ? '已校验' : '未校验' }}
-      </el-descriptions-item>
-      <el-descriptions-item label="安全兜底">
-        {{ response.permission.failClosedApplied ? '已启用 fail closed' : '未触发' }}
-      </el-descriptions-item>
-      <el-descriptions-item v-if="response.permission.reasonCode" label="原因">
-        {{ reasonLabel(response.permission.reasonCode) }}
-      </el-descriptions-item>
-    </el-descriptions>
+    <section class="data-steward-answer__boundary" aria-label="安全边界">
+      <div>
+        <span>权限</span>
+        <strong>{{ response.permission.permissionStatus === 'allowed' ? '允许' : '拒绝' }}</strong>
+      </div>
+      <div>
+        <span>证据</span>
+        <strong>{{ response.assetCatalogOnly ? 'catalog-only' : response.evidenceMode }}</strong>
+      </div>
+      <div>
+        <span>项目范围</span>
+        <strong>{{ response.permission.projectScopeChecked ? '已校验' : '未校验' }}</strong>
+      </div>
+      <div>
+        <span>安全兜底</span>
+        <strong>{{ response.permission.failClosedApplied ? '已触发' : '未触发' }}</strong>
+      </div>
+    </section>
+
+    <el-alert
+      v-if="response.permission.reasonCode"
+      type="warning"
+      :title="reasonLabel(response.permission.reasonCode)"
+      :closable="false"
+      show-icon
+    />
 
     <el-collapse class="data-steward-answer__diagnostic">
       <el-collapse-item name="diagnostic">
         <template #title>
           <span class="data-steward-answer__diagnostic-title">
-            诊断编号
+            追踪信息
             <small>{{ compactDiagnosticId }}</small>
           </span>
         </template>
@@ -65,6 +74,10 @@
             <dd>{{ response.queryId || '-' }}</dd>
           </div>
           <div>
+            <dt>response_id</dt>
+            <dd>{{ response.responseId || '-' }}</dd>
+          </div>
+          <div>
             <dt>trace_id</dt>
             <dd>{{ response.traceId || '-' }}</dd>
           </div>
@@ -72,11 +85,33 @@
             <dt>request_id</dt>
             <dd>{{ response.trace.requestId || '-' }}</dd>
           </div>
+          <div>
+            <dt>session_ref</dt>
+            <dd>{{ response.sessionRef || '-' }}</dd>
+          </div>
+          <div>
+            <dt>thread_ref</dt>
+            <dd>{{ response.threadRef || '-' }}</dd>
+          </div>
+          <div>
+            <dt>previous_response_ref</dt>
+            <dd>{{ response.previousResponseRef || '-' }}</dd>
+          </div>
+          <div>
+            <dt>authority_health</dt>
+            <dd>{{ authorityHealthText }}</dd>
+          </div>
+          <div>
+            <dt>context_refs</dt>
+            <dd>{{ response.sanitizedContextRefs.length }} safe refs</dd>
+          </div>
+          <div>
+            <dt>memory_candidates</dt>
+            <dd>{{ response.safeMemoryCandidates.length }} candidates</dd>
+          </div>
         </dl>
       </el-collapse-item>
     </el-collapse>
-
-    <MissingEvidenceNotice :items="response.missingEvidence" />
 
     <section v-if="response.citations.length" class="data-steward-answer__citations">
       <strong>引用范围</strong>
@@ -92,7 +127,7 @@
 
     <el-alert
       type="info"
-      title="Hermes 不会自动执行操作。下方建议仅作为人工审批前的草案。"
+      title="Hermes 不会自动执行操作。下方内容只是平台治理建议草案。"
       :closable="false"
       show-icon
     />
@@ -107,6 +142,7 @@ import type { HermesChatResponse } from '@/modules/data-steward/api/dataSteward'
 import EvidenceModeBadge from '@/modules/data-steward/components/EvidenceModeBadge.vue';
 import MissingEvidenceNotice from '@/modules/data-steward/components/MissingEvidenceNotice.vue';
 import OperationPlanPreview from '@/modules/data-steward/components/OperationPlanPreview.vue';
+import SafeMarkdownRenderer from '@/modules/data-steward/components/SafeMarkdownRenderer.vue';
 
 const props = defineProps<{
   response: HermesChatResponse;
@@ -131,7 +167,7 @@ const statusType = computed(() => {
 
 const answerSourceLabel = computed(() => {
   return props.response.trace?.agentMode === 'openai_compatible_catalog_only'
-    ? '真实 Hermes 回答'
+    ? 'Hermes catalog-only 回答'
     : '平台安全兜底';
 });
 
@@ -144,6 +180,11 @@ const compactDiagnosticId = computed(() => {
   return value ? `...${value.slice(-8)}` : '-';
 });
 
+const authorityHealthText = computed(() => {
+  const health = props.response.authorityHealth;
+  return `${health.architectureAuthorityHealth} / ${health.mode}`;
+});
+
 function reasonLabel(value: string) {
   const labels: Record<string, string> = {
     MISSING_PROJECT_SCOPE: '缺少项目范围',
@@ -153,7 +194,9 @@ function reasonLabel(value: string) {
     PERMISSION_TAGS_MISSING: '权限标签缺失',
     PROJECT_SCOPE_DENIED: '当前用户无权访问该项目',
     GATEWAY_NOT_READONLY: '网关未处于只读模式',
-    REQUIRED_ACTIONS_MISSING: '缺少目录查询能力'
+    REQUIRED_ACTIONS_MISSING: '缺少目录查询能力',
+    USER_PROMPT_FORBIDDEN_FIELD_DETECTED: '问题命中安全红线，已 fail closed',
+    HERMES_RESPONSE_FORBIDDEN_FIELD_DETECTED: '回答命中安全红线，已 fail closed'
   };
   return labels[value] ?? value;
 }
@@ -161,11 +204,13 @@ function reasonLabel(value: string) {
 
 <style scoped>
 .data-steward-answer {
-  border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
   border-radius: 8px;
   display: grid;
-  gap: 12px;
-  padding: 12px;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px;
 }
 
 .data-steward-answer__head {
@@ -180,10 +225,57 @@ function reasonLabel(value: string) {
   gap: 8px;
 }
 
-.data-steward-answer__text {
-  line-height: 1.7;
-  margin: 0;
-  white-space: pre-wrap;
+.data-steward-answer__body {
+  background: var(--el-fill-color-blank);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.data-steward-answer__body-head {
+  display: grid;
+  gap: 3px;
+}
+
+.data-steward-answer__body-head strong {
+  color: var(--el-text-color-primary);
+  font-size: 14px;
+}
+
+.data-steward-answer__body-head span {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.data-steward-answer__boundary {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.data-steward-answer__boundary div {
+  background: var(--el-fill-color-lighter);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.data-steward-answer__boundary span {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.data-steward-answer__boundary strong {
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .data-steward-answer__paths {
@@ -264,5 +356,16 @@ function reasonLabel(value: string) {
 .data-steward-answer__diagnostic-list dt {
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .data-steward-answer__head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .data-steward-answer__boundary {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

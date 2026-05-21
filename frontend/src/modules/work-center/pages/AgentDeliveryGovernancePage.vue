@@ -189,7 +189,7 @@
       </section>
     </section>
 
-    <el-drawer v-model="hermesDrawerVisible" title="Hermes 只读辅助" size="520px">
+    <HermesWorkspaceDrawer v-model="hermesDrawerVisible">
       <DataStewardPanel
         v-if="projectId"
         :project-id="projectId"
@@ -200,7 +200,7 @@
         :project-name="currentProject?.name"
         page-title="交付治理助手"
       />
-    </el-drawer>
+    </HermesWorkspaceDrawer>
   </section>
 </template>
 
@@ -211,6 +211,7 @@ import { ElMessage } from 'element-plus';
 import { ChatDotRound, Link, Refresh, Search } from '@element-plus/icons-vue';
 
 import DataStewardPanel from '@/modules/data-steward/components/DataStewardPanel.vue';
+import HermesWorkspaceDrawer from '@/modules/data-steward/components/HermesWorkspaceDrawer.vue';
 import {
   applyAgentGovernanceRecommendations,
   fetchAgentGovernanceMissingItems,

@@ -16,7 +16,8 @@ public final class HermesGatewayDtos {
         String mode,
         String contractVersion,
         HermesSupports supports,
-        HermesSafety safety
+        HermesSafety safety,
+        HermesAuthorityHealth authorityHealth
     ) {
     }
 
@@ -30,7 +31,16 @@ public final class HermesGatewayDtos {
         Boolean runtimeWriteEnabled,
         Boolean agentAnswerIntegrationEnabled,
         String unavailableReason,
-        Instant checkedAt
+        Instant checkedAt,
+        HermesAuthorityHealth authorityHealth
+    ) {
+    }
+
+    public record HermesAuthorityHealth(
+        String safetyHealth,
+        String capabilityHealth,
+        String architectureAuthorityHealth,
+        String mode
     ) {
     }
 
@@ -63,6 +73,14 @@ public final class HermesGatewayDtos {
         String projectCode,
         String projectName,
         String pageTitle,
+        @JsonAlias("session_id")
+        String sessionId,
+        @JsonAlias("thread_id")
+        String threadId,
+        @JsonAlias("previous_response_id")
+        String previousResponseId,
+        @JsonAlias("sanitized_context_refs")
+        List<Map<String, Object>> sanitizedContextRefs,
         @NotBlank(message = "question 不能为空")
         String question
     ) {
@@ -71,6 +89,12 @@ public final class HermesGatewayDtos {
     public record DataStewardChatRequest(
         @JsonAlias("session_id")
         String sessionId,
+        @JsonAlias("thread_id")
+        String threadId,
+        @JsonAlias("previous_response_id")
+        String previousResponseId,
+        @JsonAlias("sanitized_context_refs")
+        List<Map<String, Object>> sanitizedContextRefs,
         String message,
         @JsonAlias("project_filters")
         List<String> projectFilters,
@@ -102,12 +126,17 @@ public final class HermesGatewayDtos {
                 projectCode == null ? "" : projectCode.trim(),
                 projectName == null ? "" : projectName.trim(),
                 pageTitle == null ? "" : pageTitle.trim(),
+                sessionId == null ? "" : sessionId.trim(),
+                threadId == null ? "" : threadId.trim(),
+                previousResponseId == null ? "" : previousResponseId.trim(),
+                sanitizedContextRefs == null ? List.of() : sanitizedContextRefs,
                 normalizedQuestion()
             );
         }
     }
 
     public record HermesChatResponse(
+        String responseId,
         String status,
         String evidenceMode,
         Boolean assetCatalogOnly,
@@ -122,7 +151,13 @@ public final class HermesGatewayDtos {
         HermesPermissionResult permission,
         List<HermesMissingEvidence> missingEvidence,
         HermesOperationPlan operationPlan,
-        HermesTrace trace
+        HermesTrace trace,
+        String sessionRef,
+        String threadRef,
+        String previousResponseRef,
+        HermesAuthorityHealth authorityHealth,
+        List<Map<String, Object>> safeMemoryCandidates,
+        List<Map<String, Object>> sanitizedContextRefs
     ) {
     }
 

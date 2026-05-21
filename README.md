@@ -49,6 +49,8 @@ bash scripts/dev/start-backend.sh
 bash scripts/dev/start-frontend.sh
 ```
 
+Hermes 分支本地预览默认使用后端 `18080`、前端 `5174`，前端 `/api` 会代理到当前分支后端，避免误连平台主线 `8080` / `5173`。
+
 Windows PowerShell：
 
 ```powershell
