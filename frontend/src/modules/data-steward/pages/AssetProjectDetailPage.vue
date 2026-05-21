@@ -238,7 +238,24 @@
       </el-tab-pane>
 
       <el-tab-pane label="文件管理" name="files">
-        <section class="asset-job-panel" data-m1e-checksum-jobs>
+        <AssetProjectFileBrowser
+          v-if="Number.isFinite(projectId)"
+          :key="`${projectId}-${fileBrowserRefreshKey}-${catalogInitialQualityIssue}`"
+          :project-id="projectId"
+          :root-label="projectRootLabel"
+          :discipline-options="disciplineOptions"
+          :initial-quality-issue="catalogInitialQualityIssue"
+          :batch-checksum-creating="batchChecksumCreating"
+          :active="activeTab === 'files'"
+          @open-preview="openPreviewById"
+          @open-detail="openFileDetailById"
+          @open-metadata="openMetadataById"
+          @create-checksum="createChecksumById"
+          @create-batch-checksum="createBatchChecksumForProject"
+        />
+        <el-empty v-else description="请先选择项目" :image-size="56" />
+
+        <section v-if="Number.isFinite(projectId)" class="asset-job-panel" data-m1e-checksum-jobs>
           <div class="asset-job-panel__header">
             <div>
               <h2>checksum 后台任务</h2>
@@ -296,22 +313,6 @@
             </el-table-column>
           </el-table>
         </section>
-        <AssetProjectFileBrowser
-          v-if="Number.isFinite(projectId)"
-          :key="`${projectId}-${fileBrowserRefreshKey}-${catalogInitialQualityIssue}`"
-          :project-id="projectId"
-          :root-label="projectRootLabel"
-          :discipline-options="disciplineOptions"
-          :initial-quality-issue="catalogInitialQualityIssue"
-          :batch-checksum-creating="batchChecksumCreating"
-          :active="activeTab === 'files'"
-          @open-preview="openPreviewById"
-          @open-detail="openFileDetailById"
-          @open-metadata="openMetadataById"
-          @create-checksum="createChecksumById"
-          @create-batch-checksum="createBatchChecksumForProject"
-        />
-        <el-empty v-else description="请先选择项目" :image-size="56" />
       </el-tab-pane>
 
       <el-tab-pane label="扫描任务" name="scans">
@@ -1685,7 +1686,7 @@ function scanProgressValue(task: AssetScanTask) {
 .asset-job-panel {
   display: grid;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-top: 16px;
   padding: 14px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 8px;
