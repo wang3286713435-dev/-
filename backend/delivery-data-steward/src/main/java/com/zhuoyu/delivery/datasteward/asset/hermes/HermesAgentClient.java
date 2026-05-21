@@ -3,6 +3,7 @@ package com.zhuoyu.delivery.datasteward.asset.hermes;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhuoyu.delivery.datasteward.asset.hermes.HermesGatewayDtos.HermesCitation;
+import com.zhuoyu.delivery.datasteward.asset.hermes.HermesGatewayDtos.HermesAuthorityHealth;
 import com.zhuoyu.delivery.datasteward.asset.hermes.HermesGatewayDtos.HermesChatResponse;
 import com.zhuoyu.delivery.datasteward.asset.hermes.HermesGatewayDtos.HermesMissingEvidence;
 import com.zhuoyu.delivery.datasteward.asset.hermes.HermesGatewayDtos.HermesOperationAction;
@@ -106,6 +107,7 @@ public class HermesAgentClient {
             return null;
         }
         return new HermesChatResponse(
+            responseId(request.requestId()),
             "catalog_only",
             "catalog_only",
             true,
@@ -137,8 +139,37 @@ public class HermesAgentClient {
                 true,
                 List.of(new HermesOperationAction("manual_review_required", "draft_only"))
             ),
-            new HermesTrace(request.requestId(), "openai_compatible_catalog_only", false)
+            new HermesTrace(request.requestId(), "openai_compatible_catalog_only", false),
+            stringValue(request.pageContext().get("session_ref")),
+            stringValue(request.pageContext().get("thread_ref")),
+            stringValue(request.pageContext().get("previous_response_ref")),
+            wrappedAuthorityHealth(),
+            List.of(),
+            contextRefs(request.pageContext().get("sanitized_context_refs"))
         );
+    }
+
+    private List<Map<String, Object>> contextRefs(Object value) {
+        if (!(value instanceof List<?> list) || list.isEmpty()) {
+            return List.of();
+        }
+        return list.stream()
+            .filter(Map.class::isInstance)
+            .map(item -> safeContextRef((Map<?, ?>) item))
+            .toList();
+    }
+
+    private Map<String, Object> safeContextRef(Map<?, ?> item) {
+        Map<String, Object> ref = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : item.entrySet()) {
+            String key = stringValue(entry.getKey());
+            if (key.isBlank()) {
+                continue;
+            }
+            Object rawValue = entry.getValue();
+            ref.put(key, rawValue instanceof String text ? stringValue(text) : rawValue);
+        }
+        return ref;
     }
 
     private String extractOpenAiAnswer(Map<?, ?> response) {
@@ -254,6 +285,19 @@ public class HermesAgentClient {
         return "localhost".equalsIgnoreCase(host)
             || "127.0.0.1".equals(host)
             || "::1".equals(host);
+    }
+
+    private static String responseId(String requestId) {
+        return requestId == null || requestId.isBlank() ? "" : "response:" + requestId;
+    }
+
+    private static HermesAuthorityHealth wrappedAuthorityHealth() {
+        return new HermesAuthorityHealth(
+            "green",
+            "staged",
+            "orange",
+            "openai_compatible_gateway_wrapped"
+        );
     }
 
     public record HermesHealthProbe(

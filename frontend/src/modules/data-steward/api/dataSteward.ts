@@ -923,6 +923,14 @@ export interface HermesCapabilities {
     requiresProjectScope: boolean;
     requiresCitationForContentAnswer: boolean;
   };
+  authorityHealth: HermesAuthorityHealth;
+}
+
+export interface HermesAuthorityHealth {
+  safetyHealth: string;
+  capabilityHealth: string;
+  architectureAuthorityHealth: string;
+  mode: string;
 }
 
 export interface HermesHealth {
@@ -936,6 +944,7 @@ export interface HermesHealth {
   agentAnswerIntegrationEnabled: boolean;
   unavailableReason: string;
   checkedAt: string;
+  authorityHealth: HermesAuthorityHealth;
 }
 
 export interface HermesChatRequest {
@@ -947,6 +956,10 @@ export interface HermesChatRequest {
   projectCode?: string;
   projectName?: string;
   pageTitle?: string;
+  sessionId?: string;
+  threadId?: string;
+  previousResponseId?: string;
+  sanitizedContextRefs?: Record<string, unknown>[];
   question: string;
 }
 
@@ -997,6 +1010,7 @@ export interface HermesTrace {
 }
 
 export interface HermesChatResponse {
+  responseId: string;
   status: 'ok' | 'denied' | 'missing_evidence' | 'catalog_only' | 'error' | string;
   evidenceMode: 'catalog_only' | 'missing_evidence' | string;
   assetCatalogOnly: boolean;
@@ -1012,6 +1026,12 @@ export interface HermesChatResponse {
   missingEvidence: HermesMissingEvidence[];
   operationPlan: HermesOperationPlan;
   trace: HermesTrace;
+  sessionRef: string;
+  threadRef: string;
+  previousResponseRef: string;
+  authorityHealth: HermesAuthorityHealth;
+  safeMemoryCandidates: Record<string, unknown>[];
+  sanitizedContextRefs: Record<string, unknown>[];
 }
 
 const HERMES_CHAT_TIMEOUT_MS = 45_000;
@@ -1067,6 +1087,7 @@ export interface CatalogSearchResponse {
     trueNasPathOutput: boolean;
     secretPrinted: boolean;
   };
+  authorityHealth: HermesAuthorityHealth;
 }
 
 export interface CatalogFilesQuery {

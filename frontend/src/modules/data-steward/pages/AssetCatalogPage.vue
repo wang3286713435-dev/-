@@ -287,7 +287,7 @@
       </template>
     </el-drawer>
 
-    <el-drawer v-model="hermesDrawerVisible" title="Hermes 数据管家" size="520px">
+    <HermesWorkspaceDrawer v-model="hermesDrawerVisible">
       <DataStewardPanel
         v-if="detail"
         :project-id="detail.projectId"
@@ -296,7 +296,7 @@
         :asset-id="detail.fileId"
       />
       <el-empty v-else description="请先选择文件" :image-size="56" />
-    </el-drawer>
+    </HermesWorkspaceDrawer>
   </section>
 </template>
 
@@ -304,6 +304,7 @@
 import { computed, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Refresh } from '@element-plus/icons-vue';
+import HermesWorkspaceDrawer from '@/modules/data-steward/components/HermesWorkspaceDrawer.vue';
 import {
   createFileAccessTicket,
   fetchCatalogDirectories,

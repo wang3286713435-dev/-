@@ -4,23 +4,23 @@
 
 ## 入口
 
-- [`scripts/dev/bootstrap-infra.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/bootstrap-infra.sh)
-- [`scripts/dev/bootstrap-infra.ps1`](/Users/vc/Documents/数字化交付平台/scripts/dev/bootstrap-infra.ps1)
-- [`scripts/dev/start-backend.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/start-backend.sh)
-- [`scripts/dev/start-backend.ps1`](/Users/vc/Documents/数字化交付平台/scripts/dev/start-backend.ps1)
-- [`scripts/dev/start-frontend.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/start-frontend.sh)
-- [`scripts/dev/start-frontend.ps1`](/Users/vc/Documents/数字化交付平台/scripts/dev/start-frontend.ps1)
-- [`scripts/dev/check-minimal-chain.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-minimal-chain.sh)
-- [`scripts/dev/check-minimal-chain.ps1`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-minimal-chain.ps1)
-- [`scripts/dev/check-master-data-chain.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-master-data-chain.sh)
-- [`scripts/dev/check-master-data-chain.ps1`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-master-data-chain.ps1)
-- [`scripts/dev/check-deliverable-standard-chain.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-deliverable-standard-chain.sh)
-- [`scripts/dev/check-deliverable-standard-chain.ps1`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-deliverable-standard-chain.ps1)
-- [`scripts/dev/check-mvp-chain.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-mvp-chain.sh)
-- [`scripts/dev/check-mvp-chain.ps1`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-mvp-chain.ps1)
-- [`scripts/dev/check-agent-db2-contract.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-agent-db2-contract.sh)
-- [`scripts/dev/check-asset-quality-overview.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-asset-quality-overview.sh)
-- [`scripts/dev/check-phase2-batch1-readonly-catalog.sh`](/Users/vc/Documents/数字化交付平台/scripts/dev/check-phase2-batch1-readonly-catalog.sh)
+- [`scripts/dev/bootstrap-infra.sh`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/bootstrap-infra.sh)
+- [`scripts/dev/bootstrap-infra.ps1`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/bootstrap-infra.ps1)
+- [`scripts/dev/start-backend.sh`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/start-backend.sh)
+- [`scripts/dev/start-backend.ps1`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/start-backend.ps1)
+- [`scripts/dev/start-frontend.sh`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/start-frontend.sh)
+- [`scripts/dev/start-frontend.ps1`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/start-frontend.ps1)
+- [`scripts/dev/check-minimal-chain.sh`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/check-minimal-chain.sh)
+- [`scripts/dev/check-minimal-chain.ps1`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/check-minimal-chain.ps1)
+- [`scripts/dev/check-master-data-chain.sh`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/check-master-data-chain.sh)
+- [`scripts/dev/check-master-data-chain.ps1`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/check-master-data-chain.ps1)
+- [`scripts/dev/check-deliverable-standard-chain.sh`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/check-deliverable-standard-chain.sh)
+- [`scripts/dev/check-deliverable-standard-chain.ps1`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/check-deliverable-standard-chain.ps1)
+- [`scripts/dev/check-mvp-chain.sh`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/check-mvp-chain.sh)
+- [`scripts/dev/check-mvp-chain.ps1`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/check-mvp-chain.ps1)
+- [`scripts/dev/check-agent-db2-contract.sh`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/check-agent-db2-contract.sh)
+- [`scripts/dev/check-asset-quality-overview.sh`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/check-asset-quality-overview.sh)
+- [`scripts/dev/check-phase2-batch1-readonly-catalog.sh`](/Users/vc/Documents/数字化交付平台-hermes/scripts/dev/check-phase2-batch1-readonly-catalog.sh)
 
 ## 本地启动顺序
 
@@ -56,6 +56,8 @@ Windows PowerShell:
 
 优先使用仓库内的 `backend/mvnw` / `backend/mvnw.cmd` 构建并启动 `delivery-app`。如果本机缺少 Java 21，但已经安装 Docker Desktop，脚本会回退到 `maven:3.9-eclipse-temurin-21` Docker 镜像，并连接 `infra_default` 网络内的 MySQL。
 
+Hermes 分支默认使用 `SERVER_PORT=18080` 启动后端，避免和平台主线本地 `8080` 冲突。需要改端口时可提前设置 `SERVER_PORT`。
+
 ### 3. 启动前端
 
 macOS / Linux:
@@ -70,7 +72,7 @@ Windows PowerShell:
 .\scripts\dev\start-frontend.ps1
 ```
 
-脚本使用 `corepack pnpm install` 安装依赖，并通过 Vite 在 `5173` 端口启动前端。
+脚本使用 `corepack pnpm install` 安装依赖，并通过 Vite 在 `5174` 端口启动前端。Hermes 分支默认将 `/api` 代理到 `http://localhost:18080`，可用 `VITE_API_PROXY_TARGET` 覆盖；如需临时改前端端口，可设置 `VITE_FRONTEND_PORT`。
 
 ### 4. 执行最小链路检查
 

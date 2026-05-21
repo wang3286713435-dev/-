@@ -12,6 +12,7 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogSearchRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogSearchResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogSearchResult;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogSearchSafety;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogAuthorityHealth;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.PathMappingResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.PermissionEvidence;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.PermissionProofResponse;
@@ -353,7 +354,17 @@ public class CatalogApplicationService {
             "catalog_only",
             results,
             nextCursor,
-            new CatalogSearchSafety(false, false, false)
+            new CatalogSearchSafety(false, false, false),
+            catalogAuthorityHealth()
+        );
+    }
+
+    private static CatalogAuthorityHealth catalogAuthorityHealth() {
+        return new CatalogAuthorityHealth(
+            "green",
+            "staged",
+            "orange",
+            "openai_compatible_gateway_wrapped"
         );
     }
 

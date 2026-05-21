@@ -36,11 +36,11 @@
       :icon="ChatDotRound"
       @click="hermesDrawerVisible = true"
     >
-      <span>Hermes</span>
+      <span>Hermes 助手</span>
       <small>{{ globalHermesHint }}</small>
     </el-button>
 
-    <el-drawer v-model="hermesDrawerVisible" title="Hermes 数据管家" size="560px">
+    <HermesWorkspaceDrawer v-model="hermesDrawerVisible">
       <DataStewardPanel
         v-if="globalHermesProjectId"
         :project-id="globalHermesProjectId"
@@ -52,7 +52,7 @@
         :page-title="globalHermesPageTitle"
       />
       <el-empty v-else description="请先选择项目" :image-size="56" />
-    </el-drawer>
+    </HermesWorkspaceDrawer>
   </div>
 </template>
 
@@ -62,6 +62,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ChatDotRound } from '@element-plus/icons-vue';
 
 import DataStewardPanel from '@/modules/data-steward/components/DataStewardPanel.vue';
+import HermesWorkspaceDrawer from '@/modules/data-steward/components/HermesWorkspaceDrawer.vue';
 import ProjectWorkspaceNav from '@/modules/core/components/ProjectWorkspaceNav.vue';
 import SidebarMenu from '@/modules/core/components/SidebarMenu.vue';
 import { useProjectWorkspaceContext } from '@/modules/core/composables/useProjectWorkspaceContext';
