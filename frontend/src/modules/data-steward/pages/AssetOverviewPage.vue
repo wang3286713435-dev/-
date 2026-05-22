@@ -2,8 +2,8 @@
   <section class="mvp-page asset-page">
     <div class="mvp-page__header">
       <div>
-        <h1>资产总览</h1>
-        <p>默认聚焦真实 NAS 项目，样例、测试和归档项目需主动切换查看</p>
+        <h1>项目启动台</h1>
+        <p>先选项目，再进入文件管理、项目可视化或交付状态</p>
       </div>
       <div class="mvp-page__actions">
         <el-segmented v-model="sourceFilter" :options="sourceOptions" @change="loadPage" />
@@ -24,7 +24,7 @@
       </div>
     </div>
 
-    <section ref="heroRef" class="asset-hero">
+    <section ref="heroRef" class="asset-launchpad" aria-label="项目启动台">
       <div class="zy-hero-lightfield" aria-hidden="true">
         <span></span>
         <span></span>
@@ -32,90 +32,17 @@
       </div>
       <div class="zy-spotlight" aria-hidden="true"></div>
       <ParticleField :count="14" :speed="0.2" :link-distance="120" />
-      <div class="asset-hero__intro">
-        <span class="asset-hero__eyebrow">
-          <span class="zy-code-chip">ASSETS · OVERVIEW</span>
-          <small>真实 NAS 项目优先 · 不读取文件正文 · 不触碰 NAS 文件</small>
-        </span>
-        <h2>先选真实项目，再进入数字化交付工作区</h2>
-        <p>
-          默认只看已经接管的真实 NAS 项目。先确认资产已登记，再进入接入评估、工程主数据、文档/图纸交付与整改闭环。
-        </p>
+      <div class="asset-launchpad__copy">
+        <span class="zy-code-chip">PROJECT LAUNCHPAD</span>
+        <h2>选择项目，直接开始工作</h2>
+        <p>默认聚焦真实项目。搜索或选择推荐项目后，直接进入文件管理、项目可视化或交付状态。</p>
       </div>
 
-      <div class="asset-hero__workflow">
-        <header class="asset-hero__section-head">
-          <span class="zy-code-chip">FLOW</span>
-          <strong>三步工作链</strong>
-          <small>每一步都对应下方表格的「下一步动作」</small>
-        </header>
-        <ol class="asset-flow">
-          <li
-            v-for="(item, index) in objectiveSteps"
-            :key="item.label"
-            class="asset-flow__step"
-            :data-index="String(index + 1).padStart(2, '0')"
-          >
-            <div class="asset-flow__head">
-              <span class="asset-flow__num">{{ String(index + 1).padStart(2, '0') }}</span>
-              <strong>{{ item.label }}</strong>
-            </div>
-            <p>{{ item.description }}</p>
-            <button
-              v-if="actionForStep(index)"
-              class="asset-flow__cta"
-              type="button"
-              :disabled="!primaryActionProject"
-              @click="openHeroAction(actionForStep(index)!.key)"
-            >
-              {{ actionForStep(index)!.label }}
-              <span aria-hidden="true">→</span>
-            </button>
-          </li>
-        </ol>
-      </div>
-
-      <div class="asset-hero__status">
-        <header class="asset-hero__section-head">
-          <span class="zy-code-chip">STATE</span>
-          <strong>当前视图统计</strong>
-          <small>{{ statusScopeText }}</small>
-        </header>
-        <div class="asset-status-grid">
-          <article v-for="item in statusCards" :key="item.label">
-            <span class="asset-status-grid__label">{{ item.label }}</span>
-            <strong class="asset-status-grid__value">{{ item.value }}</strong>
-            <em class="asset-status-grid__unit">{{ item.unit }}</em>
-          </article>
-        </div>
-      </div>
-
-      <div class="asset-hero__risk">
-        <header class="asset-hero__section-head">
-          <span class="zy-code-chip">ALERT</span>
-          <strong>风险提醒</strong>
-          <small>这些问题会影响后续接入评估、交付缺失解释和人工挂接</small>
-        </header>
-        <div class="asset-risk-strip">
-          <article v-for="risk in riskSummaryCards" :key="risk.label" :class="{ 'is-warning': risk.count > 0 }">
-            <span class="asset-risk-strip__label">
-              <span class="zy-status-dot" :class="risk.count > 0 ? 'zy-status-dot--warning' : 'zy-status-dot--success'"></span>
-              {{ risk.label }}
-            </span>
-            <strong>{{ formatCount(risk.count) }}</strong>
-            <em>{{ risk.helper }}</em>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <section class="asset-entry-lanes" aria-label="项目入口台">
-      <article class="asset-entry-card asset-entry-card--primary">
-        <span class="asset-entry-card__eyebrow">推荐进入</span>
+      <article class="asset-launchpad__recommend">
+        <span>推荐项目</span>
         <template v-if="recommendedProject">
           <strong>{{ recommendedProject.code }} {{ recommendedProject.name }}</strong>
-          <p>{{ governanceStage(recommendedProject).hint }}</p>
-          <div class="asset-entry-card__meta">
+          <div class="asset-launchpad__tags">
             <el-tag size="small" :type="sourceTagType(recommendedProject.projectSource, recommendedProject.projectCategory)">
               {{ projectSourceText(recommendedProject.projectSource, recommendedProject.projectCategory) }}
             </el-tag>
@@ -123,22 +50,23 @@
               {{ onboardingStatusText(recommendedProject.onboardingStatus) }}
             </el-tag>
           </div>
-          <div class="asset-entry-card__actions">
-            <el-button type="primary" size="small" @click="openDetail(recommendedProject)">进入项目工作台</el-button>
-            <el-button size="small" @click="openGovernanceNext(recommendedProject)">
-              {{ governanceStage(recommendedProject).actionLabel }}
-            </el-button>
+          <div class="asset-launchpad__actions">
+            <el-button type="primary" @click="openDetail(recommendedProject)">进入项目</el-button>
+            <el-button @click="openProjectFiles(recommendedProject)">文件管理</el-button>
+            <el-button @click="openProjectVisualization(recommendedProject)">项目可视化</el-button>
           </div>
         </template>
         <template v-else>
-          <strong>暂无可进入项目</strong>
-          <p>当前筛选下没有项目。可以切换到“全部”或联系管理员确认项目权限。</p>
+          <strong>暂无推荐项目</strong>
+          <p>当前筛选下没有可进入项目，可以切换筛选或联系管理员确认权限。</p>
         </template>
       </article>
+    </section>
 
+    <section class="asset-entry-lanes" aria-label="项目入口台">
       <article class="asset-entry-card">
-        <span class="asset-entry-card__eyebrow">待处理项目</span>
-        <strong>{{ pendingProjects.length ? '先补齐底座' : '暂无明显阻塞' }}</strong>
+        <span class="asset-entry-card__eyebrow">待处理</span>
+        <strong>{{ pendingProjects.length ? '需要确认规则' : '暂无明显阻塞' }}</strong>
         <div v-if="pendingProjects.length" class="asset-entry-list">
           <button v-for="row in pendingProjects" :key="`pending-${row.projectId}`" type="button" @click="openGovernanceNext(row)">
             <span>{{ row.name }}</span>
@@ -149,7 +77,7 @@
       </article>
 
       <article class="asset-entry-card">
-        <span class="asset-entry-card__eyebrow">最近进入</span>
+        <span class="asset-entry-card__eyebrow">最近项目</span>
         <strong>{{ recentProjects.length ? '继续上次项目' : '还没有最近项目' }}</strong>
         <div v-if="recentProjects.length" class="asset-entry-list">
           <button v-for="row in recentProjects" :key="`recent-${row.projectId}`" type="button" @click="openDetail(row)">
@@ -159,14 +87,56 @@
         </div>
         <p v-else>进入项目工作台后，这里会记录最近打开的项目。</p>
       </article>
+
+      <article class="asset-entry-card asset-entry-card--summary">
+        <span class="asset-entry-card__eyebrow">项目概况</span>
+        <strong>{{ formatCount(visibleProjects.length) }} 个可见项目</strong>
+        <div class="asset-summary-row">
+          <span>已登记文件</span>
+          <em>{{ statusCards[1]?.value ?? '0' }} 份</em>
+        </div>
+        <div class="asset-summary-row">
+          <span>待补规则</span>
+          <em>{{ statusCards[6]?.value ?? '0' }} 个</em>
+        </div>
+        <el-button text @click="overviewMoreActive = overviewMoreActive.length ? [] : ['summary']">
+          查看统计和风险
+        </el-button>
+      </article>
     </section>
+
+    <el-collapse v-model="overviewMoreActive" class="asset-overview-more">
+      <el-collapse-item name="summary">
+        <template #title>
+          <span class="asset-overview-more__title">统计和风险摘要</span>
+          <small>低频信息已收起，不影响选项目</small>
+        </template>
+        <div class="asset-status-grid">
+          <article v-for="item in statusCards" :key="item.label">
+            <span class="asset-status-grid__label">{{ item.label }}</span>
+            <strong class="asset-status-grid__value">{{ item.value }}</strong>
+            <em class="asset-status-grid__unit">{{ item.unit }}</em>
+          </article>
+        </div>
+        <div class="asset-risk-strip">
+          <article v-for="risk in riskSummaryCards" :key="risk.label" :class="{ 'is-warning': risk.count > 0 }">
+            <span class="asset-risk-strip__label">
+              <span class="zy-status-dot" :class="risk.count > 0 ? 'zy-status-dot--warning' : 'zy-status-dot--success'"></span>
+              {{ risk.label }}
+            </span>
+            <strong>{{ formatCount(risk.count) }}</strong>
+            <em>{{ risk.helper }}</em>
+          </article>
+        </div>
+      </el-collapse-item>
+    </el-collapse>
 
     <section class="asset-table-section" aria-label="项目列表">
       <div class="asset-table-section__header">
         <div>
           <span class="zy-code-chip">PROJECTS</span>
           <strong>项目列表</strong>
-          <p>默认只保留员工做下一步判断需要的字段；统计和底座细节可按需展开。</p>
+          <p>选择项目后可直接进入文件管理、项目可视化或交付状态。</p>
         </div>
         <el-switch
           v-model="detailColumnsVisible"
@@ -206,18 +176,9 @@
       </el-table-column>
       <el-table-column v-if="detailColumnsVisible" prop="projectStage" label="阶段" width="120" show-overflow-tooltip />
       <el-table-column prop="projectManagerName" label="负责人" width="130" show-overflow-tooltip />
-      <el-table-column label="下一步动作" min-width="320">
+      <el-table-column label="下一步" min-width="260">
         <template #default="{ row }">
           <div class="asset-governance-cell">
-            <div class="asset-governance-trail">
-              <span
-                v-for="step in governanceTrail(row)"
-                :key="`${row.projectId}-${step.key}`"
-                :class="{ 'is-current': step.current, 'is-done': step.done }"
-              >
-                {{ step.label }}
-              </span>
-            </div>
             <small>{{ governanceStage(row).hint }}</small>
             <el-button text :icon="ArrowRight" @click.stop="openGovernanceNext(row)">
               {{ governanceStage(row).actionLabel }}
@@ -265,9 +226,13 @@
           <el-tag :type="row.assetStatus === 'ACTIVE' ? 'success' : 'info'">{{ row.assetStatus }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="120" fixed="right">
+      <el-table-column label="操作" width="230" fixed="right">
         <template #default="{ row }">
-          <el-button text :icon="ArrowRight" @click="openDetail(row)">详情</el-button>
+          <div class="asset-row-actions">
+            <el-button text :icon="ArrowRight" @click="openDetail(row)">工作台</el-button>
+            <el-button text @click="openProjectFiles(row)">文件</el-button>
+            <el-button text @click="openProjectVisualization(row)">可视化</el-button>
+          </div>
         </template>
       </el-table-column>
       </el-table>
@@ -301,6 +266,7 @@ const keyword = ref('');
 const sourceFilter = ref('REAL_NAS');
 const projectSortOrder = ref<'ASC' | 'DESC'>('ASC');
 const detailColumnsVisible = ref(false);
+const overviewMoreActive = ref<string[]>([]);
 const projects = ref<AssetProject[]>([]);
 const statistics = ref<AssetStatistics | null>(null);
 const qualityOverview = ref<AssetQualityOverview | null>(null);
@@ -312,12 +278,6 @@ const sourceOptions = [
   { label: '测试', value: 'TEST_PROJECT' },
   { label: '归档', value: 'ARCHIVED_HISTORY' },
   { label: '全部', value: 'ALL' }
-];
-
-const objectiveSteps = [
-  { label: '1. 看资产', description: '确认项目、目录、文件数量和最近扫描状态。' },
-  { label: '2. 补底座', description: '维护部位树、节点类型、交付标准和目录模板。' },
-  { label: '3. 做交付', description: '进入文档/图纸交付，处理审核、整改和预检查。' }
 ];
 
 const realNasProjects = computed(() => projects.value.filter(isRealNasProject));
@@ -360,23 +320,6 @@ const statusCards = computed(() => {
     { label: '有文件项目', value: formatCount(registered), unit: '个项目' }
   ];
 });
-
-const statusScopeText = computed(() => {
-  if (sourceFilter.value === 'REAL_NAS') {
-    return '来自真实 NAS 项目统计接口，不混入 smoke、测试或样例项目。';
-  }
-  if (sourceFilter.value === 'ALL') {
-    return '当前显示全部可访问项目，包含样例、测试和历史项目。';
-  }
-  return '当前统计按列表筛选结果计算，用于快速判断这一类项目的接入情况。';
-});
-
-const actionItems = [
-  { key: 'enter', label: '进入真实项目', description: '打开项目工作台，先看资产目录、容量和治理风险。' },
-  { key: 'assessment', label: '查看接入评估', description: '查看目录线索和主数据缺口，确认模板只是草案。' },
-  { key: 'master-data', label: '完善工程主数据', description: '补齐部位树、节点类型、交付定义和目录模板。' },
-  { key: 'delivery', label: '进入文档交付', description: '查看应交项、已挂接文件、审核状态和导出预检查。' }
-] as const;
 
 const riskSummaryCards = computed(() => {
   const rows = realNasProjects.value;
@@ -433,28 +376,14 @@ function openDetail(row: AssetProject) {
   router.push({ name: 'data-steward-asset-detail', params: { projectId: row.projectId } });
 }
 
-function openHeroAction(action: typeof actionItems[number]['key']) {
-  const project = primaryActionProject.value;
-  if (!project) return;
-  if (action === 'enter') {
-    openDetail(project);
-    return;
-  }
-  if (action === 'assessment') {
-    router.push({ name: 'project-master-data-initialization', params: { projectId: project.projectId } });
-    return;
-  }
-  if (action === 'master-data') {
-    router.push({ name: 'project-master-data-deliverable-standard', params: { projectId: project.projectId } });
-    return;
-  }
-  router.push({ name: 'project-work-document-delivery', params: { projectId: project.projectId } });
+function openProjectFiles(row: AssetProject) {
+  rememberProject(row.projectId);
+  router.push({ name: 'data-steward-asset-detail', params: { projectId: row.projectId }, query: { tab: 'files' } });
 }
 
-function actionForStep(index: number) {
-  const map: Array<typeof actionItems[number]['key']> = ['enter', 'master-data', 'delivery'];
-  const key = map[index];
-  return actionItems.find((item) => item.key === key) ?? null;
+function openProjectVisualization(row: AssetProject) {
+  rememberProject(row.projectId);
+  router.push({ name: 'data-steward-asset-detail', params: { projectId: row.projectId }, query: { tab: 'dashboard' } });
 }
 
 function openGovernanceNext(row: AssetProject) {
@@ -506,24 +435,6 @@ function governanceStage(row: AssetProject) {
     hint: '先进入项目工作台，确认资产目录和接入前置条件。',
     routeName: 'data-steward-asset-detail'
   } as const;
-}
-
-function governanceTrail(row: AssetProject) {
-  const stage = governanceStage(row);
-  const labels = [
-    ['catalog', '资产目录'],
-    ['assessment', '接入评估'],
-    ['master-data', '工程主数据'],
-    ['standard', '交付标准'],
-    ['delivery', '文档/图纸交付'],
-    ['review', '审核整改']
-  ] as const;
-  return labels.map(([key, label], index) => ({
-    key,
-    label,
-    done: index < stage.index,
-    current: index === stage.index
-  }));
 }
 
 function isRealNasProject(row: AssetProject) {
@@ -634,17 +545,19 @@ function onboardingTagType(value?: string | null) {
   width: 130px;
 }
 
-/* ---- Hero ---- */
-.asset-hero {
+/* ---- Project launchpad ---- */
+.asset-launchpad {
   background: var(--zy-panel-tint);
   -webkit-backdrop-filter: blur(14px) saturate(1.04);
   backdrop-filter: blur(14px) saturate(1.04);
   border: 1px solid color-mix(in srgb, var(--zy-line) 72%, transparent);
   border-radius: var(--zy-radius-lg);
   display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.72fr);
   gap: var(--zy-sp-5);
+  align-items: center;
   min-width: 0;
-  padding: var(--zy-sp-6);
+  padding: var(--zy-sp-5);
   position: relative;
   overflow: hidden;
   box-shadow: var(--zy-shadow-soft);
@@ -652,12 +565,12 @@ function onboardingTagType(value?: string | null) {
 }
 
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-  .asset-hero {
+  .asset-launchpad {
     background: var(--zy-surface);
   }
 }
 
-.asset-hero::before {
+.asset-launchpad::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -670,34 +583,19 @@ function onboardingTagType(value?: string | null) {
   mask-image: linear-gradient(to bottom, black 0%, transparent 70%);
 }
 
-.asset-hero__intro,
-.asset-hero__workflow,
-.asset-hero__status,
-.asset-hero__risk {
+.asset-launchpad__copy,
+.asset-launchpad__recommend {
   position: relative;
   z-index: 2;
 }
 
-.asset-hero__intro {
+.asset-launchpad__copy {
   display: grid;
   gap: var(--zy-sp-2);
-  max-width: 880px;
+  max-width: 700px;
 }
 
-.asset-hero__eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--zy-sp-2);
-  flex-wrap: wrap;
-}
-
-.asset-hero__eyebrow small {
-  color: var(--zy-muted);
-  font-size: var(--zy-fs-xs);
-  letter-spacing: 0;
-}
-
-.asset-hero__intro h2 {
+.asset-launchpad__copy h2 {
   margin: 0;
   color: var(--zy-ink);
   font-size: var(--zy-fs-3xl);
@@ -706,12 +604,46 @@ function onboardingTagType(value?: string | null) {
   letter-spacing: -0.02em;
 }
 
-.asset-hero__intro p {
+.asset-launchpad__copy p,
+.asset-launchpad__recommend p {
   margin: 0;
   color: var(--zy-text-soft);
   font-size: var(--zy-fs-sm);
   line-height: 1.7;
-  max-width: 720px;
+}
+
+.asset-launchpad__recommend {
+  display: grid;
+  gap: var(--zy-sp-3);
+  min-width: 0;
+  padding: var(--zy-sp-4);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: var(--zy-shadow-xs);
+}
+
+.asset-launchpad__recommend > span {
+  color: var(--zy-blue-700);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.asset-launchpad__recommend strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-xl);
+  font-weight: var(--zy-fw-semi);
+  line-height: 1.35;
+}
+
+.asset-launchpad__tags,
+.asset-launchpad__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zy-sp-2);
+  min-width: 0;
 }
 
 .asset-hero__section-head {
@@ -993,6 +925,65 @@ function onboardingTagType(value?: string | null) {
   min-width: 0;
 }
 
+.asset-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zy-sp-3);
+  min-width: 0;
+  padding: 6px 0;
+  border-top: var(--zy-border-soft);
+}
+
+.asset-summary-row span {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+}
+
+.asset-summary-row em {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-sm);
+  font-style: normal;
+  font-weight: var(--zy-fw-semi);
+}
+
+.asset-overview-more {
+  border: var(--zy-border);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+  box-shadow: var(--zy-shadow-xs);
+  overflow: hidden;
+}
+
+.asset-overview-more :deep(.el-collapse),
+.asset-overview-more :deep(.el-collapse-item__wrap) {
+  border: 0;
+}
+
+.asset-overview-more :deep(.el-collapse-item__header) {
+  min-height: 48px;
+  padding: 0 var(--zy-sp-4);
+  border: 0;
+}
+
+.asset-overview-more :deep(.el-collapse-item__content) {
+  display: grid;
+  gap: var(--zy-sp-3);
+  padding: 0 var(--zy-sp-4) var(--zy-sp-4);
+}
+
+.asset-overview-more__title {
+  margin-right: var(--zy-sp-2);
+  color: var(--zy-ink);
+  font-weight: var(--zy-fw-semi);
+}
+
+.asset-overview-more small {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-regular);
+}
+
 .asset-entry-list {
   display: grid;
   gap: var(--zy-sp-2);
@@ -1148,8 +1139,20 @@ function onboardingTagType(value?: string | null) {
   font-weight: var(--zy-fw-bold);
 }
 
+.asset-row-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.asset-row-actions :deep(.el-button) {
+  margin-left: 0;
+}
+
 @media (max-width: 960px) {
-  .asset-hero {
+  .asset-launchpad {
+    grid-template-columns: 1fr;
     padding: var(--zy-sp-4);
   }
 

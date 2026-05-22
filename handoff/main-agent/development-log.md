@@ -3106,6 +3106,55 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - 前端新增运行期文件需纳入交付范围，测试 prompt 已补充“运行期前端文件不得保持未跟踪”的 P1 检查，避免重复 UX1 tokens.css 问题。
 - 当前建议：进入 UX2 测试 agent 整体验收。
 
+# 2026-05-22 UX3 启动
+
+- 用户确认进入 `UX3：主视图聚焦与认知减负`。
+- 已从 UX2 收口提交后切出分支：`codex/ux3-main-view-focus`。
+- UX3 不进入 M2C，不新增业务能力，只做 UX 分支内的小批次。
+- 已写入：
+  - UX3 主计划：`handoff/main-agent/ux3-main-view-focus-plan.md`
+  - 开发 agent prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 agent prompt：`handoff/test-agent/current-prompt.md`
+  - 主状态：`handoff/main-agent/status.md`
+- UX3 核心目标：
+  - 资产总览从教程式入口改成项目启动台。
+  - 项目工作台首屏聚焦文件管理、项目资产驾驶舱 / 可视化、交付状态。
+  - 技术标签和大段说明降级，不再抢主视觉。
+  - 旧路由和现有功能保留。
+- 边界：
+  - 只允许修改 `frontend/**` 和 `handoff/dev-agent/latest-report.md`。
+  - 禁止修改后端、数据库迁移、接口语义、权限规则、`docs/**`。
+
+# 2026-05-22 UX3 开发完成，进入测试验收
+
+- 开发 agent 已完成 UX3 并写入 `handoff/dev-agent/latest-report.md`。
+- 主 agent 已核对变更范围：
+  - 前端页面改动集中在资产总览、项目工作台、项目内导航和壳层。
+  - 未发现 `backend/**`、数据库迁移、`docs/**` 变更。
+- 开发报告中的自测通过：
+  - 前端构建。
+  - 后端健康检查。
+  - M2B / M2A / M1F / M1E / M1D / M1C 回归。
+  - `git diff --check`。
+- 当前建议：进入 UX3 测试 agent 验收。
+
+# 2026-05-22 UX3 收口
+
+- UX3 测试 agent 验收通过，报告已写入 `handoff/test-agent/latest-report.md`。
+- 当前无 P0 / P1。
+- 已确认：
+  - Fresh login 后资产总览可在约 3.1 秒内展示项目启动台和核心入口。
+  - 503 / 506 项目工作台首屏聚焦文件管理、项目可视化 / 资产驾驶舱、交付状态。
+  - 旧链接兼容、文件管理、项目可视化入口和多分辨率布局通过。
+  - M2B / M2A / M1F / M1E / M1D / M1C 回归通过。
+  - 未发现 `backend/**`、数据库迁移、`docs/**` 改动。
+  - 未发现真实 NAS 路径或敏感字段泄露。
+- P2 后续打磨项：
+  - 既有 Vite chunk size warning。
+  - 项目工作台仍有少量偏技术文本。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 非交付未跟踪文件继续排除。
+- 主 agent 裁决：UX3 可以正式收口，下一步建议做 Git checkpoint。
+
 ## 2026-05-22 UX2 收口
 
 - UX2 测试 agent 整体验收通过，报告已写入 `handoff/test-agent/latest-report.md`。

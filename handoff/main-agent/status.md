@@ -1,5 +1,66 @@
 # 主 Agent 项目状态
 
+## 2026-05-22 UX3 启动
+
+- 当前 active 批次：`UX3：主视图聚焦与认知减负`。
+- 当前分支：`codex/ux3-main-view-focus`。
+- 启动依据：
+  - UX2 已验收通过并推送。
+  - 用户反馈主视图仍然过于混乱，数据管家核心功能没有足够聚焦。
+- UX3 定位：
+  - UX 分支内的小批次。
+  - 不进入 M2C。
+  - 不新增业务能力。
+  - 只做主视图减法、核心入口重排和低频入口降级。
+- UX3 开发 prompt：`handoff/dev-agent/current-prompt.md`。
+- UX3 测试 prompt：`handoff/test-agent/current-prompt.md`。
+- UX3 计划：`handoff/main-agent/ux3-main-view-focus-plan.md`。
+- UX3 重点：
+  - 资产总览改成项目启动台。
+  - 首屏聚焦项目搜索、真实项目列表、推荐进入、文件管理、项目可视化。
+  - 项目工作台首屏聚焦文件管理、资产驾驶舱 / 可视化、交付状态。
+  - 技术标签和长教程降级到详情、折叠区或空状态。
+- UX3 边界：
+  - 允许修改 `frontend/**` 和 `handoff/dev-agent/latest-report.md`。
+  - 禁止修改 `backend/**`、数据库迁移、后端接口、权限规则和 `docs/**`。
+  - 禁止新增 Hermes、BIM、NAS 写能力或文件正文读取。
+
+## 2026-05-22 UX3 进入测试验收
+
+- 开发 agent 已完成 UX3 主视图聚焦与认知减负，并写入 `handoff/dev-agent/latest-report.md`。
+- 开发报告显示：
+  - 资产总览改成“项目启动台”。
+  - 项目工作台首屏固定突出文件管理、项目可视化、交付状态。
+  - 技术标签移入“项目详情 / 技术信息”折叠区。
+  - 项目内导航压缩为“主入口 + 更多入口”。
+  - 侧边栏版本标识更新为 `BUILD · UX3`。
+- 主 agent 初审：
+  - 页面改动集中在 `frontend/**`。
+  - 未发现 `backend/**`、数据库迁移、`docs/**` 改动。
+  - 可以进入 UX3 测试 agent 验收。
+
+## 2026-05-22 UX3 收口
+
+- UX3 测试 agent 已完成验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 结论：`通过`。
+- 当前无 P0 / P1。
+- 已验证：
+  - 后端构建、前端构建、健康检查通过。
+  - M2B / M2A / M1F / M1E / M1D / M1C 回归通过。
+  - `git diff --check` 通过。
+  - Fresh login 后资产总览约 3.1 秒内展示项目启动台、推荐项目、文件管理、项目可视化、真实项目列表和下一步动作。
+  - 503 / 506 项目工作台首屏聚焦文件管理、项目可视化 / 资产驾驶舱、交付状态。
+  - 旧链接兼容稳定，多分辨率检查通过。
+  - 未发现真实 NAS 路径、`storage_uri`、raw row、SQL、token、secret 泄露。
+  - 未发现 `backend/**`、数据库迁移、`docs/**` 变更。
+- P2：
+  - 既有 Vite chunk size warning。
+  - 项目工作台仍有少量偏技术文本，例如 `INTERNAL_PILOT`、`项目 503`、`平台内部 ID`。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 仍为非交付未跟踪文件，收口提交时继续排除。
+- 主 agent 裁决：
+  - `UX3：主视图聚焦与认知减负` 可以正式收口。
+  - UX3 收口后建议做 Git checkpoint，再回到平台主线规划。
+
 ## 2026-05-22 UX2 启动
 
 - 当前 active 批次：`UX2：前端使用逻辑与体验重构专项`。

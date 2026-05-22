@@ -1,55 +1,42 @@
-# Codex 开发 Agent 当前任务：UX2 使用逻辑与字段减负续接
+# 开发 Agent 当前任务：UX3 主视图聚焦与认知减负
 
-你是数字化交付平台 UX2 批次的开发 agent。本轮从 Claude Code 已完成的“高级感视觉升级”之后继续，不重新开始，不回滚视觉升级。
-
-工作目录：
+你是数字化交付平台 UX3 批次的开发 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
 完成承诺固定为：
 
-`<promise>MAINLINE_UX2_USER_EXPERIENCE_REFACTOR_COMPLETE</promise>`
+`<promise>MAINLINE_UX3_MAIN_VIEW_FOCUS_COMPLETE</promise>`
 
 ## 0. 当前状态
 
-UX2 已经进入开发中。
+UX2 已验收通过并推送，当前从 UX2 基线切出 UX3 分支：
 
-Claude Code 已完成一个 UX2 视觉子批次：
+`codex/ux3-main-view-focus`
 
-- 登录页加入官网风格 lightfield / spotlight / 粒子视觉。
-- 资产总览 hero 加入高级视觉层。
-- 项目工作台命令中心加入高级视觉层。
-- 新增或修改：
-  - `frontend/src/styles/effects.css`
-  - `frontend/src/modules/core/components/ParticleField.vue`
-  - `frontend/src/modules/core/composables/useSpotlight.ts`
-  - `frontend/src/styles/tokens.css`
-  - `frontend/src/styles/index.css`
-  - `frontend/src/modules/auth/pages/LoginPage.vue`
-  - `frontend/src/modules/data-steward/pages/AssetOverviewPage.vue`
-  - `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
+UX3 是 UX 分支内的小批次，不进入 M2C，不新增业务能力。
 
-你必须把这些改动当成当前基线，不要回滚。除非发现明确 P0/P1，可做最小修复并在报告中说明。
+用户明确反馈：
 
-本轮继续完成 UX2 的真正主目标：
+- 当前主视图过于混乱。
+- 用户进入后不知道应该干什么。
+- 数据管家最重要的是文件管理、项目管理与可视化。
+- 主视图不要留太多教程与文字。
+- 应通过交互逻辑和 UI 引导用户使用平台。
+- 当前平台内容并不复杂，最主要功能应集中在用户视野中。
 
-`让普通员工进入平台后看得懂、知道下一步、少被技术字段干扰。`
+## 1. 本轮目标
 
-## 1. 本轮定位
+本轮只做主视图减法和入口聚焦：
 
-这不是后端功能开发，也不是继续单纯美化 UI。
-
-本轮重点是：
-
-1. 优化用户使用路径。
-2. 强化下一步动作。
-3. 降低技术字段干扰。
-4. 把低频功能收进“更多工具”或折叠区。
-5. 保留旧路由兼容。
-
-主路径固定为：
-
-`选择项目 -> 看资产 -> 确认主数据 -> 做交付 -> 查整改 / 预检查`
+1. 资产总览改成更直接的“项目启动台”。
+2. 项目工作台首屏聚焦三个核心入口：
+   - 文件管理。
+   - 项目资产驾驶舱 / 项目可视化。
+   - 交付状态。
+3. 大段教程、长说明、偏技术状态从主视图移到折叠区、详情区或空状态中。
+4. 保留旧路由兼容，不删除功能。
+5. 保留 UX2 视觉升级，不回滚 lightfield / spotlight / glass-lite。
 
 ## 2. 必须先阅读
 
@@ -57,25 +44,20 @@ Claude Code 已完成一个 UX2 视觉子批次：
 
 1. `handoff/main-agent/status.md`
 2. `handoff/main-agent/development-log.md`
-3. `handoff/main-agent/ux2-user-experience-refactor-plan.md`
+3. `handoff/main-agent/ux3-main-view-focus-plan.md`
 4. `handoff/dev-agent/latest-report.md`
 5. `handoff/test-agent/latest-report.md`
 
 重点检查：
 
-1. `frontend/src/router/index.ts`
-2. `frontend/src/modules/core/layout/AppLayout.vue`
-3. `frontend/src/modules/core/components/SidebarMenu.vue`
-4. `frontend/src/modules/core/components/ProjectWorkspaceNav.vue`
-5. `frontend/src/modules/data-steward/pages/AssetOverviewPage.vue`
-6. `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
-7. `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
-8. `frontend/src/modules/master-data/pages/ProjectInitializationPage.vue`
-9. `frontend/src/modules/work-center/components/DeliveryViewPanel.vue`
-10. `frontend/src/modules/work-center/pages/RectificationsPage.vue`
-11. `frontend/src/styles/index.css`
-12. `frontend/src/styles/tokens.css`
-13. `frontend/src/styles/effects.css`
+1. `frontend/src/modules/data-steward/pages/AssetOverviewPage.vue`
+2. `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
+3. `frontend/src/modules/core/components/ProjectWorkspaceNav.vue`
+4. `frontend/src/modules/core/components/SidebarMenu.vue`
+5. `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
+6. `frontend/src/styles/index.css`
+7. `frontend/src/styles/effects.css`
+8. `frontend/src/styles/tokens.css`
 
 ## 3. 允许修改
 
@@ -84,14 +66,15 @@ Claude Code 已完成一个 UX2 视觉子批次：
 - `frontend/**`
 - `handoff/dev-agent/latest-report.md`
 
-允许：
+允许做：
 
-- 调整前端路由入口展示，但不能删除旧路由。
-- 调整菜单显隐和层级。
-- 调整项目工作台默认信息结构。
-- 调整页面默认字段、折叠区、高级信息区。
-- 调整按钮文案、空状态、错误提示和下一步提示。
-- 继续微调视觉样式，但不能把本轮变成纯视觉升级。
+- 调整资产总览首屏结构。
+- 调整项目工作台首屏结构。
+- 调整项目内导航层级。
+- 折叠或降级低频入口。
+- 压缩说明文字。
+- 把偏技术字段移到详情 / 技术信息区。
+- 微调样式以强化核心入口。
 
 ## 4. 严禁越界
 
@@ -99,130 +82,96 @@ Claude Code 已完成一个 UX2 视觉子批次：
 
 1. 修改 `backend/**`。
 2. 修改数据库迁移。
-3. 新增或修改后端接口。
-4. 改变权限规则。
-5. 修改 `docs/**`。
-6. 引入 Hermes 新能力。
-7. 引入 BIM 轻量化。
+3. 修改 `docs/**`。
+4. 新增或修改后端接口。
+5. 改变权限规则。
+6. 新增 Hermes 能力。
+7. 新增 BIM 轻量化能力。
 8. 新增真实 NAS 写能力。
 9. 读取文件正文。
-10. 写索引、parser、OpenSearch、Qdrant、MinIO documents/chunks。
-11. 删除旧路由导致历史链接、员工书签或测试脚本失效。
+10. 删除旧路由导致书签或测试脚本失效。
+11. 物理删除功能入口或破坏既有业务页面。
 12. 为 105 / 503 / 93 / 506 写死逻辑。
-13. 把 `.claude/**` 或 `CLAUDE.md` 默认纳入 UX2 提交。
+13. 把 `.claude/**`、`CLAUDE.md`、`tmp/**` 纳入提交。
 
 如你认为必须改后端才能解决问题，停止并写入报告，不得自行修改后端。
 
-## 5. 本轮必须完成
+## 5. 具体开发要求
 
-### A. 资产总览使用逻辑收敛
-
-目标：
-
-- 资产总览是“项目入口台”，不是统计堆叠页。
-- 用户进入后优先看到：
-  - 真实项目。
-  - 最近进入项目。
-  - 待处理项目。
-  - 下一步动作。
-
-要求：
-
-- 默认视图弱化测试 / 样例 / 历史项目。
-- 不删除测试 / 样例项目筛选能力。
-- 低频统计、扫描、导出、文件服务等入口不抢主视觉。
-- 项目列表必须仍然可用。
-
-### B. 项目工作台下一步引导
+### A. 资产总览：项目启动台
 
 目标：
 
-- 项目工作台默认展示当前项目状态和下一步动作。
-- 员工能理解：
-  - 先看资产。
-  - 再确认工程主数据。
-  - 再做文档 / 图纸交付。
-  - 最后查整改和预检查。
+- 用户进入后第一眼知道：先选项目。
+- 主视图核心是项目管理，不是教程页。
 
 要求：
 
-- 保留三段链路：`项目资产 -> 工程主数据 -> 交付工作中心`。
-- 不要一屏平铺所有入口。
-- 常用入口前置：
+- 删除或折叠 `FLOW / STATE / ALERT` 等大块教程式首屏内容。
+- 首屏保留并强化：
+  - 项目搜索。
+  - 真实项目列表。
+  - 推荐进入项目。
+  - 最近项目。
+  - 核心动作：进入项目、查看文件管理、查看项目可视化 / 资产驾驶舱。
+- 统计和风险提醒可以保留，但必须降级为紧凑摘要或折叠区，不占据主视觉。
+- 测试 / 样例 / 历史项目筛选能力保留，但默认不抢主视图。
+
+### B. 项目工作台：核心入口优先
+
+目标：
+
+- 用户进入项目后第一眼看到核心工作入口。
+
+要求：
+
+- 顶部去掉或弱化偏技术标签的强展示：
+  - `平台内部ID`
+  - `NAS_REAL_PILOT`
+  - `ACTIVE`
+- 这些字段如仍需保留，移入“项目详情 / 技术信息”折叠区。
+- 首屏核心入口固定为：
   - 文件管理。
-  - 初始化向导 / 工程主数据。
-  - 文档交付。
-  - 图纸交付。
-  - 整改 / 预检查。
-- 低频入口进入“更多工具”或折叠区域。
+  - 项目资产驾驶舱 / 可视化。
+  - 交付状态。
+- 工程主数据入口保留，但不要比上述核心入口更抢眼。
+- Hermes、模型集成、管理对象、事项、任务、导出、文件服务等低频入口放入更多工具。
 
-### C. 文件管理字段减负
-
-目标：
-
-- 文件管理默认聚焦目录树和文件表。
-- 默认表格面向员工，不直接堆技术字段。
-
-默认优先展示：
-
-- 文件名。
-- 类型。
-- 版本。
-- 大小。
-- 专业。
-- 状态。
-- 操作。
-
-技术字段进入“技术信息 / 诊断信息”：
-
-- 平台内部 ID。
-- checksum 细节。
-- 扫描任务编号。
-- trace / 诊断编号。
-- 处理状态码。
-
-注意：
-
-- 不删除数据能力。
-- 不影响现有操作：预览、详情、治理、补 checksum、更多操作。
-- 不泄露真实 NAS 路径。
-
-### D. 工程主数据和交付页业务解释
+### C. 项目内导航：主入口 + 更多
 
 目标：
 
-- 工程主数据页面要讲清楚“先定义规则”。
-- 文档 / 图纸交付页面要讲清楚“按规则交付”。
+- 不再一眼看到大量同级按钮。
 
 要求：
 
-- 在初始化向导、部位树、节点类型、交付物标准页面增加更清楚的业务说明和下一步动作。
-- 在文档 / 图纸交付页面强化：
-  - 应交。
-  - 缺失。
-  - 补交。
-  - 审核。
-  - 整改。
-  - 预检查。
-- 不改变交付业务逻辑。
+- `ProjectWorkspaceNav` 继续保留三段语义，但视觉上压缩为主入口 + 更多入口。
+- 保留旧页面入口和跳转能力。
+- 当前项目上下文必须持续可见。
+- 不要让主导航像“功能清单墙”。
 
-### E. 旧链接兼容
+### D. 文件管理入口
 
-至少保证这些旧入口不白屏，并能跳到当前项目工作台内对应页面：
+目标：
 
-- `/master-data/sections`
-- `/master-data/node-types`
-- `/master-data/initialization`
-- `/master-data/deliverable-standard`
-- `/work/document-delivery`
-- `/work/drawing-delivery`
-- `/work/rectifications`
-- `/work/agent-governance`
-- `/work/dashboard`
-- `/data-steward/models`
-- `/data-steward/objects`
+- 文件管理作为数据管家最重要功能之一，必须更容易进入。
 
-如果当前用户没有当前项目，跳回 `/data-steward/assets`，不要白屏。
+要求：
+
+- 资产总览的项目行或推荐卡应能快速进入文件管理。
+- 项目工作台首屏必须有明显文件管理入口。
+- 不改变文件管理业务逻辑。
+
+### E. 项目可视化入口
+
+目标：
+
+- 当前未接真实 BIM 引擎前，项目可视化可以对应资产驾驶舱 / 项目数据可视化，不伪装成真实 3D。
+
+要求：
+
+- 文案使用“项目可视化 / 资产驾驶舱”，不要承诺真实 BIM 轻量化。
+- 不进入 8B / BIM 引擎能力。
 
 ## 6. 自测要求
 
@@ -241,22 +190,17 @@ bash scripts/dev/check-m1c-real-project-masterdata.sh
 git diff --check
 ```
 
-如果后端未启动，按项目既有脚本启动后再检查健康。
+浏览器至少检查：
 
-## 7. 浏览器自测
+1. Fresh login 后进入资产总览，5 秒内能看懂先选项目。
+2. 资产总览首屏核心是项目搜索、项目列表、推荐进入、文件管理、项目可视化。
+3. 503 / 506 项目工作台首屏最显眼的是文件管理、资产驾驶舱 / 可视化、交付状态。
+4. 大段教程文字不再占据主视图。
+5. 技术标签不再抢主视觉。
+6. 旧链接不白屏。
+7. 1280 / 1440 / 1920 宽度下无横向溢出、按钮丢失、文字挤压。
 
-至少手动检查：
-
-1. Fresh login 后资产总览是否清楚。
-2. 资产总览是否能在 10 秒内让用户知道下一步。
-3. 503 / 506 项目工作台是否有清楚的项目状态和下一步动作。
-4. 文件管理默认是否聚焦目录树和文件表。
-5. 工程主数据是否说明“先定义规则”。
-6. 文档 / 图纸交付是否说明“按规则交付”。
-7. 旧链接是否不白屏。
-8. 1280 / 1440 / 1920 宽度下是否无横向溢出、按钮丢失、文字挤压。
-
-## 8. 报告要求
+## 7. 报告要求
 
 完成后写入：
 
@@ -264,13 +208,13 @@ git diff --check
 
 报告必须包含：
 
-1. 是否保留 Claude 视觉升级。
-2. 本轮完成了哪些使用逻辑优化。
-3. 本轮完成了哪些字段减负。
-4. 本轮完成了哪些下一步动作提示。
-5. 旧链接兼容结果。
-6. 自测命令结果。
-7. 浏览器自测结果。
+1. 主视图减法做了什么。
+2. 资产总览如何变成项目启动台。
+3. 项目工作台核心入口如何调整。
+4. 哪些教程 / 技术信息被折叠或降级。
+5. 文件管理和项目可视化入口是否更明显。
+6. 旧链接兼容结果。
+7. 自测命令结果。
 8. 是否修改后端 / docs / 数据库迁移。
 9. P0 / P1 / P2。
-10. 是否建议进入 UX2 整体验收。
+10. 是否建议进入 UX3 测试验收。

@@ -44,7 +44,7 @@
             :plain="!isAssetTab('dashboard')"
             @click="go('data-steward-asset-detail')"
           >
-            资产驾驶舱
+            项目可视化
           </el-button>
           <el-button
             size="small"
@@ -54,57 +54,61 @@
           >
             文件管理
           </el-button>
-          <el-button
-            size="small"
-            :type="isActive(['project-data-steward-models']) ? 'primary' : undefined"
-            :plain="!isActive(['project-data-steward-models'])"
-            @click="go('project-data-steward-models')"
-          >
-            模型集成
-          </el-button>
-          <el-button
-            size="small"
-            :type="isActive(['project-data-steward-objects']) ? 'primary' : undefined"
-            :plain="!isActive(['project-data-steward-objects'])"
-            @click="go('project-data-steward-objects')"
-          >
-            管理对象
-          </el-button>
         </div>
         <div class="project-workspace-nav__secondary">
-          <span class="project-workspace-nav__more-label">更多工具</span>
-          <el-button
-            text
-            size="small"
-            :type="isActive(['project-data-steward-issues']) ? 'primary' : undefined"
-            @click="go('project-data-steward-issues')"
-          >
-            事项
-          </el-button>
-          <el-button
-            text
-            size="small"
-            :type="isActive(['project-data-steward-tasks']) ? 'primary' : undefined"
-            @click="go('project-data-steward-tasks')"
-          >
-            任务
-          </el-button>
-          <el-button
-            text
-            size="small"
-            :type="isActive(['project-data-steward-exports']) ? 'primary' : undefined"
-            @click="go('project-data-steward-exports')"
-          >
-            导出
-          </el-button>
-          <el-button
-            text
-            size="small"
-            :type="isActive(['project-data-steward-file-service']) ? 'primary' : undefined"
-            @click="go('project-data-steward-file-service')"
-          >
-            文件服务
-          </el-button>
+          <details :open="isAssetMoreActive">
+            <summary>更多入口</summary>
+            <div class="project-workspace-nav__more-list">
+              <el-button
+                text
+                size="small"
+                :type="isActive(['project-data-steward-models']) ? 'primary' : undefined"
+                @click="go('project-data-steward-models')"
+              >
+                模型集成
+              </el-button>
+              <el-button
+                text
+                size="small"
+                :type="isActive(['project-data-steward-objects']) ? 'primary' : undefined"
+                @click="go('project-data-steward-objects')"
+              >
+                管理对象
+              </el-button>
+              <el-button
+                text
+                size="small"
+                :type="isActive(['project-data-steward-issues']) ? 'primary' : undefined"
+                @click="go('project-data-steward-issues')"
+              >
+                事项
+              </el-button>
+              <el-button
+                text
+                size="small"
+                :type="isActive(['project-data-steward-tasks']) ? 'primary' : undefined"
+                @click="go('project-data-steward-tasks')"
+              >
+                任务
+              </el-button>
+              <el-button
+                text
+                size="small"
+                :type="isActive(['project-data-steward-exports']) ? 'primary' : undefined"
+                @click="go('project-data-steward-exports')"
+              >
+                导出
+              </el-button>
+              <el-button
+                text
+                size="small"
+                :type="isActive(['project-data-steward-file-service']) ? 'primary' : undefined"
+                @click="go('project-data-steward-file-service')"
+              >
+                文件服务
+              </el-button>
+            </div>
+          </details>
         </div>
       </section>
 
@@ -124,32 +128,39 @@
             :plain="!isActive(['project-master-data-initialization'])"
             @click="go('project-master-data-initialization')"
           >
-            初始化向导
+            工程主数据
           </el-button>
-          <el-button
-            size="small"
-            :type="isActive(['project-master-data-sections']) ? 'primary' : undefined"
-            :plain="!isActive(['project-master-data-sections'])"
-            @click="go('project-master-data-sections')"
-          >
-            部位树
-          </el-button>
-          <el-button
-            size="small"
-            :type="isActive(['project-master-data-node-types']) ? 'primary' : undefined"
-            :plain="!isActive(['project-master-data-node-types'])"
-            @click="go('project-master-data-node-types')"
-          >
-            节点类型
-          </el-button>
-          <el-button
-            size="small"
-            :type="isActive(['project-master-data-deliverable-standard']) ? 'primary' : undefined"
-            :plain="!isActive(['project-master-data-deliverable-standard'])"
-            @click="go('project-master-data-deliverable-standard')"
-          >
-            交付物标准
-          </el-button>
+        </div>
+        <div class="project-workspace-nav__secondary">
+          <details :open="isMasterDataMoreActive">
+            <summary>更多入口</summary>
+            <div class="project-workspace-nav__more-list">
+              <el-button
+                text
+                size="small"
+                :type="isActive(['project-master-data-sections']) ? 'primary' : undefined"
+                @click="go('project-master-data-sections')"
+              >
+                部位树
+              </el-button>
+              <el-button
+                text
+                size="small"
+                :type="isActive(['project-master-data-node-types']) ? 'primary' : undefined"
+                @click="go('project-master-data-node-types')"
+              >
+                节点类型
+              </el-button>
+              <el-button
+                text
+                size="small"
+                :type="isActive(['project-master-data-deliverable-standard']) ? 'primary' : undefined"
+                @click="go('project-master-data-deliverable-standard')"
+              >
+                交付物标准
+              </el-button>
+            </div>
+          </details>
         </div>
       </section>
 
@@ -172,47 +183,51 @@
         <div class="project-workspace-nav__primary">
           <el-button
             size="small"
+            :type="isActive(['project-work-dashboard']) ? 'primary' : undefined"
+            :plain="!isActive(['project-work-dashboard'])"
+            @click="goWorkCenter('project-work-dashboard')"
+          >
+            交付状态
+          </el-button>
+          <el-button
+            size="small"
             :type="isActive(['project-work-document-delivery']) ? 'primary' : undefined"
             :plain="!isActive(['project-work-document-delivery'])"
             @click="goWorkCenter('project-work-document-delivery')"
           >
             文档交付
           </el-button>
-          <el-button
-            size="small"
-            :type="isActive(['project-work-drawing-delivery']) ? 'primary' : undefined"
-            :plain="!isActive(['project-work-drawing-delivery'])"
-            @click="goWorkCenter('project-work-drawing-delivery')"
-          >
-            图纸交付
-          </el-button>
-          <el-button
-            size="small"
-            :type="isActive(['project-work-rectifications']) ? 'primary' : undefined"
-            :plain="!isActive(['project-work-rectifications'])"
-            @click="goWorkCenter('project-work-rectifications')"
-          >
-            整改闭环
-          </el-button>
-          <el-button
-            size="small"
-            :type="isActive(['project-work-dashboard']) ? 'primary' : undefined"
-            :plain="!isActive(['project-work-dashboard'])"
-            @click="goWorkCenter('project-work-dashboard')"
-          >
-            交付驾驶舱
-          </el-button>
         </div>
         <div class="project-workspace-nav__secondary">
-          <span class="project-workspace-nav__more-label">更多工具</span>
-          <el-button
-            text
-            size="small"
-            :type="isActive(['project-work-agent-governance']) ? 'primary' : undefined"
-            @click="goWorkCenter('project-work-agent-governance')"
-          >
-            交付治理助手
-          </el-button>
+          <details :open="isWorkMoreActive">
+            <summary>更多入口</summary>
+            <div class="project-workspace-nav__more-list">
+              <el-button
+                text
+                size="small"
+                :type="isActive(['project-work-drawing-delivery']) ? 'primary' : undefined"
+                @click="goWorkCenter('project-work-drawing-delivery')"
+              >
+                图纸交付
+              </el-button>
+              <el-button
+                text
+                size="small"
+                :type="isActive(['project-work-rectifications']) ? 'primary' : undefined"
+                @click="goWorkCenter('project-work-rectifications')"
+              >
+                整改闭环
+              </el-button>
+              <el-button
+                text
+                size="small"
+                :type="isActive(['project-work-agent-governance']) ? 'primary' : undefined"
+                @click="goWorkCenter('project-work-agent-governance')"
+              >
+                交付治理助手
+              </el-button>
+            </div>
+          </details>
         </div>
       </section>
     </div>
@@ -246,6 +261,24 @@ const projectManagerName = computed(() => project.value?.projectManagerName || '
 const masterDataReady = computed(() =>
   Boolean(initializationStatus.value?.ready || initializationStatus.value?.standardStatus?.deliverableStandardReady)
 );
+const isAssetMoreActive = computed(() => isActive([
+  'project-data-steward-models',
+  'project-data-steward-objects',
+  'project-data-steward-issues',
+  'project-data-steward-tasks',
+  'project-data-steward-exports',
+  'project-data-steward-file-service'
+]));
+const isMasterDataMoreActive = computed(() => isActive([
+  'project-master-data-sections',
+  'project-master-data-node-types',
+  'project-master-data-deliverable-standard'
+]));
+const isWorkMoreActive = computed(() => isActive([
+  'project-work-drawing-delivery',
+  'project-work-rectifications',
+  'project-work-agent-governance'
+]));
 
 watch(
   () => props.projectId,
@@ -495,23 +528,50 @@ function isAssetTab(tab: string) {
   box-shadow: 0 1px 0 rgba(37, 99, 235, 0.15);
 }
 
+.project-workspace-nav__primary :deep(.el-button:only-child) {
+  grid-column: 1 / -1;
+}
+
 .project-workspace-nav__secondary {
+  display: grid;
+  gap: var(--zy-sp-1);
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.project-workspace-nav__secondary details {
+  min-width: 0;
+}
+
+.project-workspace-nav__secondary summary {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  color: var(--zy-subtle);
+  font-size: 11px;
+  font-weight: var(--zy-fw-semi);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.project-workspace-nav__secondary summary:hover {
+  color: var(--zy-blue-700);
+}
+
+.project-workspace-nav__more-list {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 4px var(--zy-sp-1);
   min-width: 0;
-  padding-top: 2px;
+  padding-top: 4px;
 }
 
-.project-workspace-nav__more-label {
-  flex: 0 0 auto;
-  color: var(--zy-subtle);
-  font-size: 11px;
-  font-weight: var(--zy-fw-semi);
-  letter-spacing: 0.06em;
-  margin-right: 2px;
-  text-transform: uppercase;
+.project-workspace-nav__secondary details:not([open]) .project-workspace-nav__more-list {
+  display: none;
 }
 
 .project-workspace-nav__secondary :deep(.el-button) {
