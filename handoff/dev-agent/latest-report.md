@@ -1,160 +1,190 @@
-# 开发 Agent 报告：M2F 真实项目交付闭环试运行
+# 开发 Agent 报告：M2G 真实 NAS 文件管理器灰度完善
 
-时间：2026-05-22
+时间：2026-05-23 02:38 CST
 
 ## 1. 本轮目标
 
-本轮执行 `M2F：真实项目交付闭环试运行`。
+本轮执行 `M2G：真实 NAS 文件管理器灰度完善`。
 
-目标是以 `105 / 503` 真实 NAS 项目为样本，确认 M2E 已人工确认的正式工程主数据能驱动文档 / 图纸交付、缺失项解释、人工挂接防线、整改查询和交付包草案 dry-run。
+目标是把已具备的受控 NAS 写入能力打磨成更像日常文件管理器的体验：项目工作台内按路由项目执行、当前目录可写状态清楚、上传 / 新建 / 重命名 / 移动 / 移入回收站 / 恢复形成闭环，且所有脚本写操作只发生在隔离临时目录。
 
 ## 2. 读取的关键文档
 
 - `handoff/dev-agent/current-prompt.md`
 - `handoff/main-agent/status.md`
 - `handoff/main-agent/phase2-current-roadmap.md`
-- `handoff/main-agent/m2f-real-project-delivery-loop-trial-plan.md`
-- `handoff/main-agent/m2e-real-project-masterdata-confirmation-plan.md`
-- `handoff/main-agent/m2d-real-project-masterdata-onboarding-plan.md`
+- `handoff/main-agent/m2g-real-nas-file-manager-polish-plan.md`
+- `handoff/main-agent/m2b-nas-write-trial-plan.md`
 - `handoff/main-agent/lightweight-test-strategy.md`
+- `handoff/main-agent/digital-twin-pr-compatibility-check.md`
 - `handoff/test-agent/latest-report.md`
 - `handoff/dev-agent/latest-report.md`
 
-## 3. 当前 105 交付闭环审计结果
+## 3. 当前文件管理器问题审计
 
-105 / 503 当前正式工程主数据状态：
+已有能力：
 
-- `deliverableStandardReady=true`
-- 部位节点：11
-- 节点类型：3，均已锁定
-- 交付定义：3
-- 交付类型：5
-- 交付属性：15
-- 目录模板：3
+- 左侧目录树、右侧文件表、上传文件、新建文件夹。
+- 文件 / 文件夹重命名、移动、移入回收站、恢复。
+- 真实 NAS 写入灰度状态、回收站、操作记录。
+- 后端已按项目权限、灰度开关、允许目录和审计校验。
 
-交付链路状态：
+发现的体验断点：
 
-- 文档交付：`standardReady=true`，`totalRequired=22`，`missingCount=22`，当前尚未人工挂接文件。
-- 图纸交付：`standardReady=true`，`totalRequired=22`，`missingCount=22`，当前尚未人工挂接文件。
-- 缺失项解释：包含目标、交付定义、交付类型、期望文件类型，并提示必须人工选择项目资产目录文件补交。
-- 候选推荐：图纸侧可生成候选推荐；应用推荐接口仍要求用户明确确认。
-- 整改：接口可查，当前 105 无打开整改项。
-- 交付包准备：`dryRun=true`，`physicalPackageGenerated=false`，`nasFileCopied=false`，`totalCount=44`，`missingCount=44`。
+- 前端项目角色判断会在路由项目找不到时兜底使用全局 `currentProject`，容易把全局项目状态带入当前项目工作台。
+- 当前目录是否可写和不可写原因主要藏在按钮 tooltip 和灰度提示中，不够直观。
+- 当前文件夹重命名 / 移动 / 移入回收站入口堆在顶部，文件管理器主操作区略拥挤。
+- 移动目标原来是自由输入，缺少“只能项目内相对目录、不能真实 NAS 路径、目标目录必须存在”的前端校验。
+- 操作记录和回收站里仍显示部分原始状态码 / 类型码，需要转成业务语言。
 
-## 4. 修复的断点
+## 4. 前端修复内容
 
-发现并修复了一个小断点：
+修改：
 
-- 交付页面前端已有业务化解释，但后端 `delivery-completeness` 的 `missingReason` 和交付包缺失行的 `blockReason` 仍只返回“尚未挂接文件”，对员工不够明确。
+- `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
 
-本轮修复：
+完成内容：
 
-- `DeliveryApplicationService` 中缺失项原因改为：
-  - `工程部位“建筑专业”缺少“文档交付 / PDF 文档”，需要人工选择当前项目资产目录中的文档文件完成补交。`
-- 交付包草案 / 预检查中的缺失阻塞原因同步使用同一业务化说明。
-- `AgentGovernanceApplicationService` 缺失项解释补充交付定义，避免只写交付类型。
+- NAS 写按钮、回收站恢复权限只按当前路由 `projectId` 对应的项目角色判断，不再用全局 `currentProject` 兜底。
+- 如果全局当前项目和工作台路由项目不一致，页面显示“按本页面项目执行”，后端仍继续做真实权限和灰度校验。
+- 新增“当前文件夹状态”区域，直接展示：
+  - 当前文件夹。
+  - 当前目录可写 / 不可写。
+  - 不可写原因或可执行操作说明。
+- 顶部工具栏收敛为：
+  - 上传文件。
+  - 新建文件夹。
+  - 刷新。
+  - 当前文件夹下拉操作。
+  - 回收站。
+  - 操作记录。
+- 当前文件夹的重命名 / 移动 / 移入回收站移入下拉菜单。
+- 新建文件夹成功后自动进入新文件夹，并刷新目录树、文件列表和当前目录状态。
+- 上传、重命名、移动、移入回收站、恢复后统一刷新必要视图。
+- 文件 / 文件夹移动目标增加前端校验：
+  - 只允许项目内相对目录。
+  - 禁止真实 NAS 地址、绝对路径、`:`、反斜杠、`//`。
+  - 禁止 `.` / `..`。
+  - 移动文件夹时禁止移动到自身或子文件夹。
+  - 目标目录必须存在于当前目录树。
+- 操作记录状态从 `SUCCEEDED` 等码值转为“成功 / 失败 / 处理中”。
+- 回收站类型从 `FILE / DIRECTORY` 转为“文件 / 文件夹”，状态转为“在回收站 / 已恢复 / 恢复失败”。
 
-未新增业务能力，只补齐解释口径和测试脚本。
+## 5. 后端修复内容
 
-## 5. 新增 M2F 专项脚本
+本轮未修改后端业务代码。
+
+审计结论：
+
+- 受控 NAS 后端仍通过 `projectId` 路由参数、JWT 当前用户、项目角色、灰度配置和允许目录执行校验。
+- 后端操作响应只返回 `displayPath/pathHint`、操作编号、traceId 等安全字段。
+- 操作记录和回收站列表未返回 `storage_uri` / `storage_path` / 真实 NAS 绝对路径。
+
+## 6. 新增 M2G 专项脚本
 
 新增：
 
-- `scripts/dev/check-m2f-real-project-delivery-loop.sh`
+- `scripts/dev/check-m2g-nas-file-manager-polish.sh`
 
-脚本覆盖：
+脚本特点：
 
-1. 管理员登录并切换到 `503 / 105`。
-2. 标准状态、部位树、节点类型、交付定义、交付类型可查。
-3. 文档 / 图纸交付基于正式规则返回应交缺失项。
-4. 缺失项说明包含目标、交付定义、交付类型和文件类型。
-5. 缺失项解释接口和图纸候选推荐可用。
-6. 应用推荐必须人工确认，非法批量挂接参数会被拒绝。
-7. 审核 / 整改查询接口可用。
-8. 交付包草案 dry-run 可生成快照，不生成真实包、不复制 NAS 文件。
-9. forbidden-field scan 未发现 raw path / SQL / secret 等敏感内容。
+- 自动创建隔离测试项目和 `/tmp/delivery-m2g-nas-*` 临时 NAS 根目录。
+- 默认无灰度配置时验证写操作被拒绝。
+- 开启灰度后只允许 `trial-zone` 相对目录范围。
+- 覆盖文件闭环：
+  - 上传文件。
+  - 重命名文件。
+  - 移动文件。
+  - 移入回收站。
+  - 恢复。
+- 覆盖文件夹闭环：
+  - 新建文件夹。
+  - 重命名文件夹。
+  - 移动文件夹。
+  - 移入回收站。
+  - 恢复。
+- 覆盖边界：
+  - 查看者不能写。
+  - 允许范围外写操作被拒绝。
+  - 文件不能移出白名单。
+  - 文件夹不能移动到自身或子文件夹内。
+  - 操作记录 / 回收站 / 目录树 / 文件列表 forbidden-field scan。
+  - 审计日志写入。
 
-## 6. 当前链路状态
+脚本结果：
 
-文档 / 图纸交付：
+```text
+bash scripts/dev/check-m2g-nas-file-manager-polish.sh  PASS=26 FAIL=0
+```
 
-- 已能由正式工程主数据生成应交项。
-- 当前 105 仍处于“全部待人工补交”状态。
-- 下一步动作是从缺失项中人工选择项目资产目录文件补交。
+## 7. 操作链路状态
 
-文件挂接：
+- 上传文件：隔离目录脚本通过，成功后文件列表可查。
+- 新建文件夹：隔离目录脚本通过，前端成功后进入新文件夹。
+- 重命名文件：隔离目录脚本通过。
+- 移动文件：隔离目录脚本通过，前端增加目录输入校验。
+- 删除到回收站：隔离目录脚本通过；用户可见文案统一为“回收站 / 移入回收站”。
+- 恢复：隔离目录脚本通过，恢复冲突仍由后端返回业务错误。
+- 文件夹重命名 / 移动 / 移入回收站 / 恢复：隔离目录脚本通过。
 
-- 批量挂接接口要求合法目标、交付类型和文件参数。
-- Agent 推荐应用接口必须 `confirmed=true`，否则拒绝。
-- 本轮未自动挂接文件。
+## 8. 浏览器短验
 
-审核 / 整改：
+已用 Chrome 打开真实项目文件管理页：
 
-- 相关查询接口可用。
-- 本轮未在 105 上自动提交审核、自动驳回或自动整改。
+`http://127.0.0.1:5173/data-steward/assets/503?tab=files`
 
-交付包 / 档案目录：
+短验结果：
 
-- 当前 105 可生成交付包草案快照。
-- 快照总计 44 条，全部因缺失挂接文件而阻塞。
-- 档案目录为语义目录，不是真实 NAS 路径。
-
-## 7. 改动文件列表
-
-本轮修改 / 新增：
-
-- `backend/delivery-work-center/src/main/java/com/zhuoyu/delivery/workcenter/delivery/DeliveryApplicationService.java`
-- `backend/delivery-work-center/src/main/java/com/zhuoyu/delivery/workcenter/agentgovernance/AgentGovernanceApplicationService.java`
-- `scripts/dev/check-m2f-real-project-delivery-loop.sh`
-- `handoff/dev-agent/latest-report.md`
-
-工作区仍存在主 agent / 其他批次留下的 `.claude/**`、`CLAUDE.md`、`tmp/**` 等未跟踪文件；本轮未触碰。
-
-## 8. 数据库迁移
-
-本轮未新增数据库迁移，未修改旧迁移。
+- 页面可打开，无白屏。
+- 左侧目录树、右侧文件表、顶部工具栏可见。
+- 新增“当前文件夹状态”区域可见。
+- 当前目录可写状态和“按本页面项目执行”提示可见。
+- 未执行任何真实 NAS 写按钮。
+- 未在页面可见内容中发现真实 NAS 绝对路径。
 
 ## 9. 安全边界
 
-- 是否触碰真实 NAS 文件：否。
-- 是否复制 / 移动 / 删除 / 重命名真实 NAS 文件：否。
+- 是否触碰真实业务目录：否。
+- 是否写真实业务 NAS 文件：否。
 - 是否读取 PDF / Office / DWG / RVT / IFC 正文：否。
 - 是否新增 Hermes 能力：否。
-- 是否接入 BIM 引擎 / parser / writer / indexing / 向量库：否。
-- 是否 Agent 自动挂接、自动审核、自动整改：否。
+- 是否新增 BIM / parser / writer / indexing / 向量库能力：否。
+- 是否开放普通用户永久删除：否。
+- 是否绕过灰度开关、项目权限、角色权限或审计：否。
+- 是否暴露 `storage_path` / `storage_uri` / raw NAS path / raw DB row / SQL / secret：专项脚本和回归脚本未发现。
 - 是否修改 `docs/**`：否。
-- 是否暴露 `storage_path` / `storage_uri` / raw NAS path / raw DB row / SQL / secret：专项脚本 forbidden-field scan 未发现。
 
 ## 10. 自测结果
 
 ```text
-cd backend && ./mvnw -pl delivery-work-center -am -DskipTests compile      PASS
-cd backend && ./mvnw -pl delivery-app -am -DskipTests package              PASS
-corepack pnpm --dir frontend build                                        PASS（仅既有 Vite chunk size warning）
-curl -fsS http://127.0.0.1:8080/actuator/health                           PASS：{"status":"UP"}
-bash scripts/dev/check-m2f-real-project-delivery-loop.sh                  PASS=6 FAIL=0
-bash scripts/dev/check-m2e-real-project-masterdata-confirmation.sh         PASS=11 FAIL=0
-bash scripts/dev/check-m2c-delivery-package-archive.sh                    PASS=11 FAIL=0
-git diff --check                                                          PASS
+corepack pnpm --dir frontend build                                  PASS（仅既有 Vite chunk size warning）
+cd backend && ./mvnw -pl delivery-app -am -DskipTests package        PASS
+curl -fsS http://127.0.0.1:8080/actuator/health                     PASS：{"status":"UP"}
+bash scripts/dev/check-m2g-nas-file-manager-polish.sh                PASS=26 FAIL=0
+bash scripts/dev/check-m2b-nas-write-trial.sh                        PASS=18 FAIL=0
+bash scripts/dev/check-phase2-batch4-file-access.sh                  PASS=18 FAIL=0
+git diff --check                                                     PASS
 ```
 
-后端已用最新构建包重启，当前 `127.0.0.1:8080` 健康检查为 UP。
+## 11. 改动文件列表
 
-## 11. 已知风险
+本轮修改 / 新增：
 
-- 105 当前尚未进行真实人工文件挂接，因此文档 / 图纸交付仍是 44 个缺失项；本轮只确认正式规则能生成应交项和阻塞说明。
-- 本轮未在 105 上执行真实审核驳回写入流程，避免向真实项目制造测试整改；审核 / 整改查询和人工确认防线已通过脚本检查。
-- 交付包草案是 DB 快照和清单 dry-run，不代表真实物理交付包。
-- 图纸候选推荐可用，文档侧候选是否充足取决于当前资产目录中 `PROCESSED` 文档文件和元数据质量。
+- `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
+- `scripts/dev/check-m2g-nas-file-manager-polish.sh`
+- `handoff/dev-agent/latest-report.md`
 
-## 12. 是否建议进入测试复核
+工作区已有但非本轮触碰：
 
-建议进入测试 agent 复核 M2F。
+- `frontend/src/modules/visualization/pages/DigitalTwinPortalPage.vue`
+- `.claude/**`
+- `CLAUDE.md`
+- `tmp/**`
 
-重点复核：
+## 12. 已知风险和未做项
 
-1. 105 正式工程主数据是否能驱动文档 / 图纸应交项。
-2. 缺失项和交付包阻塞说明是否业务可读。
-3. 人工挂接确认防线是否保持。
-4. 交付包草案是否仍为 dry-run 且不触碰真实 NAS。
-5. 是否未新增 Hermes / BIM / parser / indexing 或真实 NAS 写能力。
+- 本轮没有修改后端核心 NAS 写逻辑，只做前端体验和专项脚本补强。
+- 浏览器短验没有执行真实业务目录写操作，只确认页面可打开和提示可见。
+- 移动目标本轮采用“明确相对目录输入校验”，尚未做完整图形化目录选择器。
+- `503 / 105` 当前页面显示已有真实 NAS 灰度状态，但本轮没有点击真实写按钮，也没有创建、移动、删除真实业务文件。
+- 前端构建仍有既有 chunk size warning，主要与当前主线已有大 chunk 和数字孪生依赖有关，不阻塞本轮。

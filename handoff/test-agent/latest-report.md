@@ -1,154 +1,133 @@
-# M2F 真实项目交付闭环试运行验收报告
+# M2G 真实 NAS 文件管理器灰度完善验收报告
 
-生成时间：2026-05-23 00:06 CST
+生成时间：2026-05-23 03:00 CST
 
 ## 1. 测试结论
 
 结论：通过。
 
-M2F 已达到本轮验收目标：`105 / 503` 已确认的正式工程主数据能驱动文档 / 图纸交付视图，缺失项解释能说明目标部位、交付定义、交付类型和需要补交的文件类型；推荐挂接仍需要人工确认；审核 / 整改查询和交付包草案 dry-run 链路未回归。
+M2G 已达到本轮验收目标：专项脚本在隔离测试项目和临时 NAS 根目录中验证了默认关闭、灰度开启、上传、新建、重命名、移动、移入回收站、恢复、权限边界、范围边界、操作记录、回收站和审计；真实项目文件管理页短验通过，未执行真实业务目录写操作。
 
-当前未发现 P0 / P1。仅有既有 Vite chunk size warning 作为 P2，不阻塞收口判断。
+当前未发现 P0 / P1。P2 为既有 Vite chunk size warning、非交付未跟踪文件、以及数字孪生 / 可视化并行分支改动观察项，不阻塞 M2G 收口判断。
 
-建议主 agent 收口 M2F。
+建议主 agent 收口 M2G，但收口提交时应只选择 M2G 文件管理器、M2G 脚本和 handoff 报告，不要混入数字孪生 / 可视化改动。
 
 ## 2. 必读文件
 
 已阅读：
 
 - `handoff/main-agent/lightweight-test-strategy.md`
-- `handoff/main-agent/m2f-real-project-delivery-loop-trial-plan.md`
+- `handoff/main-agent/m2g-real-nas-file-manager-polish-plan.md`
 - `handoff/dev-agent/latest-report.md`
 - `handoff/main-agent/status.md`
 - `handoff/main-agent/phase2-current-roadmap.md`
 
-本轮按轻量策略执行，不做大范围浏览器逐页点击，不做多分辨率视觉巡检。
+本轮按轻量测试策略执行，但按 current prompt 要求做了 M2G 专项脚本和一次真实项目文件管理页短浏览器验收。
 
 ## 3. 必跑命令结果
 
-- M2F 专项脚本存在：`scripts/dev/check-m2f-real-project-delivery-loop.sh`。
 - 后端构建：`cd backend && ./mvnw -pl delivery-app -am -DskipTests package`，通过，`BUILD SUCCESS`。
 - 前端构建：`corepack pnpm --dir frontend build`，通过，仅有既有 Vite chunk size warning。
 - 健康检查：`curl -fsS http://127.0.0.1:8080/actuator/health`，通过，返回 `{"status":"UP"}`。
-- M2F 专项脚本：`bash scripts/dev/check-m2f-real-project-delivery-loop.sh`，通过，`PASS=6 FAIL=0`。
-- M2E 回归：`bash scripts/dev/check-m2e-real-project-masterdata-confirmation.sh`，通过，`PASS=11 FAIL=0`。
-- M2C 回归：`bash scripts/dev/check-m2c-delivery-package-archive.sh`，通过，`PASS=11 FAIL=0`。
+- M2G 专项脚本：`bash scripts/dev/check-m2g-nas-file-manager-polish.sh`，通过，`PASS=26 FAIL=0`。
+- M2B 回归：`bash scripts/dev/check-m2b-nas-write-trial.sh`，通过，`PASS=18 FAIL=0`。
+- 文件访问安全回归：`bash scripts/dev/check-phase2-batch4-file-access.sh`，通过，`PASS=18 FAIL=0`。
 - 空白字符检查：`git diff --check`，通过。
 
-## 4. M2F 专项脚本结果
+## 4. M2G 专项脚本结果
 
-专项脚本通过并覆盖：
+脚本存在：`scripts/dev/check-m2g-nas-file-manager-polish.sh`。
 
-- 管理员登录并切换到 `503 / 105`。
-- 105 正式工程主数据和交付标准可查，且节点类型已锁定。
-- 文档 / 图纸交付视图能基于正式规则返回业务可读缺失项。
-- 缺失项解释、候选推荐和人工确认 / 合法参数防线可用。
-- 审核 / 整改查询与交付包草案 dry-run 链路不回归。
+脚本通过并覆盖：
 
-## 5. 105 真实项目交付闭环状态
+- 自动创建隔离测试项目和 `/tmp/delivery-m2g-nas-*` 临时 NAS 根目录。
+- 默认无灰度配置时，写操作关闭且不落盘。
+- 开启灰度后，只允许 `trial-zone` 相对目录范围。
+- 隔离目录内文件闭环通过：上传、重命名、移动、移入回收站、恢复。
+- 隔离目录内文件夹闭环通过：新建、重命名、移动、移入回收站、恢复。
+- 查看者不能写。
+- 允许范围外新建目录被拒绝。
+- 允许范围内文件移出白名单被拒绝。
+- 文件夹不能移动到自身或子文件夹内。
+- 操作记录和回收站同时覆盖文件、文件夹记录，且不泄露真实路径。
+- 灰度配置和文件管理操作已写入审计日志。
 
-核心接口抽查结果：
+结论：通过。
 
-- 标准状态：`deliverableStandardReady=true`。
-- 部位节点：`11`。
-- 节点类型：`3`，全部锁定，包含 `PROJECT`、`DISCIPLINE`、`DELIVERY_ITEM`。
-- 交付定义：`3`，包含 `DRAWING_DELIVERY`、`DOCUMENT_DELIVERY`、`MODEL_DELIVERY`。
-- 交付类型：`5`，覆盖 `DOCUMENT`、`DRAWING`、`MODEL`。
+## 5. 浏览器短验结果
 
-文档交付：
+短验页面：
 
-- `standardReady=true`。
-- `totalRequired=22`。
-- `missingCount=22`。
-- `nextActionCode=BIND_MISSING_FILES`。
-- 示例缺失原因：`工程部位“建筑专业”缺少“文档交付 / PDF 文档”，需要人工选择当前项目资产目录中的文档文件完成补交。`
+- `http://127.0.0.1:5173/data-steward/assets/503?tab=files`
 
-图纸交付：
+结果：
 
-- `standardReady=true`。
-- `totalRequired=22`。
-- `missingCount=22`。
-- `nextActionCode=BIND_MISSING_FILES`。
-- 示例缺失原因：`工程部位“建筑专业”缺少“图纸交付 / DWG 图纸”，需要人工选择当前项目资产目录中的图纸文件完成补交。`
+- 页面可打开，非白屏，非 404。
+- 左侧目录树可见。
+- 右侧文件表可见，包含文件名、类型、版本、大小、专业、状态、操作等列。
+- 顶部工具栏可见：`上传文件`、`新建文件夹`、`刷新`、`回收站`、`操作记录`。
+- 当前文件夹状态可见。
+- 页面提示 `真实 NAS 写入灰度已开启`。
+- 页面提示 `当前页面按项目工作台项目执行，不受全局当前项目显示影响`。
+- 当前目录说明清楚：`当前目录允许操作`、`当前目录可写`、`可以上传、新建、重命名和移动；删除会进入回收站，不会永久删除`。
+- 页面级横向溢出为 `0`。
+- 页面可见文本未发现真实 NAS 路径、`storage_path`、`storage_uri`、SQL、token、secret、password。
+- 本轮没有在真实业务目录点击上传、新建、移动、删除、恢复等写按钮。
 
-缺失项解释：
+结论：通过。
 
-- `totalCount=44`。
-- 示例解释：`建筑专业还缺少“文档交付 / PDF 文档”。平台会推荐当前项目内登记为文档的候选文件，用户确认后才会挂接。`
+## 6. 安全与红线检查
 
-人工挂接防线：
+接口响应、脚本断言、页面可见文本和静态扫描未发现 M2G 引入以下问题：
 
-- 未确认推荐挂接返回 `WORK_AGENT_GOVERNANCE_CONFIRM_REQUIRED`。
-- 错误批量挂接参数被拒绝，未出现自动挂接。
+- 真实业务目录被脚本写入、移动、删除、改名或复制。
+- 真实 NAS 路径泄露。
+- 权限绕过。
+- 普通用户永久删除能力开放。
+- 新增 Hermes / BIM / parser / indexing 能力。
+- 读取 PDF / Office / DWG / RVT / IFC 正文。
+- 写 OpenSearch / Qdrant / MinIO documents/chunks。
 
-交付包草案 / 档案目录：
+本轮脚本真实写操作仅发生在隔离测试项目和 `/tmp/delivery-m2g-nas-*` 临时目录。
 
-- `dryRun=true`。
-- `physicalPackageGenerated=false`。
-- `nasFileCopied=false`。
-- `totalCount=44`。
-- `blockedCount=44`。
-- `missingCount=44`。
+静态扫描命中说明：
 
-结论：105 当前仍是“全部待人工补交”的真实试运行状态，但正式工程主数据已经能驱动应交项、缺失项、推荐候选、整改查询和交付包草案链路。
+- `scripts/dev/check-m2g-nas-file-manager-polish.sh` 中的 `/Volumes`、`nas://`、`smb://`、`storage_path`、`storage_uri`、token、secret、password 命中均为 forbidden-field 断言、测试登录参数或请求头变量。
+- `AssetProjectFileBrowser.vue` 命中 `真实 NAS`、`不会永久删除` 等用户提示文案，未发现真实路径输出。
+- 受控 NAS 后端既有 `Files.copy` / `Files.move` 调用来自受控写能力本身，本轮 M2G 未修改后端核心写逻辑，专项脚本已验证灰度、权限、范围和审计边界。
 
-## 6. forbidden field 与红线检查
+## 7. 工作区改动范围检查
 
-接口响应和页面相关文本抽查未发现：
+M2G 相关改动：
 
-- `/Volumes`
-- `smb://`
-- `nas://`
-- `storage_path`
-- `storage_uri`
-- `storagePath`
-- `storageUri`
-- raw row
-- SQL
-- token
-- secret
-- password
-
-静态扫描 M2F 相关后端代码和专项脚本，命中项仅出现在：
-
-- 专项脚本 forbidden-field 断言列表。
-- 登录测试参数。
-- `DeliveryApplicationService` 的脱敏 / forbidden 判断逻辑。
-- 既有数据库字段名 `delete_token`。
-
-未发现：
-
-- 真实 NAS 文件写入、移动、删除、复制、改名。
-- PDF / Office / DWG / RVT / IFC 正文读取。
-- Hermes / BIM / parser / writer / indexing / 向量库新能力。
-- Agent 自动挂接、自动审核、自动整改。
-- 真实交付包生成或 NAS 文件复制。
-
-## 7. 浏览器短验
-
-未做浏览器短验。
-
-原因：本轮开发报告显示改动集中在后端 `DeliveryApplicationService`、`AgentGovernanceApplicationService` 和专项脚本，没有修改关键 Vue 页面；专项脚本和接口抽查已覆盖本轮目标。按 `lightweight-test-strategy.md`，本轮不做大范围浏览器逐页点击。
-
-## 8. 工作区状态备注
-
-当前工作区有 M2F 预期改动：
-
-- `backend/delivery-work-center/src/main/java/com/zhuoyu/delivery/workcenter/agentgovernance/AgentGovernanceApplicationService.java`
-- `backend/delivery-work-center/src/main/java/com/zhuoyu/delivery/workcenter/delivery/DeliveryApplicationService.java`
-- `scripts/dev/check-m2f-real-project-delivery-loop.sh`
+- `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
+- `scripts/dev/check-m2g-nas-file-manager-polish.sh`
 - `handoff/dev-agent/latest-report.md`
 - `handoff/main-agent/status.md`
 
-仍有既有非交付未跟踪文件：
+并行分支改动观察项：
+
+- `backend/delivery-visualization-adapter/**`
+- `frontend/src/modules/visualization/**`
+- `frontend/src/modules/core/layout/AppLayout.vue`
+- `frontend/src/router/index.ts`
+- `backend/delivery-core/src/main/java/com/zhuoyu/delivery/core/user/application/CurrentUserApplicationService.java`
+
+判断：
+
+- 这些数字孪生 / 可视化相关改动未导致本轮后端构建、前端构建、M2G 专项、M2B 回归、文件访问安全回归失败。
+- 按 current prompt 规则，记录为并行分支改动观察项，不阻塞 M2G。
+- M2G 收口提交时应选择性提交文件管理器、M2G 脚本和 handoff 文件，不应把数字孪生 / 可视化改动混入 M2G 提交。
+
+既有非交付未跟踪文件：
 
 - `.claude/**`
 - `CLAUDE.md`
 - `tmp/**`
 
-建议主 agent 收口提交时确认归属并排除非交付文件。
+不判定为失败，但收口提交时应排除。
 
-## 9. P0 / P1 / P2
+## 8. P0 / P1 / P2
 
 P0：无。
 
@@ -156,11 +135,12 @@ P1：无。
 
 P2：
 
-- 既有 Vite chunk size warning，未阻塞前端构建和本轮验收。
-- 工作区仍有 `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪文件，收口提交时需确认归属。
+- 既有 Vite chunk size warning，未阻塞构建和本轮验收。
+- 工作区仍有 `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪文件，收口提交时需排除。
+- 数字孪生 / 可视化相关文件处于修改状态，未导致本轮回归失败；建议作为并行分支改动单独收口，不混入 M2G 提交。
 
-## 10. 是否建议主 agent 收口 M2F
+## 9. 是否建议主 agent 收口 M2G
 
-建议主 agent 收口 M2F。
+建议主 agent 收口 M2G。
 
-理由：后端构建、前端构建、健康检查、M2F 专项脚本、M2E 回归、M2C 回归和 `git diff --check` 均通过；105 / 503 正式工程主数据能驱动文档 / 图纸应交项、缺失项解释、人工挂接防线、整改查询和交付包草案 dry-run；未发现真实 NAS、正文读取、Hermes / BIM / parser / indexing 或敏感字段泄露越界。
+理由：后端构建、前端构建、健康检查、M2G 专项脚本、M2B 回归、文件访问安全回归和 `git diff --check` 均通过；专项脚本完整覆盖隔离目录内文件 / 文件夹写操作闭环、权限边界、范围边界、回收站恢复、操作记录和审计；浏览器短验确认真实项目文件管理页可用、按钮和可写状态清楚、无横向溢出；未发现真实路径或敏感字段泄露，未发现真实业务目录被脚本写入。

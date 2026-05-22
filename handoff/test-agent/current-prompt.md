@@ -94,6 +94,30 @@ git diff --check
 - secret
 - password
 
+## 5.1 批次边界检查
+
+本轮主线批次是 `M2G：真实 NAS 文件管理器灰度完善`，核心改动应集中在文件管理器前端、M2G 专项脚本和交接报告。
+
+请额外检查工作区改动范围：
+
+```bash
+git diff --name-only
+git status --short
+```
+
+如果发现以下非 M2G 范围文件仍处于修改状态，请在报告中单独列为“并行分支改动观察项”，并按严重程度判断：
+
+- `backend/delivery-visualization-adapter/**`
+- `frontend/src/modules/visualization/**`
+- 其他与文件管理器、M2G 脚本、handoff 报告无关的业务文件
+
+判断规则：
+
+- 如果这些改动导致构建、回归或页面异常，记 P1。
+- 如果这些改动未导致回归，且主 agent 已确认来源为“另一个 agent 在数字孪生 / 可视化分支上的并行改动”，不阻塞 M2G；报告中记录即可。
+- M2G 收口提交时应选择性提交文件管理器、M2G 脚本和 handoff 文件，不应把数字孪生 / 可视化改动混入 M2G 提交。
+- 不要因为存在 `.claude/**`、`CLAUDE.md`、`tmp/**` 这类既有非交付未跟踪文件直接判失败，但需要在 P2 中提醒收口时排除。
+
 ## 6. 禁止通过的情况
 
 P0：

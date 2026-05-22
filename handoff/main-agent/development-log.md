@@ -3551,3 +3551,56 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - 不读取正文。
   - 不扩展 Hermes / BIM / parser / indexing。
   - 不继续扩展数字孪生。
+
+## 2026-05-23 M2G 开发完成，进入测试前审计
+
+- 开发 agent 已完成 M2G 并更新 `handoff/dev-agent/latest-report.md`。
+- 主 agent 审计结论：
+  - M2G 文件管理器核心改动存在，集中于 `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`。
+  - 新增 M2G 专项脚本 `scripts/dev/check-m2g-nas-file-manager-polish.sh`。
+  - 专项脚本已通过，`PASS=26 FAIL=0`。
+  - `git diff --check` 通过。
+- M2G 已实现的文件管理器体验：
+  - NAS 写操作前端只按路由项目判断权限，不再用全局 `currentProject` 兜底。
+  - 新增当前文件夹可写 / 不可写状态说明。
+  - 当前文件夹重命名、移动、移入回收站收进下拉。
+  - 移动目标增加项目内相对目录校验。
+  - 操作记录和回收站状态改成业务语言。
+- 并行分支改动：
+  - 当前工作区还包含数字孪生 / 可视化相关改动：
+    - `backend/delivery-visualization-adapter/**`
+    - `frontend/src/modules/visualization/**`
+  - 用户已确认这些改动来自另一个 agent 在另一个分支上的数字孪生平台可视化界面开发。
+  - 这些改动不是 M2G 文件管理器交付内容；不因其存在阻塞 M2G，但如果造成构建或回归失败，仍按回归问题处理。
+  - 主 agent 已将测试 prompt 调整为“并行分支改动观察项”，要求测试 agent 记录但不误判为 M2G 本身问题。
+- 当前裁决：
+  - 允许 M2G 进入测试 agent 轻量验收。
+  - M2G 收口提交时只选择性纳入 M2G 相关文件，不把数字孪生 / 可视化改动混入同一个 M2G 提交。
+
+## 2026-05-23 M2G 正式收口
+
+- 测试 agent 已完成 M2G 轻量验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：通过。
+- 当前无 P0 / P1。
+- P2：
+  - 既有 Vite chunk size warning。
+  - 非交付未跟踪文件继续排除。
+  - 数字孪生 / 可视化并行分支改动继续作为观察项，不混入 M2G 提交。
+- 已通过：
+  - 后端构建。
+  - 前端构建。
+  - 健康检查。
+  - M2G 专项脚本，`PASS=26 FAIL=0`。
+  - M2B 回归，`PASS=18 FAIL=0`。
+  - 文件访问安全回归，`PASS=18 FAIL=0`。
+  - `git diff --check`。
+- 已确认：
+  - 文件管理页可打开，无白屏、无横向溢出。
+  - 当前文件夹状态、可写 / 不可写原因、回收站、操作记录均可见且业务语言清楚。
+  - 上传、新建、重命名、移动、移入回收站、恢复闭环在隔离测试项目和临时目录中通过。
+  - 真实业务目录未被脚本写入、移动、删除、改名或复制。
+  - 未泄露真实 NAS 路径或敏感字段。
+  - 未新增 Hermes / BIM / parser / indexing 能力。
+- 主 agent 裁决：`M2G：真实 NAS 文件管理器灰度完善` 正式收口。
+- 当前 active 批次：`待用户确认`。
+- 下一步建议：进入 `M2H：多真实项目复制试点`，验证当前能力不是为单一项目特化。
