@@ -1,0 +1,121 @@
+{
+  "task_id": "CT-P0-REQ-001",
+  "status": "done",
+  "summary": "完成两份正式需求文件的 P0 覆盖矩阵。生成主索引 REQUIREMENT_MATRIX.md 和 12 个子需求文件，共 198 条需求映射，覆盖数据中台.docx（多模态存储、主数据、数据治理、数据服务、隐私保护）和智慧建筑平台清单.xlsx（性能指标、软件清单 69 项、硬件清单 8 项、基础设施 10 项、可视化 35 项、驾驶舱交付 15 项、配套服务 5 项）。未纳入专业工程评分表，未将原型描述为正式交付成果。",
+  "changed_files": [
+    "docs/c-tower/REQUIREMENT_MATRIX.md",
+    "docs/c-tower/requirements/REQ-DP-STORAGE.md",
+    "docs/c-tower/requirements/REQ-DP-MDM.md",
+    "docs/c-tower/requirements/REQ-DP-GOV.md",
+    "docs/c-tower/requirements/REQ-DP-SVC.md",
+    "docs/c-tower/requirements/REQ-DP-PRIV.md",
+    "docs/c-tower/requirements/REQ-PF-PERF.md",
+    "docs/c-tower/requirements/REQ-PF-SW.md",
+    "docs/c-tower/requirements/REQ-PF-HW.md",
+    "docs/c-tower/requirements/REQ-PF-INFRA.md",
+    "docs/c-tower/requirements/REQ-PF-VIS.md",
+    "docs/c-tower/requirements/REQ-PF-DEL.md",
+    "docs/c-tower/requirements/REQ-PF-SVC.md"
+  ],
+  "acceptance": [
+    {
+      "item": "覆盖 数据中台.docx 多模态存储要求",
+      "status": "passed",
+      "evidence": "REQ-DP-STORAGE.md: 12条需求，覆盖时序/关系/缓存/对象/视频图像存储、性能指标、压缩、降采样"
+    },
+    {
+      "item": "覆盖 数据中台.docx 主数据管理要求",
+      "status": "passed",
+      "evidence": "REQ-DP-MDM.md: 9条需求，覆盖 One ID/One Thing/One Map 及扩展主数据"
+    },
+    {
+      "item": "覆盖 数据中台.docx 数据治理要求",
+      "status": "passed",
+      "evidence": "REQ-DP-GOV.md: 10条需求，覆盖 ETL/ELT、死区过滤、异常隔离、补数、DQC、边缘清洗"
+    },
+    {
+      "item": "覆盖 数据中台.docx 数据服务要求",
+      "status": "passed",
+      "evidence": "REQ-DP-SVC.md: 11条需求，覆盖原子服务、聚合服务、API网关、OAuth 2.0、流控熔断、审计"
+    },
+    {
+      "item": "覆盖 数据中台.docx 隐私要求",
+      "status": "passed",
+      "evidence": "REQ-DP-PRIV.md: 6条需求，覆盖个保法、人脸加密、脱敏展示、定期销毁、访问留痕、权限隔离"
+    },
+    {
+      "item": "覆盖 平台清单.xlsx 软件清单",
+      "status": "passed",
+      "evidence": "REQ-PF-SW.md: 69条需求，覆盖智慧管理系统39项、经营服务系统5项、数字底座23项、配套服务2项"
+    },
+    {
+      "item": "覆盖 平台清单.xlsx 性能指标",
+      "status": "passed",
+      "evidence": "REQ-PF-PERF.md: 8条需求，覆盖系统容量/响应速度/可靠性全部指标"
+    },
+    {
+      "item": "覆盖 平台清单.xlsx 硬件配置",
+      "status": "passed",
+      "evidence": "REQ-PF-HW.md: 8条需求，覆盖服务器/存储/交换机/边缘网关/安全设备"
+    },
+    {
+      "item": "覆盖 平台清单.xlsx 基础设施",
+      "status": "passed",
+      "evidence": "REQ-PF-INFRA.md: 10条需求，覆盖信创/高可用/分级存储/多环境部署"
+    },
+    {
+      "item": "覆盖 平台清单.xlsx 可视化需求",
+      "status": "passed",
+      "evidence": "REQ-PF-VIS.md: 35条需求，覆盖系统框架/云渲染/云推送/17个专题/全局性能指标"
+    },
+    {
+      "item": "覆盖 平台清单.xlsx 驾驶舱交付成果",
+      "status": "passed",
+      "evidence": "REQ-PF-DEL.md: 15条需求，覆盖系统功能/文档/源码/知识产权/验收/云服务"
+    },
+    {
+      "item": "每条需求包含来源文件、来源位置、需求描述、平台模块、优先级、阶段、验收方式、风险、待确认项",
+      "status": "passed",
+      "evidence": "所有198条需求均包含 requirement_id/source_file/source_section/requirement_text/platform_domain/module/priority/delivery_phase/acceptance_method/current_platform_fit/gap/risk/owner_role/needs_owner_confirmation 字段"
+    },
+    {
+      "item": "不纳入专业工程评分表",
+      "status": "passed",
+      "evidence": "矩阵说明中明确：'不纳入专业工程评分表，不把当前 C塔原型或演示样例描述为正式交付成果'"
+    },
+    {
+      "item": "不把当前 C塔原型描述为正式交付成果",
+      "status": "passed",
+      "evidence": "所有需求的 current_platform_fit 字段按实际状态标注（可复用/需改造/需新增），未出现'已交付'或'平台已完成'等表述"
+    }
+  ],
+  "tests": [
+    {
+      "command": "git diff --check",
+      "status": "passed",
+      "evidence": "无输出，无空白符错误"
+    }
+  ],
+  "risks": [
+    "两份源文件范围非常大，共映射198条需求，全部交付周期和预算较高",
+    "国产数据库和时序数据库选型未冻结，影响 P1 技术路线",
+    "业主第三方系统接口清单未提供，影响集成中台和数据接入设计",
+    "AI 算法不少于30种的具体清单和验收标准待确认",
+    "云渲染并发数和 GPU 资源配置需业主最终确认",
+    "可视化场景需求描述为初步需求，需制定专项方案确认最终清单",
+    "移动端多系统（Android/iOS/HarmonyOS）适配成本高",
+    "开源组件和第三方授权范围需在合同中明确"
+  ],
+  "needs_lead_decision": [
+    "C-01: 国产数据库选型（达梦/金仓/OceanBase）",
+    "C-02: 时序数据库选型（TDengine/其他）",
+    "C-03: 空间编码规则（IFC/BOMA/自定义）",
+    "C-04: 设备编码规范最终确认",
+    "C-05: 第三方系统接口清单与协议",
+    "C-06: AI 算法清单和验收标准",
+    "C-07: 云渲染并发数和 GPU 资源",
+    "C-08: 移动端优先级（企业微信/小程序/原生 App）",
+    "C-09: 等保二级费用承担方和测评安排",
+    "C-10: 开源组件和源代码范围"
+  ]
+}
