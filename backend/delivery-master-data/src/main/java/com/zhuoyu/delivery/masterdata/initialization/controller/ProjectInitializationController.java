@@ -7,6 +7,8 @@ import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.Init
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingApplyRequest;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingApplyResponse;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingAssessmentResponse;
+import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingConfirmRequest;
+import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingConfirmResponse;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingDraftPreviewResponse;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.StandardTemplateDetailResponse;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.StandardTemplateSummaryResponse;
@@ -75,6 +77,16 @@ public class ProjectInitializationController {
         var principal = securityPrincipalAccessor.requireCurrentPrincipal();
         projectContextService.requireCurrentProject(principal, projectId);
         return ApiResponse.success(initializationApplicationService.applyOnboarding(principal.userId(), projectId, request));
+    }
+
+    @PostMapping("/projects/{projectId}/onboarding/confirm")
+    public ApiResponse<OnboardingConfirmResponse> onboardingConfirm(
+        @PathVariable Long projectId,
+        @RequestBody OnboardingConfirmRequest request
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(initializationApplicationService.confirmOnboarding(principal.userId(), projectId, request));
     }
 
     @GetMapping("/standard-templates")

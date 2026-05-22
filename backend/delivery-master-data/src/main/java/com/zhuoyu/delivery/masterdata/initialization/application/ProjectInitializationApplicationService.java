@@ -11,6 +11,9 @@ import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.Onbo
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingApplyResponse;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingAssetSummary;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingAssessmentResponse;
+import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingConfirmRequest;
+import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingConfirmResponse;
+import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingConfirmedItem;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingDistributionItem;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingDraftItem;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingDraftPreviewResponse;
@@ -41,10 +44,12 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
@@ -355,6 +360,608 @@ public class ProjectInitializationApplicationService {
             templateResult,
             templateResult.nextActions()
         );
+    }
+
+    @Transactional
+    public OnboardingConfirmResponse confirmOnboarding(Long operatorId, Long projectId, OnboardingConfirmRequest request) {
+        validateManualConfirmation(request);
+        String templateCode = defaultTemplateCode(request.templateCode());
+        requireTemplate(templateCode);
+        AssetOnboardingSnapshot snapshot = loadAssetOnboardingSnapshot(projectId);
+        if (snapshot.fileCount() <= 0) {
+            throw new BusinessException(
+                "REAL_PROJECT_ASSET_CATALOG_REQUIRED",
+                "人工确认前需要先形成项目资产目录线索",
+                HttpStatus.PRECONDITION_FAILED
+            );
+        }
+        TemplatePreviewResponse templatePreview = preview(projectId, new TemplatePreviewRequest(templateCode));
+        DraftSelection draftSelection = validateDraftSelection(
+            request.selectedDraftItemIds(),
+            onboardingDraftItems(snapshot, templatePreview)
+        );
+
+        ExistingState existing = loadExisting(projectId);
+        CountAccumulator created = new CountAccumulator();
+        CountAccumulator skipped = new CountAccumulator();
+        List<OnboardingConfirmedItem> generatedItems = new ArrayList<>();
+
+        applyConfirmedSections(projectId, operatorId, snapshot, existing, created, skipped, generatedItems, request.sectionStrategy(), draftSelection);
+        applyConfirmedNodeTypes(projectId, operatorId, existing, created, skipped, generatedItems, request.nodeTypeStrategy(), draftSelection);
+        applyConfirmedDeliverables(projectId, operatorId, snapshot, existing, created, skipped, generatedItems, request.deliverableStrategy(), draftSelection);
+        applyConfirmedDirectoryTemplates(projectId, operatorId, snapshot, existing, created, skipped, generatedItems, draftSelection);
+
+        if (shouldLockConfirmedNodeTypes(request.nodeTypeStrategy()) && draftSelection.touchesNodeTypes()) {
+            nodeTypeRepository.lockAll(projectId, operatorId);
+            existing.nodeTypeByCode().clear();
+            existing.nodeTypeByCode().putAll(mapByCode(nodeTypeRepository.findByProject(projectId), NodeType::code));
+        }
+
+        StandardStatusResponse afterStatus = standardStatusApplicationService.getStatus(projectId);
+        List<String> followUps = manualFollowUps(snapshot, afterStatus);
+        auditLogApplicationService.record(
+            projectId,
+            "master-data",
+            "masterdata.onboarding.manual-confirm",
+            "REAL_PROJECT_MASTERDATA",
+            templateCode,
+            operatorId,
+            Map.of(
+                "templateCode", templateCode,
+                "confirmationMode", "MANUAL_REVIEW",
+                "sectionStrategy", defaultText(request.sectionStrategy(), "DISCIPLINE_LEVEL"),
+                "nodeTypeStrategy", defaultText(request.nodeTypeStrategy(), "LOCK_CONFIRMED"),
+                "deliverableStrategy", defaultText(request.deliverableStrategy(), "FILE_TYPE_MINIMAL"),
+                "assetCatalogOnly", true,
+                "selectedDraftItemCount", draftSelection.selectedDraftIds().size(),
+                "created", created.toCounts(),
+                "skipped", skipped.toCounts(),
+                "deliverableStandardReady", Boolean.TRUE.equals(afterStatus.deliverableStandardReady())
+            )
+        );
+
+        return new OnboardingConfirmResponse(
+            projectId,
+            true,
+            "MANUAL_REVIEW",
+            false,
+            false,
+            true,
+            "catalog_only",
+            created.toCounts(),
+            skipped.toCounts(),
+            afterStatus,
+            Boolean.TRUE.equals(afterStatus.deliverableStandardReady()),
+            generatedItems,
+            followUps,
+            missingEvidence(snapshot),
+            nextActions(afterStatus)
+        );
+    }
+
+    private void validateManualConfirmation(OnboardingConfirmRequest request) {
+        if (request == null || !Boolean.TRUE.equals(request.confirmed())) {
+            throw new BusinessException("REAL_PROJECT_ONBOARDING_CONFIRM_REQUIRED", "生成正式工程主数据前需要人工确认", HttpStatus.BAD_REQUEST);
+        }
+        String mode = request.confirmationMode() == null ? "" : request.confirmationMode().trim().toUpperCase(Locale.ROOT);
+        if (!"MANUAL_REVIEW".equals(mode)) {
+            throw new BusinessException("REAL_PROJECT_CONFIRMATION_MODE_REQUIRED", "人工确认模式必须为 MANUAL_REVIEW", HttpStatus.BAD_REQUEST);
+        }
+        if (!Boolean.TRUE.equals(request.riskAccepted())) {
+            throw new BusinessException("REAL_PROJECT_RISK_ACCEPTANCE_REQUIRED", "需要确认已理解 catalog-only 证据边界和后续人工复核风险", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private DraftSelection validateDraftSelection(List<String> selectedDraftItemIds, List<OnboardingDraftItem> draftItems) {
+        Set<String> normalizedSelection = selectedDraftItemIds == null
+            ? Set.of()
+            : selectedDraftItemIds.stream()
+                .filter(item -> item != null && !item.isBlank())
+                .map(String::trim)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (normalizedSelection.isEmpty()) {
+            throw new BusinessException(
+                "REAL_PROJECT_DRAFT_SELECTION_REQUIRED",
+                "请至少选择一个草案项",
+                HttpStatus.BAD_REQUEST
+            );
+        }
+        Map<String, OnboardingDraftItem> draftById = draftItems.stream()
+            .collect(Collectors.toMap(ProjectInitializationApplicationService::draftItemId, Function.identity(), (left, right) -> left, LinkedHashMap::new));
+        List<String> invalidIds = normalizedSelection.stream()
+            .filter(item -> !draftById.containsKey(item))
+            .toList();
+        if (!invalidIds.isEmpty()) {
+            throw new BusinessException(
+                "REAL_PROJECT_DRAFT_SELECTION_INVALID",
+                "选择的草案项不存在或已失效",
+                HttpStatus.BAD_REQUEST
+            );
+        }
+        return new DraftSelection(normalizedSelection, draftById);
+    }
+
+    private void applyConfirmedSections(
+        Long projectId,
+        Long operatorId,
+        AssetOnboardingSnapshot snapshot,
+        ExistingState existing,
+        CountAccumulator created,
+        CountAccumulator skipped,
+        List<OnboardingConfirmedItem> generatedItems,
+        String sectionStrategy,
+        DraftSelection draftSelection
+    ) {
+        if (!shouldApplyProjectRoot(draftSelection)) {
+            return;
+        }
+        boolean projectRootSelected = draftSelection.selected("TARGET_CANDIDATE", "项目级交付对象", "CATALOG_PROJECT_ASSET_SUMMARY")
+            || draftSelection.selectedAny("SECTION_NODE", "项目");
+        SectionNode root = ensureSectionNode(
+            projectId,
+            operatorId,
+            existing,
+            created,
+            skipped,
+            generatedItems,
+            null,
+            "PROJECT",
+            snapshot.projectName() == null || snapshot.projectName().isBlank() ? "项目" : snapshot.projectName(),
+            1,
+            10,
+            projectRootSelected ? "MANUAL_REVIEW" : "DEPENDENCY+MANUAL_REVIEW",
+            projectRootSelected
+                ? "人工确认项目级根节点；名称来自项目主数据，不来自文件正文。"
+                : "作为所选草案项的最小依赖自动补齐；名称来自项目主数据，不来自文件正文。"
+        );
+        if (!"PROJECT_LEVEL".equalsIgnoreCase(defaultText(sectionStrategy, "DISCIPLINE_LEVEL"))) {
+            int order = 100;
+            boolean disciplineTargetSelected = draftSelection.selected("TARGET_CANDIDATE", "专业级交付对象", "CATALOG_DISCIPLINE_DISTRIBUTION");
+            for (OnboardingDistributionItem discipline : snapshot.disciplineDistribution()) {
+                if (discipline.count() == null || discipline.count() <= 0) {
+                    continue;
+                }
+                if (!disciplineTargetSelected
+                    && !draftSelection.selected("DISCIPLINE_CANDIDATE", discipline.label(), "CATALOG_DISCIPLINE_DISTRIBUTION")) {
+                    continue;
+                }
+                ensureSectionNode(
+                    projectId,
+                    operatorId,
+                    existing,
+                    created,
+                    skipped,
+                    generatedItems,
+                    root,
+                    "DISC_" + safeCode(discipline.code(), "GENERAL"),
+                    discipline.label() + "专业",
+                    2,
+                    order,
+                    "CATALOG_DISCIPLINE_DISTRIBUTION+MANUAL_REVIEW",
+                    "专业来自目录治理字段和人工确认，仍需项目负责人后续校准。"
+                );
+                order += 10;
+            }
+        }
+    }
+
+    private void applyConfirmedNodeTypes(
+        Long projectId,
+        Long operatorId,
+        ExistingState existing,
+        CountAccumulator created,
+        CountAccumulator skipped,
+        List<OnboardingConfirmedItem> generatedItems,
+        String nodeTypeStrategy,
+        DraftSelection draftSelection
+    ) {
+        boolean needsDeliveryInfrastructure = draftSelection.needsDeliverableInfrastructure();
+        boolean touchedNodeTypes = false;
+        if (draftSelection.selectedAny("NODE_TYPE", "项目") || needsDeliveryInfrastructure) {
+            ensureNodeType(projectId, operatorId, existing, created, skipped, generatedItems,
+                "PROJECT", "项目", 1, 10,
+                draftSelection.selectedAny("NODE_TYPE", "项目") ? "MANUAL_REVIEW" : "DEPENDENCY+MANUAL_REVIEW",
+                draftSelection.selectedAny("NODE_TYPE", "项目") ? "项目级节点由人工确认生成。" : "作为所选交付规则的最小依赖自动补齐。");
+            touchedNodeTypes = true;
+        }
+        if (draftSelection.selectedAny("NODE_TYPE", "专业")
+            || draftSelection.selected("TARGET_CANDIDATE", "专业级交付对象", "CATALOG_DISCIPLINE_DISTRIBUTION")) {
+            ensureNodeType(projectId, operatorId, existing, created, skipped, generatedItems,
+                "DISCIPLINE", "专业", 2, 20, "CATALOG_DISCIPLINE_DISTRIBUTION+MANUAL_REVIEW", "专业级节点来自目录专业线索和人工确认。");
+            touchedNodeTypes = true;
+        }
+        if (draftSelection.selectedAny("NODE_TYPE", "交付项") || needsDeliveryInfrastructure) {
+            ensureNodeType(projectId, operatorId, existing, created, skipped, generatedItems,
+                "DELIVERY_ITEM", "交付项", 3, 30,
+                draftSelection.selectedAny("NODE_TYPE", "交付项") ? "INDUSTRY_REFERENCE+MANUAL_REVIEW" : "DEPENDENCY+INDUSTRY_REFERENCE+MANUAL_REVIEW",
+                draftSelection.selectedAny("NODE_TYPE", "交付项") ? "交付项节点为行业参考骨架，后续仍可人工调整。" : "作为所选交付定义/类型的最小依赖自动补齐。");
+            touchedNodeTypes = true;
+        }
+        if (touchedNodeTypes && !shouldLockConfirmedNodeTypes(nodeTypeStrategy)) {
+            generatedItems.add(new OnboardingConfirmedItem(
+                "NODE_TYPE_LOCK",
+                "NODE_TYPES_UNLOCKED",
+                "节点类型未锁定",
+                "REVIEW_REQUIRED",
+                "MANUAL_REVIEW",
+                "catalog_only",
+                "当前策略未锁定节点类型，交付页面会继续提示先锁定节点类型。"
+            ));
+        }
+    }
+
+    private void applyConfirmedDeliverables(
+        Long projectId,
+        Long operatorId,
+        AssetOnboardingSnapshot snapshot,
+        ExistingState existing,
+        CountAccumulator created,
+        CountAccumulator skipped,
+        List<OnboardingConfirmedItem> generatedItems,
+        String deliverableStrategy,
+        DraftSelection draftSelection
+    ) {
+        if (!draftSelection.needsDeliverableInfrastructure()) {
+            return;
+        }
+        NodeType projectNodeType = existing.nodeTypeByCode().get("PROJECT");
+        NodeType deliveryNodeType = existing.nodeTypeByCode().getOrDefault("DELIVERY_ITEM", projectNodeType);
+        if (deliveryNodeType == null) {
+            throw new BusinessException("MASTERDATA_NODE_TYPE_MISSING", "缺少可绑定交付定义的节点类型", HttpStatus.CONFLICT);
+        }
+        DeliverableDefinition drawingDefinition = null;
+        DeliverableDefinition documentDefinition = null;
+        DeliverableDefinition modelDefinition = null;
+
+        List<String> extensions = snapshot.extensionDistribution().stream().map(OnboardingDistributionItem::code).toList();
+        boolean fullTemplate = "FULL_TEMPLATE".equalsIgnoreCase(defaultText(deliverableStrategy, "FILE_TYPE_MINIMAL"));
+        boolean broadFileTypeTarget = draftSelection.selected("TARGET_CANDIDATE", "文件类型级交付对象", "CATALOG_EXTENSION_DISTRIBUTION");
+        boolean includeDwg = draftSelection.selectedExtensionCandidate("DWG")
+            || draftSelection.selectedAny("DELIVERABLE_TYPE", "DWG 图纸")
+            || (broadFileTypeTarget && (fullTemplate || extensions.contains("DWG")));
+        boolean includePdf = draftSelection.selectedExtensionCandidate("PDF")
+            || draftSelection.selectedAny("DELIVERABLE_TYPE", "PDF 图纸")
+            || draftSelection.selectedAny("DELIVERABLE_TYPE", "PDF 文档")
+            || (broadFileTypeTarget && (fullTemplate || extensions.contains("PDF")));
+        boolean includeRvt = draftSelection.selectedExtensionCandidate("RVT")
+            || draftSelection.selectedAny("DELIVERABLE_TYPE", "RVT 模型")
+            || draftSelection.hasCategory("DELIVERABLE_ATTRIBUTE")
+            || (broadFileTypeTarget && (fullTemplate || extensions.contains("RVT")));
+        boolean includeExcel = draftSelection.selectedExtensionCandidate("XLS")
+            || draftSelection.selectedExtensionCandidate("XLSX")
+            || draftSelection.selectedExtensionCandidate("CSV")
+            || draftSelection.selectedAny("DELIVERABLE_TYPE", "Office 文档")
+            || (broadFileTypeTarget && (extensions.contains("XLS") || extensions.contains("XLSX") || extensions.contains("CSV")));
+
+        if (draftSelection.selectedAny("DELIVERABLE_DEFINITION", "图纸交付") || includeDwg || includePdf) {
+            drawingDefinition = ensureDefinition(projectId, operatorId, existing, created, skipped, generatedItems,
+                deliveryNodeType, "DRAWING_DELIVERY", "图纸交付", "DRAWING", true, 10,
+                (includeDwg || includePdf) && !draftSelection.selectedAny("DELIVERABLE_DEFINITION", "图纸交付")
+                    ? "DEPENDENCY+CATALOG_EXTENSION_DISTRIBUTION+MANUAL_REVIEW"
+                    : "CATALOG_EXTENSION_DISTRIBUTION+MANUAL_REVIEW",
+                "DWG/PDF 图纸交付来自扩展名统计和人工确认，未读取图纸内容。");
+        }
+        if (draftSelection.selectedAny("DELIVERABLE_DEFINITION", "文档交付") || includePdf || includeExcel) {
+            documentDefinition = ensureDefinition(projectId, operatorId, existing, created, skipped, generatedItems,
+                projectNodeType == null ? deliveryNodeType : projectNodeType, "DOCUMENT_DELIVERY", "文档交付", "DOCUMENT", true, 20,
+                (includePdf || includeExcel) && !draftSelection.selectedAny("DELIVERABLE_DEFINITION", "文档交付")
+                    ? "DEPENDENCY+CATALOG_EXTENSION_DISTRIBUTION+MANUAL_REVIEW"
+                    : "CATALOG_EXTENSION_DISTRIBUTION+MANUAL_REVIEW",
+                "PDF/Office 文档交付来自目录线索和人工确认，未读取正文。");
+        }
+        if (draftSelection.selectedAny("DELIVERABLE_DEFINITION", "模型交付") || includeRvt) {
+            modelDefinition = ensureDefinition(projectId, operatorId, existing, created, skipped, generatedItems,
+                deliveryNodeType, "MODEL_DELIVERY", "模型交付", "MODEL", true, 30,
+                includeRvt && !draftSelection.selectedAny("DELIVERABLE_DEFINITION", "模型交付")
+                    ? "DEPENDENCY+CATALOG_EXTENSION_DISTRIBUTION+MANUAL_REVIEW"
+                    : "CATALOG_EXTENSION_DISTRIBUTION+MANUAL_REVIEW",
+                "RVT 模型交付来自扩展名统计和人工确认，未解析模型构件。");
+        }
+
+        if (includeDwg) {
+            DeliverableType type = ensureType(projectId, operatorId, existing, created, skipped, generatedItems,
+                drawingDefinition, "DWG_DRAWING", "DWG 图纸", "DRAWING", "SECTION_NODE", 10,
+                "CATALOG_EXTENSION_DISTRIBUTION+MANUAL_REVIEW", "DWG 只是文件扩展名线索，不能确认图层、标题栏或图纸内容。");
+            ensureCoreAttributes(projectId, operatorId, existing, created, skipped, generatedItems, type, "DWG");
+        }
+        if (includePdf) {
+            DeliverableType drawingType = ensureType(projectId, operatorId, existing, created, skipped, generatedItems,
+                drawingDefinition, "PDF_DRAWING", "PDF 图纸", "DRAWING", "SECTION_NODE", 20,
+                "CATALOG_EXTENSION_DISTRIBUTION+MANUAL_REVIEW", "PDF 图纸类型来自目录线索，未读取图纸正文。");
+            ensureCoreAttributes(projectId, operatorId, existing, created, skipped, generatedItems, drawingType, "PDF_DRAWING");
+            DeliverableType documentType = ensureType(projectId, operatorId, existing, created, skipped, generatedItems,
+                documentDefinition, "PDF_DOCUMENT", "PDF 文档", "DOCUMENT", "SECTION_NODE", 30,
+                "CATALOG_EXTENSION_DISTRIBUTION+MANUAL_REVIEW", "PDF 文档类型来自目录线索，未读取正文。");
+            ensureCoreAttributes(projectId, operatorId, existing, created, skipped, generatedItems, documentType, "PDF_DOC");
+        }
+        if (includeRvt) {
+            DeliverableType type = ensureType(projectId, operatorId, existing, created, skipped, generatedItems,
+                modelDefinition, "RVT_MODEL", "RVT 模型", "MODEL", "SECTION_NODE", 40,
+                "CATALOG_EXTENSION_DISTRIBUTION+MANUAL_REVIEW", "RVT 类型来自目录线索，未解析 Level/Grid/Family/Type 或构件参数。");
+            ensureCoreAttributes(projectId, operatorId, existing, created, skipped, generatedItems, type, "RVT");
+        }
+        if (includeExcel) {
+            DeliverableType type = ensureType(projectId, operatorId, existing, created, skipped, generatedItems,
+                documentDefinition, "EXCEL_REGISTER", "Excel 清单", "DOCUMENT", "SECTION_NODE", 50,
+                "CATALOG_EXTENSION_DISTRIBUTION+MANUAL_REVIEW", "清单类型来自目录线索；当前交付视图按文档类管理，实际表格内容未解析。");
+            ensureCoreAttributes(projectId, operatorId, existing, created, skipped, generatedItems, type, "XLS");
+        }
+    }
+
+    private void applyConfirmedDirectoryTemplates(
+        Long projectId,
+        Long operatorId,
+        AssetOnboardingSnapshot snapshot,
+        ExistingState existing,
+        CountAccumulator created,
+        CountAccumulator skipped,
+        List<OnboardingConfirmedItem> generatedItems,
+        DraftSelection draftSelection
+    ) {
+        boolean broadFileTypeTarget = draftSelection.selected("TARGET_CANDIDATE", "文件类型级交付对象", "CATALOG_EXTENSION_DISTRIBUTION");
+        boolean includeDrawingTemplate = broadFileTypeTarget || draftSelection.selectedAny("DIRECTORY_TEMPLATE", "建筑机电图纸目录");
+        boolean includeDocumentTemplate = broadFileTypeTarget || draftSelection.selectedAny("DIRECTORY_TEMPLATE", "建筑机电文档目录");
+        boolean includeModelTemplate = broadFileTypeTarget || draftSelection.selectedAny("DIRECTORY_TEMPLATE", "建筑机电模型目录");
+        if (!includeDrawingTemplate && !includeDocumentTemplate && !includeModelTemplate) {
+            return;
+        }
+        if (includeDrawingTemplate) {
+            ensureDirectoryTemplate(projectId, operatorId, existing, created, skipped, generatedItems,
+                "DRAWING", snapshot.projectCode() + " 图纸交付目录",
+                "{\"name\":\"图纸交付\",\"children\":[{\"name\":\"DWG 图纸\"},{\"name\":\"PDF 图纸\"},{\"name\":\"待人工补充\"}]}",
+                10, "CATALOG_EXTENSION_DISTRIBUTION+MANUAL_REVIEW", "目录模板只表达交付组织方式，不代表真实 NAS 路径。");
+        }
+        if (includeDocumentTemplate) {
+            ensureDirectoryTemplate(projectId, operatorId, existing, created, skipped, generatedItems,
+                "DOCUMENT", snapshot.projectCode() + " 文档交付目录",
+                "{\"name\":\"文档交付\",\"children\":[{\"name\":\"PDF 文档\"},{\"name\":\"Excel 清单\"},{\"name\":\"待人工补充\"}]}",
+                20, "CATALOG_EXTENSION_DISTRIBUTION+MANUAL_REVIEW", "目录模板只表达交付组织方式，不读取文档内容。");
+        }
+        if (includeModelTemplate) {
+            ensureDirectoryTemplate(projectId, operatorId, existing, created, skipped, generatedItems,
+                "MODEL", snapshot.projectCode() + " 模型资料目录",
+                "{\"name\":\"模型资料\",\"children\":[{\"name\":\"RVT 模型\"},{\"name\":\"待人工补充\"}]}",
+                30, "CATALOG_EXTENSION_DISTRIBUTION+MANUAL_REVIEW", "目录模板只表达模型资料组织方式，不代表模型已解析。");
+        }
+    }
+
+    private static boolean shouldApplyProjectRoot(DraftSelection draftSelection) {
+        return draftSelection.selected("TARGET_CANDIDATE", "项目级交付对象", "CATALOG_PROJECT_ASSET_SUMMARY")
+            || draftSelection.selected("TARGET_CANDIDATE", "专业级交付对象", "CATALOG_DISCIPLINE_DISTRIBUTION")
+            || draftSelection.hasCategory("DISCIPLINE_CANDIDATE")
+            || draftSelection.hasCategory("SECTION_NODE")
+            || draftSelection.needsDeliverableInfrastructure()
+            || draftSelection.hasCategory("DIRECTORY_TEMPLATE");
+    }
+
+    private SectionNode ensureSectionNode(
+        Long projectId,
+        Long operatorId,
+        ExistingState existing,
+        CountAccumulator created,
+        CountAccumulator skipped,
+        List<OnboardingConfirmedItem> generatedItems,
+        SectionNode parent,
+        String code,
+        String name,
+        Integer level,
+        Integer sortOrder,
+        String source,
+        String riskHint
+    ) {
+        SectionNode existingNode = existing.sectionByCode().get(code);
+        if (existingNode != null) {
+            skipped.sectionNodes++;
+            generatedItems.add(confirmedItem("SECTION_NODE", code, existingNode.name(), "SKIP", source, riskHint));
+            return existingNode;
+        }
+        Long nodeId = sectionNodeRepository.insert(projectId, parent == null ? null : parent.id(), code, name, level, "", sortOrder, "ACTIVE", operatorId);
+        String path = parent == null ? String.valueOf(nodeId) : parent.path() + "/" + nodeId;
+        sectionNodeRepository.updatePath(projectId, nodeId, path, operatorId);
+        SectionNode node = new SectionNode(nodeId, projectId, parent == null ? null : parent.id(), code, name, level, path, sortOrder, "ACTIVE");
+        existing.sectionByCode().put(code, node);
+        created.sectionNodes++;
+        generatedItems.add(confirmedItem("SECTION_NODE", code, name, "CREATE", source, riskHint));
+        return node;
+    }
+
+    private NodeType ensureNodeType(
+        Long projectId,
+        Long operatorId,
+        ExistingState existing,
+        CountAccumulator created,
+        CountAccumulator skipped,
+        List<OnboardingConfirmedItem> generatedItems,
+        String code,
+        String name,
+        Integer scopeLevel,
+        Integer sortOrder,
+        String source,
+        String riskHint
+    ) {
+        NodeType existingType = existing.nodeTypeByCode().get(code);
+        if (existingType != null) {
+            skipped.nodeTypes++;
+            generatedItems.add(confirmedItem("NODE_TYPE", code, existingType.name(), "SKIP", source, riskHint));
+            return existingType;
+        }
+        Long id = nodeTypeRepository.insert(projectId, code, name, scopeLevel, sortOrder, "ACTIVE", operatorId);
+        NodeType nodeType = new NodeType(id, projectId, code, name, scopeLevel, sortOrder, "ACTIVE", false, null, null);
+        existing.nodeTypeByCode().put(code, nodeType);
+        created.nodeTypes++;
+        generatedItems.add(confirmedItem("NODE_TYPE", code, name, "CREATE", source, riskHint));
+        return nodeType;
+    }
+
+    private DeliverableDefinition ensureDefinition(
+        Long projectId,
+        Long operatorId,
+        ExistingState existing,
+        CountAccumulator created,
+        CountAccumulator skipped,
+        List<OnboardingConfirmedItem> generatedItems,
+        NodeType nodeType,
+        String code,
+        String name,
+        String category,
+        Boolean required,
+        Integer sortOrder,
+        String source,
+        String riskHint
+    ) {
+        DeliverableDefinition existingDefinition = existing.definitionByCode().get(code);
+        if (existingDefinition != null) {
+            skipped.deliverableDefinitions++;
+            generatedItems.add(confirmedItem("DELIVERABLE_DEFINITION", code, existingDefinition.name(), "SKIP", source, riskHint));
+            return existingDefinition;
+        }
+        Long id = definitionRepository.insert(projectId, nodeType.id(), code, name, category, required, sortOrder, "ACTIVE", operatorId);
+        DeliverableDefinition definition = new DeliverableDefinition(id, projectId, nodeType.id(), code, name, category, required, sortOrder, "ACTIVE");
+        existing.definitionByCode().put(code, definition);
+        created.deliverableDefinitions++;
+        generatedItems.add(confirmedItem("DELIVERABLE_DEFINITION", code, name, "CREATE", source, riskHint));
+        return definition;
+    }
+
+    private DeliverableType ensureType(
+        Long projectId,
+        Long operatorId,
+        ExistingState existing,
+        CountAccumulator created,
+        CountAccumulator skipped,
+        List<OnboardingConfirmedItem> generatedItems,
+        DeliverableDefinition definition,
+        String code,
+        String name,
+        String fileKind,
+        String bindingStrategy,
+        Integer sortOrder,
+        String source,
+        String riskHint
+    ) {
+        DeliverableType existingType = existing.typeByCode().get(code);
+        if (existingType != null) {
+            skipped.deliverableTypes++;
+            generatedItems.add(confirmedItem("DELIVERABLE_TYPE", code, existingType.name(), "SKIP", source, riskHint));
+            return existingType;
+        }
+        Long id = typeRepository.insert(projectId, definition.id(), code, name, fileKind, bindingStrategy, sortOrder, "ACTIVE", operatorId);
+        DeliverableType type = new DeliverableType(id, projectId, definition.id(), code, name, fileKind, bindingStrategy, sortOrder, "ACTIVE");
+        existing.typeByCode().put(code, type);
+        created.deliverableTypes++;
+        generatedItems.add(confirmedItem("DELIVERABLE_TYPE", code, name, "CREATE", source, riskHint));
+        return type;
+    }
+
+    private DeliverableAttribute ensureAttribute(
+        Long projectId,
+        Long operatorId,
+        ExistingState existing,
+        CountAccumulator created,
+        CountAccumulator skipped,
+        List<OnboardingConfirmedItem> generatedItems,
+        DeliverableType type,
+        String code,
+        String name,
+        String valueType,
+        String enumOptions,
+        Integer sortOrder,
+        String source,
+        String riskHint
+    ) {
+        DeliverableAttribute existingAttribute = existing.attributeByCode().get(code);
+        if (existingAttribute != null) {
+            skipped.deliverableAttributes++;
+            generatedItems.add(confirmedItem("DELIVERABLE_ATTRIBUTE", code, existingAttribute.name(), "SKIP", source, riskHint));
+            return existingAttribute;
+        }
+        Long id = attributeRepository.insert(projectId, type.id(), code, name, valueType, null, false, null, enumOptions, sortOrder, "ACTIVE", operatorId);
+        DeliverableAttribute attribute = new DeliverableAttribute(id, projectId, type.id(), code, name, valueType, null, false, null, enumOptions, sortOrder, "ACTIVE");
+        existing.attributeByCode().put(code, attribute);
+        created.deliverableAttributes++;
+        generatedItems.add(confirmedItem("DELIVERABLE_ATTRIBUTE", code, name, "CREATE", source, riskHint));
+        return attribute;
+    }
+
+    private void ensureCoreAttributes(
+        Long projectId,
+        Long operatorId,
+        ExistingState existing,
+        CountAccumulator created,
+        CountAccumulator skipped,
+        List<OnboardingConfirmedItem> generatedItems,
+        DeliverableType type,
+        String prefix
+    ) {
+        String safePrefix = safeCode(prefix, "DELIVERY");
+        ensureAttribute(projectId, operatorId, existing, created, skipped, generatedItems, type,
+            safePrefix + "_DISCIPLINE", "专业", "ENUM",
+            "[\"建筑\",\"结构\",\"电气\",\"给排水\",\"消防\",\"智能化\",\"暖通\",\"燃气\",\"通用/未标注\"]",
+            10, "MANUAL_REVIEW", "属性用于后续人工维护，不代表平台已读取文件正文。");
+        ensureAttribute(projectId, operatorId, existing, created, skipped, generatedItems, type,
+            safePrefix + "_VERSION", "版本", "TEXT", null,
+            20, "MANUAL_REVIEW", "版本需要人工确认或后续治理，不从文件正文推断。");
+        ensureAttribute(projectId, operatorId, existing, created, skipped, generatedItems, type,
+            safePrefix + "_EVIDENCE_MODE", "证据模式", "TEXT", null,
+            30, "CATALOG_ONLY", "当前初始规则证据模式为 catalog-only。");
+    }
+
+    private void ensureDirectoryTemplate(
+        Long projectId,
+        Long operatorId,
+        ExistingState existing,
+        CountAccumulator created,
+        CountAccumulator skipped,
+        List<OnboardingConfirmedItem> generatedItems,
+        String templateType,
+        String name,
+        String rootNodeJson,
+        Integer sortOrder,
+        String source,
+        String riskHint
+    ) {
+        DirectoryTemplate existingTemplate = existing.directoryTemplateByName().get(name);
+        if (existingTemplate != null) {
+            skipped.directoryTemplates++;
+            generatedItems.add(confirmedItem("DIRECTORY_TEMPLATE", name, existingTemplate.name(), "SKIP", source, riskHint));
+            return;
+        }
+        Long id = directoryTemplateRepository.insert(projectId, templateType, name, rootNodeJson, "REAL_ASSET_MANUAL_CONFIRM", sortOrder, "ACTIVE", operatorId);
+        existing.directoryTemplateByName().put(name, new DirectoryTemplate(id, projectId, templateType, name, rootNodeJson, "REAL_ASSET_MANUAL_CONFIRM", sortOrder, "ACTIVE"));
+        created.directoryTemplates++;
+        generatedItems.add(confirmedItem("DIRECTORY_TEMPLATE", name, name, "CREATE", source, riskHint));
+    }
+
+    private static OnboardingConfirmedItem confirmedItem(String category, String code, String name, String action, String source, String riskHint) {
+        return new OnboardingConfirmedItem(category, code, name, action, source, "catalog_only", riskHint);
+    }
+
+    private static boolean shouldLockConfirmedNodeTypes(String nodeTypeStrategy) {
+        return !"KEEP_EDITABLE".equalsIgnoreCase(defaultText(nodeTypeStrategy, "LOCK_CONFIRMED"));
+    }
+
+    private static List<String> manualFollowUps(AssetOnboardingSnapshot snapshot, StandardStatusResponse status) {
+        List<String> followUps = new ArrayList<>();
+        followUps.add("复核专业级部位是否符合真实项目组织，不要把目录专业线索直接当作最终楼栋/楼层/系统。");
+        followUps.add("进入交付物标准页检查 DWG / PDF / RVT / Excel 初始规则，删除不适用项并补充缺失项。");
+        followUps.add("进入文档/图纸交付页人工挂接文件；本次不会自动挂接、自动审核或生成交付结论。");
+        if (snapshot.missingChecksumCount() > 0) {
+            followUps.add("部分文件缺少 checksum，正式交付前建议补齐一致性校验。");
+        }
+        if (!Boolean.TRUE.equals(status.deliverableStandardReady())) {
+            followUps.add("当前标准仍未完全就绪，请根据页面阻塞原因继续补齐。");
+        }
+        return followUps;
+    }
+
+    private static String defaultText(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
+    private static String safeCode(String value, String fallback) {
+        String text = value == null || value.isBlank() ? fallback : value;
+        String safe = text.toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9_]+", "_").replaceAll("_+", "_").replaceAll("^_|_$", "");
+        return safe.isBlank() ? fallback : (safe.length() > 48 ? safe.substring(0, 48) : safe);
     }
 
     private void applySectionNodes(
@@ -1348,6 +1955,14 @@ public class ProjectInitializationApplicationService {
             .collect(Collectors.toMap(codeExtractor, Function.identity(), (left, right) -> left, LinkedHashMap::new));
     }
 
+    private static String draftItemId(OnboardingDraftItem item) {
+        return draftItemId(item.category(), item.name(), item.evidenceSource());
+    }
+
+    private static String draftItemId(String category, String name, String evidenceSource) {
+        return defaultText(category, "") + ":" + defaultText(name, "") + ":" + defaultText(evidenceSource, "");
+    }
+
     private record ExistingState(
         Map<String, SectionNode> sectionByCode,
         Map<String, NodeType> nodeTypeByCode,
@@ -1356,6 +1971,49 @@ public class ProjectInitializationApplicationService {
         Map<String, DeliverableAttribute> attributeByCode,
         Map<String, DirectoryTemplate> directoryTemplateByName
     ) {
+    }
+
+    private record DraftSelection(
+        Set<String> selectedDraftIds,
+        Map<String, OnboardingDraftItem> draftById
+    ) {
+        boolean selected(String category, String name, String evidenceSource) {
+            return selectedDraftIds.contains(draftItemId(category, name, evidenceSource));
+        }
+
+        boolean selectedAny(String category, String name) {
+            return selectedItems().stream()
+                .anyMatch(item -> category.equals(item.category()) && name.equals(item.name()));
+        }
+
+        boolean selectedExtensionCandidate(String extension) {
+            return selected("DELIVERABLE_TYPE_CANDIDATE", extensionLabel(extension), "CATALOG_EXTENSION_DISTRIBUTION");
+        }
+
+        boolean hasCategory(String category) {
+            return selectedItems().stream().anyMatch(item -> category.equals(item.category()));
+        }
+
+        boolean needsDeliverableInfrastructure() {
+            return hasCategory("DELIVERABLE_DEFINITION")
+                || hasCategory("DELIVERABLE_TYPE")
+                || hasCategory("DELIVERABLE_ATTRIBUTE")
+                || hasCategory("DELIVERABLE_TYPE_CANDIDATE")
+                || selected("TARGET_CANDIDATE", "文件类型级交付对象", "CATALOG_EXTENSION_DISTRIBUTION");
+        }
+
+        boolean touchesNodeTypes() {
+            return hasCategory("NODE_TYPE")
+                || selected("TARGET_CANDIDATE", "专业级交付对象", "CATALOG_DISCIPLINE_DISTRIBUTION")
+                || needsDeliverableInfrastructure();
+        }
+
+        private List<OnboardingDraftItem> selectedItems() {
+            return selectedDraftIds.stream()
+                .map(draftById::get)
+                .filter(item -> item != null)
+                .toList();
+        }
     }
 
     private record AssetOnboardingSnapshot(

@@ -1,5 +1,131 @@
 # 主 Agent 项目状态
 
+## 2026-05-22 M2F 启动
+
+- 用户已确认主 agent 的下一步计划，并允许执行。
+- 主 agent 裁决：当前进入 `M2F：真实项目交付闭环试运行`。
+- 启动原因：
+  - M2E 已正式收口。
+  - 105 / 503 已完成真实资产接入和人工确认后的正式工程主数据。
+  - 当前需要验证这些规则是否真的能驱动文档 / 图纸交付、缺失项、挂接、审核整改和交付包草案。
+- M2F 核心链路：
+  - `真实资产 -> 工程主数据 -> 交付标准 -> 文档/图纸应交项 -> 文件挂接 -> 审核/整改 -> 交付包草案`
+- M2F 目标：
+  - 105 正式工程主数据能驱动文档 / 图纸交付链路。
+  - 缺失项和阻塞原因对员工可理解。
+  - 人工挂接、审核整改、交付包草案链路不回归。
+- M2F 禁止：
+  - 真实 NAS 文件写入、移动、删除、重命名、复制。
+  - 读取 PDF / Office / DWG / RVT / IFC 正文。
+  - 新增 Hermes / BIM / parser / writer / indexing 能力。
+  - 自动挂接、自动审核、自动整改。
+  - 启动 8B / 8C / 9A。
+- 当前交接：
+  - 计划：`handoff/main-agent/m2f-real-project-delivery-loop-trial-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-05-22 M2E 正式收口
+
+- 测试 agent 已完成 `M2E P1 selectedDraftItemIds 契约极短复验`，报告写入 `handoff/test-agent/latest-report.md`。
+- 复验结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- P2：
+  - 仅既有 Vite chunk size warning，不阻塞。
+- 已确认：
+  - 空 `selectedDraftItemIds=[]` 被后端拒绝。
+  - 不存在或失效的草案项 ID 被后端拒绝。
+  - 合法小选择只处理所选草案项及必要依赖，不再全量返回 40 项。
+  - 依赖项通过 `DEPENDENCY+...` 标识，没有伪装成用户直接选择。
+  - 初始化页已确认状态文案不再误导为“工程主数据未确认”。
+  - 初始化页可见“查看节点类型”入口。
+  - 未发现真实 NAS 路径或敏感字段泄露。
+  - 未触碰真实 NAS 文件，未读取正文，未新增 Hermes / BIM / parser / indexing 能力。
+- 主 agent 裁决：`M2E：真实项目工程主数据人工确认与交付规则落地` 正式收口。
+- 当前 active 批次：`待用户确认`。
+
+## 2026-05-22 M2E P1 修复完成，进入极短复验
+
+- 开发 agent 已完成 `M2E P1 修复 selectedDraftItemIds 契约`，报告写入 `handoff/dev-agent/latest-report.md`。
+- 主 agent 已完成代码和脚本初验：
+  - 后端确认接口现在会读取并校验 `selectedDraftItemIds`。
+  - 空选择会返回 `REAL_PROJECT_DRAFT_SELECTION_REQUIRED`。
+  - 无效草案 ID 会返回 `REAL_PROJECT_DRAFT_SELECTION_INVALID`。
+  - 合法小选择只处理所选草案项及必要依赖，不再全量返回 40 项生成 / 跳过结果。
+  - 依赖项通过 `DEPENDENCY+...` 标识，避免伪装成用户直接选择。
+- 主 agent 已执行：
+  - `curl -fsS http://127.0.0.1:8080/actuator/health`：通过。
+  - `bash scripts/dev/check-m2e-real-project-masterdata-confirmation.sh`：`PASS=11 FAIL=0`。
+  - `git diff --check`：通过。
+- 已将测试 agent prompt 收窄为 `M2E P1 selectedDraftItemIds 契约极短复验`。
+- 当前裁决：
+  - P1 从主 agent 初验看已修复。
+  - M2E 尚未正式收口，等待测试 agent 极短复验。
+
+## 2026-05-22 M2E 测试不通过，进入 P1 修复
+
+- 测试 agent 已完成 M2E 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：不通过。
+- P0：无。
+- P1：
+  - `selectedDraftItemIds` 未生效。
+  - 前端支持逐项勾选草案项，但后端忽略该字段。
+  - 空选择或无效选择仍返回 OK 并按全量规则处理。
+- P2：
+  - 既有 Vite chunk warning。
+  - 105 已是确认后状态，无法复测 first-run。
+  - 初始化页部分文案仍停留在 M2D 草案状态。
+  - 缺少明确“查看节点类型”入口。
+- 主 agent 裁决：
+  - M2E 暂不收口。
+  - 当前进入 `M2E P1 修复 selectedDraftItemIds 契约`。
+  - 已更新开发 agent prompt：`handoff/dev-agent/current-prompt.md`。
+
+## 2026-05-22 M2E 开发完成，进入测试验收
+
+- 开发 agent 已完成 `M2E：真实项目工程主数据人工确认与交付规则落地`，报告写入 `handoff/dev-agent/latest-report.md`。
+- 主 agent 已完成初验：
+  - `scripts/dev/check-m2e-real-project-masterdata-confirmation.sh` 通过，`PASS=7 FAIL=0`。
+  - `scripts/dev/check-m2d-real-project-masterdata-onboarding.sh` 通过，`PASS=8 FAIL=0`。
+  - `scripts/dev/check-m2c-delivery-package-archive.sh` 通过，`PASS=11 FAIL=0`。
+  - `scripts/dev/check-m1c-real-project-masterdata.sh` 通过，`PASS=14 FAIL=0`。
+  - 健康检查通过。
+  - `git diff --check` 通过。
+- 已确认：
+  - 新增 `POST /api/master-data/projects/{projectId}/onboarding/confirm`。
+  - 未带 `confirmed=true` 时拒绝。
+  - 105 / 503 已通过人工确认生成正式初始主数据。
+  - 文档 / 图纸交付和交付包准备视图已基于正式规则工作。
+  - 未触碰真实 NAS 文件，未读取正文，未新增 Hermes / BIM / parser / indexing。
+- 主 agent 关注点：
+  - 前端传入 `selectedDraftItemIds`，需要测试 agent 确认后端是否真正按勾选项影响生成；如果只是 UI 勾选但后端忽略，应记为 P1 或要求开发 agent 收窄为“策略确认”而非“逐项选择”。
+- 当前状态：进入测试 agent 验收，尚未收口。
+
+## 2026-05-22 M2E 启动
+
+- 用户确认支持主 agent 的下一批次申请。
+- 主 agent 裁决：当前进入 `M2E：真实项目工程主数据人工确认与交付规则落地`。
+- 启动原因：
+  - M2D 已让 105 进入“真实资产已接入、工程主数据未确认、草案可预览”的状态。
+  - 105 仍需要经过人工确认，才能生成正式部位树、节点类型和交付物标准。
+  - 平台必须从“管文件 + 看草案”推进到“按人工确认的规则做真实交付”。
+- M2E 目标：
+  - 新增或强化人工确认接口。
+  - 人工确认后生成最小可用工程主数据。
+  - 正式数据必须能解释来源：资产线索、人工确认、行业参考。
+  - 生成后文档/图纸交付和交付包草案能基于正式规则工作。
+- M2E 禁止：
+  - 触碰真实 NAS 文件。
+  - 读取文件正文。
+  - 新增 Hermes / BIM / parser / indexing 能力。
+  - 自动挂接、审核、整改或生成真实交付结论。
+  - 让真实项目回到“一键模板已完成”的老路。
+- 当前交接：
+  - 计划：`handoff/main-agent/m2e-real-project-masterdata-confirmation-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
 ## 2026-05-22 M2D 收口
 
 - 测试 agent 已完成 `M2D：真实项目工程主数据接入草案增强` 轻量验收，报告写入 `handoff/test-agent/latest-report.md`。

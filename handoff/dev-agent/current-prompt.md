@@ -1,4 +1,4 @@
-# 开发 Agent 当前任务：M2D 真实项目工程主数据接入草案增强
+# 开发 Agent 当前任务：M2F 真实项目交付闭环试运行
 
 你是数字化交付平台开发 agent。工作目录：
 
@@ -6,148 +6,99 @@
 
 ## 0. 当前批次
 
-`M2D：真实项目工程主数据接入草案增强`
+`M2F：真实项目交付闭环试运行`
 
-本轮不是新增大功能，也不是继续 BIM / Hermes / NAS 写操作。目标是修复当前真实项目接入的核心问题：工程主数据不能再靠模板演示冒充真实交付标准。
+本批不是继续堆新功能，而是把 `105 / 503` 真实 NAS 项目中已人工确认的工程主数据真正放进交付链路里跑通。
 
-105 项目已经由主 agent 清空演示模板数据，当前状态：
+核心链路：
 
-- 真实项目：`503 / 105 / 深圳市二十八高项目`
-- 文件资产：2928 条
-- 主要文件：DWG 2487、PDF 242、RVT 198、XLSX 1
-- 主要专业线索：建筑、结构、电气、给排水、消防、智能化、暖通、燃气、通用
-- 工程主数据：已重置为空
-- 交付标准：已重置为空
+`真实资产 -> 工程主数据 -> 交付标准 -> 文档/图纸应交项 -> 文件挂接 -> 审核/整改 -> 交付包草案`
 
 ## 1. 必须先阅读
 
 - `handoff/main-agent/status.md`
 - `handoff/main-agent/phase2-current-roadmap.md`
+- `handoff/main-agent/m2f-real-project-delivery-loop-trial-plan.md`
+- `handoff/main-agent/m2e-real-project-masterdata-confirmation-plan.md`
 - `handoff/main-agent/m2d-real-project-masterdata-onboarding-plan.md`
-- `handoff/main-agent/project-105-template-reset-report.md`
-- `handoff/dev-agent/latest-report.md`
+- `handoff/main-agent/lightweight-test-strategy.md`
 - `handoff/test-agent/latest-report.md`
+- `handoff/dev-agent/latest-report.md`
 
-重点检查代码：
+## 2. 本轮目标
 
-- `backend/delivery-master-data/src/main/java/com/zhuoyu/delivery/masterdata/initialization/application/ProjectInitializationApplicationService.java`
-- `backend/delivery-master-data/src/main/java/com/zhuoyu/delivery/masterdata/initialization/dto/InitializationDtos.java`
-- `backend/delivery-master-data/src/main/java/com/zhuoyu/delivery/masterdata/initialization/controller/ProjectInitializationController.java`
-- `frontend/src/modules/master-data/pages/ProjectInitializationPage.vue`
-- `frontend/src/modules/master-data/api/masterData.ts`
-- `frontend/src/modules/master-data/pages/SectionNodesPage.vue`
-- `frontend/src/modules/master-data/pages/NodeTypesPage.vue`
-- `frontend/src/modules/master-data/pages/DeliverableStandardPage.vue`
-- `frontend/src/modules/work-center/pages/DocumentDeliveryPage.vue`
-- `frontend/src/modules/work-center/pages/DrawingDeliveryPage.vue`
+确认并修复 105 真实项目从正式工程主数据进入交付闭环时的断点。
 
-## 2. 问题定义
+至少覆盖：
 
-当前初始化向导虽然已经叫“真实项目接入向导”，但底层仍然很大程度依赖内置模板骨架。对于 105 这类真实 NAS 项目，如果员工点击确认应用，就可能再次生成演示式工程主数据，并让平台看起来像“标准已就绪”。
+1. 105 的部位树、节点类型、交付物定义、交付物类型是否已经被交付页面正确识别。
+2. 文档交付和图纸交付是否能基于正式规则展示应交项、缺失项或合理阻塞原因。
+3. 缺失项解释是否面向业务用户，而不是只展示技术字段。
+4. 文件补交 / 挂接是否仍需人工确认。
+5. 审核、驳回、整改、复审是否不回归。
+6. 交付包 / 档案目录草案是否能反映当前交付状态。
 
-这会继续误导用户。
+## 3. 开发策略
 
-本轮要把主流程改成：
+先审计链路，再做最小修复。
 
-`真实资产目录 -> 接入评估 -> 工程主数据草案 -> 人工确认 -> 再进入标准驱动交付`
+请先用接口或脚本确认当前 105 链路状态：
 
-而不是：
+- 标准状态。
+- 部位树。
+- 节点类型。
+- 交付物定义 / 类型。
+- 文档交付视图。
+- 图纸交付视图。
+- 缺失项。
+- 文件补交候选。
+- 审核 / 整改。
+- 交付包草案 / 档案目录。
 
-`点击模板 -> 直接变成已完成交付标准`
+发现断点时只修断点，不扩展新业务能力。
 
-## 3. 本轮目标
+## 4. 必须新增或增强的脚本
 
-### A. 接入评估增强
+新增：
 
-增强现有接口：
+`scripts/dev/check-m2f-real-project-delivery-loop.sh`
 
-- `GET /api/master-data/projects/{projectId}/onboarding/assessment`
-- `GET /api/master-data/projects/{projectId}/onboarding/preview`
+脚本至少验证：
 
-让返回结果更适合真实项目接入：
+1. 管理员登录并切换到 `503 / 105`。
+2. 105 标准状态为人工确认后的正式状态。
+3. 部位树、节点类型、交付物定义、交付物类型可查。
+4. 文档 / 图纸交付视图能基于正式规则返回应交项或合理阻塞说明。
+5. 缺失项解释包含交付定义、交付类型、目标和需要补的文件类型。
+6. 文件补交 / 批量挂接接口仍要求明确人工确认或合法参数。
+7. 审核 / 整改 / 交付包草案接口不回归。
+8. 响应不包含 `/Volumes`、`smb://`、`nas://`、`storage_path`、`storage_uri`、raw row、SQL、token、secret。
 
-- 文件总数、模型数、图纸数、文档/表格数
-- 扩展名分布
-- 专业分布
-- 目录线索，必须是脱敏/相对目录语义，不得返回 `/Volumes`、`nas://`、`smb://`、`storage_uri`
-- 治理风险：缺 checksum、缺专业、低置信度等
-- 证据模式：始终明确 `catalog_only`
-- Missing Evidence：不得把目录元数据说成文件正文证据
+## 5. 允许修改范围
 
-### B. 草案从真实资产出发
+允许：
 
-草案项必须能体现 105 的真实资产线索，而不是纯模板骨架。
+- `backend/**` 中与交付闭环断点直接相关的最小修复。
+- `frontend/**` 中与 105 交付闭环可用性直接相关的文案、入口、空状态和提示修复。
+- `scripts/dev/**` 新增或增强 M2F 专项脚本。
+- `handoff/dev-agent/latest-report.md`。
 
-至少建议生成这些候选：
+## 6. 明确禁止
 
-- 专业候选：建筑、结构、给排水、暖通、电气、消防、智能化、燃气、通用
-- 交付类型候选：RVT 模型、DWG 图纸、PDF 图纸/文档、Excel 清单
-- 交付对象候选：项目级、专业级、文件类型级
+禁止：
 
-每条草案项必须有：
+- 真实 NAS 文件写入、移动、删除、重命名、复制。
+- 读取 PDF / Office / DWG / RVT / IFC 正文。
+- 新增 Hermes 能力。
+- 接入 BIM 引擎、构件解析、parser、writer、indexing、向量库。
+- Agent 自动挂接、自动审核、自动整改。
+- 让模板数据冒充真实工程结构。
+- 启动 8B / 8C / 9A。
+- 修改 `docs/**`。
 
-- `evidenceSource`
-- `evidenceMode=catalog_only`
-- `confidenceLevel`
-- `riskHint`
-- `pendingConfirmation=true`
-- 是否来自真实资产线索
-- 是否来自模板骨架
+## 7. 自测要求
 
-### C. 禁止真实 NAS 项目一键套模板变成“标准已就绪”
-
-对 `asset_source` 为 `NAS_REAL*` 的真实项目：
-
-- 前端主流程不再出现“确认应用模板后就完成”的表达。
-- 后端 `onboarding/apply` 不得简单调用 `apply-template` 让真实项目直接生成并锁定节点类型。
-- 如果保留 `apply-template` 兼容接口，真实 NAS 项目必须要求更强确认，或返回明确错误，防止误操作。
-- 不要破坏历史测试项目/脚本的模板兼容能力；只收紧真实 NAS 项目主流程。
-
-优先方案：本轮让真实 NAS 项目的 onboarding apply 只允许“生成/展示草案，不直接落成已就绪标准”。如确实需要落库，必须保证不会自动锁定节点类型，且页面仍显示“待人工确认”。
-
-### D. 前端体验
-
-重点改 `ProjectInitializationPage.vue`：
-
-- 105 首屏显示：真实资产已接入，工程主数据未确认。
-- 明确展示文件类型、专业、目录线索、治理风险。
-- 文案从“模板”降级为“草案骨架 / 行业参考”。
-- 主按钮不应诱导用户“一键应用模板”。
-- 给出清楚下一步：先确认部位树，再确认节点类型，再确认交付物标准。
-- 技术字段默认不要抢主视觉。
-
-## 4. 明确禁止事项
-
-本轮严禁：
-
-- 不要修改 `docs/**`。
-- 不要触碰真实 NAS 文件。
-- 不要新增真实 NAS 写能力。
-- 不要读取 PDF / Office / DWG / RVT / IFC 正文。
-- 不要接入 Hermes 新能力。
-- 不要接入 BIM 引擎。
-- 不要自动挂接文件。
-- 不要自动审核、整改、交付。
-- 不要把目录元数据当正文 evidence。
-- 不要暴露真实 NAS 路径、`storage_uri`、SQL、token、secret。
-
-## 5. 验收标准
-
-必须满足：
-
-1. 105 项目工程主数据页不再显示“标准已就绪”的误导状态。
-2. 105 接入评估展示真实资产统计、专业分布、扩展名分布和治理风险。
-3. 草案项能明显区分资产线索与模板骨架。
-4. 草案项有证据来源、证据模式、置信度、风险提示和人工确认标记。
-5. 真实 NAS 项目不能一键套模板后直接变成 `deliverableStandardReady=true`。
-6. 文档/图纸交付在主数据未确认时继续提示先确认工程主数据。
-7. 响应和页面不泄露真实 NAS 路径。
-8. 不触碰真实 NAS 文件。
-9. M2C / M2B / M2A / M1F / M1E / M1D / M1C 回归通过。
-
-## 6. 自测要求
-
-至少执行：
+完成后至少执行：
 
 ```bash
 cd /Users/vc/Documents/数字化交付平台/backend
@@ -156,28 +107,15 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-m2f-real-project-delivery-loop.sh
+bash scripts/dev/check-m2e-real-project-masterdata-confirmation.sh
 bash scripts/dev/check-m2c-delivery-package-archive.sh
-bash scripts/dev/check-m2b-nas-write-trial.sh
-bash scripts/dev/check-m2a-controlled-nas-write.sh
-bash scripts/dev/check-m1f-employee-access-control.sh
-bash scripts/dev/check-m1e-file-task-continuity.sh
-bash scripts/dev/check-m1d-standard-delivery-loop.sh
-bash scripts/dev/check-m1c-real-project-masterdata.sh
 git diff --check
 ```
 
-建议新增专项脚本：
+除非你改动了明显影响文件权限或 NAS 写操作的代码，否则不要扩展成全量脚本回归。
 
-`scripts/dev/check-m2d-real-project-masterdata-onboarding.sh`
-
-覆盖 105 项目：
-
-- assessment/preview 响应。
-- forbidden fields 扫描。
-- 真实 NAS 项目不能一键模板变 ready。
-- 文档/图纸交付在未确认主数据时为空或阻塞提示。
-
-## 7. 报告要求
+## 8. 报告要求
 
 完成后写入：
 
@@ -185,15 +123,24 @@ git diff --check
 
 报告必须包含：
 
-- 改了哪些文件。
-- 接入评估如何变得更真实。
-- 草案如何从 105 资产线索生成。
-- 如何防止真实 NAS 项目再次被模板误导。
-- 是否有数据库迁移。
-- 是否触碰真实 NAS 文件。
-- 自测结果。
-- 已知风险。
+1. 当前 105 交付闭环审计结果。
+2. 修复了哪些断点。
+3. 是否新增 M2F 专项脚本。
+4. 文档 / 图纸交付、缺失项、挂接、审核整改、交付包草案的当前状态。
+5. 自测命令结果。
+6. 是否触碰真实 NAS 文件。
+7. 是否读取正文。
+8. 是否新增 Hermes / BIM / parser / indexing 能力。
+9. 已知风险和未完成事项。
 
-## 8. 完成定义
+## 9. 完成定义
 
-只有当 105 项目能清楚展示“真实资产已接入，但工程主数据待确认”，并且不会再被一键模板误导成“交付标准已就绪”，才算完成。
+只有同时满足以下条件，才能标记完成：
+
+- 105 正式工程主数据能驱动文档 / 图纸交付链路。
+- 缺失项和阻塞说明对员工可理解。
+- 人工挂接、审核整改、交付包草案链路不回归。
+- 未触碰真实 NAS 文件。
+- 未读取正文。
+- 未泄露真实路径或敏感字段。
+- 构建、健康检查、M2F 专项脚本和必要回归通过。

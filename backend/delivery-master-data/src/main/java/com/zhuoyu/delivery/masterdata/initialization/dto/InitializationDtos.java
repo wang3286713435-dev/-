@@ -239,4 +239,46 @@ public final class InitializationDtos {
         List<String> nextActions
     ) {
     }
+
+    public record OnboardingConfirmRequest(
+        String templateCode,
+        Boolean confirmed,
+        String confirmationMode,
+        List<String> selectedDraftItemIds,
+        String sectionStrategy,
+        String nodeTypeStrategy,
+        String deliverableStrategy,
+        Boolean riskAccepted
+    ) {
+    }
+
+    public record OnboardingConfirmResponse(
+        Long projectId,
+        Boolean confirmed,
+        String confirmationMode,
+        Boolean nasTouched,
+        Boolean contentRead,
+        Boolean formalMasterDataGenerated,
+        String evidenceMode,
+        TemplateCounts created,
+        TemplateCounts skipped,
+        StandardStatusResponse standardStatus,
+        Boolean deliverableStandardReady,
+        List<OnboardingConfirmedItem> generatedItems,
+        List<String> manualFollowUps,
+        List<OnboardingMissingEvidence> missingEvidence,
+        List<String> nextActions
+    ) {
+    }
+
+    public record OnboardingConfirmedItem(
+        String category,
+        String code,
+        String name,
+        String action,
+        String source,
+        String evidenceMode,
+        String riskHint
+    ) {
+    }
 }

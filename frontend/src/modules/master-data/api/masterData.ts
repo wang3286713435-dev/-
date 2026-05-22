@@ -259,6 +259,45 @@ export interface OnboardingApplyResult {
   nextActions: string[];
 }
 
+export interface OnboardingConfirmPayload {
+  templateCode?: string;
+  confirmed: boolean;
+  confirmationMode: 'MANUAL_REVIEW';
+  selectedDraftItemIds?: string[];
+  sectionStrategy?: 'PROJECT_LEVEL' | 'DISCIPLINE_LEVEL' | 'DIRECTORY_LEVEL_MINIMAL';
+  nodeTypeStrategy?: 'LOCK_CONFIRMED' | 'KEEP_EDITABLE';
+  deliverableStrategy?: 'FILE_TYPE_MINIMAL' | 'FULL_TEMPLATE';
+  riskAccepted: boolean;
+}
+
+export interface OnboardingConfirmedItem {
+  category: string;
+  code: string;
+  name: string;
+  action: string;
+  source: string;
+  evidenceMode: string;
+  riskHint: string;
+}
+
+export interface OnboardingConfirmResult {
+  projectId: number;
+  confirmed: boolean;
+  confirmationMode: string;
+  nasTouched: boolean;
+  contentRead: boolean;
+  formalMasterDataGenerated: boolean;
+  evidenceMode: string;
+  created: TemplateCounts;
+  skipped: TemplateCounts;
+  standardStatus: StandardStatus;
+  deliverableStandardReady: boolean;
+  generatedItems: OnboardingConfirmedItem[];
+  manualFollowUps: string[];
+  missingEvidence: OnboardingMissingEvidence[];
+  nextActions: string[];
+}
+
 export interface DeliverableDefinition {
   id: number;
   projectId: number;
@@ -412,6 +451,14 @@ export async function applyOnboardingDraft(projectId: number, templateCode: stri
   const { data } = await http.post<ApiResponse<OnboardingApplyResult>>(
     `/api/master-data/projects/${projectId}/onboarding/apply`,
     { templateCode, confirmed: true }
+  );
+  return data.data;
+}
+
+export async function confirmOnboardingDraft(projectId: number, payload: OnboardingConfirmPayload) {
+  const { data } = await http.post<ApiResponse<OnboardingConfirmResult>>(
+    `/api/master-data/projects/${projectId}/onboarding/confirm`,
+    payload
   );
   return data.data;
 }

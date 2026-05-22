@@ -1,5 +1,66 @@
 # 主 Agent 开发监控日志
 
+## 2026-05-22：M2E 测试不通过，转入 P1 修复
+
+- 测试 agent 完成 M2E 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 结论：不通过，无 P0，有 1 个 P1。
+- P1 内容：
+  - 前端提供草案项勾选并提交 `selectedDraftItemIds`。
+  - 后端定义了该字段，但 `confirmOnboarding(...)` 未读取。
+  - 空选择或无效选择仍 OK，且按全量规则处理。
+- 主 agent 裁决：
+  - 暂不收口 M2E。
+  - 开发 agent 下一步只修复 `selectedDraftItemIds` 契约。
+  - 推荐实现方案 A：后端真正按选择项过滤，并拒绝空选择 / 无效选择。
+  - 同步修复两个轻量 P2：确认后状态文案、补“查看节点类型”入口。
+- 已更新：
+  - `handoff/dev-agent/current-prompt.md`
+
+## 2026-05-22：M2E 开发审计
+
+- 开发 agent 已完成 M2E，报告写入 `handoff/dev-agent/latest-report.md`。
+- 主 agent 初验结果：
+  - M2E 专项脚本通过，`PASS=7 FAIL=0`。
+  - M2D 回归通过，`PASS=8 FAIL=0`。
+  - M2C 回归通过，`PASS=11 FAIL=0`。
+  - M1C 回归通过，`PASS=14 FAIL=0`。
+  - 后端健康检查通过。
+  - `git diff --check` 通过。
+- 初验确认：
+  - 105 / 503 已进入人工确认后的正式初始规则状态。
+  - `onboarding/confirm` 未带 `confirmed=true` 时拒绝。
+  - 交付链路和交付包准备视图已基于正式规则产生待挂接项。
+  - 未发现真实 NAS 操作、正文读取、Hermes / BIM / parser / indexing 越界。
+- 待测试 agent 重点复核：
+  - 前端 `selectedDraftItemIds` 是否真实影响后端生成；若后端忽略该字段，应作为 P1 处理，或要求开发 agent 将页面文案改为策略确认，不表达为逐项勾选采纳。
+- 当前裁决：
+  - 可以进入 M2E 测试 agent 验收。
+  - 尚不收口 M2E。
+
+## 2026-05-22：M2E 启动
+
+- 用户确认支持进入下一批次。
+- 主 agent 裁决：启动 `M2E：真实项目工程主数据人工确认与交付规则落地`。
+- 当前基础：
+  - M2D 已收口。
+  - 105 / 503 保持 `deliverableStandardReady=false`。
+  - 105 已有真实资产评估和 catalog-only 草案预览。
+  - 105 仍未生成正式工程主数据和交付规则。
+- M2E 核心目标：
+  - 将 M2D 草案通过人工确认转成正式可维护的工程主数据。
+  - 生成最小可用部位树、节点类型、交付物定义、交付物类型和目录线索。
+  - 让文档/图纸交付、交付包 / 档案目录基于正式规则工作。
+- 关键边界：
+  - 真实 NAS 项目不得未经人工确认直接生成标准。
+  - 不触碰真实 NAS 文件。
+  - 不读取正文。
+  - 不新增 Hermes、BIM、parser、writer、indexing。
+  - 不自动挂接、审核、整改或生成正式交付结论。
+- 已写入：
+  - M2E 计划：`handoff/main-agent/m2e-real-project-masterdata-confirmation-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
 ## 2026-05-22：M2D 收口裁决
 
 - 测试 agent 已完成 `M2D：真实项目工程主数据接入草案增强` 轻量验收，报告写入 `handoff/test-agent/latest-report.md`。
@@ -3355,3 +3416,56 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - 项目工作台少量技术字段仍偏显眼。
   - `.claude/**`、`CLAUDE.md`、`tmp/**` 非交付未跟踪文件继续排除。
 - 主 agent 裁决：UX2 可以正式收口，下一步建议做 Git checkpoint。
+
+## 2026-05-22 M2E P1 修复完成，进入极短复验
+
+- 开发 agent 已完成 `selectedDraftItemIds` 契约修复，并更新 `handoff/dev-agent/latest-report.md`。
+- 主 agent 已审计关键实现：
+  - 后端确认接口不再忽略 `selectedDraftItemIds`。
+  - 后端会基于重新生成的合法草案集合校验前端传入 ID。
+  - 空选择、非法选择均被拒绝。
+  - 合法小选择只处理所选草案项及必要依赖，依赖项通过 `DEPENDENCY+...` 标识。
+- 主 agent 已运行：
+  - 健康检查：通过。
+  - `scripts/dev/check-m2e-real-project-masterdata-confirmation.sh`：`PASS=11 FAIL=0`。
+  - `git diff --check`：通过。
+- 已把 `handoff/test-agent/current-prompt.md` 收窄为 M2E P1 极短复验，避免再次做全量浏览器测试。
+- 当前判断：
+  - P1 初验已修复。
+  - 等测试 agent 极短复验后再决定是否收口 M2E。
+
+## 2026-05-22 M2E 正式收口
+
+- 测试 agent 已完成 `M2E P1 selectedDraftItemIds 契约极短复验`，报告写入 `handoff/test-agent/latest-report.md`。
+- 结论：通过。
+- 当前无 P0 / P1。
+- P2 仅保留既有 Vite chunk size warning。
+- 已确认：
+  - 空选择、非法选择、合法小选择三类接口契约均通过。
+  - 后端不再忽略 `selectedDraftItemIds`。
+  - 合法小选择不再全量返回 40 项。
+  - 依赖补齐通过 `DEPENDENCY+...` 表达。
+  - 页面文案和“查看节点类型”入口已到位。
+  - 未触碰真实 NAS 文件，未读取正文，未新增 Hermes / BIM / parser / indexing 能力。
+- 主 agent 裁决：`M2E：真实项目工程主数据人工确认与交付规则落地` 正式收口。
+- 下一批次暂不自动启动，等待用户确认。
+
+## 2026-05-22 M2F 启动
+
+- 用户确认主 agent 提出的下一步路线，并允许执行。
+- 主 agent 已将当前 active 批次切换为 `M2F：真实项目交付闭环试运行`。
+- 已新增：
+  - M2F 计划：`handoff/main-agent/m2f-real-project-delivery-loop-trial-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+- M2F 不是新功能堆叠，而是检验 105 真实项目是否能从正式工程主数据进入交付闭环：
+  - 文档 / 图纸应交项。
+  - 缺失项解释。
+  - 人工文件挂接。
+  - 审核、驳回、整改、复审。
+  - 交付包草案 / 档案目录。
+- 仍然禁止：
+  - 真实 NAS 文件写入、移动、删除、重命名、复制。
+  - 文件正文读取。
+  - Hermes / BIM / parser / indexing 新能力。
+  - 自动挂接、自动审核、自动整改。

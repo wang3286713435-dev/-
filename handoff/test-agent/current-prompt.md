@@ -1,4 +1,4 @@
-# 测试 Agent 当前任务：M2D 真实项目工程主数据接入草案增强验收
+# 测试 Agent 当前任务：M2F 真实项目交付闭环试运行验收
 
 你是数字化交付平台测试 agent。工作目录：
 
@@ -6,22 +6,21 @@
 
 ## 测试策略
 
-本轮采用轻量测试策略，先阅读：
+本轮继续采用轻量测试策略，先阅读：
 
 - `handoff/main-agent/lightweight-test-strategy.md`
 
-本轮不要做大范围浏览器逐页点击，不要多分辨率视觉巡检。只验证代码可用、接口契约、专项脚本、主线红线和是否偏离 M2D 目标。
+不要做大范围浏览器逐页点击，不做多分辨率视觉巡检。只验证代码可用、接口契约、专项脚本、主线红线和是否偏离 M2F 目标。
 
 ## 0. 当前验收批次
 
-`M2D：真实项目工程主数据接入草案增强`
+`M2F：真实项目交付闭环试运行`
 
-本轮目标是验证 105 真实 NAS 项目不再被模板演示数据误导，而是展示真实资产接入评估和工程主数据草案。
+目标是验证 `105 / 503` 真实 NAS 项目已确认的工程主数据，能进入文档 / 图纸交付、缺失项、人工挂接、审核整改和交付包草案链路。
 
 ## 1. 必须先阅读
 
-- `handoff/main-agent/m2d-real-project-masterdata-onboarding-plan.md`
-- `handoff/main-agent/project-105-template-reset-report.md`
+- `handoff/main-agent/m2f-real-project-delivery-loop-trial-plan.md`
 - `handoff/dev-agent/latest-report.md`
 - `handoff/main-agent/status.md`
 - `handoff/main-agent/phase2-current-roadmap.md`
@@ -35,43 +34,34 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-m1c-real-project-masterdata.sh
+bash scripts/dev/check-m2f-real-project-delivery-loop.sh
+bash scripts/dev/check-m2e-real-project-masterdata-confirmation.sh
+bash scripts/dev/check-m2c-delivery-package-archive.sh
 git diff --check
 ```
 
-如果开发 agent 新增：
+如果没有 `scripts/dev/check-m2f-real-project-delivery-loop.sh`，记 P1。
 
-`scripts/dev/check-m2d-real-project-masterdata-onboarding.sh`
-
-必须执行。
-
-另外执行一条与交付包依赖直接相关的轻量回归：
-
-```bash
-bash scripts/dev/check-m2c-delivery-package-archive.sh
-```
-
-除非发现 P0/P1 或主 agent 另行要求，本轮不需要跑 M2B/M2A/M1F/M1E/M1D 全量脚本。
+除非发现 P0/P1，本轮不跑全量历史脚本。
 
 ## 3. 专项验收
 
-以 `503 / 105` 为重点项目，至少验证：
+以 `503 / 105` 为重点项目，确认：
 
-1. `GET /api/master-data/projects/503/standard-status`
-   - 不应显示 `deliverableStandardReady=true`。
-2. `GET /api/master-data/projects/503/initialization/status`
-   - 应显示需要确认部位树、节点类型、交付标准。
-3. `GET /api/master-data/projects/503/onboarding/assessment`
-   - 返回真实资产统计。
-   - 返回专业分布、扩展名分布、治理风险。
-   - `evidenceMode=catalog_only`。
-4. `GET /api/master-data/projects/503/onboarding/preview`
-   - 草案项包含 evidenceSource / confidenceLevel / riskHint / pendingConfirmation。
-   - 能看出哪些来自资产线索，哪些来自模板骨架。
-5. 真实 NAS 项目不能一键应用模板后直接变成标准已就绪。
-6. 文档交付 / 图纸交付在主数据未确认时不得显示虚假的应交完成状态。
-7. 105 文档交付 / 图纸交付 / 交付包接口在主数据未确认时，不得显示演示模板产生的虚假应交项。
-8. 如做浏览器短验，只打开 105 工程主数据页确认不白屏、文案不明显误导即可，不要逐页点击。
+1. 标准状态已处于 M2E 人工确认后的正式规则状态。
+2. 部位树、节点类型、交付物定义、交付物类型可查。
+3. 文档交付 / 图纸交付能基于正式规则返回应交项，或返回合理阻塞说明。
+4. 缺失项解释必须包含：
+   - 目标或部位。
+   - 交付定义。
+   - 交付类型。
+   - 需要补什么文件。
+   - 为什么现在缺失或阻塞。
+5. 文件补交 / 挂接仍需要人工确认或合法参数，不能自动挂接。
+6. 审核、驳回、整改、复审接口不回归。
+7. 交付包草案 / 档案目录能反映当前交付状态。
+
+如开发 agent 修改了关键 Vue 页面，可以做一次极短浏览器验收，只打开 105 文档交付或图纸交付页面确认不白屏、缺失项和入口清晰即可。
 
 ## 4. 红线检查
 
@@ -96,16 +86,17 @@ P0：
 
 - 真实 NAS 文件被移动、删除、改名、复制或读取正文。
 - 真实 NAS 路径泄露。
-- 105 再次被一键模板误判为交付标准已就绪。
-- 项目权限绕过。
-- M2C / M2B / M2A / M1F / M1E / M1D / M1C 回归失败。
+- 权限绕过。
+- 自动挂接、自动审核、自动整改。
+- 启动 Hermes / BIM / parser / indexing 新能力。
 
 P1：
 
-- 105 看不到真实资产统计。
-- 草案项没有证据来源、置信度、风险提示或人工确认标记。
-- 文档/图纸交付仍显示虚假应交项。
-- 代码或接口仍把模板表达成真实项目结构。
+- 没有 M2F 专项脚本。
+- 105 已确认主数据不能驱动文档 / 图纸交付。
+- 缺失项没有可理解解释。
+- 挂接、审核整改或交付包草案主链路断裂。
+- M2E 或 M2C 回归失败。
 
 P2：
 
@@ -123,7 +114,8 @@ P2：
 - 测试结论。
 - P0/P1/P2。
 - 必跑命令结果。
-- M2D 专项脚本或接口结果。
-- 是否做了浏览器短验；如果未做，说明按轻量策略跳过。
+- M2F 专项脚本结果。
+- 105 真实项目交付闭环状态。
 - forbidden field 扫描结果。
-- 是否建议主 agent 收口 M2D。
+- 是否做了浏览器短验；如果未做，说明按轻量策略跳过。
+- 是否建议主 agent 收口 M2F。

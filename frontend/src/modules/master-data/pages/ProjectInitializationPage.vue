@@ -10,8 +10,8 @@
 
     <section class="initialization-hero">
       <div>
-        <span class="initialization-hero__eyebrow">M2D 真实项目主数据草案</span>
-        <h2>{{ assessment?.realNasProject ? '真实资产已接入，工程主数据未确认' : '用目录证据生成草案，再由项目负责人确认' }}</h2>
+        <span class="initialization-hero__eyebrow">{{ heroEyebrow }}</span>
+        <h2>{{ heroTitle }}</h2>
         <p>
           接入向导只读取 catalog metadata、项目来源、扫描记录和受控路径映射状态，不读取文件正文，不解析 BIM 构件，不访问或复制 NAS 文件。模板内容只是参考骨架，真实项目需要人工确认部位树、节点类型和交付物标准。
         </p>
@@ -28,7 +28,7 @@
       :closable="false"
       show-icon
       title="真实项目不会通过一键模板直接变成就绪标准"
-      description="当前页面只展示真实资产目录线索和标准草案。下一步请进入部位树、节点类型、交付物标准逐项确认。"
+      :description="status?.ready ? '工程主数据已生成，但仍需进入部位树、节点类型、交付物标准继续人工复核和维护。' : '当前页面只展示真实资产目录线索和标准草案。下一步请进入部位树、节点类型、交付物标准逐项确认。'"
     />
 
     <section class="masterdata-next-action">
@@ -39,6 +39,7 @@
       </div>
       <div class="masterdata-next-action__actions">
         <el-button type="primary" @click="router.push({ name: 'project-master-data-sections', params: { projectId } })">查看部位树</el-button>
+        <el-button @click="router.push({ name: 'project-master-data-node-types', params: { projectId } })">查看节点类型</el-button>
         <el-button @click="router.push({ name: 'project-master-data-deliverable-standard', params: { projectId } })">查看交付物标准</el-button>
       </div>
     </section>
@@ -234,7 +235,7 @@
           :loading="applying"
           @click="confirmApply"
         >
-          {{ realProjectManualMode ? '进入人工配置' : '确认应用草案' }}
+          {{ realProjectManualMode ? '确认生成工程主数据' : '确认应用草案' }}
         </el-button>
       </div>
 
@@ -257,9 +258,25 @@
         <div v-if="onboardingPreview?.draftItems?.length" class="draft-evidence">
           <div class="draft-evidence__header">
             <h3>草案证据与风险</h3>
-            <p>每一项都标注来源、证据模式和复核风险。catalog-only 线索只能辅助判断，不能替代真实工程结构。</p>
+            <p>请勾选本次要采纳的草案项。后端只会处理所选项及必要依赖项，catalog-only 线索不能替代真实工程结构。</p>
           </div>
-          <el-table :data="onboardingPreview.draftItems" class="initialization-table" max-height="320">
+          <div v-if="realProjectManualMode" class="manual-confirm-options">
+            <el-radio-group v-model="sectionStrategy" size="small">
+              <el-radio-button label="DISCIPLINE_LEVEL">按专业生成</el-radio-button>
+              <el-radio-button label="PROJECT_LEVEL">仅项目级</el-radio-button>
+            </el-radio-group>
+            <el-checkbox v-model="riskAccepted">
+              我理解这些规则只基于目录元数据，后续仍需人工检查
+            </el-checkbox>
+          </div>
+          <el-table
+            :data="onboardingPreview.draftItems"
+            class="initialization-table"
+            max-height="320"
+            :row-key="draftItemKey"
+            @selection-change="handleDraftSelectionChange"
+          >
+            <el-table-column v-if="realProjectManualMode" type="selection" width="48" />
             <el-table-column label="类别" width="150">
               <template #default="{ row }">{{ categoryLabel(row.category) }}</template>
             </el-table-column>
@@ -322,7 +339,29 @@
       <el-empty v-else description="请选择模板并点击预览草案" />
     </section>
 
-    <section v-if="applyResult" class="initialization-result">
+    <section v-if="confirmResult" class="initialization-result">
+      <div>
+        <h2>工程主数据已生成</h2>
+        <p>
+          本次创建 {{ totalTemplateItems(confirmResult.created) }} 项，跳过 {{ totalTemplateItems(confirmResult.skipped) }} 项。
+          已生成可编辑的初始规则；系统没有读取正文、没有触碰 NAS 文件，也没有自动挂接或审核文件。
+        </p>
+        <ul class="initialization-result__followups">
+          <li v-for="item in confirmResult.manualFollowUps" :key="item">{{ item }}</li>
+        </ul>
+      </div>
+      <div class="initialization-result__actions">
+        <el-button @click="router.push({ name: 'project-master-data-sections', params: { projectId } })">查看部位树</el-button>
+        <el-button @click="router.push({ name: 'project-master-data-node-types', params: { projectId } })">查看节点类型</el-button>
+        <el-button @click="router.push({ name: 'project-master-data-deliverable-standard', params: { projectId } })">
+          查看交付物标准
+        </el-button>
+        <el-button @click="router.push({ name: 'project-work-document-delivery', params: { projectId } })">进入文档交付</el-button>
+        <el-button @click="router.push({ name: 'project-work-drawing-delivery', params: { projectId } })">进入图纸交付</el-button>
+      </div>
+    </section>
+
+    <section v-else-if="applyResult" class="initialization-result">
       <div>
         <h2>接入草案已应用</h2>
         <p>
@@ -351,6 +390,7 @@ import { Refresh } from '@element-plus/icons-vue';
 
 import {
   applyOnboardingDraft,
+  confirmOnboardingDraft,
   fetchInitializationStatus,
   fetchOnboardingAssessment,
   fetchOnboardingPreview,
@@ -358,6 +398,8 @@ import {
   fetchStandardTemplates,
   type InitializationStatus,
   type OnboardingAssessment,
+  type OnboardingConfirmResult,
+  type OnboardingDraftItem,
   type OnboardingDraftPreview,
   type StandardTemplateDetail,
   type StandardTemplateSummary,
@@ -384,6 +426,10 @@ const selectedTemplateCode = ref('');
 const preview = ref<TemplatePreview | null>(null);
 const onboardingPreview = ref<OnboardingDraftPreview | null>(null);
 const applyResult = ref<TemplateApplyResult | null>(null);
+const confirmResult = ref<OnboardingConfirmResult | null>(null);
+const selectedDraftItems = ref<OnboardingDraftItem[]>([]);
+const sectionStrategy = ref<'DISCIPLINE_LEVEL' | 'PROJECT_LEVEL'>('DISCIPLINE_LEVEL');
+const riskAccepted = ref(false);
 
 const projectId = computed(() => workspaceProjectId.value ?? 0);
 const realProjectManualMode = computed(() => {
@@ -393,6 +439,13 @@ const realProjectManualMode = computed(() => {
 const projectLabel = computed(() => {
   const project = authStore.currentUser?.projects.find((item) => item.id === projectId.value);
   return project ? `${project.code} | ${project.name}` : `项目 ${projectId.value || '-'}`;
+});
+const heroEyebrow = computed(() => status.value?.ready ? 'M2E 工程主数据人工确认' : 'M2E 真实项目主数据待确认');
+const heroTitle = computed(() => {
+  if (!assessment.value?.realNasProject) {
+    return '用目录证据生成草案，再由项目负责人确认';
+  }
+  return status.value?.ready ? '工程主数据已生成，仍需人工复核和维护' : '真实资产已接入，工程主数据待确认';
 });
 
 const statusCards = computed(() => {
@@ -475,6 +528,7 @@ async function loadPage() {
   loading.value = true;
   loadingTemplates.value = true;
   applyResult.value = null;
+  confirmResult.value = null;
   try {
     const [nextStatus, nextAssessment, nextTemplates] = await Promise.all([
       fetchInitializationStatus(projectId.value),
@@ -500,6 +554,7 @@ async function selectTemplate(templateCode: string) {
   selectedTemplateCode.value = templateCode;
   preview.value = null;
   onboardingPreview.value = null;
+  selectedDraftItems.value = [];
   try {
     templateDetail.value = await fetchStandardTemplateDetail(templateCode);
   } catch (error) {
@@ -512,10 +567,12 @@ async function handlePreview(resetApplyResult = true) {
   previewing.value = true;
   if (resetApplyResult) {
     applyResult.value = null;
+    confirmResult.value = null;
   }
   try {
     onboardingPreview.value = await fetchOnboardingPreview(projectId.value, selectedTemplateCode.value);
     preview.value = onboardingPreview.value.templatePreview;
+    selectedDraftItems.value = [];
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '接入草案预览失败');
   } finally {
@@ -526,15 +583,45 @@ async function handlePreview(resetApplyResult = true) {
 async function confirmApply() {
   if (!projectId.value || !selectedTemplateCode.value) return;
   if (realProjectManualMode.value) {
-    await ElMessageBox.alert(
-      '真实项目接入草案不会直接应用模板，也不会让交付标准自动变为就绪。请进入部位树、节点类型和交付物标准页面，结合资产线索逐项确认。',
-      '进入人工配置',
-      {
-        type: 'warning',
-        confirmButtonText: '查看部位树'
+    if (!riskAccepted.value) {
+      ElMessage.warning('请先确认已理解 catalog-only 证据边界和后续人工复核风险');
+      return;
+    }
+    if (!selectedDraftItems.value.length) {
+      ElMessage.warning('请至少选择一个要采纳的草案项');
+      return;
+    }
+    try {
+      await ElMessageBox.confirm(
+        '确认生成工程主数据？后端只会处理你勾选的草案项及必要依赖项。本操作只基于资产目录和文件元数据生成可编辑初始规则，不读取正文，不触碰 NAS 文件，也不会自动挂接、审核或生成交付结论。',
+        '确认生成工程主数据',
+        {
+          type: 'warning',
+          confirmButtonText: '确认生成',
+          cancelButtonText: '取消'
+        }
+      );
+      applying.value = true;
+      const result = await confirmOnboardingDraft(projectId.value, {
+        templateCode: selectedTemplateCode.value,
+        confirmed: true,
+        confirmationMode: 'MANUAL_REVIEW',
+        selectedDraftItemIds: selectedDraftItems.value.map(draftItemKey),
+        sectionStrategy: sectionStrategy.value,
+        nodeTypeStrategy: 'LOCK_CONFIRMED',
+        deliverableStrategy: 'FILE_TYPE_MINIMAL',
+        riskAccepted: true
+      });
+      confirmResult.value = result;
+      ElMessage.success('工程主数据已生成，请继续人工复核');
+      await Promise.all([loadStatus(), loadAssessment(), handlePreview(false)]);
+    } catch (error) {
+      if (error !== 'cancel') {
+        ElMessage.error(error instanceof Error ? error.message : '工程主数据生成失败');
       }
-    );
-    await router.push({ name: 'project-master-data-sections', params: { projectId: projectId.value } });
+    } finally {
+      applying.value = false;
+    }
     return;
   }
   try {
@@ -565,6 +652,14 @@ async function confirmApply() {
   } finally {
     applying.value = false;
   }
+}
+
+function handleDraftSelectionChange(rows: OnboardingDraftItem[]) {
+  selectedDraftItems.value = rows;
+}
+
+function draftItemKey(row: OnboardingDraftItem) {
+  return `${row.category}:${row.name}:${row.evidenceSource}`;
 }
 
 async function loadStatus() {
@@ -1065,6 +1160,18 @@ function formatDate(value: string | null | undefined) {
   min-width: 0;
 }
 
+.manual-confirm-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zy-sp-2);
+  padding: var(--zy-sp-3);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-amber-50);
+}
+
 .draft-evidence__header h3 {
   margin: 0;
   color: var(--zy-ink);
@@ -1083,6 +1190,16 @@ function formatDate(value: string | null | undefined) {
   display: flex;
   flex-wrap: wrap;
   gap: var(--zy-sp-2);
+}
+
+.initialization-result__followups {
+  display: grid;
+  gap: 4px;
+  margin: var(--zy-sp-2) 0 0;
+  padding-left: 18px;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-sm);
+  line-height: 1.55;
 }
 
 @media (max-width: 1120px) {

@@ -148,8 +148,13 @@ echo "--- 2. Assessment contract ---"
 status_response="$(api_get "/api/master-data/projects/${PROJECT_ID}/standard-status")"
 assert_ok "${status_response}"
 assert_no_forbidden "standard status" "${status_response}"
-assert_data "真实项目标准仍未就绪" "${status_response}" "data['deliverableStandardReady'] is False"
-pass "真实项目工程主数据未被误置为 ready"
+ready_before="$(json_data_expr "${status_response}" "data['deliverableStandardReady']")"
+if [[ "${ready_before}" == "true" ]]; then
+  assert_data "M2E 后真实项目标准由人工确认生成" "${status_response}" "data['sectionNodeCount'] > 0 and data['nodeTypeCount'] > 0 and data['deliverableDefinitionCount'] > 0 and data['deliverableTypeCount'] > 0"
+  pass "真实项目已进入 M2E 人工确认后状态，M2D 接口继续验证 catalog-only 草案合同"
+else
+  pass "真实项目工程主数据未被误置为 ready"
+fi
 
 assessment_response="$(api_get "/api/master-data/projects/${PROJECT_ID}/onboarding/assessment")"
 assert_ok "${assessment_response}"
@@ -190,8 +195,13 @@ pass "真实项目 onboarding apply 只确认草案，不写成正式标准"
 status_after_response="$(api_get "/api/master-data/projects/${PROJECT_ID}/standard-status")"
 assert_ok "${status_after_response}"
 assert_no_forbidden "standard status after" "${status_after_response}"
-assert_data "ready remains false" "${status_after_response}" "data['deliverableStandardReady'] is False"
-pass "草案确认后交付标准仍未误置为 ready"
+if [[ "${ready_before}" == "true" ]]; then
+  assert_data "ready remains manually confirmed" "${status_after_response}" "data['deliverableStandardReady'] is True"
+  pass "草案确认接口未改变 M2E 已人工确认的正式规则状态"
+else
+  assert_data "ready remains false" "${status_after_response}" "data['deliverableStandardReady'] is False"
+  pass "草案确认后交付标准仍未误置为 ready"
+fi
 
 echo ""
 echo "=== Result: PASS=${PASS} FAIL=${FAIL} ==="
