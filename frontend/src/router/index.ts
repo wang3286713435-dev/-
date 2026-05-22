@@ -120,6 +120,12 @@ const router = createRouter({
           meta: { requiresAuth: true }
         },
         {
+          path: 'digital-twin',
+          name: 'digital-twin',
+          component: () => import('@/modules/visualization/pages/DigitalTwinPortalPage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
           path: 'data-steward/assets/:projectId',
           name: 'data-steward-asset-detail',
           component: () => import('@/modules/data-steward/pages/AssetProjectDetailPage.vue'),

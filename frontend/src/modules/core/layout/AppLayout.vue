@@ -76,6 +76,7 @@ import HermesWorkspaceDrawer from '@/modules/data-steward/components/HermesWorks
 import ProjectWorkspaceNav from '@/modules/core/components/ProjectWorkspaceNav.vue';
 import SidebarMenu from '@/modules/core/components/SidebarMenu.vue';
 import { useProjectWorkspaceContext } from '@/modules/core/composables/useProjectWorkspaceContext';
+import type { MenuItem } from '@/modules/core/api/types';
 import { useAuthStore } from '@/stores/auth';
 
 const authStore = useAuthStore();
@@ -96,10 +97,28 @@ const hermesEnabledRouteNames = new Set([
 
 const menus = computed(() => {
   const all = authStore.currentUser?.menus ?? [];
-  return all.filter((m) => {
+  const visibleMenus = all.filter((m) => {
     if (hiddenTopLevelKeys.has(m.key)) return false;
     return !hiddenTopLevelPathPrefixes.some((prefix) => m.path === prefix || m.path.startsWith(`${prefix}/`));
   });
+  if (visibleMenus.some((item) => item.key === 'digital-twin')) {
+    return visibleMenus;
+  }
+  const canUseDigitalTwin = Boolean(authStore.currentUser?.projects.length);
+  if (!canUseDigitalTwin) return visibleMenus;
+  const digitalTwinMenu: MenuItem = {
+    key: 'digital-twin',
+    label: '数字孪生',
+    path: '/digital-twin',
+    icon: 'Monitor'
+  };
+  const dataStewardIndex = visibleMenus.findIndex((item) => item.key === 'data-steward');
+  if (dataStewardIndex < 0) return [digitalTwinMenu, ...visibleMenus];
+  return [
+    ...visibleMenus.slice(0, dataStewardIndex + 1),
+    digitalTwinMenu,
+    ...visibleMenus.slice(dataStewardIndex + 1)
+  ];
 });
 
 const globalHermesProjectId = computed(() => {
@@ -145,6 +164,7 @@ const globalHermesHint = computed(() => globalHermesPageTitle.value);
 
 const shellEyebrow = computed(() => {
   if (routeProjectId.value) return '当前项目工作台';
+  if (String(route.name ?? '') === 'digital-twin') return '数字孪生平台';
   if (String(route.name ?? '').startsWith('admin-')) return '管理中心';
   return '平台主入口';
 });
@@ -158,6 +178,7 @@ const shellTitle = computed(() => {
     'data-steward-scans': '扫描任务',
     'data-steward-quality': '数据质量',
     'data-steward-catalog': '资产目录',
+    'digital-twin': '数字孪生',
     'admin-employees': '员工权限管理',
     'access-pending': '等待项目授权'
   };
@@ -170,6 +191,9 @@ const shellSubtitle = computed(() => {
   }
   if (String(route.name ?? '') === 'data-steward-assets') {
     return '从真实 NAS 项目进入工作台，按项目推进数字化交付。';
+  }
+  if (String(route.name ?? '') === 'digital-twin') {
+    return '按项目查看 BIM 协同管理、模型适配和交付风险联动。';
   }
   if (String(route.name ?? '').startsWith('admin-')) {
     return '管理员工账号、项目授权和试运行访问范围。';

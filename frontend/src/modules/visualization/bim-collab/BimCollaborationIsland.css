@@ -1,0 +1,880 @@
+.sc-bim-window {
+  --sc-page-bg: oklch(13% 0.055 255);
+  --sc-page-bg-2: oklch(18% 0.07 250);
+  --sc-panel-bg: oklch(18% 0.065 252 / 0.86);
+  --sc-panel-bg-strong: oklch(22% 0.08 250 / 0.92);
+  --sc-panel-border: oklch(66% 0.14 228 / 0.28);
+  --sc-panel-border-strong: oklch(72% 0.14 220 / 0.48);
+  --sc-text-main: oklch(94% 0.018 220);
+  --sc-text-soft: oklch(77% 0.04 226);
+  --sc-text-muted: oklch(64% 0.035 225);
+  --sc-accent: oklch(78% 0.16 205);
+  --sc-accent-2: oklch(78% 0.17 155);
+  --sc-warning: oklch(78% 0.16 84);
+  --sc-danger: oklch(68% 0.18 28);
+  --sc-ok: oklch(76% 0.16 152);
+  color: var(--sc-text-main);
+  display: grid;
+  gap: 10px;
+  min-height: 900px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 12px;
+  background:
+    radial-gradient(circle at 48% 14%, oklch(39% 0.12 215 / 0.24), transparent 22rem),
+    linear-gradient(180deg, var(--sc-page-bg-2), var(--sc-page-bg));
+}
+
+.sc-bim-window--light {
+  --sc-page-bg: oklch(96% 0.018 235);
+  --sc-page-bg-2: oklch(91% 0.035 230);
+  --sc-panel-bg: oklch(99% 0.01 235 / 0.9);
+  --sc-panel-bg-strong: oklch(99% 0.006 235 / 0.95);
+  --sc-panel-border: oklch(55% 0.12 230 / 0.25);
+  --sc-panel-border-strong: oklch(50% 0.14 225 / 0.35);
+  --sc-text-main: oklch(22% 0.04 238);
+  --sc-text-soft: oklch(42% 0.045 235);
+  --sc-text-muted: oklch(50% 0.035 235);
+  --sc-accent: oklch(54% 0.15 220);
+  --sc-accent-2: oklch(55% 0.15 158);
+  --sc-warning: oklch(67% 0.15 78);
+  --sc-danger: oklch(58% 0.18 28);
+  --sc-ok: oklch(58% 0.16 152);
+}
+
+.sc-bim-window *,
+.sc-bim-window *::before,
+.sc-bim-window *::after {
+  box-sizing: border-box;
+}
+
+.sc-bim-window button {
+  font: inherit;
+}
+
+.sc-bim-window__header {
+  align-items: center;
+  border: 1px solid var(--sc-panel-border);
+  background: color-mix(in oklch, var(--sc-panel-bg-strong) 82%, transparent);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  min-height: 46px;
+  min-width: 0;
+  padding: 8px 14px;
+}
+
+.sc-bim-window__header > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sc-bim-window__header span,
+.sc-bim-panel header span,
+.sc-bim-metrics span,
+.sc-bim-metrics em,
+.sc-bim-stage__top span,
+.sc-bim-chart__axis,
+.sc-bim-chart__labels,
+.sc-bim-event-list small,
+.sc-bim-boundary,
+.sc-bim-scene__chrome span,
+.sc-bim-scene__legend {
+  color: var(--sc-text-muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.sc-bim-window__header strong {
+  color: var(--sc-text-main);
+  font-size: 15px;
+  font-weight: 760;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-bim-window__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.sc-bim-window__badges span,
+.sc-bim-boundary em {
+  border: 1px solid var(--sc-panel-border);
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--sc-panel-bg) 78%, transparent);
+  color: var(--sc-text-soft);
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 10px;
+}
+
+.sc-bim-layout {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 230px minmax(440px, 1fr) 270px;
+  grid-template-rows: minmax(0, 1fr) 132px;
+  min-height: 790px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sc-bim-stack {
+  display: grid;
+  gap: 10px;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  min-height: 0;
+  min-width: 0;
+}
+
+.sc-bim-panel,
+.sc-bim-stage,
+.sc-bim-bottom,
+.sc-bim-boundary {
+  border: 1px solid var(--sc-panel-border);
+  background:
+    linear-gradient(180deg, color-mix(in oklch, var(--sc-accent) 7%, transparent), transparent),
+    var(--sc-panel-bg);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sc-bim-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.sc-bim-panel header,
+.sc-bim-stage__top {
+  align-items: center;
+  border-bottom: 1px solid var(--sc-panel-border);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 46px;
+  padding: 0 14px;
+}
+
+.sc-bim-panel h3,
+.sc-bim-stage__top h2,
+.sc-bim-bottom h3 {
+  color: var(--sc-text-main);
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.sc-bim-panel__body {
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px 14px;
+}
+
+.sc-bim-metrics {
+  display: grid;
+  gap: 10px;
+}
+
+.sc-bim-metrics.is-compact {
+  gap: 6px;
+}
+
+.sc-bim-metrics article {
+  border-bottom: 1px solid color-mix(in oklch, var(--sc-panel-border) 48%, transparent);
+  display: grid;
+  gap: 3px;
+  min-height: 38px;
+  padding-bottom: 6px;
+}
+
+.sc-bim-metrics article:last-child {
+  border-bottom: 0;
+}
+
+.sc-bim-metrics strong {
+  color: var(--sc-text-main);
+  font-size: 23px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.sc-bim-metrics.is-compact strong {
+  font-size: 17px;
+}
+
+.sc-bim-metrics .is-normal strong {
+  color: var(--sc-ok);
+}
+
+.sc-bim-metrics .is-warning strong {
+  color: var(--sc-warning);
+}
+
+.sc-bim-metrics .is-danger strong {
+  color: var(--sc-danger);
+}
+
+.sc-bim-metrics .is-focus strong {
+  color: var(--sc-accent);
+}
+
+.sc-bim-progress-block,
+.sc-bim-legend-block {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+.sc-bim-donut {
+  align-items: center;
+  aspect-ratio: 1;
+  background: conic-gradient(var(--sc-donut-color) var(--sc-donut-value), color-mix(in oklch, var(--sc-text-muted) 20%, transparent) 0);
+  border-radius: 50%;
+  display: grid;
+  justify-items: center;
+  position: relative;
+  width: 84px;
+}
+
+.sc-bim-donut::before {
+  background: var(--sc-panel-bg-strong);
+  border-radius: inherit;
+  content: "";
+  inset: 11px;
+  position: absolute;
+}
+
+.sc-bim-donut span {
+  color: var(--sc-text-main);
+  font-size: 18px;
+  font-weight: 800;
+  position: relative;
+}
+
+.sc-bim-stage {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-height: 0;
+}
+
+.sc-bim-stage__top > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sc-bim-carousel {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.sc-bim-carousel button,
+.sc-bim-toolbar button {
+  border: 1px solid var(--sc-panel-border);
+  border-radius: 6px;
+  color: var(--sc-text-main);
+  background: color-mix(in oklch, var(--sc-panel-bg) 78%, transparent);
+  min-height: 28px;
+  padding: 0 12px;
+}
+
+.sc-bim-carousel span {
+  border: 1px solid var(--sc-panel-border-strong);
+  border-radius: 999px;
+  color: var(--sc-text-main);
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.sc-bim-carousel button:not(:disabled):hover {
+  border-color: var(--sc-panel-border-strong);
+  background: color-mix(in oklch, var(--sc-accent) 26%, transparent);
+}
+
+.sc-bim-carousel button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.sc-bim-model-selector {
+  align-items: center;
+  border-bottom: 1px solid var(--sc-panel-border);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto minmax(180px, 0.8fr) auto minmax(220px, 1fr);
+  min-height: 48px;
+  min-width: 0;
+  padding: 8px 14px;
+}
+
+.sc-bim-model-selector label {
+  color: var(--sc-text-soft);
+  font-size: 12px;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.sc-bim-model-selector select {
+  background: color-mix(in oklch, var(--sc-panel-bg-strong) 88%, transparent);
+  border: 1px solid var(--sc-panel-border);
+  border-radius: 6px;
+  color: var(--sc-text-main);
+  font: inherit;
+  min-height: 30px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 10px;
+  text-overflow: ellipsis;
+}
+
+.sc-bim-model-selector select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.sc-bim-model-status {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sc-bim-model-status span {
+  align-items: center;
+  background: color-mix(in oklch, var(--sc-panel-bg) 78%, transparent);
+  border: 1px solid var(--sc-panel-border);
+  border-radius: 999px;
+  color: var(--sc-text-soft);
+  display: inline-flex;
+  font-size: 11px;
+  min-height: 24px;
+  max-width: 150px;
+  overflow: hidden;
+  padding: 0 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-bim-model-selector p {
+  color: var(--sc-text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-bim-stage__canvas {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sc-bim-toolbar {
+  align-items: center;
+  border-top: 1px solid var(--sc-panel-border);
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  min-height: 46px;
+}
+
+.sc-bim-toolbar button {
+  color: var(--sc-text-soft);
+  min-width: 48px;
+}
+
+.sc-bim-toolbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.sc-bim-chart {
+  column-gap: 8px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 22px;
+  height: 100%;
+  min-height: 122px;
+}
+
+.sc-bim-chart__axis {
+  align-content: space-between;
+  display: grid;
+  grid-row: 1;
+  justify-items: end;
+  line-height: 1;
+  padding: 4px 0 4px;
+}
+
+.sc-bim-chart__plot {
+  align-items: end;
+  border-bottom: 1px solid color-mix(in oklch, var(--sc-panel-border) 74%, transparent);
+  border-left: 1px solid color-mix(in oklch, var(--sc-panel-border) 68%, transparent);
+  display: grid;
+  gap: 12px;
+  grid-column: 2;
+  grid-row: 1;
+  grid-template-columns: repeat(var(--sc-chart-columns), minmax(0, 1fr));
+  min-width: 0;
+  overflow: hidden;
+  padding: 6px 6px 3px 8px;
+  position: relative;
+}
+
+.sc-bim-chart__plot i {
+  background: color-mix(in oklch, var(--sc-panel-border) 42%, transparent);
+  height: 1px;
+  inset-inline: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.sc-bim-chart__plot i:nth-child(1) {
+  top: 0;
+}
+
+.sc-bim-chart__plot i:nth-child(2) {
+  top: 50%;
+}
+
+.sc-bim-chart__plot i:nth-child(3) {
+  top: 100%;
+}
+
+.sc-bim-chart__plot b {
+  border-radius: 6px 6px 2px 2px;
+  display: block;
+  justify-self: center;
+  min-height: 8px;
+  width: min(18px, 64%);
+}
+
+.sc-bim-chart__labels {
+  display: grid;
+  gap: 12px;
+  grid-column: 2;
+  grid-row: 2;
+  grid-template-columns: repeat(var(--sc-chart-columns), minmax(0, 1fr));
+  padding: 6px 6px 0 8px;
+  text-align: center;
+}
+
+.sc-bim-chart__labels span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-bim-legend-list {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.sc-bim-legend-list div {
+  align-items: center;
+  color: var(--sc-text-soft);
+  display: flex;
+  font-size: 12px;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.sc-bim-legend-list span {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sc-bim-legend-list i {
+  border-radius: 2px;
+  height: 8px;
+  width: 8px;
+}
+
+.sc-bim-bottom {
+  display: grid;
+  gap: 0;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.12fr) minmax(220px, 0.72fr);
+  min-height: 0;
+}
+
+.sc-bim-bottom section {
+  border-right: 1px solid var(--sc-panel-border);
+  min-width: 0;
+  overflow: hidden;
+  padding: 10px 14px;
+}
+
+.sc-bim-bottom section:last-child {
+  border-right: 0;
+}
+
+.sc-bim-bottom h3 {
+  margin-bottom: 7px;
+}
+
+.sc-bim-event-list {
+  display: grid;
+  gap: 5px;
+}
+
+.sc-bim-event-list article {
+  align-items: center;
+  border-bottom: 1px solid color-mix(in oklch, var(--sc-panel-border) 48%, transparent);
+  color: var(--sc-text-soft);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 24px;
+}
+
+.sc-bim-event-list span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-bim-boundary {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 40px;
+  padding: 7px 12px;
+}
+
+.sc-bim-boundary > span {
+  color: var(--sc-accent);
+  font-weight: 760;
+}
+
+.sc-bim-boundary em {
+  font-style: normal;
+}
+
+.sc-bim-scene {
+  background:
+    radial-gradient(circle at 50% 46%, color-mix(in oklch, var(--sc-accent) 18%, transparent), transparent 21rem),
+    color-mix(in oklch, var(--sc-page-bg) 88%, oklch(11% 0.045 245));
+  height: 100%;
+  min-height: inherit;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.sc-bim-scene canvas {
+  position: relative;
+  z-index: 1;
+}
+
+.sc-bim-scene::before {
+  background:
+    linear-gradient(transparent 96%, color-mix(in oklch, var(--sc-accent) 24%, transparent) 100%),
+    linear-gradient(90deg, transparent 96%, color-mix(in oklch, var(--sc-accent) 18%, transparent) 100%);
+  background-size: 34px 34px;
+  content: "";
+  inset: 0;
+  opacity: 0.78;
+  pointer-events: none;
+  position: absolute;
+}
+
+.sc-bim-scene__chrome {
+  display: grid;
+  gap: 3px;
+  left: 16px;
+  pointer-events: none;
+  position: absolute;
+  top: 14px;
+  z-index: 2;
+}
+
+.sc-bim-scene__fallback {
+  bottom: 84px;
+  left: 50%;
+  min-height: 360px;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%);
+  width: min(720px, 88%);
+  z-index: 2;
+}
+
+.sc-bim-fallback-building {
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--sc-block-color) 24%, transparent) 1px, transparent 1px),
+    linear-gradient(180deg, color-mix(in oklch, var(--sc-block-color) 18%, transparent) 1px, transparent 1px),
+    linear-gradient(180deg, color-mix(in oklch, var(--sc-block-color) 34%, #08243a), #092338);
+  background-size: 16px 16px, 16px 16px, auto;
+  border: 1px solid color-mix(in oklch, var(--sc-block-color) 72%, transparent);
+  bottom: calc(38px + var(--sc-block-y));
+  box-shadow:
+    0 0 24px color-mix(in oklch, var(--sc-block-color) 22%, transparent),
+    inset 0 0 18px color-mix(in oklch, var(--sc-block-color) 12%, transparent);
+  color: var(--sc-text-main);
+  display: grid;
+  gap: 4px;
+  height: var(--sc-block-h);
+  left: calc(50% + var(--sc-block-x));
+  padding: 8px;
+  place-content: end start;
+  position: absolute;
+  transform: skewY(-8deg);
+  width: var(--sc-block-w);
+}
+
+.sc-bim-fallback-building::before,
+.sc-bim-fallback-building::after {
+  background: color-mix(in oklch, var(--sc-block-color) 22%, #061d30);
+  border: 1px solid color-mix(in oklch, var(--sc-block-color) 52%, transparent);
+  content: "";
+  position: absolute;
+}
+
+.sc-bim-fallback-building::before {
+  height: 18px;
+  left: 8px;
+  right: -18px;
+  top: -19px;
+  transform: skewX(-42deg);
+  transform-origin: bottom left;
+}
+
+.sc-bim-fallback-building::after {
+  bottom: 8px;
+  right: -19px;
+  top: -10px;
+  width: 18px;
+  transform: skewY(-46deg);
+  transform-origin: top left;
+}
+
+.sc-bim-fallback-building span,
+.sc-bim-fallback-building small {
+  max-width: 100%;
+  overflow: hidden;
+  position: relative;
+  text-overflow: ellipsis;
+  transform: skewY(8deg);
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.sc-bim-fallback-building span {
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.sc-bim-fallback-building small {
+  color: var(--sc-text-soft);
+  font-size: 10px;
+}
+
+.sc-bim-scene__chrome strong {
+  color: var(--sc-text-main);
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.sc-bim-scene__legend {
+  bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: center;
+  left: 20px;
+  pointer-events: none;
+  position: absolute;
+  right: 20px;
+  z-index: 2;
+}
+
+.sc-bim-scene__empty {
+  align-content: center;
+  border: 1px dashed color-mix(in oklch, var(--sc-accent) 42%, transparent);
+  color: var(--sc-text-soft);
+  display: grid;
+  gap: 8px;
+  inset: 96px 12% 96px;
+  justify-items: center;
+  min-height: 280px;
+  padding: 28px;
+  position: absolute;
+  text-align: center;
+  z-index: 2;
+}
+
+.sc-bim-scene__empty::before {
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--sc-accent) 18%, transparent) 1px, transparent 1px),
+    linear-gradient(180deg, color-mix(in oklch, var(--sc-accent) 12%, transparent) 1px, transparent 1px);
+  background-size: 28px 28px;
+  content: "";
+  inset: 0;
+  opacity: 0.72;
+  position: absolute;
+}
+
+.sc-bim-scene__empty strong,
+.sc-bim-scene__empty span {
+  position: relative;
+}
+
+.sc-bim-scene__empty strong {
+  color: var(--sc-text-main);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.sc-bim-scene__empty span {
+  max-width: 420px;
+}
+
+.sc-bim-scene__legend span {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.sc-bim-scene__legend i {
+  border-radius: 50%;
+  height: 8px;
+  width: 8px;
+}
+
+.sc-bim-model-label {
+  background: color-mix(in oklch, var(--sc-panel-bg-strong) 88%, transparent);
+  border: 1px solid color-mix(in oklch, var(--sc-accent) 68%, transparent);
+  border-radius: 6px;
+  box-shadow: 0 10px 24px color-mix(in oklch, var(--sc-accent) 14%, transparent);
+  color: var(--sc-text-main);
+  font-size: 12px;
+  min-width: 122px;
+  padding: 6px 9px;
+  transform: translate(-50%, -100%);
+  white-space: nowrap;
+}
+
+.sc-bim-model-label.is-normal {
+  border-color: color-mix(in oklch, var(--sc-ok) 68%, transparent);
+}
+
+.sc-bim-model-label.is-warning {
+  border-color: color-mix(in oklch, var(--sc-warning) 68%, transparent);
+}
+
+.sc-bim-model-label.is-danger {
+  border-color: color-mix(in oklch, var(--sc-danger) 68%, transparent);
+}
+
+.sc-bim-model-label span,
+.sc-bim-model-label small {
+  display: block;
+}
+
+.sc-bim-model-label span {
+  font-weight: 760;
+  line-height: 1.2;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sc-bim-model-label small {
+  color: var(--sc-text-soft);
+  font-size: 10px;
+  margin-top: 2px;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sc-bim-roof-tag {
+  background: color-mix(in oklch, var(--sc-page-bg) 72%, transparent);
+  border: 1px solid var(--sc-accent);
+  border-radius: 5px;
+  color: var(--sc-text-main);
+  font-size: 9px;
+  font-weight: 760;
+  line-height: 1.1;
+  min-width: 64px;
+  padding: 3px 6px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+@media (max-width: 1280px) {
+  .sc-bim-window {
+    min-height: 0;
+  }
+
+  .sc-bim-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(620px, 72vh) auto auto;
+    overflow: auto;
+  }
+
+  .sc-bim-stack {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: auto;
+  }
+
+  .sc-bim-bottom {
+    grid-template-columns: 1fr;
+  }
+
+  .sc-bim-bottom section {
+    border-bottom: 1px solid var(--sc-panel-border);
+    border-right: 0;
+  }
+}
+
+@media (max-width: 860px) {
+  .sc-bim-window__header,
+  .sc-bim-stage__top,
+  .sc-bim-model-selector,
+  .sc-bim-progress-block,
+  .sc-bim-legend-block {
+    display: grid;
+  }
+
+  .sc-bim-window__badges,
+  .sc-bim-carousel {
+    justify-content: start;
+  }
+
+  .sc-bim-model-selector {
+    grid-template-columns: 1fr;
+  }
+
+  .sc-bim-model-selector p {
+    white-space: normal;
+  }
+
+  .sc-bim-stack {
+    grid-template-columns: 1fr;
+  }
+}

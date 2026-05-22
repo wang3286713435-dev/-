@@ -121,6 +121,14 @@ public class CurrentUserApplicationService {
             String dataStewardPath = permissions.contains("DATA_STEWARD_ASSET_READ") ? "/data-steward/assets" : "/data-steward/files";
             menus.add(new MenuItemResponse("data-steward", "数据管家", dataStewardPath, "FolderOpened", dataStewardChildren));
         }
+        if (
+            permissions.contains("DATA_STEWARD_ASSET_READ")
+                || permissions.contains("DATA_STEWARD_MODEL_READ")
+                || permissions.contains("WORKCENTER_DASHBOARD_VIEW")
+                || permissions.contains("VISUALIZATION_WORKBENCH_VIEW")
+        ) {
+            menus.add(new MenuItemResponse("digital-twin", "数字孪生", "/digital-twin", "Monitor"));
+        }
         if (permissions.contains("WORKCENTER_HOME_VIEW")) {
             menus.add(new MenuItemResponse("home", "首页", "/home", "House"));
         }
@@ -162,10 +170,10 @@ public class CurrentUserApplicationService {
                 workChildren.add(new MenuItemResponse("work-rectifications", "整改中心", "/work/rectifications", "Warning"));
             }
             if (permissions.contains("WORKCENTER_DASHBOARD_VIEW")) {
-                workChildren.add(new MenuItemResponse("work-dashboard", "智慧大屏", "/work/dashboard", "DataBoard"));
+                workChildren.add(new MenuItemResponse("work-dashboard", "数字孪生大屏", "/work/dashboard", "DataBoard"));
             }
             if (permissions.contains("VISUALIZATION_WORKBENCH_VIEW")) {
-                workChildren.add(new MenuItemResponse("visualization-workbench", "3D 工作台", "/visualization/workbench", "Monitor"));
+                workChildren.add(new MenuItemResponse("visualization-workbench", "数字孪生工作台", "/visualization/workbench", "Monitor"));
             }
             menus.add(new MenuItemResponse("work-center", "工作中心", "/work/document-delivery", "DataBoard", workChildren));
         }

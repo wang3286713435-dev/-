@@ -1,14 +1,30 @@
 package com.zhuoyu.delivery.visualization.application;
 
 import com.zhuoyu.delivery.core.audit.application.AuditLogApplicationService;
+import com.zhuoyu.delivery.datasteward.asset.application.AssetApplicationService;
+import com.zhuoyu.delivery.datasteward.asset.application.AssetQualityApplicationService;
+import com.zhuoyu.delivery.datasteward.asset.application.StatisticsApplicationService;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.AssetProjectResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.AssetQualityMetric;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.AssetQualityOverviewResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CapacityByDiscipline;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CapacityByFileKind;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CapacityStatisticsResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.EventResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ScanTaskResponse;
 import com.zhuoyu.delivery.datasteward.dto.DataStewardDtos.FileResourceResponse;
 import com.zhuoyu.delivery.datasteward.dto.DataStewardDtos.ManagedObjectResponse;
 import com.zhuoyu.delivery.datasteward.dto.DataStewardDtos.ModelIntegrationResponse;
 import com.zhuoyu.delivery.datasteward.file.FileResourceApplicationService;
 import com.zhuoyu.delivery.datasteward.model.ModelIntegrationApplicationService;
 import com.zhuoyu.delivery.datasteward.object.ManagedObjectApplicationService;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ActivityItem;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ActivitySummary;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ContextInjectRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ContextInjectResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.DeliverySummary;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.DigitalTwinDashboardResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.DistributionItem;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LinkageRequest;
@@ -17,9 +33,25 @@ import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightPlanRe
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightStatusResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LocateResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ManagedObjectContextItem;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ModelSceneItem;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ModelSummary;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ModelContextItem;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ObjectSceneItem;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ProjectSnapshot;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.QualityMetricItem;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.QualitySummary;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.AssetSummary;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.SafetyBoundary;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ScanTaskActivityItem;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.VisualizationContextResponse;
+import com.zhuoyu.delivery.workcenter.delivery.DeliveryApplicationService;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCompletenessResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.RectificationResponse;
+import com.zhuoyu.delivery.workcenter.rectification.RectificationApplicationService;
+import com.zhuoyu.delivery.shared.preview.FilePreviewPolicy;
+import com.zhuoyu.delivery.shared.preview.PreviewDecision;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,17 +77,32 @@ public class VisualizationAdapterApplicationService {
     private final ModelIntegrationApplicationService modelIntegrationApplicationService;
     private final ManagedObjectApplicationService managedObjectApplicationService;
     private final FileResourceApplicationService fileResourceApplicationService;
+    private final AssetApplicationService assetApplicationService;
+    private final StatisticsApplicationService statisticsApplicationService;
+    private final AssetQualityApplicationService assetQualityApplicationService;
+    private final DeliveryApplicationService deliveryApplicationService;
+    private final RectificationApplicationService rectificationApplicationService;
     private final AuditLogApplicationService auditLogApplicationService;
 
     public VisualizationAdapterApplicationService(
         ModelIntegrationApplicationService modelIntegrationApplicationService,
         ManagedObjectApplicationService managedObjectApplicationService,
         FileResourceApplicationService fileResourceApplicationService,
+        AssetApplicationService assetApplicationService,
+        StatisticsApplicationService statisticsApplicationService,
+        AssetQualityApplicationService assetQualityApplicationService,
+        DeliveryApplicationService deliveryApplicationService,
+        RectificationApplicationService rectificationApplicationService,
         AuditLogApplicationService auditLogApplicationService
     ) {
         this.modelIntegrationApplicationService = modelIntegrationApplicationService;
         this.managedObjectApplicationService = managedObjectApplicationService;
         this.fileResourceApplicationService = fileResourceApplicationService;
+        this.assetApplicationService = assetApplicationService;
+        this.statisticsApplicationService = statisticsApplicationService;
+        this.assetQualityApplicationService = assetQualityApplicationService;
+        this.deliveryApplicationService = deliveryApplicationService;
+        this.rectificationApplicationService = rectificationApplicationService;
         this.auditLogApplicationService = auditLogApplicationService;
     }
 
@@ -70,6 +117,36 @@ public class VisualizationAdapterApplicationService {
             .toList();
         int published = (int) models.stream().filter(model -> "PUBLISHED".equals(model.status())).count();
         return new VisualizationContextResponse(projectId, published, objects.size(), modelItems, objectItems);
+    }
+
+    public DigitalTwinDashboardResponse digitalTwinDashboard(Long userId, Long projectId) {
+        AssetProjectResponse project = assetApplicationService.listProjects(userId, null).stream()
+            .filter(item -> item.projectId().equals(projectId))
+            .findFirst()
+            .orElse(null);
+        CapacityStatisticsResponse assetStatistics = statisticsApplicationService.getStatistics(userId, projectId);
+        AssetQualityOverviewResponse qualityOverview = assetQualityApplicationService.getOverview(userId, projectId, null);
+        DeliveryCompletenessResponse documentCompleteness = deliveryApplicationService.deliveryCompleteness(
+            projectId, "DOCUMENT", "SECTION", false);
+        DeliveryCompletenessResponse drawingCompleteness = deliveryApplicationService.deliveryCompleteness(
+            projectId, "DRAWING", "SECTION", false);
+        List<RectificationResponse> rectifications = rectificationApplicationService.list(projectId, null);
+        List<ModelIntegrationResponse> models = modelIntegrationApplicationService.list(projectId);
+        List<ManagedObjectResponse> objects = managedObjectApplicationService.list(projectId);
+        List<ScanTaskResponse> scans = assetApplicationService.listScansForUser(userId).stream()
+            .filter(task -> projectId.equals(task.projectId()))
+            .limit(6)
+            .toList();
+
+        return new DigitalTwinDashboardResponse(
+            toProjectSnapshot(projectId, project),
+            toAssetSummary(assetStatistics),
+            toDeliverySummary(documentCompleteness, drawingCompleteness, rectifications),
+            toQualitySummary(qualityOverview),
+            toModelSummary(models, objects),
+            toActivitySummary(qualityOverview, scans),
+            defaultSafetyBoundary()
+        );
     }
 
     public LightweightStatusResponse lightweightStatus(Long projectId, Long integrationId) {
@@ -193,5 +270,292 @@ public class VisualizationAdapterApplicationService {
             return "UNKNOWN";
         }
         return originalName.substring(index + 1).toUpperCase();
+    }
+
+    private ProjectSnapshot toProjectSnapshot(Long projectId, AssetProjectResponse project) {
+        if (project == null) {
+            return new ProjectSnapshot(projectId, "PROJECT-" + projectId, "项目 " + projectId,
+                null, null, null, null, null);
+        }
+        return new ProjectSnapshot(
+            project.projectId(),
+            project.code(),
+            project.name(),
+            project.industryType(),
+            project.projectStage(),
+            project.projectManagerName(),
+            project.assetStatus(),
+            project.onboardingStatus()
+        );
+    }
+
+    private AssetSummary toAssetSummary(CapacityStatisticsResponse statistics) {
+        return new AssetSummary(
+            statistics.projectCount(),
+            statistics.fileCount(),
+            statistics.modelFileCount(),
+            statistics.drawingFileCount(),
+            statistics.totalSizeBytes(),
+            statistics.byFileKind().stream().map(this::toDistribution).toList(),
+            statistics.byDiscipline().stream().map(this::toDistribution).toList()
+        );
+    }
+
+    private DistributionItem toDistribution(CapacityByFileKind item) {
+        String code = item.fileKind() == null || item.fileKind().isBlank() ? "UNKNOWN" : item.fileKind();
+        return new DistributionItem(code, fileKindLabel(code), item.fileCount(), item.totalSizeBytes());
+    }
+
+    private DistributionItem toDistribution(CapacityByDiscipline item) {
+        String code = item.discipline() == null || item.discipline().isBlank() ? "UNKNOWN" : item.discipline();
+        return new DistributionItem(code, disciplineLabel(code), item.fileCount(), item.totalSizeBytes());
+    }
+
+    private DeliverySummary toDeliverySummary(
+        DeliveryCompletenessResponse document,
+        DeliveryCompletenessResponse drawing,
+        List<RectificationResponse> rectifications
+    ) {
+        int totalRequired = intValue(document.totalRequired()) + intValue(drawing.totalRequired());
+        int completedCount = intValue(document.completedCount()) + intValue(drawing.completedCount());
+        int missingCount = intValue(document.missingCount()) + intValue(drawing.missingCount());
+        int draftCount = intValue(document.draftCount()) + intValue(drawing.draftCount());
+        int pendingReviewCount = intValue(document.pendingReviewCount()) + intValue(drawing.pendingReviewCount());
+        int approvedCount = intValue(document.approvedCount()) + intValue(drawing.approvedCount());
+        int rejectedCount = intValue(document.rejectedCount()) + intValue(drawing.rejectedCount());
+        int openRectificationCount = (int) rectifications.stream()
+            .filter(item -> item.status() == null || !"CLOSED".equals(item.status()))
+            .count();
+        double completionRate = totalRequired == 0 ? 0.0 : (double) completedCount / totalRequired;
+        double approvedRate = totalRequired == 0 ? 0.0 : (double) approvedCount / totalRequired;
+        List<String> readinessIssues = List.of(document, drawing).stream()
+            .flatMap(item -> item.readinessIssues().stream())
+            .distinct()
+            .toList();
+        String nextActionCode = chooseNextActionCode(document, drawing, openRectificationCount);
+        String nextActionText = chooseNextActionText(document, drawing, openRectificationCount);
+        return new DeliverySummary(
+            Boolean.TRUE.equals(document.standardReady()) && Boolean.TRUE.equals(drawing.standardReady()),
+            totalRequired,
+            completedCount,
+            missingCount,
+            draftCount,
+            pendingReviewCount,
+            approvedCount,
+            rejectedCount,
+            openRectificationCount,
+            completionRate,
+            approvedRate,
+            nextActionCode,
+            nextActionText,
+            readinessIssues
+        );
+    }
+
+    private QualitySummary toQualitySummary(AssetQualityOverviewResponse overview) {
+        List<QualityMetricItem> metrics = overview.metrics().stream()
+            .map(this::toQualityMetric)
+            .toList();
+        return new QualitySummary(
+            overview.riskSignalCount(),
+            overview.pendingReviewCount(),
+            overview.failedScanCount(),
+            overview.runningScanCount(),
+            overview.missingChecksumCount(),
+            overview.missingDisciplineCount(),
+            overview.missingVersionCount(),
+            overview.zeroSizeFileCount(),
+            metrics
+        );
+    }
+
+    private QualityMetricItem toQualityMetric(AssetQualityMetric metric) {
+        if ("MISSING_STORAGE_PATH".equals(metric.code())) {
+            return new QualityMetricItem("MISSING_TRACEABILITY", "溯源信息待完善", metric.severity(), metric.count());
+        }
+        return new QualityMetricItem(metric.code(), metric.label(), metric.severity(), metric.count());
+    }
+
+    private ModelSummary toModelSummary(List<ModelIntegrationResponse> models, List<ManagedObjectResponse> objects) {
+        int published = (int) models.stream().filter(model -> "PUBLISHED".equals(model.status())).count();
+        String lightweightStatus = models.isEmpty() ? "NOT_STARTED" : "NOT_CONNECTED";
+        String statusLabel = models.isEmpty() ? "暂无模型集成" : "Mock 适配未连接";
+        String actionHint = models.isEmpty()
+            ? "当前项目还没有模型集成元数据，可先在数据管家登记模型。"
+            : "当前只展示模型元数据和适配状态，未执行真实轻量化转换。";
+        return new ModelSummary(
+            models.size(),
+            published,
+            objects.size(),
+            "MOCK",
+            false,
+            lightweightStatus,
+            false,
+            statusLabel,
+            actionHint,
+            models.stream()
+                .map(this::toModelSceneItem)
+                .toList(),
+            objects.stream()
+                .map(object -> new ObjectSceneItem(object.id(), object.code(), object.name(), object.objectType(), object.sectionNodeId()))
+                .toList()
+        );
+    }
+
+    private ModelSceneItem toModelSceneItem(ModelIntegrationResponse model) {
+        FileResourceResponse modelFile = fileResourceApplicationService.requireFile(model.projectId(), model.modelFileId());
+        String modelFormat = modelFormat(modelFile.originalName());
+        PreviewDecision preview = FilePreviewPolicy.decide("." + modelFormat.toLowerCase(Locale.ROOT), modelFile.fileKind());
+        return new ModelSceneItem(
+            model.id(),
+            model.modelFileId(),
+            model.name(),
+            modelFormat,
+            model.versionNo(),
+            model.status(),
+            model.componentCount(),
+            preview.previewStatus(),
+            preview.previewMode(),
+            preview.conversionStatus(),
+            false,
+            modelStatusLabel(modelFormat, preview),
+            modelActionHint(modelFormat, preview)
+        );
+    }
+
+    private String modelStatusLabel(String modelFormat, PreviewDecision preview) {
+        if ("RVT".equals(modelFormat)) {
+            return "RVT 待轻量化";
+        }
+        return preview.statusLabel();
+    }
+
+    private String modelActionHint(String modelFormat, PreviewDecision preview) {
+        if ("RVT".equals(modelFormat)) {
+            return "RVT 原始文件已入库，本轮只展示模型状态；需完成 IFC/XKT/Fragments 等轻量化产物后才能在线预览。";
+        }
+        return preview.actionHint();
+    }
+
+    private ActivitySummary toActivitySummary(AssetQualityOverviewResponse overview, List<ScanTaskResponse> scans) {
+        return new ActivitySummary(
+            overview.latestAssetUpdatedAt(),
+            overview.latestEventAt(),
+            overview.recentEvents().stream().limit(6).map(this::toActivity).toList(),
+            scans.stream().map(this::toScanActivity).toList()
+        );
+    }
+
+    private ActivityItem toActivity(EventResponse event) {
+        return new ActivityItem(event.id(), event.projectId(), event.actionCode(), event.summary(), event.createdAt());
+    }
+
+    private ScanTaskActivityItem toScanActivity(ScanTaskResponse task) {
+        return new ScanTaskActivityItem(
+            task.id(),
+            task.projectId(),
+            task.projectCode(),
+            task.status(),
+            task.progressPercent(),
+            task.totalScanned(),
+            task.autoIngested(),
+            task.pendingReview(),
+            task.failedCount(),
+            task.updatedAt()
+        );
+    }
+
+    private SafetyBoundary defaultSafetyBoundary() {
+        return new SafetyBoundary(
+            List.of(
+                "仅读取平台业务元数据和统计结果",
+                "不返回真实 NAS 路径或底层存储字段",
+                "不读取模型正文、族、构件属性或图纸正文"
+            ),
+            List.of(
+                "真实 BIM 引擎接入",
+                "轻量化转换任务创建",
+                "构件级解析或搜索",
+                "NAS 文件写入、移动、删除"
+            ),
+            "当前中央场景为模型元数据驱动的数字孪生视图，真实 3D Viewer 待 BIM 引擎选型后接入。"
+        );
+    }
+
+    private String chooseNextActionCode(
+        DeliveryCompletenessResponse document,
+        DeliveryCompletenessResponse drawing,
+        int openRectificationCount
+    ) {
+        if (openRectificationCount > 0) {
+            return "HANDLE_RECTIFICATION";
+        }
+        if (!Boolean.TRUE.equals(document.standardReady()) || !Boolean.TRUE.equals(drawing.standardReady())) {
+            return "COMPLETE_STANDARD";
+        }
+        if (intValue(document.missingCount()) + intValue(drawing.missingCount()) > 0) {
+            return "BIND_MISSING_FILES";
+        }
+        if (intValue(document.pendingReviewCount()) + intValue(drawing.pendingReviewCount()) > 0) {
+            return "REVIEW_PENDING";
+        }
+        if (intValue(document.approvedCount()) + intValue(drawing.approvedCount()) > 0) {
+            return "EXPORT_PRECHECK";
+        }
+        return document.nextActionCode() != null ? document.nextActionCode() : "CHECK_DELIVERY";
+    }
+
+    private String chooseNextActionText(
+        DeliveryCompletenessResponse document,
+        DeliveryCompletenessResponse drawing,
+        int openRectificationCount
+    ) {
+        if (openRectificationCount > 0) {
+            return "存在未关闭整改项，请先处理整改闭环。";
+        }
+        if (!Boolean.TRUE.equals(document.standardReady()) || !Boolean.TRUE.equals(drawing.standardReady())) {
+            return "先补齐工程主数据和交付物标准，再生成应交项。";
+        }
+        if (intValue(document.missingCount()) + intValue(drawing.missingCount()) > 0) {
+            return "存在缺失应交项，请从资产目录选择文件完成补交。";
+        }
+        if (intValue(document.pendingReviewCount()) + intValue(drawing.pendingReviewCount()) > 0) {
+            return "已有资料待审核，请继续完成审核或驳回整改。";
+        }
+        if (intValue(document.approvedCount()) + intValue(drawing.approvedCount()) > 0) {
+            return "交付资料已具备基础完整度，可以执行导出预检查。";
+        }
+        return document.nextActionText() != null ? document.nextActionText() : "请继续检查交付准备状态。";
+    }
+
+    private String fileKindLabel(String code) {
+        return switch (code) {
+            case "MODEL" -> "模型";
+            case "DRAWING" -> "图纸";
+            case "DOCUMENT" -> "文档";
+            case "SPREADSHEET" -> "表格";
+            case "PRESENTATION" -> "演示";
+            case "MODEL_VIEWER" -> "展示模型";
+            case "ARCHIVE" -> "归档包";
+            default -> code;
+        };
+    }
+
+    private String disciplineLabel(String code) {
+        return switch (code) {
+            case "HVAC" -> "暖通";
+            case "ELECTRICAL" -> "电气";
+            case "PLUMBING" -> "给排水";
+            case "FIRE" -> "消防";
+            case "ARCHITECTURE" -> "建筑";
+            case "STRUCTURE" -> "结构";
+            case "OTHER" -> "其他";
+            case "UNKNOWN" -> "未标注";
+            default -> code;
+        };
+    }
+
+    private int intValue(Integer value) {
+        return value == null ? 0 : value;
     }
 }
