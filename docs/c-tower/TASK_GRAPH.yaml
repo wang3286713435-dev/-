@@ -1,0 +1,316 @@
+project: c-tower-full-platform-agent-cluster
+version: "2.0"
+updated_at: "2026-05-22"
+integration_branch: integration/c-tower
+task_artifact_root: handoff/c-tower
+
+execution_model:
+  monitor: codex
+  worker_runtime: claude
+  principle: "Codex Monitor owns planning, task graph, write-set control, gates, review, and merge advice. Claude workers execute only assigned tasks."
+  worktree_root: worktrees
+  branch_prefix: codex/ctower
+  default_worker_outputs:
+    - report.json
+    - test.log
+    - risk.md
+    - diff.patch
+
+default_rules:
+  no_direct_main_merge: true
+  no_worker_scope_expansion: true
+  append_only_flyway: true
+  source_documents:
+    - /Users/vc/Downloads/数据中台.docx
+    - /Users/vc/Downloads/智慧建筑平台清单及系统配置.xlsx
+  required_context:
+    - docs/c-tower/PRD.md
+    - docs/c-tower/TECH_SPEC.md
+    - docs/c-tower/DELIVERY_PLAN.md
+    - docs/c-tower/TASK_GRAPH.yaml
+    - docs/c-tower/WORKER_PROMPT_TEMPLATE.md
+  global_forbidden_without_monitor_approval:
+    - backend/delivery-core/**
+    - backend/delivery-app/src/main/resources/db/migration/**
+    - frontend/src/router/index.ts
+    - frontend/src/modules/core/**
+    - pom.xml
+    - backend/pom.xml
+    - frontend/package.json
+    - frontend/pnpm-lock.yaml
+
+phases:
+  - phase_id: P0
+    name: 需求与方案冻结
+    objective: "把两份正式需求文件转成可执行需求矩阵、技术缺口、专项 PoC 和 P1 backlog。"
+  - phase_id: P1
+    name: 数字底座 MVP
+    objective: "建设平台骨架、数据中台基础、IoT 样例、主数据、API 网关样例和基础驾驶舱。"
+  - phase_id: P2
+    name: 核心业务应用
+    objective: "建设安防、交通、设施、能碳、应急、风险、通行、机器人和门户业务闭环。"
+  - phase_id: P3
+    name: 数字孪生与可视化
+    objective: "建设驾驶舱、云渲染、模型管理、专题可视化和 AI 智能体展示。"
+  - phase_id: P4
+    name: 生产加固与验收
+    objective: "完成性能、等保、国产化、灾备、部署、源码和验收交付。"
+
+tasks:
+  - task_id: CT-P0-REQ-001
+    phase: P0
+    title: 两份正式需求文件覆盖矩阵
+    type: requirements
+    worker_role: claude-requirements-worker
+    executor: claude
+    monitor: codex
+    depends_on: []
+    write_set:
+      - docs/c-tower/REQUIREMENT_MATRIX.md
+      - docs/c-tower/requirements/**
+    forbidden_paths:
+      - backend/**
+      - frontend/**
+    acceptance:
+      - 覆盖 /Users/vc/Downloads/数据中台.docx 中的多模态存储、主数据、数据治理、数据服务和隐私要求。
+      - 覆盖 /Users/vc/Downloads/智慧建筑平台清单及系统配置.xlsx 中的软件清单、性能指标、硬件配置、基础设施、可视化和驾驶舱交付成果。
+      - 每条需求包含来源文件、来源位置、需求描述、平台模块、优先级、阶段、验收方式、风险和待确认项。
+      - 不纳入专业工程评分表，除非用户后续明确要求。
+    branch: codex/ctower/CT-P0-REQ-001-requirement-matrix
+    artifact_dir: handoff/c-tower/CT-P0-REQ-001
+    gate_commands:
+      - git diff --check
+    status: ready
+
+  - task_id: CT-P0-ARCH-001
+    phase: P0
+    title: 当前平台与 C塔完整需求技术差距评估
+    type: architecture
+    worker_role: claude-architecture-worker
+    executor: claude
+    monitor: codex
+    depends_on:
+      - CT-P0-REQ-001
+    write_set:
+      - docs/c-tower/ARCHITECTURE_GAP_ASSESSMENT.md
+    forbidden_paths:
+      - backend/**
+      - frontend/**
+    acceptance:
+      - 明确当前仓库可复用能力、需要改造能力和必须新建服务能力。
+      - 明确当前平台不能直接承诺 20 万点位、5 万 TPS、99.99% 可用率、云渲染、AI 中台和等保二级。
+      - 给出 P1、P2、P3、P4 的技术演进路线。
+    branch: codex/ctower/CT-P0-ARCH-001-gap-assessment
+    artifact_dir: handoff/c-tower/CT-P0-ARCH-001
+    gate_commands:
+      - git diff --check
+    status: blocked
+
+  - task_id: CT-P0-DATA-001
+    phase: P0
+    title: 数据中台与国产数据库 PoC 方案
+    type: data-architecture
+    worker_role: claude-data-worker
+    executor: claude
+    monitor: codex
+    depends_on:
+      - CT-P0-REQ-001
+    write_set:
+      - docs/c-tower/DATA_PLATFORM_POC_PLAN.md
+    forbidden_paths:
+      - backend/**
+      - frontend/**
+    acceptance:
+      - 给出国产关系数据库候选：达梦、人大金仓、OceanBase MySQL 兼容模式或业主指定库。
+      - 给出时序数据库候选和 200,000 点位链路验证方案。
+      - 覆盖对象存储、Redis 或兼容缓存、DQC、API 网关、One ID、One Thing、One Map。
+      - 给出 PoC 数据集、压测方法、成功标准和风险。
+    branch: codex/ctower/CT-P0-DATA-001-data-poc
+    artifact_dir: handoff/c-tower/CT-P0-DATA-001
+    gate_commands:
+      - git diff --check
+    status: blocked
+
+  - task_id: CT-P0-VIS-001
+    phase: P0
+    title: 数字孪生与云渲染专项方案
+    type: visualization-architecture
+    worker_role: claude-visualization-worker
+    executor: claude
+    monitor: codex
+    depends_on:
+      - CT-P0-REQ-001
+    write_set:
+      - docs/c-tower/VISUALIZATION_POC_PLAN.md
+    forbidden_paths:
+      - backend/**
+      - frontend/**
+    acceptance:
+      - 覆盖驾驶舱、数字孪生、云渲染、云推送、BIM/GLTF、专题可视化和模型数据管理。
+      - 给出 5 路保障和 10 路最高 4K 并发的验证方式。
+      - 明确哪些能力需要专业可视化团队、GPU 资源或第三方引擎。
+    branch: codex/ctower/CT-P0-VIS-001-visualization-poc
+    artifact_dir: handoff/c-tower/CT-P0-VIS-001
+    gate_commands:
+      - git diff --check
+    status: blocked
+
+  - task_id: CT-P0-SEC-001
+    phase: P0
+    title: 等保二级、隐私保护与信创适配方案
+    type: security
+    worker_role: claude-security-worker
+    executor: claude
+    monitor: codex
+    depends_on:
+      - CT-P0-REQ-001
+    write_set:
+      - docs/c-tower/SECURITY_AND_COMPLIANCE_PLAN.md
+    forbidden_paths:
+      - backend/**
+      - frontend/**
+    acceptance:
+      - 覆盖等保二级、日志审计、漏洞扫描、主机安全、WAF 和安全整改流程。
+      - 覆盖个人信息保护、人脸数据加密、脱敏展示和定期销毁。
+      - 覆盖国产服务器、国产数据库、国产操作系统和中间件适配路线。
+    branch: codex/ctower/CT-P0-SEC-001-security-compliance
+    artifact_dir: handoff/c-tower/CT-P0-SEC-001
+    gate_commands:
+      - git diff --check
+    status: blocked
+
+  - task_id: CT-P0-PLAN-001
+    phase: P0
+    title: P1 backlog、预算口径与集群运行报告
+    type: planning
+    worker_role: claude-planning-worker
+    executor: claude
+    monitor: codex
+    depends_on:
+      - CT-P0-ARCH-001
+      - CT-P0-DATA-001
+      - CT-P0-VIS-001
+      - CT-P0-SEC-001
+    write_set:
+      - docs/c-tower/P1_BACKLOG_AND_BUDGET.md
+      - docs/c-tower/AGENT_CLUSTER_RUN_REPORT.md
+    forbidden_paths:
+      - backend/**
+      - frontend/**
+    acceptance:
+      - 输出 P1 可执行 backlog、人员结构、周期、预算口径和风险。
+      - 输出第一轮 Claude 集群运行报告，包括任务、分支、报告、门禁和问题。
+      - 标出需要用户或业主确认的关键决策。
+    branch: codex/ctower/CT-P0-PLAN-001-p1-backlog
+    artifact_dir: handoff/c-tower/CT-P0-PLAN-001
+    gate_commands:
+      - git diff --check
+    status: blocked
+
+  - task_id: CT-P0-QA-001
+    phase: P0
+    title: P0 文档与任务图审查
+    type: review
+    worker_role: claude-review-worker
+    executor: claude
+    monitor: codex
+    depends_on:
+      - CT-P0-PLAN-001
+    write_set:
+      - docs/c-tower/P0_REVIEW_REPORT.md
+    forbidden_paths:
+      - backend/**
+      - frontend/**
+    acceptance:
+      - 审查 PRD、TECH_SPEC、DELIVERY_PLAN、TASK_GRAPH 和 P0 专项文档是否互相一致。
+      - 检查是否仍有“演示切片替代完整平台”的表达。
+      - 给出 P1 是否可以启动的结论和阻塞项。
+    branch: codex/ctower/CT-P0-QA-001-p0-review
+    artifact_dir: handoff/c-tower/CT-P0-QA-001
+    gate_commands:
+      - git diff --check
+    status: blocked
+
+  - task_id: CT-P1-BASE-001
+    phase: P1
+    title: 平台基础能力与 C塔管理端骨架
+    type: implementation
+    worker_role: claude-fullstack-worker
+    executor: claude
+    monitor: codex
+    depends_on:
+      - CT-P0-QA-001
+    write_set:
+      - backend/delivery-data-steward/**
+      - frontend/src/modules/c-tower/**
+      - docs/c-tower/P1_IMPLEMENTATION_REPORT.md
+    forbidden_paths:
+      - backend/delivery-core/**
+      - backend/delivery-app/src/main/resources/db/migration/**
+      - frontend/src/router/index.ts
+    acceptance:
+      - 只实现 P1 批准范围内的管理端骨架和读取接口。
+      - 不自行修改权限、路由、迁移或核心模块。
+      - 输出 P1 实现报告和测试结果。
+    branch: codex/ctower/CT-P1-BASE-001-platform-skeleton
+    artifact_dir: handoff/c-tower/CT-P1-BASE-001
+    gate_commands:
+      - git diff --check
+      - cd backend && ./mvnw -pl delivery-app -am package
+      - corepack pnpm --dir frontend typecheck
+      - corepack pnpm --dir frontend build
+    status: planned
+
+  - task_id: CT-P1-DB-001
+    phase: P1
+    title: P1 数据模型与 Flyway 迁移
+    type: database
+    worker_role: claude-data-worker
+    executor: claude
+    monitor: codex
+    depends_on:
+      - CT-P0-QA-001
+    write_set:
+      - backend/delivery-app/src/main/resources/db/migration/**
+      - docs/c-tower/P1_DATABASE_DESIGN.md
+    forbidden_paths:
+      - frontend/**
+      - backend/delivery-core/**
+    acceptance:
+      - 迁移只能追加新版本。
+      - 覆盖 P1 已批准的数据源、主数据、API 服务、DQC 和 PoC 记录模型。
+      - 明确国产库兼容性注意事项。
+    branch: codex/ctower/CT-P1-DB-001-p1-schema
+    artifact_dir: handoff/c-tower/CT-P1-DB-001
+    gate_commands:
+      - git diff --check
+      - cd backend && ./mvnw -pl delivery-app -am package
+    status: planned
+
+  - task_id: CT-P1-QA-001
+    phase: P1
+    title: P1 集成验收
+    type: test
+    worker_role: claude-qa-worker
+    executor: claude
+    monitor: codex
+    depends_on:
+      - CT-P1-BASE-001
+      - CT-P1-DB-001
+    write_set:
+      - docs/c-tower/P1_ACCEPTANCE_REPORT.md
+    forbidden_paths:
+      - backend/**
+      - frontend/**
+    acceptance:
+      - 执行 P1 后端构建、前端类型检查和前端构建。
+      - 检查需求矩阵中 P1 条目的覆盖状态。
+      - 输出阻塞项、缺陷和是否建议合入 integration/c-tower。
+    branch: codex/ctower/CT-P1-QA-001-p1-acceptance
+    artifact_dir: handoff/c-tower/CT-P1-QA-001
+    gate_commands:
+      - git diff --check
+      - cd backend && ./mvnw -pl delivery-app -am package
+      - corepack pnpm --dir frontend typecheck
+      - corepack pnpm --dir frontend build
+    status: planned

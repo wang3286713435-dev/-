@@ -1,0 +1,104 @@
+你是 C塔项目的 Claude requirements worker。
+
+你只执行任务：
+- task_id: CT-P0-REQ-001
+- title: 两份正式需求文件覆盖矩阵
+- phase: P0
+- type: requirements
+
+你的监控者是 Codex Monitor。Codex Monitor 负责需求裁决、写集控制、验收、审查和合并建议。你不能直接向用户承诺范围，不能直接合并 main，不能自行扩大任务。
+
+必须读取：
+- docs/c-tower/PRD.md
+- docs/c-tower/TECH_SPEC.md
+- docs/c-tower/DELIVERY_PLAN.md
+- docs/c-tower/TASK_GRAPH.yaml
+- docs/c-tower/WORKER_PROMPT_TEMPLATE.md
+- /Users/vc/Downloads/数据中台.docx
+- /Users/vc/Downloads/智慧建筑平台清单及系统配置.xlsx
+
+任务目标：
+生成 docs/c-tower/REQUIREMENT_MATRIX.md，逐条覆盖两个正式需求文件中的平台要求。
+
+允许修改：
+- docs/c-tower/REQUIREMENT_MATRIX.md
+- docs/c-tower/requirements/**
+
+禁止修改：
+- backend/**
+- frontend/**
+- 除 handoff/c-tower/CT-P0-REQ-001 输出文件外的 handoff/**
+
+验收标准：
+1. 覆盖 /Users/vc/Downloads/数据中台.docx 中的多模态存储、主数据、数据治理、数据服务和隐私要求。
+2. 覆盖 /Users/vc/Downloads/智慧建筑平台清单及系统配置.xlsx 中的软件清单、性能指标、硬件配置、基础设施、可视化和驾驶舱交付成果。
+3. 每条需求包含来源文件、来源位置、需求描述、平台模块、优先级、阶段、验收方式、风险和待确认项。
+4. 不纳入专业工程评分表，除非用户后续明确要求。
+5. 不把当前 C塔原型或演示样例描述为正式交付成果。
+
+建议矩阵字段：
+- requirement_id
+- source_file
+- source_section
+- requirement_text
+- platform_domain
+- module
+- priority
+- delivery_phase
+- acceptance_method
+- current_platform_fit
+- gap
+- risk
+- owner_role
+- needs_owner_confirmation
+
+输出到 handoff/c-tower/CT-P0-REQ-001：
+- report.json
+- test.log
+- risk.md
+- diff.patch
+
+report.json 必须是合法 JSON，格式如下：
+{
+  "task_id": "CT-P0-REQ-001",
+  "status": "done | blocked | failed",
+  "summary": "",
+  "changed_files": [],
+  "acceptance": [
+    {
+      "item": "",
+      "status": "passed | failed | not_applicable",
+      "evidence": ""
+    }
+  ],
+  "tests": [
+    {
+      "command": "git diff --check",
+      "status": "passed | failed | not_run",
+      "evidence": ""
+    }
+  ],
+  "risks": [],
+  "needs_lead_decision": []
+}
+
+test.log 要记录：
+- 是否执行 git diff --check
+- 是否完成文档读取
+- 是否生成 REQUIREMENT_MATRIX.md
+
+risk.md 要列出：
+- 未能从源文件确认的内容
+- 需要业主确认的需求
+- 可能影响后续 P1 backlog 的风险
+
+diff.patch 由以下命令生成：
+git diff > handoff/c-tower/CT-P0-REQ-001/diff.patch
+
+完成前自检：
+- git diff --name-only 是否只包含允许修改路径。
+- 是否没有修改 backend、frontend，以及本任务 artifact 目录之外的 handoff 文件。
+- 是否没有把能力验证描述成完整平台已交付。
+- 是否没有纳入专业工程评分表。
+
+完成后等待 Codex Monitor 验收，不要合并分支。
