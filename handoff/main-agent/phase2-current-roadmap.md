@@ -8,7 +8,7 @@
 
 当前 active 批次：
 
-`M2F：真实项目交付闭环试运行`
+`待用户确认`
 
 主线健康度：
 
@@ -57,18 +57,24 @@ M2E 收口依据：
 
 `M2F：真实项目交付闭环试运行`
 
-M2F 目标：
+M2F 已收口：
 
-- 以 `105 / 503` 为代表项目，验证正式工程主数据是否真的驱动交付。
-- 跑通文档 / 图纸应交项、缺失项、人工挂接、审核整改、交付包草案。
-- 只修真实链路断点，不新增大模块。
-- 不触碰真实 NAS 文件，不读取正文，不新增 Hermes / BIM / parser / indexing。
+- 以 `105 / 503` 为代表项目，已验证正式工程主数据能驱动交付。
+- 文档 22 个应交项、图纸 22 个应交项，当前均待人工补交。
+- 缺失项解释已能说明目标部位、交付定义、交付类型和需要补交的文件类型。
+- 推荐挂接仍需要人工确认。
+- 审核 / 整改查询和交付包草案 dry-run 链路不回归。
+- 未触碰真实 NAS 文件，未读取正文，未新增 Hermes / BIM / parser / indexing。
 
-M2F 交接：
+M2F 收口依据：
 
 - 计划：`handoff/main-agent/m2f-real-project-delivery-loop-trial-plan.md`
-- 开发 prompt：`handoff/dev-agent/current-prompt.md`
-- 测试 prompt：`handoff/test-agent/current-prompt.md`
+- 开发报告：`handoff/dev-agent/latest-report.md`
+- 测试报告：`handoff/test-agent/latest-report.md`
+
+下一批次建议：
+
+`M2G：真实 NAS 文件管理器灰度完善`
 
 M2D 已完成：
 

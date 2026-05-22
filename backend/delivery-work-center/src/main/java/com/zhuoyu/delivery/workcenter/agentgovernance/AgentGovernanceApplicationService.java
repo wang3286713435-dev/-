@@ -278,8 +278,8 @@ public class AgentGovernanceApplicationService {
         String key = missingItemKey(viewType, row.targetType(), row.targetId(), row.deliverableTypeId());
         String reason = row.missingReason() == null || row.missingReason().isBlank() ? "尚未挂接文件" : row.missingReason();
         String viewLabel = "DRAWING".equals(viewType) ? "图纸" : "文档";
-        String explanation = "%s还缺少“%s”。平台会推荐当前项目内登记为%s的候选文件，用户确认后才会挂接。"
-            .formatted(row.targetName(), row.deliverableTypeName(), viewLabel);
+        String explanation = "%s还缺少“%s / %s”。平台会推荐当前项目内登记为%s的候选文件，用户确认后才会挂接。"
+            .formatted(row.targetName(), row.deliverableDefinitionName(), row.deliverableTypeName(), viewLabel);
         return new AgentGovernanceMissingItem(
             key,
             viewType,

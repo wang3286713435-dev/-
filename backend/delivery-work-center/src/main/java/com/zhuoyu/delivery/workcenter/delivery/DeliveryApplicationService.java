@@ -258,7 +258,7 @@ public class DeliveryApplicationService {
                     req.deliverableTypeId(), req.deliverableTypeCode(), req.deliverableTypeName(),
                     req.fileKind(), true, false,
                     null, null, null, null, null,
-                    "尚未挂接文件"));
+                    missingReason(req, normalizedView)));
             }
         }
 
@@ -513,8 +513,8 @@ public class DeliveryApplicationService {
                     (Long) null, (Long) null, (String) null, mr.fileKind(), (String) null, (String) null,
                     (String) null, "MISSING",
                     "UNSUPPORTED", "NONE", "NOT_SUPPORTED", false,
-                    false, "缺失文件", "尚未挂接文件，无法判断在线预览能力。", "DANGER",
-                    "MISSING", "尚未挂接文件"
+                    false, "缺失文件", missingReason(mr, vt), "DANGER",
+                    "MISSING", missingReason(mr, vt)
                 ));
             }
         }
@@ -841,6 +841,22 @@ public class DeliveryApplicationService {
         if ("REVIEW_REQUIRED".equals(exportStatus)) return "文件已挂接但尚未通过审核（当前审核状态：" + (reviewStatus != null ? reviewStatus : "未知") + "）";
         if ("REJECTED".equals(exportStatus)) return "审核已驳回，请处理整改后重新提交审核";
         return "未知阻塞原因";
+    }
+
+    private String missingReason(DeliveryCompletenessRow row, String viewType) {
+        String targetLabel = "OBJECT".equals(row.targetType()) ? "管理对象" : "工程部位";
+        return "%s“%s”缺少“%s / %s”，需要人工选择当前项目资产目录中的%s文件完成补交。"
+            .formatted(
+                targetLabel,
+                row.targetName(),
+                row.deliverableDefinitionName(),
+                row.deliverableTypeName(),
+                fileKindLabel(expectedFileKind(viewType))
+            );
+    }
+
+    private String fileKindLabel(String fileKind) {
+        return "DRAWING".equals(fileKind) ? "图纸" : "文档";
     }
 
     private String normalizeFileExt(String fileExt, String fileName) {

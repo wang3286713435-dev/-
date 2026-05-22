@@ -1,5 +1,44 @@
 # 主 Agent 项目状态
 
+## 2026-05-23 M2F 正式收口
+
+- 测试 agent 已完成 `M2F：真实项目交付闭环试运行` 轻量验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- P2：
+  - 既有 Vite chunk size warning。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪文件继续排除。
+- 已确认：
+  - 105 / 503 已确认的正式工程主数据能驱动文档 / 图纸交付视图。
+  - 文档 22 个应交项、图纸 22 个应交项，当前均待人工补交。
+  - 缺失项解释能说明目标部位、交付定义、交付类型和需要补交的文件类型。
+  - 推荐挂接仍需要人工确认。
+  - 审核 / 整改查询和交付包草案 dry-run 链路未回归。
+  - 未触碰真实 NAS 文件，未读取正文，未新增 Hermes / BIM / parser / indexing 能力。
+- 主 agent 裁决：`M2F：真实项目交付闭环试运行` 正式收口。
+- 当前 active 批次：`待用户确认`。
+
+## 2026-05-23 M2F 开发完成，进入测试验收
+
+- 开发 agent 已完成 `M2F：真实项目交付闭环试运行`，报告写入 `handoff/dev-agent/latest-report.md`。
+- 主 agent 已审计开发报告、关键代码和专项脚本。
+- 本轮改动集中在：
+  - `DeliveryApplicationService`：补齐 `delivery-completeness` 与交付包草案中的业务化缺失 / 阻塞说明。
+  - `AgentGovernanceApplicationService`：缺失项解释补充交付定义。
+  - `scripts/dev/check-m2f-real-project-delivery-loop.sh`：新增 M2F 专项脚本。
+- 主 agent 初验通过：
+  - 后端健康检查：通过。
+  - `scripts/dev/check-m2f-real-project-delivery-loop.sh`：`PASS=6 FAIL=0`。
+  - `git diff --check`：通过。
+- 已确认：
+  - 105 正式工程主数据能驱动文档 / 图纸应交项。
+  - 当前文档 22 个应交项、图纸 22 个应交项，均处于待人工补交。
+  - 交付包草案 dry-run 共 44 条，均因未挂接文件而阻塞。
+  - 缺失 / 阻塞原因能写出目标、交付定义、交付类型和需要补交的文件类型。
+  - 未触碰真实 NAS 文件，未读取正文，未新增 Hermes / BIM / parser / indexing。
+- 当前裁决：进入测试 agent 轻量验收，尚未收口 M2F。
+
 ## 2026-05-22 M2F 启动
 
 - 用户已确认主 agent 的下一步计划，并允许执行。

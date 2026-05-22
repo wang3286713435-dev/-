@@ -3469,3 +3469,41 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - 文件正文读取。
   - Hermes / BIM / parser / indexing 新能力。
   - 自动挂接、自动审核、自动整改。
+
+## 2026-05-23 M2F 开发完成，进入测试验收
+
+- 开发 agent 已完成 M2F，并更新 `handoff/dev-agent/latest-report.md`。
+- 主 agent 已审计关键变更：
+  - `DeliveryApplicationService` 将缺失项和交付包阻塞原因从“尚未挂接文件”补强为业务可读说明。
+  - `AgentGovernanceApplicationService` 的缺失项解释补充交付定义，避免只展示交付类型。
+  - 新增 `scripts/dev/check-m2f-real-project-delivery-loop.sh`。
+- 主 agent 初验：
+  - 健康检查通过。
+  - M2F 专项脚本通过，`PASS=6 FAIL=0`。
+  - `git diff --check` 通过。
+- 当前 105 状态：
+  - 正式工程主数据已驱动文档 / 图纸交付。
+  - 文档 22 个应交项、图纸 22 个应交项。
+  - 当前均待人工补交文件。
+  - 交付包草案 dry-run 共 44 条，未生成真实物理包。
+- 边界确认：
+  - 未触碰真实 NAS 文件。
+  - 未读取正文。
+  - 未新增 Hermes / BIM / parser / indexing。
+  - 未自动挂接、自动审核或自动整改。
+- 当前建议：进入测试 agent 轻量验收，暂不收口。
+
+## 2026-05-23 M2F 正式收口
+
+- 测试 agent 已完成 M2F 轻量验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：通过。
+- 当前无 P0 / P1。
+- P2 仅为既有 Vite chunk size warning 和非交付未跟踪文件提示。
+- 已确认：
+  - 105 / 503 正式工程主数据能驱动文档 / 图纸交付视图。
+  - 缺失项解释包含目标部位、交付定义、交付类型和需要补交的文件类型。
+  - 推荐挂接仍需要人工确认。
+  - 审核 / 整改查询和交付包草案 dry-run 链路不回归。
+  - 未触碰真实 NAS 文件，未读取正文，未新增 Hermes / BIM / parser / indexing 能力。
+- 主 agent 裁决：`M2F：真实项目交付闭环试运行` 正式收口。
+- 下一批次暂不自动启动，等待用户确认。
