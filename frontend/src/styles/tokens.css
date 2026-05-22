@@ -1,0 +1,486 @@
+/* ============================================================
+ * 卓羽智能数字化交付平台 设计 token
+ * 与公司视觉设计规范 v0.4 对齐 (DESIGN_SYSTEM.md §5/§6/§7)
+ * 蓝白科技风 + 工程系统感 + 克制
+ * ============================================================ */
+
+:root {
+  /* ---- 主色 / 蓝白工程基调 ---- */
+  --zy-navy-950: #050b14;
+  --zy-navy-900: #07111f;
+  --zy-navy-800: #0f1f35;
+  --zy-navy-700: #1a2c47;
+  --zy-blue-700: #1d4ed8;
+  --zy-blue-600: #2563eb;
+  --zy-blue-500: #3b82f6;
+  --zy-blue-200: #bfdbfe;
+  --zy-blue-100: #dbeafe;
+  --zy-blue-50:  #eff6ff;
+
+  /* ---- 辅色 / 状态点缀，禁大面积铺底 ---- */
+  --zy-cyan-500:  #14b8c8;
+  --zy-cyan-400:  #22d3ee;
+  --zy-green-500: #22c55e;
+  --zy-green-50:  #ecfdf5;
+  --zy-amber-500: #f59e0b;
+  --zy-amber-50:  #fff8eb;
+  --zy-red-500:   #ef4444;
+  --zy-red-50:    #fef2f2;
+
+  /* ---- 中性 / 文本与背景层级 ---- */
+  --zy-ink:        #0b1220;
+  --zy-text:       #1f2937;
+  --zy-text-soft:  #334155;
+  --zy-muted:      #5f6b7a;
+  --zy-subtle:     #94a3b8;
+  --zy-line:       #dbe5f1;
+  --zy-line-soft:  #edf2f7;
+  --zy-bg:         #f6f9fc;
+  --zy-bg-deep:    #eef3f8;
+  --zy-surface:    #ffffff;
+  --zy-surface-soft: #fbfdff;
+
+  /* ---- 字体 / 规范 §6.1 推荐 ---- */
+  --zy-font-sans:
+    Inter,
+    "Noto Sans SC",
+    -apple-system,
+    BlinkMacSystemFont,
+    "PingFang SC",
+    "Segoe UI",
+    "Microsoft YaHei",
+    sans-serif;
+  --zy-font-mono:
+    "JetBrains Mono",
+    ui-monospace,
+    "SFMono-Regular",
+    Menlo,
+    Consolas,
+    monospace;
+
+  /* ---- 字号阶 / 规范 §6.2 ---- */
+  --zy-fs-xs:   12px;
+  --zy-fs-sm:   13px;
+  --zy-fs-base: 14px;
+  --zy-fs-md:   15px;
+  --zy-fs-lg:   16px;
+  --zy-fs-xl:   18px;
+  --zy-fs-2xl:  20px;
+  --zy-fs-3xl:  24px;
+  --zy-fs-4xl:  28px;
+  --zy-fs-5xl:  32px;
+
+  /* ---- 行高 ---- */
+  --zy-lh-tight:   1.2;
+  --zy-lh-snug:    1.35;
+  --zy-lh-normal:  1.55;
+  --zy-lh-relaxed: 1.7;
+
+  /* ---- 字重 ---- */
+  --zy-fw-regular: 400;
+  --zy-fw-medium:  500;
+  --zy-fw-semi:    600;
+  --zy-fw-bold:    700;
+  --zy-fw-black:   800;
+
+  /* ---- 间距阶 / 4 的倍数 ---- */
+  --zy-sp-0:  0px;
+  --zy-sp-1:  4px;
+  --zy-sp-2:  8px;
+  --zy-sp-3:  12px;
+  --zy-sp-4:  16px;
+  --zy-sp-5:  20px;
+  --zy-sp-6:  24px;
+  --zy-sp-7:  28px;
+  --zy-sp-8:  32px;
+  --zy-sp-10: 40px;
+  --zy-sp-12: 48px;
+  --zy-sp-16: 64px;
+
+  /* ---- 圆角 / 规范 §7.2，默认 8 ---- */
+  --zy-radius-xs:   2px;
+  --zy-radius-sm:   4px;
+  --zy-radius-base: 8px;
+  --zy-radius-md:   10px;
+  --zy-radius-lg:   12px;
+  --zy-radius-pill: 999px;
+
+  /* ---- 阴影 / 规范 §7.3 偏弱 ---- */
+  --zy-shadow-xs:    0 1px 2px rgba(15, 23, 42, 0.04);
+  --zy-shadow-sm:    0 2px 6px rgba(15, 23, 42, 0.05);
+  --zy-shadow-md:    0 8px 22px rgba(15, 23, 42, 0.06);
+  --zy-shadow-lg:    0 18px 42px rgba(15, 23, 42, 0.055);
+  --zy-shadow-focus: 0 0 0 3px rgba(37, 99, 235, 0.18);
+  --zy-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+
+  /* ---- 描边 / 线条是核心资产 §7.4 ---- */
+  --zy-border:        1px solid var(--zy-line);
+  --zy-border-soft:   1px solid var(--zy-line-soft);
+  --zy-border-strong: 1px solid #c8d4e4;
+
+  /* ---- Motion / 公司规范 §12 「系统在运行而非视觉在表演」 ---- */
+  --zy-ease:        cubic-bezier(0.4, 0, 0.2, 1);
+  --zy-ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --zy-duration-1:  120ms;
+  --zy-duration-2:  180ms;
+  --zy-duration-3:  240ms;
+  --zy-duration-4:  360ms;
+
+  /* ---- 布局 ---- */
+  --zy-sidebar-w:    232px;
+  --zy-header-h:     64px;
+  --zy-content-max:  1480px;
+  --zy-content-pad:  24px;
+}
+
+/* ============================================================
+ * Element Plus 主题映射 — 让 EP 默认蓝色统一到品牌蓝
+ * 仅覆盖关键变量，避免改伤组件内部用法
+ * ============================================================ */
+
+:root {
+  /* primary */
+  --el-color-primary:           var(--zy-blue-600);
+  --el-color-primary-light-3:   var(--zy-blue-500);
+  --el-color-primary-light-5:   #6b9ff6;
+  --el-color-primary-light-7:   #a9c5fa;
+  --el-color-primary-light-8:   var(--zy-blue-200);
+  --el-color-primary-light-9:   var(--zy-blue-100);
+  --el-color-primary-dark-2:    var(--zy-blue-700);
+
+  /* status */
+  --el-color-success: var(--zy-green-500);
+  --el-color-warning: var(--zy-amber-500);
+  --el-color-danger:  var(--zy-red-500);
+  --el-color-error:   var(--zy-red-500);
+  --el-color-info:    var(--zy-subtle);
+
+  /* text */
+  --el-text-color-primary:     var(--zy-text);
+  --el-text-color-regular:     var(--zy-text);
+  --el-text-color-secondary:   var(--zy-muted);
+  --el-text-color-placeholder: var(--zy-subtle);
+  --el-text-color-disabled:    #c4cbd4;
+
+  /* border */
+  --el-border-color:         var(--zy-line);
+  --el-border-color-light:   var(--zy-line-soft);
+  --el-border-color-lighter: var(--zy-line-soft);
+  --el-border-color-extra-light: var(--zy-line-soft);
+  --el-border-radius-base:   var(--zy-radius-base);
+  --el-border-radius-small:  var(--zy-radius-sm);
+
+  /* surface */
+  --el-bg-color:           var(--zy-surface);
+  --el-bg-color-page:      var(--zy-bg);
+  --el-bg-color-overlay:   var(--zy-surface);
+  --el-fill-color-blank:   var(--zy-surface);
+  --el-fill-color-light:   var(--zy-bg);
+  --el-fill-color-lighter: var(--zy-surface-soft);
+
+  /* font */
+  --el-font-family: var(--zy-font-sans);
+}
+
+/* Element Plus 组件细节微调 — 让 EP 默认观感更贴近"精致企业中后台" */
+
+.el-button {
+  font-weight: var(--zy-fw-medium);
+  letter-spacing: 0;
+}
+
+.el-button + .el-button {
+  margin-left: 8px;
+}
+
+.el-table {
+  --el-table-border-color:    var(--zy-line-soft);
+  --el-table-header-bg-color: #f7fafd;
+  --el-table-row-hover-bg-color: #f4f8fc;
+  font-size: var(--zy-fs-base);
+}
+
+.el-table th.el-table__cell {
+  color: var(--zy-muted);
+  font-weight: var(--zy-fw-semi);
+  background: #f7fafd;
+}
+
+.el-tag {
+  border-radius: var(--zy-radius-sm);
+  font-weight: var(--zy-fw-medium);
+}
+
+.el-tag--small {
+  height: 22px;
+  line-height: 20px;
+  padding: 0 8px;
+}
+
+.el-card {
+  --el-card-border-color:  var(--zy-line);
+  --el-card-border-radius: var(--zy-radius-base);
+  --el-card-padding:       20px;
+  box-shadow: var(--zy-shadow-xs);
+}
+
+.el-drawer__header {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: var(--zy-border-soft);
+  color: var(--zy-text);
+  font-weight: var(--zy-fw-semi);
+}
+
+.el-dialog__header {
+  border-bottom: var(--zy-border-soft);
+  padding-bottom: 14px;
+}
+
+.el-dialog__title {
+  color: var(--zy-text);
+  font-weight: var(--zy-fw-semi);
+}
+
+.el-input__wrapper,
+.el-textarea__inner,
+.el-select .el-input__wrapper {
+  box-shadow: 0 0 0 1px var(--zy-line) inset;
+  transition: box-shadow var(--zy-duration-2) var(--zy-ease);
+}
+
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus,
+.el-select .el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px var(--zy-blue-500) inset,
+              var(--zy-shadow-focus);
+}
+
+.el-menu {
+  border-right: none !important;
+}
+
+.el-empty__description {
+  color: var(--zy-muted);
+}
+
+.el-message-box {
+  --el-messagebox-border-radius: var(--zy-radius-base);
+}
+
+/* 全局焦点环 — 可访问性 */
+:focus-visible {
+  outline: 2px solid var(--zy-blue-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* 滚动条精修 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.28);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.4);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* 选区色 */
+::selection {
+  background: var(--zy-blue-100);
+  color: var(--zy-blue-700);
+}
+
+/* 字体特性 — 数字等宽，专业感 */
+:root {
+  font-feature-settings:
+    "ss01",
+    "cv11",
+    "tnum";
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+ * UX2 升级 — 与公司官网 zhuoyusmart.top 视觉对齐
+ *   1. 拟态玻璃 header + panel
+ *   2. Hero 光场（radial + conic 极光）
+ *   3. 全局网格底纹 + radial aura
+ *   4. light / dark 双主题
+ *   5. 鼠标追踪光斑 (--pointer-x/y, --spot-x/y)
+ * ============================================================ */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* 官网语义 token —— 用于 hero / glass / aura */
+  --zy-bg-page:        var(--zy-bg);
+  --zy-bg-section:     var(--zy-surface);
+  --zy-bg-soft:        #f3f7fb;
+  --zy-surface-raised: var(--zy-surface);
+
+  --zy-text-primary:   var(--zy-ink);
+  --zy-text-secondary: var(--zy-text-soft);
+
+  --zy-line-strong:    #bfd0e5;
+
+  --zy-brand:          var(--zy-blue-600);
+  --zy-brand-strong:   var(--zy-blue-700);
+  --zy-accent:         var(--zy-cyan-500);
+
+  /* 拟态玻璃 / panel tint */
+  --zy-header-bg:      rgba(255, 255, 255, 0.86);
+  --zy-panel-tint:     rgba(255, 255, 255, 0.86);
+  --zy-panel-ink:      var(--zy-ink);
+
+  /* hero base */
+  --zy-hero-base:      var(--zy-surface);
+  --zy-hero-ink:       #061326;
+  --zy-hero-muted:     #42617e;
+
+  /* 网格底纹 */
+  --zy-grid-line:      rgba(37, 99, 235, 0.045);
+  --zy-grid-size:      96px;
+
+  /* 官网风更厚柔阴影（cards / drawers / dialog） */
+  --zy-shadow-soft:    0 22px 58px rgba(15, 23, 42, 0.052);
+  --zy-shadow-strong:  0 34px 86px rgba(15, 23, 42, 0.11);
+
+  /* 鼠标追踪光斑默认位置 */
+  --pointer-x:         50%;
+  --pointer-y:         28%;
+  --spot-x:            50%;
+  --spot-y:            24%;
+
+  --zy-image-filter:   saturate(0.95) contrast(1.02);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* 官网 dark token */
+  --zy-bg:             #050b14;
+  --zy-bg-page:        #050b14;
+  --zy-bg-section:     #07111f;
+  --zy-bg-soft:        #0d1b2e;
+  --zy-bg-deep:        #050b14;
+  --zy-surface:        #0f1f35;
+  --zy-surface-soft:   #0d1b2e;
+  --zy-surface-raised: #132842;
+
+  --zy-ink:            #eef6ff;
+  --zy-text:           #c7d5e7;
+  --zy-text-primary:   #eef6ff;
+  --zy-text-soft:      #c7d5e7;
+  --zy-text-secondary: #c7d5e7;
+  --zy-muted:          #91a4bb;
+  --zy-subtle:         #6e8398;
+
+  --zy-line:           rgba(184, 205, 230, 0.18);
+  --zy-line-soft:      rgba(184, 205, 230, 0.10);
+  --zy-line-strong:    rgba(184, 205, 230, 0.32);
+
+  --zy-brand:          #6ea8ff;
+  --zy-brand-strong:   #8fc0ff;
+  --zy-blue-700:       #8fc0ff;
+  --zy-blue-600:       #6ea8ff;
+  --zy-blue-500:       #4d8eef;
+  --zy-blue-200:       rgba(110, 168, 255, 0.36);
+  --zy-blue-100:       rgba(110, 168, 255, 0.22);
+  --zy-blue-50:        rgba(110, 168, 255, 0.12);
+  --zy-accent:         #38d5e8;
+  --zy-cyan-500:       #38d5e8;
+
+  --zy-green-500:      #4ade80;
+  --zy-green-50:       rgba(74, 222, 128, 0.14);
+  --zy-amber-500:      #fbbf24;
+  --zy-amber-50:       rgba(251, 191, 36, 0.14);
+  --zy-red-500:        #fb7185;
+  --zy-red-50:         rgba(251, 113, 133, 0.14);
+
+  --zy-shadow-xs:      0 1px 2px rgba(0, 0, 0, 0.4);
+  --zy-shadow-sm:      0 2px 8px rgba(0, 0, 0, 0.4);
+  --zy-shadow-md:      0 12px 32px rgba(0, 0, 0, 0.42);
+  --zy-shadow-lg:      0 28px 72px rgba(0, 0, 0, 0.5);
+  --zy-shadow-soft:    0 26px 72px rgba(0, 0, 0, 0.3);
+  --zy-shadow-strong:  0 38px 104px rgba(0, 0, 0, 0.44);
+
+  --zy-header-bg:      rgba(5, 11, 20, 0.76);
+  --zy-panel-tint:     rgba(15, 31, 53, 0.84);
+  --zy-panel-ink:      #eef6ff;
+  --zy-hero-base:      #06101e;
+  --zy-hero-ink:       #eef6ff;
+  --zy-hero-muted:     #a7bbd3;
+  --zy-grid-line:      rgba(110, 168, 255, 0.075);
+
+  --zy-image-filter:   saturate(0.82) contrast(0.96) brightness(0.72);
+}
+
+/* dark theme 下 EP 默认变量也跟着切 */
+[data-theme="dark"] {
+  --el-color-primary:           var(--zy-brand);
+  --el-color-primary-light-3:   #87b6ff;
+  --el-color-primary-light-5:   #a6cbff;
+  --el-color-primary-light-7:   #c4dcff;
+  --el-color-primary-light-8:   rgba(110, 168, 255, 0.24);
+  --el-color-primary-light-9:   rgba(110, 168, 255, 0.14);
+  --el-color-primary-dark-2:    #8fc0ff;
+
+  --el-bg-color:           var(--zy-surface);
+  --el-bg-color-page:      var(--zy-bg);
+  --el-bg-color-overlay:   var(--zy-surface);
+  --el-fill-color-blank:   var(--zy-surface);
+  --el-fill-color-light:   var(--zy-surface-soft);
+  --el-fill-color-lighter: var(--zy-bg-soft);
+
+  --el-text-color-primary:     var(--zy-text-primary);
+  --el-text-color-regular:     var(--zy-text-soft);
+  --el-text-color-secondary:   var(--zy-muted);
+  --el-text-color-placeholder: var(--zy-subtle);
+  --el-text-color-disabled:    rgba(238, 246, 255, 0.32);
+
+  --el-border-color:         var(--zy-line);
+  --el-border-color-light:   var(--zy-line-soft);
+  --el-border-color-lighter: var(--zy-line-soft);
+}
+
+/* Dark theme EP 表格表头 */
+[data-theme="dark"] .el-table {
+  --el-table-bg-color:        var(--zy-surface);
+  --el-table-tr-bg-color:     var(--zy-surface);
+  --el-table-header-bg-color: var(--zy-bg-soft);
+  --el-table-row-hover-bg-color: rgba(110, 168, 255, 0.06);
+  --el-table-border-color:    var(--zy-line);
+}
+
+[data-theme="dark"] .el-table th.el-table__cell {
+  color: var(--zy-muted);
+  background: var(--zy-bg-soft);
+}
+
+[data-theme="dark"] ::selection {
+  background: rgba(110, 168, 255, 0.24);
+  color: var(--zy-text-primary);
+}
+
+/* Reduced motion 全局覆盖（已在 index.css 设过；保留兜底） */
+@media (prefers-reduced-motion: reduce) {
+  .zy-hero-lightfield,
+  .zy-hero-lightfield *,
+  .zy-particle-field {
+    animation: none !important;
+  }
+}

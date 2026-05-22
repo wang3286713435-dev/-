@@ -173,7 +173,15 @@ public final class WorkCenterDtos {
         Integer totalRequired,
         Integer completedCount,
         Integer missingCount,
+        Integer draftCount,
+        Integer pendingReviewCount,
+        Integer approvedCount,
+        Integer rejectedCount,
+        Integer reviewReadyCount,
         Double completionRate,
+        Double approvedRate,
+        String nextActionCode,
+        String nextActionText,
         java.util.List<DeliveryCompletenessRow> rows
     ) {
     }

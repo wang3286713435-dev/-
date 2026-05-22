@@ -128,13 +128,13 @@ echo "== wait failure job =="
 failure_done="$(wait_job_status "${failure_job_id}" "FAILED")"
 assert_ok "${failure_done}"
 MISSING_FILE="${missing_file}" parse_json '
-import json, os, sys
+import json, sys
 job=json.load(sys.stdin)["data"]
 reason=job.get("failureReason") or ""
 assert job["status"] == "FAILED", job
-assert os.environ["MISSING_FILE"] in reason, job
-assert reason.startswith("文件不存在: /tmp/"), job
-print("failure reason visible")
+assert "底层路径已隐藏" in reason, job
+assert "/tmp/" not in reason and "nas://" not in reason and "storagePath" not in str(job.get("requestPayload") or ""), job
+print("failure reason sanitized")
 ' <<< "${failure_done}"
 
 rm -rf "${tmp_dir}"

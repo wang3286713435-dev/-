@@ -1,156 +1,204 @@
-# 开发 Agent 当前任务：M1A 平台主线功能基线审计与交付闭环缺口收束
+# 开发 Agent 当前任务：UX3 主视图聚焦与认知减负
 
-你是数字化交付平台二期开发 agent。工作目录：
+你是数字化交付平台 UX3 批次的开发 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
-当前开发方式：独立开发 Codex 会话主导开发。禁止创建子 agent，禁止调用 Claude Code。
-
-## 0. 路线冻结
-
-当前用户裁决：
-
-- G4 暂停开发。
-- Hermes 定位冻结。
-- 后续 Hermes 必须重新对齐后，通过独立分支继续完善。
-- 主线不能继续卡死在 Hermes 功能中。
-- 当前主线恢复到平台功能本身的完善。
-
-当前 active 主线：
-
-`M1A：平台主线功能基线审计与交付闭环缺口收束`
-
 完成承诺固定为：
 
-`<promise>MAINLINE_M1A_PLATFORM_BASELINE_AUDIT_COMPLETE</promise>`
+`<promise>MAINLINE_UX3_MAIN_VIEW_FOCUS_COMPLETE</promise>`
 
-## 1. 必须先阅读
+## 0. 当前状态
+
+UX2 已验收通过并推送，当前从 UX2 基线切出 UX3 分支：
+
+`codex/ux3-main-view-focus`
+
+UX3 是 UX 分支内的小批次，不进入 M2C，不新增业务能力。
+
+用户明确反馈：
+
+- 当前主视图过于混乱。
+- 用户进入后不知道应该干什么。
+- 数据管家最重要的是文件管理、项目管理与可视化。
+- 主视图不要留太多教程与文字。
+- 应通过交互逻辑和 UI 引导用户使用平台。
+- 当前平台内容并不复杂，最主要功能应集中在用户视野中。
+
+## 1. 本轮目标
+
+本轮只做主视图减法和入口聚焦：
+
+1. 资产总览改成更直接的“项目启动台”。
+2. 项目工作台首屏聚焦三个核心入口：
+   - 文件管理。
+   - 项目资产驾驶舱 / 项目可视化。
+   - 交付状态。
+3. 大段教程、长说明、偏技术状态从主视图移到折叠区、详情区或空状态中。
+4. 保留旧路由兼容，不删除功能。
+5. 保留 UX2 视觉升级，不回滚 lightfield / spotlight / glass-lite。
+
+## 2. 必须先阅读
 
 开始前先阅读：
 
 1. `handoff/main-agent/status.md`
 2. `handoff/main-agent/development-log.md`
-3. `handoff/main-agent/phase2-current-roadmap.md`
-4. `handoff/main-agent/mainline-git-governance-and-hermes-freeze.md`
-5. `handoff/dev-agent/latest-report.md`
-6. `handoff/test-agent/latest-report.md`
-7. `docs/07-complete-delivery-prd.md`
-8. `docs/08-acceptance-and-agent-integration.md`
-9. `docs/10-phase2-development-roadmap.md`
+3. `handoff/main-agent/ux3-main-view-focus-plan.md`
+4. `handoff/dev-agent/latest-report.md`
+5. `handoff/test-agent/latest-report.md`
 
 重点检查：
 
-1. 项目工作台：
-   - `frontend/src/modules/data-steward/pages/AssetOverviewPage.vue`
-   - `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
-   - `frontend/src/modules/core/components/ProjectWorkspaceNav.vue`
-2. 文件管理：
-   - `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
-   - `frontend/src/modules/data-steward/pages/AssetCatalogPage.vue`
-3. 工程主数据：
-   - `frontend/src/modules/master-data/pages/ProjectInitializationPage.vue`
-   - `frontend/src/modules/master-data/pages/SectionNodesPage.vue`
-   - `frontend/src/modules/master-data/pages/NodeTypesPage.vue`
-   - `frontend/src/modules/master-data/pages/DeliverableStandardPage.vue`
-4. 工作中心：
-   - `frontend/src/modules/work-center/components/DeliveryViewPanel.vue`
-   - `frontend/src/modules/work-center/pages/RectificationsPage.vue`
-5. 后端相关：
-   - `backend/delivery-master-data/src/main/java/com/zhuoyu/delivery/masterdata/**`
-   - `backend/delivery-work-center/src/main/java/com/zhuoyu/delivery/workcenter/**`
-   - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/**`
+1. `frontend/src/modules/data-steward/pages/AssetOverviewPage.vue`
+2. `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
+3. `frontend/src/modules/core/components/ProjectWorkspaceNav.vue`
+4. `frontend/src/modules/core/components/SidebarMenu.vue`
+5. `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
+6. `frontend/src/styles/index.css`
+7. `frontend/src/styles/effects.css`
+8. `frontend/src/styles/tokens.css`
 
-如实际文件位置不同，用 `rg` 定位，禁止凭空重复造模块。
+## 3. 允许修改
 
-## 2. 本轮目标
+只允许修改：
 
-本轮不是继续开发 Hermes，也不是继续 G4。
+- `frontend/**`
+- `handoff/dev-agent/latest-report.md`
 
-本轮目标是回到平台主线，做一次平台功能基线审计，找出阻塞真实项目交付闭环的缺口，并只做小范围修补。
+允许做：
 
-重点关注：
+- 调整资产总览首屏结构。
+- 调整项目工作台首屏结构。
+- 调整项目内导航层级。
+- 折叠或降级低频入口。
+- 压缩说明文字。
+- 把偏技术字段移到详情 / 技术信息区。
+- 微调样式以强化核心入口。
 
-1. 项目工作台是否清晰。
-2. 资产总览和文件管理是否适合真实项目使用。
-3. 工程主数据是否能被普通员工理解和维护。
-4. 标准驱动交付链路是否能跑通。
-5. 文档 / 图纸交付、审核、整改、导出预检查是否稳定。
-6. BIM Mock 入口是否只是安全占位，未误导成真实轻量化。
-7. 权限、审计、路径脱敏是否没有回归。
+## 4. 严禁越界
 
-## 3. 本轮允许做什么
+严禁：
 
-允许：
+1. 修改 `backend/**`。
+2. 修改数据库迁移。
+3. 修改 `docs/**`。
+4. 新增或修改后端接口。
+5. 改变权限规则。
+6. 新增 Hermes 能力。
+7. 新增 BIM 轻量化能力。
+8. 新增真实 NAS 写能力。
+9. 读取文件正文。
+10. 删除旧路由导致书签或测试脚本失效。
+11. 物理删除功能入口或破坏既有业务页面。
+12. 为 105 / 503 / 93 / 506 写死逻辑。
+13. 把 `.claude/**`、`CLAUDE.md`、`tmp/**` 纳入提交。
 
-- 修复项目工作台、文件管理、工程主数据、交付页面中的 P0/P1/P2。
-- 修复页面跳转、项目上下文、刷新、空状态、错误提示。
-- 修复真实项目使用中明显不清楚的文案和入口。
-- 修复主线平台功能脚本或补最小 smoke。
-- 修复不影响底层模型的小型只读接口问题。
-- 修复权限、审计、路径脱敏回归。
+如你认为必须改后端才能解决问题，停止并写入报告，不得自行修改后端。
 
-## 4. 本轮禁止做什么
+## 5. 具体开发要求
 
-禁止：
+### A. 资产总览：项目启动台
 
-1. 继续 G4。
-2. 新增 Hermes 能力。
-3. 进入 8B / 8C / 9A。
-4. 做真实 BIM 轻量化。
-5. 做构件级解析。
-6. 读取 PDF / Office / DWG / RVT / IFC 正文。
-7. 做 selective indexing。
-8. 写 Hermes memory。
-9. 写 OpenSearch / Qdrant / MinIO documents/chunks。
-10. 开放真实 NAS 增删改查。
-11. Agent 自动审批、自动整改、自动挂接。
-12. 把 catalog metadata 冒充正文 evidence。
-13. 返回真实 NAS 路径、raw row、SQL、token、secret、password。
-14. 为 105 写死特殊逻辑。
-15. 修改 `docs/**`，除非主 agent 单独授权。
+目标：
 
-如发现 Hermes 现有能力阻塞主线，只允许做 P0/P1 修复，不允许借修复继续扩 Hermes。
+- 用户进入后第一眼知道：先选项目。
+- 主视图核心是项目管理，不是教程页。
 
-## 5. 建议执行方式
+要求：
 
-先做审计，再决定是否小修：
+- 删除或折叠 `FLOW / STATE / ALERT` 等大块教程式首屏内容。
+- 首屏保留并强化：
+  - 项目搜索。
+  - 真实项目列表。
+  - 推荐进入项目。
+  - 最近项目。
+  - 核心动作：进入项目、查看文件管理、查看项目可视化 / 资产驾驶舱。
+- 统计和风险提醒可以保留，但必须降级为紧凑摘要或折叠区，不占据主视觉。
+- 测试 / 样例 / 历史项目筛选能力保留，但默认不抢主视图。
 
-1. 跑一遍当前平台主线 smoke。
-2. 用 105 和另一个真实 NAS 项目抽查：
-   - 资产总览。
-   - 项目工作台。
-   - 文件管理。
-   - 初始化向导。
-   - 部位树。
-   - 节点类型。
-   - 交付物标准。
-   - 文档交付。
-   - 图纸交付。
-   - 审核 / 整改。
-   - 导出预检查。
-3. 列出 P0 / P1 / P2。
-4. 只修 P0/P1 和非常小的 P2。
-5. 不新增大模块。
+### B. 项目工作台：核心入口优先
+
+目标：
+
+- 用户进入项目后第一眼看到核心工作入口。
+
+要求：
+
+- 顶部去掉或弱化偏技术标签的强展示：
+  - `平台内部ID`
+  - `NAS_REAL_PILOT`
+  - `ACTIVE`
+- 这些字段如仍需保留，移入“项目详情 / 技术信息”折叠区。
+- 首屏核心入口固定为：
+  - 文件管理。
+  - 项目资产驾驶舱 / 可视化。
+  - 交付状态。
+- 工程主数据入口保留，但不要比上述核心入口更抢眼。
+- Hermes、模型集成、管理对象、事项、任务、导出、文件服务等低频入口放入更多工具。
+
+### C. 项目内导航：主入口 + 更多
+
+目标：
+
+- 不再一眼看到大量同级按钮。
+
+要求：
+
+- `ProjectWorkspaceNav` 继续保留三段语义，但视觉上压缩为主入口 + 更多入口。
+- 保留旧页面入口和跳转能力。
+- 当前项目上下文必须持续可见。
+- 不要让主导航像“功能清单墙”。
+
+### D. 文件管理入口
+
+目标：
+
+- 文件管理作为数据管家最重要功能之一，必须更容易进入。
+
+要求：
+
+- 资产总览的项目行或推荐卡应能快速进入文件管理。
+- 项目工作台首屏必须有明显文件管理入口。
+- 不改变文件管理业务逻辑。
+
+### E. 项目可视化入口
+
+目标：
+
+- 当前未接真实 BIM 引擎前，项目可视化可以对应资产驾驶舱 / 项目数据可视化，不伪装成真实 3D。
+
+要求：
+
+- 文案使用“项目可视化 / 资产驾驶舱”，不要承诺真实 BIM 轻量化。
+- 不进入 8B / BIM 引擎能力。
 
 ## 6. 自测要求
 
 至少执行：
 
 ```bash
-cd /Users/vc/Documents/数字化交付平台/backend
-./mvnw -pl delivery-app -am -DskipTests package
-
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-phase2-batch6a-project-initialization.sh
-bash scripts/dev/check-phase2-batch6b-delivery-package.sh
-bash scripts/dev/check-phase2-batch7a-preview-export-precheck.sh
-bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh
+bash scripts/dev/check-m2b-nas-write-trial.sh
+bash scripts/dev/check-m2a-controlled-nas-write.sh
+bash scripts/dev/check-m1f-employee-access-control.sh
+bash scripts/dev/check-m1e-file-task-continuity.sh
+bash scripts/dev/check-m1d-standard-delivery-loop.sh
+bash scripts/dev/check-m1c-real-project-masterdata.sh
 git diff --check
 ```
 
-如果补了新的主线 smoke，报告中说明脚本名和覆盖范围。
+浏览器至少检查：
+
+1. Fresh login 后进入资产总览，5 秒内能看懂先选项目。
+2. 资产总览首屏核心是项目搜索、项目列表、推荐进入、文件管理、项目可视化。
+3. 503 / 506 项目工作台首屏最显眼的是文件管理、资产驾驶舱 / 可视化、交付状态。
+4. 大段教程文字不再占据主视图。
+5. 技术标签不再抢主视觉。
+6. 旧链接不白屏。
+7. 1280 / 1440 / 1920 宽度下无横向溢出、按钮丢失、文字挤压。
 
 ## 7. 报告要求
 
@@ -160,12 +208,13 @@ git diff --check
 
 报告必须包含：
 
-1. 当前 Git 分支和基线 commit。
-2. 是否确认 G4 暂停、Hermes 冻结。
-3. 审计了哪些平台主线页面和接口。
-4. 105 与另一个真实 NAS 项目抽查结果。
-5. P0 / P1 / P2 列表。
-6. 修复了哪些文件。
-7. 是否触碰 Hermes，若触碰，说明是否仅为 P0/P1 修复。
-8. 自测命令结果。
-9. 是否建议进入下一轮主线平台功能开发。
+1. 主视图减法做了什么。
+2. 资产总览如何变成项目启动台。
+3. 项目工作台核心入口如何调整。
+4. 哪些教程 / 技术信息被折叠或降级。
+5. 文件管理和项目可视化入口是否更明显。
+6. 旧链接兼容结果。
+7. 自测命令结果。
+8. 是否修改后端 / docs / 数据库迁移。
+9. P0 / P1 / P2。
+10. 是否建议进入 UX3 测试验收。

@@ -6,7 +6,7 @@
         class="directory-tree-node__toggle"
         type="button"
         :aria-label="expanded ? '折叠目录' : '展开目录'"
-        @click.stop="expanded = !expanded"
+        @click.stop="toggleExpanded"
       >
         <el-icon class="directory-tree-node__toggle-icon" :class="{ 'is-expanded': expanded }">
           <CaretRight />
@@ -37,15 +37,17 @@
         :node="child"
         :depth="depth + 1"
         :active-path="activePath"
+        :expanded-paths="expandedPaths"
         @select="$emit('select', $event)"
         @enter="$emit('enter', $event)"
+        @toggle-expand="(path, isExpanded) => $emit('toggle-expand', path, isExpanded)"
       />
     </ul>
   </li>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import { CaretRight, Folder, FolderOpened } from '@element-plus/icons-vue';
 
 import type { DirectoryTreeNode } from '@/modules/data-steward/utils/directoryTree';
@@ -58,23 +60,41 @@ const props = withDefaults(defineProps<{
   node: DirectoryTreeNode;
   depth?: number;
   activePath: string;
+  expandedPaths?: string[];
 }>(), {
-  depth: 0
+  depth: 0,
+  expandedPaths: () => []
 });
 
 const emit = defineEmits<{
   select: [path: string];
   enter: [path: string];
+  'toggle-expand': [path: string, expanded: boolean];
 }>();
 
-const expanded = ref(props.depth === 0);
 const hasChildren = computed(() => props.node.children.length > 0);
+const expanded = computed(() =>
+  props.depth === 0
+  || props.expandedPaths.includes(props.node.fullPath)
+  || isActiveAncestor(props.node.fullPath, props.activePath)
+);
 
 function enterDirectory() {
   if (hasChildren.value) {
-    expanded.value = true;
+    emit('toggle-expand', props.node.fullPath, true);
   }
   emit('enter', props.node.fullPath);
+}
+
+function toggleExpanded() {
+  emit('toggle-expand', props.node.fullPath, !expanded.value);
+}
+
+function isActiveAncestor(nodePath: string, activePath: string) {
+  if (!nodePath || !activePath) return false;
+  const normalizedNode = nodePath.replace(/\/+$/, '');
+  const normalizedActive = activePath.replace(/\/+$/, '');
+  return normalizedActive === normalizedNode || normalizedActive.startsWith(`${normalizedNode}/`);
 }
 </script>
 
@@ -103,16 +123,21 @@ function enterDirectory() {
 .directory-tree-node__toggle {
   border: 0;
   background: transparent;
-  color: #64748b;
+  color: var(--zy-subtle);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
+  transition: color var(--zy-duration-2) var(--zy-ease);
+}
+
+.directory-tree-node__toggle:hover {
+  color: var(--zy-blue-600);
 }
 
 .directory-tree-node__toggle-icon {
-  transition: transform 0.15s ease;
+  transition: transform var(--zy-duration-2) var(--zy-ease);
 }
 
 .directory-tree-node__toggle-icon.is-expanded {
@@ -122,24 +147,30 @@ function enterDirectory() {
 .directory-tree-node__button {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--zy-sp-2);
   min-width: max-content;
   border: 0;
   background: transparent;
-  color: #475569;
+  color: var(--zy-text-soft);
   cursor: pointer;
-  padding: 6px 10px 6px 0;
-  border-radius: 6px;
+  padding: 5px 10px 5px 4px;
+  border-radius: var(--zy-radius-sm);
+  font-family: inherit;
+  font-size: var(--zy-fs-sm);
+  transition:
+    background var(--zy-duration-2) var(--zy-ease),
+    color var(--zy-duration-2) var(--zy-ease);
 }
 
 .directory-tree-node__button:hover {
-  background: rgba(59, 130, 246, 0.08);
+  background: var(--zy-blue-50);
+  color: var(--zy-blue-700);
 }
 
 .directory-tree-node__button.is-active {
-  background: rgba(59, 130, 246, 0.12);
-  color: #1d4ed8;
-  font-weight: 600;
+  background: var(--zy-blue-100);
+  color: var(--zy-blue-700);
+  font-weight: var(--zy-fw-semi);
 }
 
 .directory-tree-node__folder {

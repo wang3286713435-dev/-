@@ -246,7 +246,7 @@ function formatDate(value: string | null | undefined) {
 }
 
 .muted-text {
-  color: #94a3b8;
+  color: var(--zy-subtle);
   font-size: 12px;
 }
 </style>

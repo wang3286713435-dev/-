@@ -1,5 +1,384 @@
 # 主 Agent 开发监控日志
 
+## 2026-05-22：UX2 前端使用逻辑重构专项待启动
+
+- 用户确认 UX2 方向：
+  - UX1 仍偏 UI 美化，没有彻底解决用户使用逻辑。
+  - UX2 要从“用户刚进入平台知道怎么用”出发，重排入口、字段、主次关系和下一步动作。
+  - 可以引入轻量拟态玻璃和 Apple 式卡片层级，但不能牺牲表格、权限、NAS 操作、交付审核的可读性。
+- 主 agent 裁决：
+  - UX2 必须等待 UX1 测试报告。
+  - 若 UX1 有 P0 / P1，先修 UX1。
+  - 当前仅准备 UX2 待启动计划和 prompt，不切换 `current-prompt.md`。
+- 已写入：
+  - UX2 计划：`handoff/main-agent/ux2-user-experience-refactor-plan.md`
+  - UX2 待启动 Claude prompt：`handoff/dev-agent/ux2-user-experience-refactor-prompt.md`
+  - UX2 待启动测试 prompt：`handoff/test-agent/ux2-user-experience-refactor-test-prompt.md`
+
+## 2026-05-21：UX1 正式进入 Claude Code 前端壳层重构
+
+- 用户确认执行 UX1 前端壳层重构专项计划。
+- 主 agent 已将当前开发 prompt 切换为 Claude Code 专用 UX1 prompt。
+- 本批由 `Claude Code` 主导开发，主 agent 负责监控、纠偏和验收判断。
+- 当前分支：`codex/ux1-frontend-routing-visual`。
+- 当前策略：
+  - 冻结后端功能开发。
+  - 不进入 M2C、8B、Hermes 新能力或任何后端新功能。
+  - 先重构前端壳层、路由、菜单、项目工作台和页面层级。
+- Claude 边界：
+  - 只允许修改 `frontend/**` 和 `handoff/dev-agent/latest-report.md`。
+  - 禁止修改 `backend/**`、数据库迁移、接口语义、权限规则和 `docs/**`。
+  - 如需要后端改动，必须停止并报告，不得自行修改。
+- 开发 prompt：`handoff/dev-agent/current-prompt.md`。
+
+## 2026-05-22：UX1 完整重构进入测试验收
+
+- Claude Code 报告 UX1 前端壳层完整重构已完成。
+- 主 agent 已读取 `handoff/dev-agent/latest-report.md`。
+- 初步审计：
+  - 改动集中在 `frontend/**` 与 handoff。
+  - `backend/**`、`docs/**`、数据库迁移未见修改。
+  - 发现未跟踪 `.claude/**`、`CLAUDE.md` 等非运行文件，后续收口前需决定清理或明确不纳入提交。
+- 已将测试 agent prompt 切换为 UX1 验收：
+  - 多分辨率视觉巡检。
+  - 项目间路由切换连续性。
+  - 旧链接兼容。
+  - 文件管理 / 工程主数据 / 交付工作中心主链路。
+  - M2B/M2A/M1F/M1E/M1D/M1C 回归。
+- 测试 prompt：`handoff/test-agent/current-prompt.md`。
+
+## 2026-05-21：UX1 紧急 UI / UX 修复首轮
+
+- M2B 已完成 Git checkpoint 并推送。
+- 已切出前端专项分支：`codex/ux1-frontend-routing-visual`。
+- 本轮先做 UX1 急救型修复，不作为完整 UX1 收口。
+- 已修改：
+  - `AppLayout.vue`：顶部补充当前工作上下文、页面标题和下一步说明。
+  - `ProjectWorkspaceNav.vue`：项目工作台导航从按钮堆叠优化为三段清晰分组。
+  - `AssetProjectDetailPage.vue`：checksum 后台任务默认收起，避免压过文件目录和文件列表。
+  - `index.css`：补充顶部上下文样式。
+- 未修改：
+  - `backend/**`
+  - `docs/**`
+  - 数据库迁移
+  - 权限规则
+  - Hermes / BIM / NAS 写能力边界
+- 验证：
+  - 前端构建通过，仅保留既有 Vite chunk size warning。
+  - 后端健康检查 `UP`。
+  - `git diff --check` 通过。
+- 急救报告：`handoff/main-agent/ux1-emergency-ui-fix-report.md`。
+
+## 2026-05-21：M2B 受控 NAS 写操作真实项目灰度收口
+
+- 测试 agent 已完成 M2B 复核。
+- 结论：通过，当前无 P0 / P1 / P2。
+- 已确认：
+  - 默认无灰度配置时，真实项目写操作关闭。
+  - M2B 专项脚本连续两次通过，结果 `PASS=18 FAIL=0`。
+  - M2A / M1F / M1E / M1D / M1C 回归均通过。
+  - 真实项目 UI 只做只读冒烟，未触发真实业务目录写入。
+  - 未发现 raw path、敏感字段、Hermes/G4/8B/8C/9A 扩展或 parser/indexing 边界突破。
+- 主 agent 裁决：
+  - M2B 可以正式收口。
+  - 主线健康度维持 `绿灯`。
+  - M2B 不代表默认开放真实项目 NAS 写操作；真实写入仍必须通过项目级灰度开关、目录范围、角色 / 账号边界和后端校验。
+  - 下一步按既定顺序建议先 Git checkpoint / push，再进入 `UX1：前端路由逻辑与视觉体验专项优化`。
+- 收口报告：`handoff/main-agent/m2b-nas-write-trial-closure.md`。
+
+## 2026-05-21：M2B 受控 NAS 写操作真实项目灰度启动
+
+- 用户确认：M2A 完整度可以进入 M2B。
+- 主 agent 复查：
+  - 后端健康检查 `UP`。
+  - `git diff --check` 通过。
+  - M2A 专项脚本通过，结果 `PASS=21 FAIL=0`。
+  - M2A bugfix 已覆盖“项目工作台路由项目可直接执行 NAS 操作，不要求 JWT 当前项目先切换”。
+- 主 agent 裁决：
+  - M2A 功能完整度足够进入 M2B。
+  - M2B 不是继续扩展完整 NAS CRUD，而是给真实项目试运行增加灰度开关、可写目录范围和安全提示。
+  - 进入 M2B 前必须完成当前成果 Git checkpoint / push。
+- 已写入：
+  - M2B 计划：`handoff/main-agent/m2b-nas-write-trial-plan.md`
+  - M2B 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - M2B 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-05-21：UX1 前端路由逻辑与视觉体验专项批次冻结
+
+- 用户反馈：当前平台核心功能做得不错且基本完善，但可用性、跳转逻辑、用户使用方式和视觉质感较差。
+- 用户裁决：
+  - 当前批次收口并推送 Git 后，主线后续需要新开一个专门优化前端路由逻辑和视觉的批次。
+  - UX1 由 `Gemini` 主导开发，主 agent 负责监控、审计、纠偏和最终收口判断。
+  - UX1 可以调整前端路由、菜单、组件布局、样式和交互文案。
+  - UX1 不得修改后端任何功能实现。
+  - 旧链接必须兼容跳转，不能直接删除导致用户书签或测试脚本失效。
+- 主 agent 裁决：
+  - UX1 不抢占 M2B 命名。
+  - 批次顺序固定为：`M2A 当前 bugfix 收口并推送 Git -> M2B 受控 NAS 写操作真实项目灰度 -> UX1 前端路由与视觉体验优化`。
+  - UX1 视觉方向为 `精致企业中后台`，保留 Vue 3 + Element Plus 体系，不做炫酷大屏化。
+  - UX1 只做前端，不修改 `backend/**`、数据库迁移、接口语义或权限规则。
+- 已写入：
+  - UX1 计划：`handoff/main-agent/ux1-frontend-routing-visual-plan.md`
+  - UX1 Gemini 开发 prompt：`handoff/dev-agent/ux1-gemini-frontend-routing-visual-prompt.md`
+  - UX1 测试 prompt：`handoff/test-agent/ux1-frontend-routing-visual-test-prompt.md`
+
+## 2026-05-21：M2A 新增文件夹误报当前项目缺陷修复
+
+- 用户反馈：真实使用 M2A 新增文件夹时，页面提示 `请先切换到当前项目`。
+- 根因确认：
+  - 项目文件管理页使用 `/data-steward/assets/{projectId}?tab=files` 路由项目作为上下文。
+  - M2A 后端 `ControlledNasController` 额外强制 `JWT currentProjectId == 路由 projectId`。
+  - 当用户有该项目权限但全局当前项目未切换时，会误报 `CORE_PROJECT_CONTEXT_MISMATCH`。
+- 修复动作：
+  - `ControlledNasController` 不再调用 `ProjectContextApplicationService.requireCurrentProject(...)`。
+  - Controller 只获取当前登录 principal。
+  - 项目权限、角色权限、路径安全和写操作权限仍由 `ControlledNasApplicationService` 基于 `projectId` 校验。
+- 回归保护：
+  - `scripts/dev/check-m2a-controlled-nas-write.sh` 增加断言：不先切换 JWT 当前项目，也能在项目工作台路由项目上新建文件夹。
+- 验证：
+  - 后端构建通过。
+  - M2A 专项脚本通过，结果 `PASS=21 FAIL=0`。
+- 修复报告：`handoff/main-agent/m2a-current-project-context-bugfix-report.md`。
+
+## 2026-05-21：M2A NAS 受控文件操作安全底座收口
+
+- 测试 agent 已完成 M2A 复核。
+- 结论：通过，当前无 P0 / P1 / P2。
+- 已确认：
+  - M2A 专项脚本 `scripts/dev/check-m2a-controlled-nas-write.sh` 通过，结果 `PASS=20 FAIL=0`。
+  - M1F / M1E / M1D / M1C / Phase2 batch4 回归均通过。
+  - 项目内新建文件夹、上传、重命名、移动、删除到隔离区、恢复、操作记录、审计和元数据同步均在隔离测试项目内通过。
+  - 查看者写操作被拒绝，未授权用户写操作被拒绝，路径穿越被拒绝。
+  - 自动化写操作只发生在脚本创建的 `/tmp` 隔离项目根目录内。
+  - 真实项目页面只读检查了 `隔离区` 和 `操作记录` 抽屉，未在真实业务 NAS 目录执行上传、移动、删除、重命名等写操作。
+  - 未发现 raw NAS 路径、`storage_uri`、`storage_path`、raw row、SQL、token、secret、password 泄露。
+- 主 agent 裁决：
+  - M2A 可以正式收口。
+  - 主线继续保持 `绿灯可继续主线开发`。
+  - M2A 只是安全底座通过，不代表全量开放完整 NAS CRUD。
+  - 永久删除、跨项目移动、批量不可逆操作、Agent / Hermes 触发 NAS 写操作仍禁止。
+  - 下一步建议为 `M2B：受控 NAS 写操作真实项目灰度试运行与安全开关`，需用户确认后再启动。
+- 收口报告：`handoff/main-agent/m2a-controlled-nas-write-closure.md`。
+
+## 2026-05-21：M2A NAS 受控文件操作安全底座启动
+
+- 用户确认希望开放真实项目的 NAS 增删改查能力，即可以通过平台直接操作 NAS 里的真实数据。
+- 主 agent 裁决：
+  - 不能一次性开放完整 CRUD。
+  - 当前 active 批次固定为 `M2A：NAS 受控文件操作安全底座`。
+  - M2A 第一批只做 `低风险写操作 + 删除到隔离区，不开放永久删除与批量操作`。
+  - 本批必须先建立权限、路径、审计、隔离和恢复边界。
+- 允许范围：
+  - 项目内新建文件夹、上传、重命名、移动。
+  - 删除到隔离区、隔离区恢复。
+  - 操作记录、审计和元数据同步。
+- 当前禁止：
+  - 永久物理删除、跨项目移动、批量不可逆操作。
+  - Agent / Hermes 触发 NAS 写操作。
+  - 前端传入或展示真实 NAS 绝对路径。
+  - 文件正文读取、真实 BIM 轻量化、构件解析。
+  - G4 / Hermes 新能力 / 8B / 8C / 9A。
+- 已写入：
+  - M2A 计划：`handoff/main-agent/m2a-controlled-nas-write-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-05-21：M1F 员工注册、项目权限管理与局域网试运行收口
+
+- 测试 agent 已完成 M1F 复核。
+- 结论：通过，当前无 P0 / P1 / P2。
+- 已确认：
+  - 员工手机号注册可用。
+  - 无项目授权员工进入等待授权。
+  - 管理员可管理员工启停 / 删除 / 授权。
+  - 普通员工越权拒绝。
+  - 停用 / 删除后不可继续使用。
+  - 局域网 `*:5173` 监听与 `192.168.1.66:5173` 访问可用。
+  - M1C / M1D / M1E 回归通过。
+  - 未触碰真实 NAS 文件，未修改 `docs/**`。
+- 主 agent 裁决：
+  - M1F 可以收口。
+  - 主线继续保持 `绿灯可继续主线开发`。
+  - 下一步可进入 M2A，但 M2A 必须以受控 NAS 写操作安全底座开局，不能直接开放完整 CRUD。
+
+## 2026-05-21：M1E 文件管理连续工作体验与后台任务可追踪性收口
+
+- 测试 agent 已完成 M1E 验收。
+- 结论：通过，当前无 P0 / P1 / P2。
+- 已确认：
+  - 503/105 与 506/93 文件管理页面均可正常打开。
+  - 文件管理可恢复目录、筛选、分页和最近文件上下文。
+  - `重置视图` 可恢复默认文件视图。
+  - 文件详情和任务区已将平台文件 ID、项目内部 ID 和 checksum 任务 ID 业务化展示。
+  - checksum 后台任务可见、可追踪、可查看脱敏失败原因、可受控重试。
+  - 普通用户不能跨项目读取任务或任务详情。
+  - 未发现真实 NAS 路径、raw row、SQL、token、secret、password 泄露。
+  - 未发生真实 NAS 写操作，未误进入 Hermes/G4/8B/8C/9A。
+- 主 agent 裁决：
+  - M1E 可以收口。
+  - 主线继续保持 `绿灯可继续主线开发`。
+  - M1A-M1E 已形成 M1 平台本体稳定期的完整阶段成果。
+  - 历史下一步建议：`M1 阶段复盘与 M2A 准备`；现已由 M1F 收口和 M2A 启动取代。
+- 收口报告：`handoff/main-agent/m1e-file-task-continuity-closure.md`。
+
+## 2026-05-20：M1E 文件管理连续工作体验与后台任务可追踪性启动
+
+- 用户选择 M1E。
+- 主 agent 裁决：
+  - M1E 是 M1 平台本体稳定期的连续工作体验收口批次，不是 M2A。
+  - 本批目标是让文件管理按项目记住目录、筛选、分页和最近文件上下文，并让 checksum 后台任务在项目内可见、可理解、可重试。
+  - M1E 不新增大模块，不开放真实 NAS 写操作。
+- 当前禁止：
+  - Hermes 新能力、G4、8B / 8C / 9A、真实 NAS 写操作、正文抽取、真实 BIM 轻量化、Agent 自动治理。
+- 已写入：
+  - M1E 计划：`handoff/main-agent/m1e-file-task-continuity-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-05-20：M1D 标准驱动交付闭环强化收口
+
+- 测试 agent 已完成 M1D 复核。
+- 结论：通过，当前无 P0 / P1 / P2。
+- 已确认：
+  - 项目工作台信息结构符合 `项目资产 -> 工程主数据 -> 交付工作中心`。
+  - 工作中心不是工程主数据子功能，但位于项目工作台下并排在工程主数据之后。
+  - 工程主数据未就绪时，工作中心提示 `请先生成 / 确认工程主数据草案`。
+  - 文档/图纸交付闭环、缺失项解释、远程分页补交、审核整改闭环和 dry-run 导出预检查均通过。
+  - 未发现真实 NAS 路径、raw row、SQL、token、secret、password 泄露。
+  - 未发生真实 NAS 写操作，未误进入 Hermes/G4/8B/8C/9A。
+- 主 agent 裁决：
+  - M1D 可以收口。
+  - 主线继续保持 `绿灯可继续主线开发`。
+  - M1 平台本体稳定期可以进入阶段复盘。
+  - 下一步建议：`M1E：文件管理连续工作体验与后台任务可追踪性收口`，或 `M1 阶段复盘与 M2A 准备`，需用户确认后再启动。
+- 收口报告：`handoff/main-agent/m1d-standard-delivery-loop-closure.md`。
+
+## 2026-05-20：M1D 标准驱动交付闭环强化启动
+
+- 用户确认进入 M1D。
+- 主 agent 裁决：
+  - M1D 是 M1 平台本体稳定期的闭环强化批次，不是 Hermes/G4 分支。
+  - 本批目标是让员工不依赖 Hermes，也能跑通“应交项 -> 缺失项 -> 补交 -> 审核 -> 整改 -> 复审/重新补交 -> 完整率刷新 -> 导出预检查”。
+  - M1D 不新增大模块，优先收束现有文档交付、图纸交付、批量挂接、审核整改和导出预检查能力。
+  - M1D 补充吸收用户提出的信息结构纠偏：项目工作台必须呈现 `项目资产 -> 工程主数据 -> 交付工作中心`，工作中心不是工程主数据子功能，但必须在工程主数据之后；工程主数据未就绪时，工作中心提示先生成 / 确认工程主数据草案。
+  - 105 项目仅作为样本之一，不能写死；必须至少抽查另一个真实 NAS 项目。
+- 当前禁止：
+  - Hermes 新能力、G4、8B / 8C / 9A、真实 NAS 写操作、正文抽取、真实 BIM 轻量化、Agent 自动治理。
+- 已写入：
+  - M1D 计划：`handoff/main-agent/m1d-standard-delivery-loop-plan.md`
+  - M1D 信息结构补充裁决：`handoff/main-agent/m1d-workspace-ia-correction.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-05-20：M1C 工程主数据真实项目落地收口
+
+- 测试 agent 已完成 M1C 验收。
+- 结论：通过，当前无 P0 / P1 / P2。
+- 已确认：
+  - 105/503 与 93/506 两个真实 NAS 项目均通过接入评估与草案预览。
+  - assessment 可展示资产登记、文件类型统计、主数据状态、缺口和下一步动作。
+  - preview 可展示 catalog-only、证据来源、置信度、风险提示和人工确认要求。
+  - 未确认 apply 被拒绝。
+  - 确认 apply 后保持幂等，不覆盖已有主数据，并产生审计事件。
+  - 部位树、节点类型、交付物标准、文档交付和图纸交付入口不回归。
+  - 未发现真实 NAS 路径、raw row、SQL、token、secret、password 泄露。
+  - 未新增 Hermes/G4/8B/8C/9A 能力，未触碰真实 NAS 写操作。
+- 主 agent 裁决：
+  - M1C 可以收口。
+  - 主线继续保持 `绿灯可继续主线开发`。
+  - 下一批建议为 `M1D：标准驱动交付闭环强化`，需用户确认后再启动。
+- 收口报告：`handoff/main-agent/m1c-real-project-masterdata-closure.md`。
+
+## 2026-05-20：M1C 工程主数据真实项目落地启动
+
+- 用户确认进入 M1C。
+- 主 agent 裁决：
+  - M1C 是平台本体稳定批次，不是 Hermes/G4 分支。
+  - 本批目标是让真实 NAS 项目通过“资产证据 -> 接入评估 -> 草案预览 -> 人工确认 -> 工程主数据可维护”进入交付闭环。
+  - 模板只能是草案/建议，不能冒充真实工程结构。
+  - 105 项目仅作为样本之一，不能写死；必须至少抽查另一个真实 NAS 项目。
+- 当前禁止：
+  - Hermes 新能力、G4、8B / 8C / 9A、真实 NAS 写操作、正文抽取、真实 BIM 轻量化、Agent 自动治理。
+- 已写入：
+  - M1C 计划：`handoff/main-agent/m1c-real-project-masterdata-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-05-20：M1B 项目工作台与数据管家可用性收口
+
+- 测试 agent 已完成 M1B 验收。
+- 结论：通过，当前无 P0 / P1 / P2。
+- 已确认：
+  - Fresh login 后进入 `/data-steward/assets`。
+  - 资产总览默认真实项目统计不再为 0。
+  - 503 / 105 与 506 / 93 项目工作台抽查通过。
+  - 工程主数据、文档交付、图纸交付页面抽查通过。
+  - 页面主路径没有错误指向 Hermes / G4。
+  - 未发现 raw path、SQL、token、secret 泄露。
+  - 未触发真实 NAS 写操作。
+- 主 agent 裁决：
+  - M1B 可以收口。
+  - 主线继续保持 `绿灯可继续主线开发`。
+  - 下一批建议为 `M1C：工程主数据真实项目落地`，需用户确认后再启动。
+- 收口报告：`handoff/main-agent/m1b-project-workbench-usability-closure.md`。
+
+## 2026-05-20：M1B 项目工作台与数据管家可用性收口启动
+
+- 用户确认进入 M1B。
+- 主 agent 裁决：
+  - M1B 不是新功能扩张批次，而是可用性收口批次。
+  - 目标是让普通员工能理解资产总览、项目状态、项目工作台入口和下一步动作。
+  - M1B 优先处理 M1A 测试报告中记录的 `/data-steward/assets` 默认真实项目统计显示为 0 等可用性问题。
+- 当前范围：
+  - 资产总览 Hero 区。
+  - 项目卡片 / 列表状态。
+  - 项目工作台顶部说明。
+  - 数据管家 / 工程主数据 / 工作中心入口解释。
+  - 空状态、提示文案、下一步按钮。
+- 当前禁止：
+  - Hermes 新能力、G4、8B / 8C / 9A、真实 NAS 写操作、正文抽取、真实 BIM 轻量化、Agent 自动治理。
+- 已写入：
+  - M1B 计划：`handoff/main-agent/m1b-project-workbench-usability-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-05-20：M1A 平台主线功能基线审计正式收口
+
+- 测试 agent 已完成 M1A 登录超时修复后极短复验。
+- 结论：通过，当前无 P0 / P1。
+- 已关闭：
+  - `P1-M1A-LOGIN-TIMEOUT`。
+  - Catalog 详情路径脱敏 P1。
+  - 旧文件资源路径脱敏 P1。
+- 验证通过：
+  - Fresh login 可进入 `/data-steward/assets`。
+  - 503 / 105 项目页面抽查通过。
+  - 506 / 93 项目页面抽查通过。
+  - 文件访问安全脚本 `PASS=18 FAIL=0`。
+  - 前端构建、健康检查、`git diff --check` 通过。
+- 主 agent 裁决：
+  - M1A 可以收口。
+  - 主线健康度从 `黄灯可控` 调整为 `绿灯可继续主线开发`。
+  - 这不代表进入 9A，也不代表客户交付准备完成。
+  - 下一批建议为 `M1B：项目工作台与数据管家可用性收口`，需用户确认后再启动。
+- 收口报告：`handoff/main-agent/m1a-platform-baseline-closure.md`。
+
+## 2026-05-20：M1A 登录超时 P1 修复
+
+- 测试 agent 首轮 M1A 验收不通过，阻塞项为 `P1-M1A-LOGIN-TIMEOUT`。
+- 主 agent 复现：
+  - 命令行登录接口请求很快。
+  - 浏览器 fresh login 会卡住并出现 `timeout of 10000ms exceeded`。
+  - 带 `Origin: http://127.0.0.1:5173` 的请求在旧后端运行态下无响应。
+- 修复动作：
+  - 将 Vite 本地代理目标从 `http://localhost:8080` 固定为 `http://127.0.0.1:8080`。
+  - 重启后端后，带 Origin 请求恢复正常。
+- 验证结果：
+  - Fresh login 约 1.6 秒进入 `/data-steward/assets`。
+  - `POST /api/core/auth/login` 与 `GET /api/core/users/me` 均返回 200。
+- 报告文件：`handoff/main-agent/m1a-login-timeout-fix-report.md`。
+- 测试 agent 当前 prompt 已改为 M1A 极短复验，重点复验 fresh login、503/506 页面和路径脱敏。
+
 ## 2026-05-20：M 系列主线健康恢复正式启动
 
 - 用户确认：现在开始进入 M 系列，目标是将主线健康度从 `黄灯可控` 提升为 `绿灯`。
@@ -2685,3 +3064,108 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
 - 主 agent 裁决：
   - G3 可以收口。
   - 下一阶段不自动进入 8B / 8C / 9A，需用户另行确认。
+
+## 2026-05-22 UX1 验收 P1 处理
+
+- 测试 agent 正式验收结论：UX1 不通过但无 P0，唯一 P1 为 `frontend/src/styles/tokens.css` 仍未跟踪。
+- 主 agent 已确认该文件是 `frontend/src/styles/index.css` 引用的运行期样式 token 文件，属于 UX1 必须交付内容。
+- 已将处理原则写入 `handoff/main-agent/status.md`：纳入 `frontend/src/styles/tokens.css`，不纳入 `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付文件；UX2 仍待 UX1 极短复验通过后再启动。
+
+## 2026-05-22 UX1 收口
+
+- 测试 agent 极短复验已确认 UX1 tokens.css P1 修复通过。
+- 当前 UX1 无 P0 / P1 / P2。
+- 主 agent 已写入 UX1 收口报告：`handoff/main-agent/ux1-frontend-routing-visual-closure.md`。
+- UX1 可正式收口；下一步建议先做 Git checkpoint，再进入 UX2 前端使用逻辑与体验重构专项。
+
+## 2026-05-22 UX2 启动
+
+- 用户确认进入 UX2。
+- 已从 UX1 收口提交后切出分支：`codex/ux2-user-experience-refactor`。
+- 已将 `handoff/dev-agent/current-prompt.md` 切换为 UX2 当前开发任务。
+- 已将 `handoff/test-agent/current-prompt.md` 切换为 UX2 验收任务。
+- UX2 仍由 Claude Code 主导开发，主 agent 负责监控和审计。
+- UX2 只做前端使用逻辑、信息层级、字段减负、下一步动作提示和视觉体验，不改后端业务逻辑。
+
+## 2026-05-22 UX2 续接安排
+
+- Claude Code 已完成 UX2 视觉子批次，并在 `handoff/dev-agent/latest-report.md` 顶部追加报告。
+- 用户确认：UX2 后续功能由原 Codex 开发 agent 继续完成，完善 UX2 后再进入整体验收。
+- 主 agent 已将 `handoff/dev-agent/current-prompt.md` 改为 Codex 开发 agent 续接任务。
+- 续接重点：
+  - 保留 Claude 视觉升级。
+  - 继续完成资产总览入口逻辑、项目工作台下一步引导、文件管理字段减负、工程主数据和交付页业务解释。
+  - 不修改后端、数据库迁移、接口语义、权限规则和 `docs/**`。
+
+## 2026-05-22 UX2 开发完成，进入整体验收
+
+- Codex 开发 agent 已完成 UX2 使用逻辑与字段减负续接，并更新 `handoff/dev-agent/latest-report.md`。
+- 主 agent 已核对开发报告和变更清单：
+  - 改动集中在 `frontend/**` 和 handoff 文件。
+  - 未发现 `backend/**`、数据库迁移、`docs/**` 变更。
+  - 前端新增运行期文件需纳入交付范围，测试 prompt 已补充“运行期前端文件不得保持未跟踪”的 P1 检查，避免重复 UX1 tokens.css 问题。
+- 当前建议：进入 UX2 测试 agent 整体验收。
+
+# 2026-05-22 UX3 启动
+
+- 用户确认进入 `UX3：主视图聚焦与认知减负`。
+- 已从 UX2 收口提交后切出分支：`codex/ux3-main-view-focus`。
+- UX3 不进入 M2C，不新增业务能力，只做 UX 分支内的小批次。
+- 已写入：
+  - UX3 主计划：`handoff/main-agent/ux3-main-view-focus-plan.md`
+  - 开发 agent prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 agent prompt：`handoff/test-agent/current-prompt.md`
+  - 主状态：`handoff/main-agent/status.md`
+- UX3 核心目标：
+  - 资产总览从教程式入口改成项目启动台。
+  - 项目工作台首屏聚焦文件管理、项目资产驾驶舱 / 可视化、交付状态。
+  - 技术标签和大段说明降级，不再抢主视觉。
+  - 旧路由和现有功能保留。
+- 边界：
+  - 只允许修改 `frontend/**` 和 `handoff/dev-agent/latest-report.md`。
+  - 禁止修改后端、数据库迁移、接口语义、权限规则、`docs/**`。
+
+# 2026-05-22 UX3 开发完成，进入测试验收
+
+- 开发 agent 已完成 UX3 并写入 `handoff/dev-agent/latest-report.md`。
+- 主 agent 已核对变更范围：
+  - 前端页面改动集中在资产总览、项目工作台、项目内导航和壳层。
+  - 未发现 `backend/**`、数据库迁移、`docs/**` 变更。
+- 开发报告中的自测通过：
+  - 前端构建。
+  - 后端健康检查。
+  - M2B / M2A / M1F / M1E / M1D / M1C 回归。
+  - `git diff --check`。
+- 当前建议：进入 UX3 测试 agent 验收。
+
+# 2026-05-22 UX3 收口
+
+- UX3 测试 agent 验收通过，报告已写入 `handoff/test-agent/latest-report.md`。
+- 当前无 P0 / P1。
+- 已确认：
+  - Fresh login 后资产总览可在约 3.1 秒内展示项目启动台和核心入口。
+  - 503 / 506 项目工作台首屏聚焦文件管理、项目可视化 / 资产驾驶舱、交付状态。
+  - 旧链接兼容、文件管理、项目可视化入口和多分辨率布局通过。
+  - M2B / M2A / M1F / M1E / M1D / M1C 回归通过。
+  - 未发现 `backend/**`、数据库迁移、`docs/**` 改动。
+  - 未发现真实 NAS 路径或敏感字段泄露。
+- P2 后续打磨项：
+  - 既有 Vite chunk size warning。
+  - 项目工作台仍有少量偏技术文本。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 非交付未跟踪文件继续排除。
+- 主 agent 裁决：UX3 可以正式收口，下一步建议做 Git checkpoint。
+
+## 2026-05-22 UX2 收口
+
+- UX2 测试 agent 整体验收通过，报告已写入 `handoff/test-agent/latest-report.md`。
+- 当前无 P0 / P1。
+- 已确认：
+  - 资产总览、503 / 506 项目工作台、文件管理、工程主数据、交付工作中心、旧链接兼容和多分辨率检查通过。
+  - M2B / M2A / M1F / M1E / M1D / M1C 回归通过。
+  - 未发现 `backend/**`、数据库迁移、`docs/**` 改动。
+  - 未发现真实 NAS 路径或敏感字段泄露。
+- P2 后续打磨项：
+  - 既有 Vite chunk size warning。
+  - 项目工作台少量技术字段仍偏显眼。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 非交付未跟踪文件继续排除。
+- 主 agent 裁决：UX2 可以正式收口，下一步建议做 Git checkpoint。

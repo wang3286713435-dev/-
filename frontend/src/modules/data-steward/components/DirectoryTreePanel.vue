@@ -37,11 +37,13 @@
           <DirectoryTreeNodeItem
             v-for="node in model.nodes"
             :key="node.id"
-            :node="node"
-            :active-path="activePath"
-            @select="$emit('select', $event)"
-            @enter="$emit('enter', $event)"
-          />
+        :node="node"
+        :active-path="activePath"
+        :expanded-paths="expandedPaths"
+        @select="$emit('select', $event)"
+        @enter="$emit('enter', $event)"
+        @toggle-expand="(path, isExpanded) => $emit('toggle-expand', path, isExpanded)"
+      />
         </ul>
       </div>
     </div>
@@ -58,6 +60,7 @@ import DirectoryTreeNodeItem from '@/modules/data-steward/components/DirectoryTr
 const props = withDefaults(defineProps<{
   directories: CatalogDirectory[];
   activePath: string;
+  expandedPaths?: string[];
   rootLabel: string;
   enabled?: boolean;
   loading?: boolean;
@@ -66,6 +69,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   enabled: true,
   loading: false,
+  expandedPaths: () => [],
   emptyDescription: '暂无目录',
   disabledDescription: '选择项目后浏览目录'
 });
@@ -73,6 +77,7 @@ const props = withDefaults(defineProps<{
 defineEmits<{
   select: [path: string];
   enter: [path: string];
+  'toggle-expand': [path: string, expanded: boolean];
 }>();
 
 const model = computed(() => buildDirectoryTree(props.directories));
@@ -82,9 +87,9 @@ const model = computed(() => buildDirectoryTree(props.directories));
 .directory-tree-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 10px;
-  background: #fff;
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
   min-height: 520px;
   height: 100%;
   overflow: hidden;
@@ -93,18 +98,20 @@ const model = computed(() => buildDirectoryTree(props.directories));
 .directory-tree-panel__header {
   display: grid;
   gap: 4px;
-  padding: 14px 16px 12px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  padding: var(--zy-sp-3) var(--zy-sp-4);
+  border-bottom: var(--zy-border-soft);
+  background: var(--zy-surface-soft);
 }
 
 .directory-tree-panel__header strong {
-  font-size: 14px;
-  color: #0f172a;
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-sm);
+  font-weight: var(--zy-fw-semi);
 }
 
 .directory-tree-panel__header span {
-  font-size: 12px;
-  color: #64748b;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -122,37 +129,41 @@ const model = computed(() => buildDirectoryTree(props.directories));
 
 .directory-tree-panel__content {
   min-width: max-content;
-  padding: 12px 12px 16px;
+  padding: var(--zy-sp-3) var(--zy-sp-3) var(--zy-sp-4);
+  font-family: var(--zy-font-sans);
 }
 
 .directory-tree-panel__root {
   display: grid;
   gap: 4px;
-  margin-bottom: 10px;
+  margin-bottom: var(--zy-sp-2);
 }
 
 .directory-tree-panel__root-button {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--zy-sp-2);
   width: fit-content;
   min-width: max-content;
-  padding: 8px 10px;
+  padding: 6px 10px;
   border: 0;
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.04);
-  color: #0f172a;
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-bg);
+  color: var(--zy-ink);
   cursor: pointer;
-  font-weight: 600;
+  font-family: inherit;
+  font-size: var(--zy-fs-sm);
+  font-weight: var(--zy-fw-semi);
+  transition: background var(--zy-duration-2) var(--zy-ease);
 }
 
 .directory-tree-panel__root-button:hover {
-  background: rgba(59, 130, 246, 0.08);
+  background: var(--zy-blue-50);
 }
 
 .directory-tree-panel__root-button.is-active {
-  background: rgba(59, 130, 246, 0.14);
-  color: #1d4ed8;
+  background: var(--zy-blue-100);
+  color: var(--zy-blue-700);
 }
 
 .directory-tree-panel__root-title {
@@ -160,8 +171,8 @@ const model = computed(() => buildDirectoryTree(props.directories));
 }
 
 .directory-tree-panel__root-helper {
-  color: #64748b;
-  font-size: 12px;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
   padding-left: 10px;
 }
 

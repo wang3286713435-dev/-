@@ -595,7 +595,7 @@ function healthTagType(value: HermesHealth | null) {
 }
 
 .data-steward-panel__context {
-  background: #f8fafc;
+  background: var(--zy-bg);
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 8px;
   display: grid;

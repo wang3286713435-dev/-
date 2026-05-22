@@ -29,7 +29,7 @@ export interface CurrentUser {
   userId: number;
   username: string;
   displayName: string;
-  currentProject: ProjectSummary;
+  currentProject: ProjectSummary | null;
   projects: ProjectSummary[];
   permissions: string[];
   menus: MenuItem[];
@@ -56,4 +56,69 @@ export interface HomeOverview {
   projectName: string;
   metrics: HomeMetric[];
   notices: string[];
+}
+
+export interface RegisterResponse {
+  userId: number;
+  username: string;
+  phoneNumber: string;
+  displayName: string;
+  departmentName: string | null;
+  status: 'ACTIVE' | 'DISABLED';
+  projectAuthorized: boolean;
+}
+
+export interface EmployeeSummary {
+  userId: number;
+  username: string;
+  phoneNumber: string | null;
+  displayName: string;
+  departmentName: string | null;
+  status: 'ACTIVE' | 'DISABLED';
+  projectCount: number;
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeProjectRoleAssignment {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  roleCode: 'PROJECT_VIEWER' | 'DELIVERY_ENGINEER' | 'PROJECT_ADMIN';
+  roleName: string;
+}
+
+export interface EmployeeDetail {
+  userId: number;
+  username: string;
+  phoneNumber: string | null;
+  displayName: string;
+  departmentName: string | null;
+  status: 'ACTIVE' | 'DISABLED';
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  projectRoles: EmployeeProjectRoleAssignment[];
+}
+
+export interface EmployeeProjectRoleUpdatePayload {
+  assignments: Array<{
+    projectId: number;
+    roleCode: 'PROJECT_VIEWER' | 'DELIVERY_ENGINEER' | 'PROJECT_ADMIN';
+  }>;
+}
+
+export interface AssignableProject {
+  id: number;
+  code: string;
+  name: string;
+  industryType: string;
+  status: string;
+}
+
+export interface ProjectRoleOption {
+  code: 'PROJECT_VIEWER' | 'DELIVERY_ENGINEER' | 'PROJECT_ADMIN';
+  name: string;
+  description: string;
 }

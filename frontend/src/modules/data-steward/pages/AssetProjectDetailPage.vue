@@ -2,37 +2,143 @@
   <section class="mvp-page asset-page">
     <ProjectWorkspaceNav v-if="Number.isFinite(projectId)" :project-id="projectId" />
 
-    <header class="asset-command-center">
+    <header ref="commandRef" class="asset-command-center">
+      <div class="zy-hero-lightfield" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <div class="zy-spotlight" aria-hidden="true"></div>
+      <ParticleField :count="12" :speed="0.18" :link-distance="120" />
       <div class="asset-command-center__copy">
-        <span>数据管家工作台</span>
+        <span>项目工作台</span>
         <h1>{{ projectTitle }}</h1>
         <p>{{ projectSubTitle }}</p>
       </div>
-      <div class="asset-command-center__meta">
-        <el-tag type="info" effect="plain">{{ project?.assetSource || '内部资产' }}</el-tag>
-        <el-tag :type="project?.assetStatus === 'ACTIVE' ? 'success' : 'info'" effect="plain">
-          {{ project?.assetStatus || '未加载' }}
-        </el-tag>
-      </div>
       <div class="asset-command-center__actions">
-        <el-button :icon="View" type="success" @click="goAgentGovernance">开始交付治理</el-button>
-        <el-button :icon="ChatDotRound" type="primary" @click="hermesDrawerVisible = true">问 Hermes</el-button>
+        <el-button type="primary" @click="openAssetTab('files')">文件管理</el-button>
+        <el-button :icon="View" @click="openAssetTab('dashboard')">项目可视化</el-button>
+        <el-button @click="goDeliveryStatus">交付状态</el-button>
+        <el-button @click="toggleProjectDetails">项目详情</el-button>
         <el-button :icon="Refresh" @click="loadPage">刷新</el-button>
       </div>
     </header>
 
-    <section class="asset-module-grid" aria-label="数据管家模块">
-      <button
-        v-for="item in moduleCards"
-        :key="item.name"
-        class="asset-module-card"
-        type="button"
-        @click="openModule(item)"
-      >
-        <span>{{ item.group }}</span>
-        <strong>{{ item.label }}</strong>
-        <em>{{ item.description }}</em>
-      </button>
+    <el-collapse v-model="projectDetailActive" class="asset-project-details">
+      <el-collapse-item name="details">
+        <template #title>
+          <span class="asset-project-details__title">项目详情 / 技术信息</span>
+          <small>平台内部 ID、资产来源、工作链路说明已收起</small>
+        </template>
+        <div class="asset-project-details__meta">
+          <el-tag type="info" effect="plain">平台内部ID {{ projectId }}</el-tag>
+          <el-tag type="info" effect="plain">{{ project?.assetSource || '内部资产' }}</el-tag>
+          <el-tag :type="project?.assetStatus === 'ACTIVE' ? 'success' : 'info'" effect="plain">
+            {{ project?.assetStatus || '未加载' }}
+          </el-tag>
+          <el-tag :type="masterDataReady ? 'success' : 'warning'" effect="plain">
+            {{ masterDataReady ? '工程主数据已就绪' : '工程主数据待确认' }}
+          </el-tag>
+        </div>
+        <section class="asset-workstream-strip" aria-label="项目工作区分区说明">
+          <article
+            v-for="item in workstreamCards"
+            :key="item.label"
+            :class="{ 'is-warning': item.phase === 'WORK_CENTER' && !masterDataReady }"
+          >
+            <small>{{ item.order }}</small>
+            <span>{{ item.label }}</span>
+            <strong>{{ item.title }}</strong>
+            <em>{{ item.description }}</em>
+            <b v-if="item.phase === 'WORK_CENTER'">{{ masterDataReady ? '已开放' : '需先确认工程主数据' }}</b>
+          </article>
+        </section>
+      </el-collapse-item>
+    </el-collapse>
+
+    <section class="asset-next-actions asset-next-actions--core" aria-label="核心入口">
+      <header>
+        <div>
+          <span class="zy-code-chip">CORE</span>
+          <strong>核心入口</strong>
+          <p>日常工作先从这三个入口开始。</p>
+        </div>
+        <el-tag :type="masterDataReady ? 'success' : 'warning'" effect="plain">
+          {{ masterDataReady ? '交付状态可查看' : '交付需先确认主数据' }}
+        </el-tag>
+      </header>
+      <div class="asset-next-actions__grid">
+        <button
+          v-for="item in primaryWorkspaceCards"
+          :key="item.name ?? item.tab ?? item.label"
+          class="asset-next-card"
+          :class="{ 'is-gated': Boolean(item.requiresMasterData && !masterDataReady) }"
+          type="button"
+          @click="openModule(item)"
+        >
+          <span>{{ item.group }}</span>
+          <strong>{{ item.label }}</strong>
+          <em>{{ item.requiresMasterData && !masterDataReady ? '需先生成 / 确认工程主数据草案' : item.description }}</em>
+        </button>
+      </div>
+    </section>
+
+    <el-collapse v-model="moreToolsActive" class="asset-more-tools">
+      <el-collapse-item name="tools">
+        <template #title>
+          <span class="asset-more-tools__title">更多工具</span>
+          <small>工程主数据、模型集成、管理对象、文件服务和辅助入口</small>
+        </template>
+        <section class="asset-module-sections" aria-label="项目工作台更多工具">
+          <article
+            v-for="section in secondaryModuleSections"
+            :key="section.phase"
+            class="asset-module-section"
+            :class="{ 'is-gated': section.phase === 'WORK_CENTER' && !masterDataReady }"
+          >
+            <header>
+              <span>{{ section.order }}</span>
+              <div>
+                <strong>{{ section.label }}</strong>
+                <small>{{ section.description }}</small>
+              </div>
+              <el-tag
+                v-if="section.phase === 'WORK_CENTER'"
+                size="small"
+                :type="masterDataReady ? 'success' : 'warning'"
+                effect="plain"
+              >
+                {{ masterDataReady ? '可进入交付' : '先确认主数据' }}
+              </el-tag>
+            </header>
+            <div class="asset-module-grid">
+              <button
+                v-for="item in section.items"
+                :key="item.name ?? item.tab ?? item.label"
+                class="asset-module-card"
+                :class="{ 'is-gated': Boolean(item.requiresMasterData && !masterDataReady) }"
+                type="button"
+                @click="openModule(item)"
+              >
+                <span>{{ item.group }}</span>
+                <strong>{{ item.label }}</strong>
+                <em>{{ item.requiresMasterData && !masterDataReady ? '需先生成 / 确认工程主数据草案' : item.description }}</em>
+              </button>
+            </div>
+          </article>
+        </section>
+      </el-collapse-item>
+    </el-collapse>
+
+    <section v-if="!masterDataReady" class="asset-workspace-gate" aria-label="交付工作中心准入提示">
+      <div>
+        <strong>交付状态可以查看，但正式交付前需要先确认工程主数据</strong>
+        <p>{{ masterDataGateText }}</p>
+      </div>
+      <div class="asset-workspace-gate__actions">
+        <el-button type="primary" @click="goInitialization">确认工程主数据</el-button>
+        <el-button @click="openModuleByName('project-master-data-deliverable-standard')">检查交付物标准</el-button>
+      </div>
     </section>
 
     <el-tabs v-model="activeTab" class="asset-tabs">
@@ -154,7 +260,7 @@
               <article v-for="item in recentFiles" :key="item.fileId" class="asset-activity-item">
                 <div>
                   <strong>{{ item.fileName }}</strong>
-                  <span>文件ID {{ item.fileId }} / {{ formatBytes(item.sizeBytes) }} / {{ formatDate(item.updatedAt) }}</span>
+                  <span>平台文件ID {{ item.fileId }} / {{ formatBytes(item.sizeBytes) }} / {{ formatDate(item.updatedAt) }}</span>
                 </div>
                 <el-tag size="small">{{ item.fileKind }}</el-tag>
               </article>
@@ -191,6 +297,7 @@
           :discipline-options="disciplineOptions"
           :initial-quality-issue="catalogInitialQualityIssue"
           :batch-checksum-creating="batchChecksumCreating"
+          :active="activeTab === 'files'"
           @open-preview="openPreviewById"
           @open-detail="openFileDetailById"
           @open-metadata="openMetadataById"
@@ -198,11 +305,87 @@
           @create-batch-checksum="createBatchChecksumForProject"
         />
         <el-empty v-else description="请先选择项目" :image-size="56" />
+
+        <section v-if="Number.isFinite(projectId)" class="asset-job-panel" data-m1e-checksum-jobs>
+          <div class="asset-job-panel__header">
+            <div>
+              <h2>checksum 后台任务</h2>
+              <span>默认收起，避免干扰文件目录。需要排查 checksum 时再展开查看任务编号、状态和失败原因。</span>
+            </div>
+            <div class="asset-job-panel__actions">
+              <el-tag size="small" type="info" effect="plain">{{ checksumJobs.length }} 条</el-tag>
+              <el-button size="small" @click="checksumJobsExpanded = !checksumJobsExpanded">
+                {{ checksumJobsExpanded ? '收起任务' : '查看任务' }}
+              </el-button>
+              <el-button
+                v-if="checksumJobsExpanded"
+                size="small"
+                :loading="checksumJobsLoading"
+                @click="loadChecksumJobs(true)"
+              >
+                刷新任务
+              </el-button>
+            </div>
+          </div>
+          <el-collapse-transition>
+            <div v-show="checksumJobsExpanded" class="asset-job-panel__body">
+              <el-table
+                v-loading="checksumJobsLoading"
+                :data="checksumJobs"
+                class="master-table asset-job-table"
+                empty-text="暂无 checksum 后台任务"
+              >
+                <el-table-column label="后台任务编号" width="130">
+                  <template #default="{ row }">#{{ row.id }}</template>
+                </el-table-column>
+                <el-table-column label="对应文件" min-width="260" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <div class="asset-job-file">
+                      <strong>{{ checksumJobFileName(row) }}</strong>
+                      <span>平台文件ID：{{ row.targetId || '-' }}</span>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="状态" width="110">
+                  <template #default="{ row }">
+                    <el-tag :type="jobStatusTag(row.status)">{{ jobStatusLabel(row.status) }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="进度" width="160">
+                  <template #default="{ row }">
+                    <el-progress :percentage="jobProgressValue(row)" :stroke-width="8" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="失败原因" min-width="220" show-overflow-tooltip>
+                  <template #default="{ row }">{{ safePathText(row.failureReason) }}</template>
+                </el-table-column>
+                <el-table-column label="更新时间" width="170">
+                  <template #default="{ row }">{{ formatDate(row.updatedAt) }}</template>
+                </el-table-column>
+                <el-table-column label="操作" width="150" fixed="right">
+                  <template #default="{ row }">
+                    <el-button size="small" text @click="openChecksumJob(row)">查看</el-button>
+                    <el-button
+                      v-if="row.status === 'FAILED'"
+                      size="small"
+                      text
+                      type="primary"
+                      :loading="checksumJobRetrying && selectedChecksumJob?.id === row.id"
+                      @click="retryChecksumJob(row)"
+                    >
+                      重试
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </el-collapse-transition>
+        </section>
       </el-tab-pane>
 
       <el-tab-pane label="扫描任务" name="scans">
         <el-table v-loading="loading" :data="projectScans" class="master-table" empty-text="暂无扫描任务">
-          <el-table-column prop="id" label="任务ID" width="90" />
+          <el-table-column prop="id" label="扫描任务编号" width="120" />
           <el-table-column prop="rootCode" label="根编码" width="130" show-overflow-tooltip />
           <el-table-column prop="status" label="状态" width="120">
             <template #default="{ row }">
@@ -251,9 +434,10 @@
         <section class="asset-detail-section">
           <h3>文件识别</h3>
           <el-descriptions :column="1" border size="small">
-            <el-descriptions-item label="文件ID">{{ selectedFile.fileId }}</el-descriptions-item>
+            <el-descriptions-item label="平台文件ID">{{ selectedFile.fileId }}</el-descriptions-item>
             <el-descriptions-item label="文件名">{{ selectedFile.fileName }}</el-descriptions-item>
             <el-descriptions-item label="项目">{{ selectedFile.projectCode }} {{ selectedFile.projectName }}</el-descriptions-item>
+            <el-descriptions-item label="项目平台内部ID">{{ selectedFile.projectId }}</el-descriptions-item>
             <el-descriptions-item label="文件类型">{{ selectedFile.fileKind }}</el-descriptions-item>
             <el-descriptions-item label="扩展名">{{ selectedFile.fileExt || '-' }}</el-descriptions-item>
             <el-descriptions-item label="专业">{{ disciplineLabel(selectedFile.discipline) }}</el-descriptions-item>
@@ -334,8 +518,8 @@
           <el-descriptions :column="1" border size="small">
             <el-descriptions-item label="来源类型">{{ selectedFile.sourceType || '-' }}</el-descriptions-item>
             <el-descriptions-item label="存储提供方">{{ selectedFile.storageProvider }}</el-descriptions-item>
-            <el-descriptions-item label="逻辑路径">{{ selectedFile.logicalPath || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="存储路径">
+            <el-descriptions-item label="文件位置提示">{{ filePathHint(selectedFile) }}</el-descriptions-item>
+            <el-descriptions-item label="底层路径">
               <template v-if="selectedFile.storagePath">
                 <el-tag type="info" size="small">底层路径已隐藏，请使用平台受控预览或下载入口</el-tag>
               </template>
@@ -407,7 +591,7 @@
             :closable="false"
           />
           <el-descriptions class="preview-descriptions" :column="1" border size="small">
-            <el-descriptions-item label="文件ID">{{ selectedPreview.fileId }}</el-descriptions-item>
+            <el-descriptions-item label="平台文件ID">{{ selectedPreview.fileId }}</el-descriptions-item>
             <el-descriptions-item label="文件类型">{{ selectedPreview.fileKind }} {{ selectedPreview.fileExt }}</el-descriptions-item>
             <el-descriptions-item label="预览方式">{{ previewModeLabel(selectedPreview) }}</el-descriptions-item>
             <el-descriptions-item label="转换状态">{{ conversionStatusLabel(selectedPreview) }}</el-descriptions-item>
@@ -450,7 +634,7 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="checksumJobDialogVisible" title="checksum 任务状态" width="620px" @closed="stopChecksumJobPolling">
+    <el-dialog v-model="checksumJobDialogVisible" title="checksum 后台任务" width="680px" @closed="stopChecksumJobPolling">
       <div v-loading="checksumJobLoading" class="job-dialog-body">
         <template v-if="selectedChecksumJob">
           <div class="job-state-panel">
@@ -458,7 +642,7 @@
               {{ jobStatusLabel(selectedChecksumJob.status) }}
             </el-tag>
             <div>
-              <strong>任务 {{ selectedChecksumJob.id }}</strong>
+              <strong>后台任务编号 #{{ selectedChecksumJob.id }}</strong>
               <span>{{ checksumJobTargetLabel }}</span>
             </div>
           </div>
@@ -467,20 +651,24 @@
             :status="selectedChecksumJob.status === 'FAILED' ? 'exception' : selectedChecksumJob.status === 'SUCCEEDED' ? 'success' : undefined"
           />
           <el-descriptions class="job-descriptions" :column="1" border size="small">
+            <el-descriptions-item label="后台任务编号">#{{ selectedChecksumJob.id }}</el-descriptions-item>
+            <el-descriptions-item label="对应文件">{{ checksumJobFileName(selectedChecksumJob) }}</el-descriptions-item>
+            <el-descriptions-item label="平台文件ID">{{ selectedChecksumJob.targetId || '-' }}</el-descriptions-item>
             <el-descriptions-item label="任务类型">{{ selectedChecksumJob.jobType }}</el-descriptions-item>
             <el-descriptions-item label="状态">{{ jobStatusLabel(selectedChecksumJob.status) }}</el-descriptions-item>
             <el-descriptions-item label="进度">
               {{ formatCount(selectedChecksumJob.progressCurrent) }} / {{ formatCount(selectedChecksumJob.progressTotal) }}
             </el-descriptions-item>
-            <el-descriptions-item label="进度说明">{{ selectedChecksumJob.progressMessage || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="进度说明">{{ safePathText(selectedChecksumJob.progressMessage) }}</el-descriptions-item>
             <el-descriptions-item label="创建时间">{{ formatDate(selectedChecksumJob.createdAt) }}</el-descriptions-item>
+            <el-descriptions-item label="更新时间">{{ formatDate(selectedChecksumJob.updatedAt) }}</el-descriptions-item>
             <el-descriptions-item label="开始时间">{{ formatDate(selectedChecksumJob.startedAt) }}</el-descriptions-item>
             <el-descriptions-item label="完成时间">{{ formatDate(selectedChecksumJob.completedAt) }}</el-descriptions-item>
           </el-descriptions>
           <el-alert
             v-if="selectedChecksumJob.status === 'FAILED'"
             class="job-message"
-            :title="selectedChecksumJob.failureReason || '任务失败，但未返回失败原因'"
+            :title="safePathText(selectedChecksumJob.failureReason) || '任务失败，但未返回失败原因'"
             type="error"
             show-icon
             :closable="false"
@@ -520,7 +708,7 @@
 
     <el-dialog v-model="metadataDialogVisible" title="人工治理文件元数据" width="520px">
       <el-form label-width="96px">
-        <el-form-item label="文件ID">
+        <el-form-item label="平台文件ID">
           <el-input :model-value="metadataForm.fileId ? String(metadataForm.fileId) : ''" disabled />
         </el-form-item>
         <el-form-item label="文件类型">
@@ -576,6 +764,7 @@ import {
   fetchAssetQualityOverview,
   fetchAssetScanTasks,
   fetchAssetStatistics,
+  fetchAssetJobs,
   fetchAssetJob,
   fetchCatalogFiles,
   fetchFileAsset,
@@ -597,6 +786,8 @@ import {
 import AssetProjectFileBrowser from '@/modules/data-steward/components/AssetProjectFileBrowser.vue';
 import DataStewardPanel from '@/modules/data-steward/components/DataStewardPanel.vue';
 import HermesWorkspaceDrawer from '@/modules/data-steward/components/HermesWorkspaceDrawer.vue';
+import ParticleField from '@/modules/core/components/ParticleField.vue';
+import { useSpotlight } from '@/modules/core/composables/useSpotlight';
 import {
   conversionStatusLabel,
   previewActionHint,
@@ -607,10 +798,14 @@ import {
   previewStatusLabel
 } from '@/modules/data-steward/utils/previewStatus';
 import ProjectWorkspaceNav from '@/modules/core/components/ProjectWorkspaceNav.vue';
+import { fetchInitializationStatus, type InitializationStatus } from '@/modules/master-data/api/masterData';
 
 const route = useRoute();
 const router = useRouter();
 const projectId = computed(() => Number(route.params.projectId));
+
+const commandRef = ref<HTMLElement | null>(null);
+useSpotlight(commandRef);
 
 const loading = ref(false);
 const activeTab = ref('dashboard');
@@ -620,6 +815,7 @@ const qualityOverview = ref<AssetQualityOverview | null>(null);
 const scanTasks = ref<AssetScanTask[]>([]);
 const pathMappings = ref<AssetPathMapping[]>([]);
 const disciplineOptions = ref<AssetDiscipline[]>([]);
+const initializationStatus = ref<InitializationStatus | null>(null);
 const recentFiles = ref<CatalogFile[]>([]);
 const detailDrawerVisible = ref(false);
 const selectedFile = ref<FileAsset | null>(null);
@@ -633,9 +829,15 @@ const accessActionLoading = ref<'PREVIEW' | 'DOWNLOAD' | null>(null);
 const selectedPreview = ref<FilePreview | null>(null);
 const hermesDrawerVisible = ref(false);
 const hermesAssetId = ref<number | undefined>();
+const moreToolsActive = ref<string[]>([]);
+const projectDetailActive = ref<string[]>([]);
 const checksumJobDialogVisible = ref(false);
 const checksumJobLoading = ref(false);
 const checksumJobRetrying = ref(false);
+const checksumJobsLoading = ref(false);
+const checksumJobs = ref<AssetJob[]>([]);
+const checksumJobsExpanded = ref(false);
+const checksumJobFileMap = ref<Record<number, FileAsset>>({});
 const selectedChecksumJob = ref<AssetJob | null>(null);
 const selectedChecksumJobFile = ref<FileAsset | null>(null);
 const fileBrowserRefreshKey = ref(0);
@@ -663,30 +865,109 @@ const metadataFileKindOptions = [
   { label: '其他', value: 'OTHER' }
 ];
 const assetTabs = new Set(['dashboard', 'files', 'scans', 'mappings']);
-const moduleCards: Array<{
+type WorkspacePhase = 'ASSET' | 'MASTER_DATA' | 'WORK_CENTER';
+type ModuleCard = {
   label: string;
   group: string;
   description: string;
+  phase: WorkspacePhase;
   name?: RouteRecordName;
   tab?: string;
+  requiresMasterData?: boolean;
+};
+
+const workstreamCards: Array<{
+  order: string;
+  label: string;
+  title: string;
+  description: string;
+  phase: WorkspacePhase;
 }> = [
-  { label: '资产驾驶舱', group: '总览', description: '项目资产、容量、治理风险', tab: 'dashboard' },
-  { label: '文件管理', group: '文件', description: '目录树、文件表、预览和治理', tab: 'files' },
-  { label: '模型集成', group: '模型', description: '登记模型集成与发布状态', name: 'project-data-steward-models' },
-  { label: '管理对象', group: '对象', description: '设备、系统和构件台账', name: 'project-data-steward-objects' },
-  { label: '交付治理助手', group: '交付', description: '体检、缺失解释和人工确认补交', name: 'project-work-agent-governance' },
-  { label: '事项列表', group: '治理', description: '缺项、低置信和失败扫描', name: 'project-data-steward-issues' },
-  { label: '任务列表', group: '任务', description: '扫描、checksum 等后台任务', name: 'project-data-steward-tasks' },
-  { label: '导出列表', group: '交付', description: '文件清单和报表导出', name: 'project-data-steward-exports' },
-  { label: '文件服务', group: '服务', description: '预览、下载、权限与禁用写操作', name: 'project-data-steward-file-service' }
+  { order: '01', label: '项目资产', title: '先看真实文件', description: '文件目录、文件列表、文件详情和受控预览。', phase: 'ASSET' },
+  { order: '02', label: '工程主数据', title: '再定义交付规则', description: '基于资产线索确认项目结构和交付标准。', phase: 'MASTER_DATA' },
+  { order: '03', label: '交付工作中心', title: '最后按规则交付', description: '文档/图纸补交、人工审核、整改和 dry-run 预检查。', phase: 'WORK_CENTER' }
 ];
+const moduleCards: ModuleCard[] = [
+  { label: '项目可视化', group: '项目资产', description: '资产驾驶舱、容量、风险和数据分布', phase: 'ASSET', tab: 'dashboard' },
+  { label: '文件管理', group: '项目资产', description: '目录树、文件表、预览和治理', phase: 'ASSET', tab: 'files' },
+  { label: '模型集成', group: '项目资产', description: '登记模型集成与发布状态', phase: 'ASSET', name: 'project-data-steward-models' },
+  { label: '管理对象', group: '项目资产', description: '对象与模型集成登记', phase: 'ASSET', name: 'project-data-steward-objects' },
+  { label: '文件服务', group: '项目资产', description: '预览、下载权限与禁用写操作', phase: 'ASSET', name: 'project-data-steward-file-service' },
+  { label: '初始化向导', group: '工程主数据', description: '从目录线索生成主数据草案', phase: 'MASTER_DATA', name: 'project-master-data-initialization' },
+  { label: '部位树', group: '工程主数据', description: '维护楼栋、楼层、房间和系统部位', phase: 'MASTER_DATA', name: 'project-master-data-sections' },
+  { label: '节点类型', group: '工程主数据', description: '确认部位层级和锁定规则', phase: 'MASTER_DATA', name: 'project-master-data-node-types' },
+  { label: '交付物标准', group: '工程主数据', description: '配置应交项、类型和验收口径', phase: 'MASTER_DATA', name: 'project-master-data-deliverable-standard' },
+  { label: '交付治理助手', group: '交付工作中心', description: '辅助查看当前交付缺口，不作为必经入口', phase: 'WORK_CENTER', name: 'project-work-agent-governance', requiresMasterData: true },
+  { label: '文档交付', group: '交付工作中心', description: '查看文档应交项、挂接和预检查', phase: 'WORK_CENTER', name: 'project-work-document-delivery', requiresMasterData: true },
+  { label: '图纸交付', group: '交付工作中心', description: '查看图纸交付状态和缺失原因', phase: 'WORK_CENTER', name: 'project-work-drawing-delivery', requiresMasterData: true },
+  { label: '整改闭环', group: '交付工作中心', description: '跟踪审核驳回、整改和复核', phase: 'WORK_CENTER', name: 'project-work-rectifications', requiresMasterData: true },
+  { label: '交付状态', group: '交付工作中心', description: '查看交付数量、绑定、审核和整改状态', phase: 'WORK_CENTER', name: 'project-work-dashboard', requiresMasterData: true }
+];
+
+const primaryWorkspaceKeys = new Set([
+  'dashboard',
+  'files',
+  'project-work-dashboard'
+]);
+
+const primaryWorkspaceCards = computed(() =>
+  moduleCards.filter((item) => primaryWorkspaceKeys.has(moduleCardKey(item)))
+);
+
+const moduleSections = computed(() => [
+  {
+    phase: 'ASSET' as WorkspacePhase,
+    order: '01',
+    label: '项目资产',
+    description: '看真实文件、目录、文件详情和治理风险。',
+    items: moduleCards.filter((item) => item.phase === 'ASSET')
+  },
+  {
+    phase: 'MASTER_DATA' as WorkspacePhase,
+    order: '02',
+    label: '工程主数据',
+    description: '基于资产线索确认项目结构、节点规则和交付标准。',
+    items: moduleCards.filter((item) => item.phase === 'MASTER_DATA')
+  },
+  {
+    phase: 'WORK_CENTER' as WorkspacePhase,
+    order: '03',
+    label: '交付工作中心',
+    description: '工作中心不是工程主数据子页面，它在主数据之后按规则推进交付。',
+    items: moduleCards.filter((item) => item.phase === 'WORK_CENTER')
+  }
+]);
+
+const secondaryModuleSections = computed(() =>
+  moduleSections.value
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => !primaryWorkspaceKeys.has(moduleCardKey(item)))
+    }))
+    .filter((section) => section.items.length > 0)
+);
 const projectTitle = computed(() => {
   if (!project.value) return `项目 ${projectId.value}`;
   return `${project.value.code} ${project.value.name}`;
 });
 const projectSubTitle = computed(() => {
   if (!project.value) return '资产明细';
-  return [project.value.projectStage, project.value.projectManagerName].filter(Boolean).join(' / ') || '资产明细';
+  return [
+    projectSourceLabel(project.value),
+    onboardingStatusLabel(project.value.onboardingStatus),
+    project.value.projectStage,
+    project.value.projectManagerName ? `负责人：${project.value.projectManagerName}` : ''
+  ].filter(Boolean).join(' / ') || '资产明细';
+});
+const masterDataReady = computed(() =>
+  Boolean(initializationStatus.value?.ready || initializationStatus.value?.standardStatus?.deliverableStandardReady)
+);
+const masterDataGateText = computed(() => {
+  const blockers = initializationStatus.value?.blockers ?? [];
+  if (blockers.length > 0) {
+    return `请先生成 / 确认工程主数据草案，并处理：${blockers.slice(0, 3).join('、')}。`;
+  }
+  return '请先完成真实项目接入评估、工程主数据草案确认、部位树、节点类型和交付物标准，再进入正常交付。';
 });
 const projectRootLabel = computed(() => project.value?.name ?? `项目 ${projectId.value}`);
 const detailTitle = computed(() => selectedFile.value ? `${selectedFile.value.fileName} - 文件详情` : '文件详情');
@@ -697,8 +978,10 @@ const currentPreview = computed(() => {
 const catalogInitialQualityIssue = computed(() => queryString(route.query.qualityIssue) ?? 'ALL');
 const checksumJobTargetLabel = computed(() => {
   const file = selectedChecksumJobFile.value;
-  if (!file) return '文件资产 checksum 计算';
-  return `${file.fileName} / 文件ID ${file.fileId}`;
+  const job = selectedChecksumJob.value;
+  if (file) return `${file.fileName} / 平台文件ID ${file.fileId}`;
+  if (job?.targetId) return `${checksumJobFileName(job)} / 平台文件ID ${job.targetId}`;
+  return '文件资产 checksum 计算';
 });
 const cards = computed(() => {
   const item = statistics.value;
@@ -767,7 +1050,7 @@ async function loadPage() {
   const requestId = ++pageLoadRequestId;
   loading.value = true;
   try {
-    const [projectsResult, statisticsResult, qualityResult, scansResult, mappingsResult, disciplinesResult, recentFilesResult] =
+    const [projectsResult, statisticsResult, qualityResult, scansResult, mappingsResult, disciplinesResult, recentFilesResult, initStatusResult] =
       await Promise.allSettled([
       fetchAssetProjects(),
       fetchAssetStatistics(projectId.value),
@@ -775,7 +1058,8 @@ async function loadPage() {
       fetchAssetScanTasks(),
       fetchAssetPathMappings(projectId.value),
       fetchAssetDisciplines(projectId.value),
-      fetchCatalogFiles({ projectId: projectId.value, page: 1, pageSize: 6 })
+      fetchCatalogFiles({ projectId: projectId.value, page: 1, pageSize: 6 }),
+      fetchInitializationStatus(projectId.value)
     ]);
     if (requestId !== pageLoadRequestId) return;
     if (projectsResult.status === 'rejected' || statisticsResult.status === 'rejected') {
@@ -789,6 +1073,8 @@ async function loadPage() {
     pathMappings.value = mappingsResult.status === 'fulfilled' ? mappingsResult.value : [];
     disciplineOptions.value = disciplinesResult.status === 'fulfilled' ? disciplinesResult.value : [];
     recentFiles.value = recentFilesResult.status === 'fulfilled' ? recentFilesResult.value.rows : [];
+    initializationStatus.value = initStatusResult.status === 'fulfilled' ? initStatusResult.value : null;
+    void loadChecksumJobs(false);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '项目资产加载失败');
   } finally {
@@ -805,11 +1091,14 @@ function resetProjectData() {
   scanTasks.value = [];
   pathMappings.value = [];
   disciplineOptions.value = [];
+  initializationStatus.value = null;
   recentFiles.value = [];
   selectedFile.value = null;
   selectedPreview.value = null;
   selectedChecksumJob.value = null;
   selectedChecksumJobFile.value = null;
+  checksumJobs.value = [];
+  checksumJobFileMap.value = {};
   detailDrawerVisible.value = false;
   previewDialogVisible.value = false;
   hermesDrawerVisible.value = false;
@@ -925,6 +1214,53 @@ async function saveMetadata() {
   }
 }
 
+async function loadChecksumJobs(showError = false) {
+  if (!Number.isFinite(projectId.value) || checksumJobsLoading.value) return;
+  checksumJobsLoading.value = true;
+  try {
+    const jobs = await fetchAssetJobs({ projectId: projectId.value, jobType: 'CHECKSUM_CALC', limit: 8 });
+    checksumJobs.value = jobs;
+    await hydrateChecksumJobFiles(jobs);
+  } catch (error) {
+    if (showError) {
+      ElMessage.error(error instanceof Error ? error.message : 'checksum 后台任务加载失败');
+    }
+  } finally {
+    checksumJobsLoading.value = false;
+  }
+}
+
+async function hydrateChecksumJobFiles(jobs: AssetJob[]) {
+  const nextMap = { ...checksumJobFileMap.value };
+  const targetIds = Array.from(new Set(
+    jobs
+      .map((job) => job.targetId)
+      .filter((targetId): targetId is number => targetId !== null && targetId !== undefined && Number.isFinite(Number(targetId)))
+  )).slice(0, 8);
+  await Promise.all(targetIds.map(async (fileId) => {
+    if (nextMap[fileId]) return;
+    try {
+      nextMap[fileId] = await fetchFileAsset(fileId);
+    } catch {
+      // 任务仍可展示，文件名拿不到时退回平台文件ID。
+    }
+  }));
+  checksumJobFileMap.value = nextMap;
+}
+
+function checksumJobFileName(job: AssetJob) {
+  const targetId = Number(job.targetId ?? 0);
+  const file = targetId ? checksumJobFileMap.value[targetId] : null;
+  return file?.fileName ?? (targetId ? `平台文件ID ${targetId}` : '未绑定文件');
+}
+
+function openChecksumJob(job: AssetJob) {
+  selectedChecksumJob.value = job;
+  selectedChecksumJobFile.value = job.targetId ? checksumJobFileMap.value[Number(job.targetId)] ?? null : null;
+  checksumJobDialogVisible.value = true;
+  startChecksumJobPolling(job.id);
+}
+
 async function createChecksum(row: FileAsset) {
   if (row.checksum || checksumCreating.value) return;
   checksumCreating.value = true;
@@ -934,6 +1270,7 @@ async function createChecksum(row: FileAsset) {
     selectedChecksumJob.value = job;
     checksumJobDialogVisible.value = true;
     ElMessage.success('checksum 任务已创建，正在后台执行');
+    void loadChecksumJobs(false);
     startChecksumJobPolling(job.id);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '创建 checksum 任务失败');
@@ -963,6 +1300,7 @@ async function createBatchChecksumForProject() {
     const count = await createBatchChecksumJobs(projectId.value);
     if (count > 0) {
       ElMessage.success(`已创建 ${count} 个 checksum 后台任务`);
+      await loadChecksumJobs(false);
     } else {
       ElMessage.info('当前项目没有需要补算的 checksum 文件');
     }
@@ -997,6 +1335,10 @@ async function loadChecksumJob(jobId: number, showError: boolean) {
     const job = await fetchAssetJob(jobId);
     if (requestId !== checksumJobRequestId) return;
     selectedChecksumJob.value = job;
+    if (job.targetId && !selectedChecksumJobFile.value) {
+      selectedChecksumJobFile.value = checksumJobFileMap.value[Number(job.targetId)] ?? null;
+    }
+    checksumJobs.value = checksumJobs.value.map((item) => item.id === job.id ? job : item);
     if (isTerminalJobStatus(job.status)) {
       stopChecksumJobPolling();
       if (job.status === 'SUCCEEDED') {
@@ -1019,13 +1361,15 @@ async function refreshChecksumJob() {
   await loadChecksumJob(selectedChecksumJob.value.id, true);
 }
 
-async function retryChecksumJob() {
-  const job = selectedChecksumJob.value;
+async function retryChecksumJob(row?: AssetJob) {
+  const job = row ?? selectedChecksumJob.value;
   if (!job || checksumJobRetrying.value) return;
+  selectedChecksumJob.value = job;
   checksumJobRetrying.value = true;
   try {
     await retryAssetJob(job.id);
     ElMessage.success('checksum 任务已重新提交');
+    await loadChecksumJobs(false);
     startChecksumJobPolling(job.id);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '任务重试失败');
@@ -1038,6 +1382,7 @@ async function refreshChecksumTarget(job: AssetJob) {
   if (job.targetId && selectedFile.value?.fileId === job.targetId) {
     selectedFile.value = await fetchFileAsset(job.targetId);
   }
+  await loadChecksumJobs(false);
   refreshFileBrowser();
 }
 
@@ -1082,7 +1427,7 @@ async function createChecksumById(fileId: number) {
 }
 
 function openRiskCard(risk: { tab: string; qualityIssue?: string }) {
-  activeTab.value = risk.tab;
+  openAssetTab(risk.tab);
   if (risk.qualityIssue) {
     void router.replace({
       name: String(route.name),
@@ -1092,18 +1437,53 @@ function openRiskCard(risk: { tab: string; qualityIssue?: string }) {
   }
 }
 
-function openModule(item: { name?: RouteRecordName; tab?: string }) {
+function openModule(item: ModuleCard) {
   if (item.tab) {
-    activeTab.value = item.tab;
+    openAssetTab(item.tab);
     return;
+  }
+  if (item.requiresMasterData && !masterDataReady.value) {
+    ElMessage.warning('请先生成 / 确认工程主数据草案；交付工作中心页面会保留阻塞提示。');
   }
   if (item.name) {
     void router.push({ name: item.name, params: { projectId: projectId.value } });
   }
 }
 
-function goAgentGovernance() {
-  void router.push({ name: 'project-work-agent-governance', params: { projectId: projectId.value } });
+function moduleCardKey(item: ModuleCard) {
+  return String(item.name ?? item.tab ?? item.label);
+}
+
+function openModuleByName(name: RouteRecordName) {
+  void router.push({ name, params: { projectId: projectId.value } });
+}
+
+function openAssetTab(tab: string) {
+  activeTab.value = tab;
+  void router.replace({
+    name: 'data-steward-asset-detail',
+    params: { projectId: projectId.value },
+    query: { ...route.query, tab }
+  });
+}
+
+function goDeliveryStatus() {
+  goWorkCenterByName('project-work-dashboard');
+}
+
+function goWorkCenterByName(name: RouteRecordName) {
+  if (!masterDataReady.value) {
+    ElMessage.warning('请先生成 / 确认工程主数据草案；工作中心页面会保留阻塞提示。');
+  }
+  void router.push({ name, params: { projectId: projectId.value } });
+}
+
+function goInitialization() {
+  void router.push({ name: 'project-master-data-initialization', params: { projectId: projectId.value } });
+}
+
+function toggleProjectDetails() {
+  projectDetailActive.value = projectDetailActive.value.length ? [] : ['details'];
 }
 
 function openHermesForFile(fileId: number) {
@@ -1127,10 +1507,23 @@ function scanProgressHint(item: AssetScanTask) {
 
 function safePathText(value: string | null | undefined) {
   if (!value) return '-';
-  if (/nas:\/\/|smb:\/\/|afp:\/\/|\/Volumes\/|\/Users\/|storage_path|storage_uri|storagePath|storageUri/i.test(value)) {
+  if (containsForbiddenPathText(value)) {
+    if (value.includes('文件不存在')) return '文件不存在，底层路径已隐藏';
     return '底层路径已隐藏';
   }
   return value;
+}
+
+function containsForbiddenPathText(value: string) {
+  return /nas:\/\/|smb:\/\/|afp:\/\/|\/Volumes\/|\/Users\/|\/tmp\/|\/private\/|\/var\/|storage_path|storage_uri|storagePath|storageUri/i.test(value);
+}
+
+function filePathHint(file: FileAsset) {
+  const raw = file.logicalPath || file.storagePath || '';
+  if (!raw || containsForbiddenPathText(raw) || raw.startsWith('/')) {
+    return `path_hint: ${file.projectCode} 项目内已登记文件，底层目录不在前端展示`;
+  }
+  return `path_hint: ${raw}`;
 }
 
 function qualityFlags(file: FileAsset) {
@@ -1159,6 +1552,24 @@ function qualityFlagLabel(value: string) {
 function queryString(value: unknown) {
   if (Array.isArray(value)) return value[0] ? String(value[0]) : undefined;
   return value ? String(value) : undefined;
+}
+
+function projectSourceLabel(row: AssetProject) {
+  if (row.projectCategory === 'REAL_NAS_PROJECT' || row.projectSource === 'REAL_NAS') return '真实 NAS 项目';
+  if (row.projectCategory === 'TEST_PROJECT') return '测试项目';
+  if (row.projectCategory === 'SAMPLE_TEMPLATE') return '样例/模板项目';
+  if (row.projectCategory === 'ARCHIVED_HISTORY') return '归档项目';
+  return row.assetSource || row.projectSource || '内部资产';
+}
+
+function onboardingStatusLabel(value: string | null | undefined) {
+  const labels: Record<string, string> = {
+    PATH_MAPPED: '已映射路径',
+    ASSETS_REGISTERED: '资产已登记',
+    MASTERDATA_INITIALIZED: '主数据已初始化',
+    GOVERNANCE_READY: '交付治理就绪'
+  };
+  return value ? (labels[value] ?? value) : '接入状态待维护';
 }
 
 function refreshFileBrowser() {
@@ -1278,17 +1689,60 @@ function scanProgressValue(task: AssetScanTask) {
   min-width: 0;
 }
 
+/* ---- Command center / 项目工作台标题区 ---- */
 .asset-command-center {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--zy-sp-4);
   align-items: center;
-  padding: 18px 20px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(20, 184, 166, 0.06)),
-    #fbfdff;
+  padding: var(--zy-sp-5) var(--zy-sp-6);
+  border: 1px solid color-mix(in srgb, var(--zy-line) 72%, transparent);
+  border-radius: var(--zy-radius-lg);
+  background: var(--zy-panel-tint);
+  -webkit-backdrop-filter: blur(14px) saturate(1.04);
+  backdrop-filter: blur(14px) saturate(1.04);
+  box-shadow: var(--zy-shadow-soft);
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .asset-command-center {
+    background: var(--zy-surface);
+  }
+}
+
+.asset-command-center::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--zy-blue-500);
+  z-index: 1;
+}
+
+.asset-command-center::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(37, 99, 235, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(37, 99, 235, 0.045) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+  mask-image: linear-gradient(to right, black 0%, transparent 65%);
+  opacity: 0.7;
+  z-index: 0;
+}
+
+.asset-command-center__copy,
+.asset-command-center__meta,
+.asset-command-center__actions {
+  position: relative;
+  z-index: 2;
 }
 
 .asset-command-center__copy {
@@ -1296,96 +1750,614 @@ function scanProgressValue(task: AssetScanTask) {
 }
 
 .asset-command-center__copy > span {
-  display: inline-block;
-  margin-bottom: 6px;
-  color: #2563eb;
-  font-size: 13px;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 2px 8px;
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-blue-50);
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  color: var(--zy-blue-700);
+  font-size: 11px;
+  font-weight: var(--zy-fw-semi);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.2;
 }
 
 .asset-command-center__copy h1 {
   margin: 0;
-  color: #0f172a;
-  font-size: 24px;
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-3xl);
+  font-weight: var(--zy-fw-semi);
   line-height: 1.25;
+  letter-spacing: -0.02em;
 }
 
 .asset-command-center__copy p {
   margin: 6px 0 0;
-  color: #64748b;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-sm);
+  line-height: 1.65;
 }
 
 .asset-command-center__meta,
 .asset-command-center__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--zy-sp-2);
   justify-content: flex-end;
 }
 
+/* ---- Project details / 技术信息折叠 ---- */
+.asset-project-details {
+  border: var(--zy-border);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+  box-shadow: var(--zy-shadow-xs);
+  overflow: hidden;
+}
+
+.asset-project-details :deep(.el-collapse),
+.asset-project-details :deep(.el-collapse-item__wrap) {
+  border: 0;
+}
+
+.asset-project-details :deep(.el-collapse-item__header) {
+  min-height: 46px;
+  padding: 0 var(--zy-sp-4);
+  border: 0;
+}
+
+.asset-project-details :deep(.el-collapse-item__content) {
+  display: grid;
+  gap: var(--zy-sp-3);
+  padding: 0 var(--zy-sp-4) var(--zy-sp-4);
+}
+
+.asset-project-details__title {
+  margin-right: var(--zy-sp-2);
+  color: var(--zy-ink);
+  font-weight: var(--zy-fw-semi);
+}
+
+.asset-project-details small {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-regular);
+}
+
+.asset-project-details__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zy-sp-2);
+}
+
+/* ---- 三段工作流条 ---- */
+.asset-workstream-strip {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1.15fr;
+  gap: var(--zy-sp-3);
+  min-width: 0;
+}
+
+.asset-workstream-strip article {
+  min-width: 0;
+  padding: var(--zy-sp-3) var(--zy-sp-4);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+  transition: border-color var(--zy-duration-2) var(--zy-ease);
+}
+
+.asset-workstream-strip article:hover {
+  border-color: var(--zy-line);
+}
+
+.asset-workstream-strip article.is-warning {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: var(--zy-amber-50);
+}
+
+.asset-workstream-strip small {
+  display: block;
+  color: var(--zy-blue-700);
+  font-family: var(--zy-font-mono);
+  font-size: 11px;
+  font-weight: var(--zy-fw-bold);
+  letter-spacing: 0;
+}
+
+.asset-workstream-strip span,
+.asset-workstream-strip em {
+  display: block;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  font-style: normal;
+  line-height: 1.55;
+}
+
+.asset-workstream-strip strong {
+  display: block;
+  margin: 6px 0 4px;
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-md);
+  font-weight: var(--zy-fw-semi);
+}
+
+.asset-workstream-strip b {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 2px 8px;
+  border-radius: var(--zy-radius-sm);
+  background: rgba(245, 158, 11, 0.14);
+  color: #92400e;
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-semi);
+}
+
+/* ---- Tabs ---- */
 .asset-tabs {
   min-width: 0;
-  padding: 16px;
-  background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 8px;
+  padding: var(--zy-sp-5);
+  background: var(--zy-surface);
+  border: var(--zy-border);
+  border-radius: var(--zy-radius-base);
+  box-shadow: var(--zy-shadow-xs);
+}
+
+.asset-tabs :deep(.el-tabs__nav-wrap::after) {
+  background-color: var(--zy-line-soft);
+}
+
+.asset-tabs :deep(.el-tabs__item) {
+  color: var(--zy-muted);
+  font-weight: var(--zy-fw-medium);
+  transition: color var(--zy-duration-2) var(--zy-ease);
+}
+
+.asset-tabs :deep(.el-tabs__item.is-active) {
+  color: var(--zy-blue-700);
+  font-weight: var(--zy-fw-semi);
+}
+
+.asset-tabs :deep(.el-tabs__active-bar) {
+  background-color: var(--zy-blue-500);
+  height: 2px;
+}
+
+/* ---- 后台任务面板 ---- */
+.asset-job-panel {
+  display: grid;
+  gap: var(--zy-sp-2);
+  margin-top: var(--zy-sp-4);
+  padding: var(--zy-sp-3) var(--zy-sp-4);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface-soft);
+}
+
+.asset-job-panel__header {
+  display: flex;
+  gap: var(--zy-sp-3);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.asset-job-panel__header h2 {
+  margin: 0;
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-md);
+  font-weight: var(--zy-fw-semi);
+}
+
+.asset-job-panel__header span {
+  display: block;
+  margin-top: 3px;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+}
+
+.asset-job-panel__actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: var(--zy-sp-2);
+  justify-content: flex-end;
+}
+
+.asset-job-panel__body {
+  min-width: 0;
+  padding-top: var(--zy-sp-2);
+  border-top: var(--zy-border-soft);
+}
+
+.asset-job-table {
+  width: 100%;
+}
+
+.asset-job-file {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.asset-job-file strong,
+.asset-job-file span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-job-file strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-sm);
+  font-weight: var(--zy-fw-semi);
+}
+
+.asset-job-file span {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+}
+
+/* ---- 工作中心 gate ---- */
+.asset-workspace-gate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zy-sp-4);
+  min-width: 0;
+  padding: var(--zy-sp-3) var(--zy-sp-5);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-left: 3px solid var(--zy-amber-500);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-amber-50);
+}
+
+.asset-workspace-gate strong {
+  display: block;
+  color: #78350f;
+  font-weight: var(--zy-fw-semi);
+  line-height: 1.5;
+}
+
+.asset-workspace-gate p {
+  margin: 4px 0 0;
+  color: #92400e;
+  font-size: var(--zy-fs-sm);
+  line-height: 1.65;
+}
+
+.asset-workspace-gate__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--zy-sp-2);
+}
+
+/* ---- 模块分组 ---- */
+.asset-next-actions {
+  display: grid;
+  gap: var(--zy-sp-3);
+  min-width: 0;
+  padding: var(--zy-sp-4) var(--zy-sp-5);
+  border: var(--zy-border);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+  box-shadow: var(--zy-shadow-xs);
+}
+
+.asset-next-actions > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--zy-sp-4);
+  min-width: 0;
+  padding-bottom: var(--zy-sp-3);
+  border-bottom: var(--zy-border-soft);
+}
+
+.asset-next-actions > header > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.asset-next-actions > header strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-lg);
+  font-weight: var(--zy-fw-semi);
+  line-height: 1.4;
+}
+
+.asset-next-actions > header p {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  line-height: 1.6;
+}
+
+.asset-next-actions__grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--zy-sp-2);
+  min-width: 0;
+}
+
+.asset-next-actions--core .asset-next-actions__grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.asset-next-card {
+  appearance: none;
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface-soft);
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: var(--zy-sp-4);
+  position: relative;
+  text-align: left;
+  transition:
+    border-color var(--zy-duration-2) var(--zy-ease),
+    background var(--zy-duration-2) var(--zy-ease),
+    transform var(--zy-duration-2) var(--zy-ease);
+}
+
+.asset-next-card:hover {
+  background: var(--zy-blue-50);
+  border-color: rgba(37, 99, 235, 0.32);
+  transform: translateY(-1px);
+}
+
+.asset-next-card.is-gated {
+  background: var(--zy-amber-50);
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+.asset-next-card span,
+.asset-next-card em {
+  color: var(--zy-muted);
+  display: block;
+  font-size: var(--zy-fs-xs);
+  font-style: normal;
+  line-height: 1.55;
+}
+
+.asset-next-card span {
+  color: var(--zy-blue-700);
+  font-family: var(--zy-font-mono);
+  font-size: 11px;
+  font-weight: var(--zy-fw-bold);
+}
+
+.asset-next-card strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-base);
+  font-weight: var(--zy-fw-semi);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-more-tools {
+  border: var(--zy-border);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+  box-shadow: var(--zy-shadow-xs);
+  overflow: hidden;
+}
+
+.asset-more-tools :deep(.el-collapse),
+.asset-more-tools :deep(.el-collapse-item__wrap) {
+  border: 0;
+}
+
+.asset-more-tools :deep(.el-collapse-item__header) {
+  min-height: 54px;
+  padding: 0 var(--zy-sp-5);
+  border: 0;
+  color: var(--zy-ink);
+  font-weight: var(--zy-fw-semi);
+}
+
+.asset-more-tools :deep(.el-collapse-item__content) {
+  padding: 0 var(--zy-sp-5) var(--zy-sp-5);
+}
+
+.asset-more-tools__title {
+  margin-right: var(--zy-sp-2);
+}
+
+.asset-more-tools small {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-regular);
+}
+
+.asset-module-sections {
+  display: grid;
+  gap: var(--zy-sp-3);
+  min-width: 0;
+}
+
+.asset-module-section {
+  min-width: 0;
+  padding: var(--zy-sp-4) var(--zy-sp-5);
+  border: var(--zy-border);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+  box-shadow: var(--zy-shadow-xs);
+}
+
+.asset-module-section.is-gated {
+  border-color: rgba(245, 158, 11, 0.26);
+  background: var(--zy-amber-50);
+}
+
+.asset-module-section > header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--zy-sp-3);
+  align-items: center;
+  margin-bottom: var(--zy-sp-3);
+  padding-bottom: var(--zy-sp-3);
+  border-bottom: 1px dashed var(--zy-line-soft);
+}
+
+.asset-module-section > header > span {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-blue-50);
+  color: var(--zy-blue-700);
+  font-family: var(--zy-font-mono);
+  font-size: 11px;
+  font-weight: var(--zy-fw-bold);
+  letter-spacing: 0;
+}
+
+.asset-module-section > header strong {
+  display: block;
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-md);
+  font-weight: var(--zy-fw-semi);
+  line-height: 1.4;
+}
+
+.asset-module-section > header small,
+.asset-module-section > p {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  line-height: 1.6;
+}
+
+.asset-module-section > p {
+  margin: -2px 0 var(--zy-sp-3);
 }
 
 .asset-module-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--zy-sp-2);
   min-width: 0;
 }
 
 .asset-module-card {
+  position: relative;
   min-width: 0;
-  padding: 13px 14px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 8px;
-  background: #ffffff;
-  color: #0f172a;
+  padding: var(--zy-sp-3) var(--zy-sp-4);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+  color: var(--zy-ink);
   text-align: left;
   cursor: pointer;
+  font-family: inherit;
+  transition:
+    border-color var(--zy-duration-2) var(--zy-ease),
+    background var(--zy-duration-2) var(--zy-ease),
+    transform var(--zy-duration-2) var(--zy-ease);
 }
 
 .asset-module-card:hover {
   border-color: rgba(37, 99, 235, 0.36);
-  background: #f8fbff;
+  background: var(--zy-surface-soft);
+}
+
+.asset-module-card::after {
+  content: "→";
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--zy-subtle);
+  font-family: var(--zy-font-mono);
+  font-size: var(--zy-fs-base);
+  opacity: 0;
+  transition: opacity var(--zy-duration-2) var(--zy-ease);
+}
+
+.asset-module-card:hover::after {
+  opacity: 0.8;
+}
+
+.asset-module-card.is-gated {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: var(--zy-amber-50);
 }
 
 .asset-module-card span,
 .asset-module-card em {
   display: block;
-  color: #64748b;
-  font-size: 12px;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
   font-style: normal;
+}
+
+.asset-module-card span {
+  font-family: var(--zy-font-mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: var(--zy-blue-600);
 }
 
 .asset-module-card strong {
   display: block;
   margin: 5px 0 3px;
   overflow: hidden;
-  color: #0f172a;
-  font-size: 15px;
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-base);
+  font-weight: var(--zy-fw-semi);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+@media (max-width: 1280px) {
+  .asset-next-actions__grid,
+  .asset-next-actions--core .asset-next-actions__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .asset-next-actions > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .asset-next-actions__grid,
+  .asset-next-actions--core .asset-next-actions__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- 资产驾驶舱网格 ---- */
 .asset-dashboard-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 14px;
+  gap: var(--zy-sp-3);
   min-width: 0;
 }
 
 .asset-dashboard-panel {
   grid-column: span 6;
   min-width: 0;
-  padding: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 8px;
-  background: #fbfdff;
+  padding: var(--zy-sp-5);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+  box-shadow: var(--zy-shadow-xs);
 }
 
 .asset-dashboard-panel--overview,
@@ -1395,107 +2367,120 @@ function scanProgressValue(task: AssetScanTask) {
 
 .asset-dashboard-panel__header {
   display: flex;
-  gap: 12px;
+  gap: var(--zy-sp-3);
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: var(--zy-sp-4);
 }
 
 .asset-dashboard-panel__header h2 {
   margin: 0;
-  color: #0f172a;
-  font-size: 16px;
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-lg);
+  font-weight: var(--zy-fw-semi);
+  letter-spacing: -0.01em;
 }
 
 .asset-dashboard-panel__header span {
-  color: #64748b;
-  font-size: 12px;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
 }
 
 .asset-kpi-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 10px;
+  gap: var(--zy-sp-2);
 }
 
 .asset-kpi {
   min-width: 0;
-  padding: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 8px;
-  background: #ffffff;
+  padding: var(--zy-sp-3) var(--zy-sp-4);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface-soft);
 }
 
 .asset-kpi span,
 .asset-kpi em {
   display: block;
-  color: #64748b;
-  font-size: 12px;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
   font-style: normal;
 }
 
 .asset-kpi strong {
   display: block;
   margin: 6px 0 4px;
-  color: #0f172a;
-  font-size: 22px;
-  line-height: 1.15;
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-3xl);
+  font-weight: var(--zy-fw-bold);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
   overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
 }
 
 .asset-risk-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: var(--zy-sp-2);
 }
 
 .asset-risk-card {
+  position: relative;
   min-width: 0;
-  padding: 12px;
-  border: 1px solid rgba(245, 158, 11, 0.24);
-  border-radius: 8px;
-  background: #fffaf0;
+  padding: var(--zy-sp-3) var(--zy-sp-4);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-left: 3px solid var(--zy-amber-500);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-amber-50);
   color: #92400e;
   text-align: left;
   cursor: pointer;
+  font-family: inherit;
+  transition:
+    border-color var(--zy-duration-2) var(--zy-ease),
+    background var(--zy-duration-2) var(--zy-ease);
 }
 
 .asset-risk-card:hover {
-  border-color: rgba(37, 99, 235, 0.32);
-  background: #eff6ff;
-  color: #1d4ed8;
+  border-color: var(--zy-blue-500);
+  background: var(--zy-blue-50);
+  color: var(--zy-blue-700);
 }
 
 .asset-risk-card span,
 .asset-risk-card em {
   display: block;
-  font-size: 12px;
+  font-size: var(--zy-fs-xs);
   font-style: normal;
 }
 
 .asset-risk-card strong {
   display: block;
   margin: 6px 0 4px;
-  color: #0f172a;
-  font-size: 22px;
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-3xl);
+  font-weight: var(--zy-fw-bold);
+  font-variant-numeric: tabular-nums;
 }
 
 .asset-bars,
 .asset-activity-list,
 .asset-event-list {
   display: grid;
-  gap: 10px;
+  gap: var(--zy-sp-2);
 }
 
 .asset-bar-row {
   display: grid;
-  gap: 7px;
+  gap: 6px;
 }
 
 .asset-bar-row > div:first-child,
 .asset-activity-item {
   display: flex;
-  gap: 12px;
+  gap: var(--zy-sp-3);
   align-items: center;
   justify-content: space-between;
   min-width: 0;
@@ -1504,46 +2489,49 @@ function scanProgressValue(task: AssetScanTask) {
 .asset-bar-row strong,
 .asset-activity-item strong,
 .asset-event-item strong {
-  color: #0f172a;
-  font-size: 13px;
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-sm);
+  font-weight: var(--zy-fw-semi);
 }
 
 .asset-bar-row span,
 .asset-activity-item span,
 .asset-event-item span,
 .asset-event-item em {
-  color: #64748b;
-  font-size: 12px;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 .asset-bar-row__track {
-  height: 8px;
+  height: 6px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(37, 99, 235, 0.1);
+  background: var(--zy-blue-50);
 }
 
 .asset-bar-row__track span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #2563eb;
+  background: var(--zy-blue-500);
+  transition: width var(--zy-duration-4) var(--zy-ease-out);
 }
 
 .asset-bar-row__track--muted {
-  background: rgba(20, 184, 166, 0.12);
+  background: rgba(20, 184, 200, 0.12);
 }
 
 .asset-bar-row__track--muted span {
-  background: #0f766e;
+  background: var(--zy-cyan-500);
 }
 
 .asset-activity-item,
 .asset-event-item {
   min-width: 0;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: #ffffff;
+  padding: var(--zy-sp-2) var(--zy-sp-3);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface-soft);
 }
 
 .asset-activity-item > div,
@@ -1566,39 +2554,40 @@ function scanProgressValue(task: AssetScanTask) {
 .asset-event-item {
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr) 140px;
-  gap: 12px;
+  gap: var(--zy-sp-3);
   align-items: center;
 }
 
 .asset-toolbar {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) auto 150px 150px 120px auto;
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: var(--zy-sp-2);
+  margin-bottom: var(--zy-sp-3);
 }
 
 .asset-pagination {
   display: flex;
   justify-content: flex-end;
-  margin-top: 14px;
+  margin-top: var(--zy-sp-3);
 }
 
 .asset-detail-section {
-  margin-bottom: 18px;
+  margin-bottom: var(--zy-sp-5);
 }
 
 .asset-detail-section h3 {
-  margin: 0 0 8px 0;
-  padding-left: 8px;
-  border-left: 3px solid #409eff;
-  color: #303133;
-  font-size: 14px;
+  margin: 0 0 var(--zy-sp-2);
+  padding-left: var(--zy-sp-2);
+  border-left: 3px solid var(--zy-blue-500);
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-sm);
+  font-weight: var(--zy-fw-semi);
 }
 
 .asset-detail-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--zy-sp-2);
 }
 
 .preview-message {
@@ -1609,50 +2598,17 @@ function scanProgressValue(task: AssetScanTask) {
   min-height: 260px;
 }
 
-.preview-state-panel {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.preview-state-panel strong,
-.preview-state-panel span {
-  display: block;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.preview-state-panel span {
-  margin-top: 4px;
-  color: #606266;
-  font-size: 13px;
-}
-
-.preview-descriptions {
-  margin-top: 12px;
-}
-
-.preview-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.job-dialog-body {
-  min-height: 260px;
-}
-
+.preview-state-panel,
 .job-state-panel {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 12px;
+  gap: var(--zy-sp-3);
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: var(--zy-sp-3);
 }
 
+.preview-state-panel strong,
+.preview-state-panel span,
 .job-state-panel strong,
 .job-state-panel span {
   display: block;
@@ -1660,18 +2616,31 @@ function scanProgressValue(task: AssetScanTask) {
   overflow-wrap: anywhere;
 }
 
+.preview-state-panel span,
 .job-state-panel span {
   margin-top: 4px;
-  color: #606266;
-  font-size: 13px;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-sm);
 }
 
+.preview-descriptions,
 .job-descriptions {
-  margin-top: 12px;
+  margin-top: var(--zy-sp-3);
+}
+
+.preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zy-sp-2);
+  margin-top: var(--zy-sp-4);
+}
+
+.job-dialog-body {
+  min-height: 260px;
 }
 
 .job-message {
-  margin-top: 12px;
+  margin-top: var(--zy-sp-3);
 }
 
 .quality-flag {
@@ -1679,8 +2648,8 @@ function scanProgressValue(task: AssetScanTask) {
 }
 
 .mono-text {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-family: var(--zy-font-mono);
+  font-size: var(--zy-fs-xs);
   overflow-wrap: anywhere;
 }
 
@@ -1691,6 +2660,23 @@ function scanProgressValue(task: AssetScanTask) {
 
   .asset-command-center__meta,
   .asset-command-center__actions {
+    justify-content: flex-start;
+  }
+
+  .asset-workstream-strip,
+  .asset-workspace-gate {
+    align-items: flex-start;
+  }
+
+  .asset-workstream-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-workspace-gate {
+    flex-direction: column;
+  }
+
+  .asset-workspace-gate__actions {
     justify-content: flex-start;
   }
 

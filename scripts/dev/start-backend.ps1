@@ -5,7 +5,17 @@ $backendDir = Join-Path $repoRoot "backend"
 $wrapperCmd = Join-Path $backendDir "mvnw.cmd"
 $m2Dir = Join-Path $HOME ".m2"
 if (-not $env:SERVER_PORT) {
-  $env:SERVER_PORT = "18080"
+  $env:SERVER_PORT = "8080"
+}
+$runtimeDir = Join-Path $repoRoot "tmp/run-logs"
+$appJar = Join-Path $backendDir "delivery-app/target/delivery-app-1.0.0-SNAPSHOT.jar"
+$runtimeJar = Join-Path $runtimeDir "delivery-app-runtime.jar"
+
+function Start-PackagedApp {
+  New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
+  Copy-Item -Force $appJar $runtimeJar
+  & java -jar $runtimeJar
+  exit $LASTEXITCODE
 }
 
 Set-Location $backendDir
@@ -20,8 +30,7 @@ if ($javaCmd -and (Test-Path $wrapperCmd)) {
     exit $LASTEXITCODE
   }
 
-  & java -jar "delivery-app/target/delivery-app-1.0.0-SNAPSHOT.jar"
-  exit $LASTEXITCODE
+  Start-PackagedApp
 }
 
 if ($javaCmd -and $mvnCmd) {
@@ -30,8 +39,7 @@ if ($javaCmd -and $mvnCmd) {
     exit $LASTEXITCODE
   }
 
-  & java -jar "delivery-app/target/delivery-app-1.0.0-SNAPSHOT.jar"
-  exit $LASTEXITCODE
+  Start-PackagedApp
 }
 
 if (-not $dockerCmd) {
@@ -50,6 +58,6 @@ if (-not $dockerCmd) {
   -v "${backendDir}:/workspace" `
   -w /workspace `
   maven:3.9-eclipse-temurin-21 `
-  bash -lc 'mvn -pl delivery-app -am -DskipTests package && java -jar delivery-app/target/delivery-app-1.0.0-SNAPSHOT.jar'
+  bash -lc 'mvn -pl delivery-app -am -DskipTests package && mkdir -p /tmp/delivery-runtime && cp delivery-app/target/delivery-app-1.0.0-SNAPSHOT.jar /tmp/delivery-runtime/delivery-app-runtime.jar && exec java -jar /tmp/delivery-runtime/delivery-app-runtime.jar'
 
 exit $LASTEXITCODE

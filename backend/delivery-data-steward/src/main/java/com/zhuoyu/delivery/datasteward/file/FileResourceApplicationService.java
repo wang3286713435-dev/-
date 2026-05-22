@@ -47,11 +47,13 @@ public class FileResourceApplicationService {
         );
         auditLogApplicationService.record(projectId, MODULE_CODE, "data.file.create", "FILE_RESOURCE",
             String.valueOf(fileId), userId, Map.of("fileKind", fileKind));
-        return requireFile(projectId, fileId);
+        return maskForResponse(requireFile(projectId, fileId));
     }
 
     public List<FileResourceResponse> list(Long projectId, String fileKind) {
-        return fileResourceRepository.findByProject(projectId, normalizeNullableFileKind(fileKind));
+        return fileResourceRepository.findByProject(projectId, normalizeNullableFileKind(fileKind)).stream()
+            .map(this::maskForResponse)
+            .toList();
     }
 
     public PageResponse<FileResourceResponse> listPage(
@@ -72,7 +74,7 @@ public class FileResourceApplicationService {
             projectId, normalizedKind, normalizedKeyword, normalizedProcessStatus, offset, safePageSize);
         int total = fileResourceRepository.countByProjectFiltered(
             projectId, normalizedKind, normalizedKeyword, normalizedProcessStatus);
-        return new PageResponse<>(items, safePageNo, safePageSize, total);
+        return new PageResponse<>(items.stream().map(this::maskForResponse).toList(), safePageNo, safePageSize, total);
     }
 
     @Transactional
@@ -82,7 +84,7 @@ public class FileResourceApplicationService {
         fileResourceRepository.updateProcessStatus(projectId, fileId, processStatus, userId);
         auditLogApplicationService.record(projectId, MODULE_CODE, "data.file.process", "FILE_RESOURCE",
             String.valueOf(fileId), userId, Map.of("processStatus", processStatus));
-        return requireFile(projectId, fileId);
+        return maskForResponse(requireFile(projectId, fileId));
     }
 
     @Transactional
@@ -104,6 +106,26 @@ public class FileResourceApplicationService {
 
     public int countByProjectAndKind(Long projectId, String fileKind) {
         return fileResourceRepository.countByProjectAndKind(projectId, fileKind);
+    }
+
+    private FileResourceResponse maskForResponse(FileResourceResponse file) {
+        if (file == null) {
+            return null;
+        }
+        return new FileResourceResponse(
+            file.id(),
+            file.projectId(),
+            file.originalName(),
+            file.fileKind(),
+            file.mimeType(),
+            file.sizeBytes(),
+            null,
+            file.checksum(),
+            file.businessTag(),
+            file.versionNo(),
+            file.processStatus(),
+            file.processedAt()
+        );
     }
 
     private String normalizeNullableFileKind(String fileKind) {

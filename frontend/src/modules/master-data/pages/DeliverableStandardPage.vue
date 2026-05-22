@@ -15,6 +15,14 @@
 
     <StandardStatusPanel :status="standardStatus" />
 
+    <el-alert
+      class="masterdata-review-alert"
+      type="info"
+      :closable="false"
+      show-icon
+      title="如果交付物标准来自接入草案，它只代表基础交付骨架，仍需项目负责人复核必交项、文件类型、属性和目录模板。"
+    />
+
     <section class="workflow-guide">
       <div class="workflow-guide__main">
         <span class="workflow-guide__step">第 3 步</span>
@@ -29,6 +37,18 @@
         <li>交付物属性：说明资料还需要补充哪些字段。</li>
         <li>目录模板：说明交付成果建议按什么目录组织。</li>
       </ol>
+    </section>
+
+    <section class="masterdata-next-action">
+      <div>
+        <span>下一步</span>
+        <strong>标准确认后，进入文档 / 图纸交付</strong>
+        <p>交付物定义和类型会直接生成应交项。缺失项不是错误，而是提示员工需要选择哪个文件补交。</p>
+      </div>
+      <div class="masterdata-next-action__actions">
+        <el-button type="primary" @click="goDocumentDelivery">进入文档交付</el-button>
+        <el-button @click="goDrawingDelivery">进入图纸交付</el-button>
+      </div>
     </section>
 
     <el-alert v-if="!canWrite" class="node-type-lock" type="warning" :closable="false" show-icon>
@@ -285,6 +305,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Delete, Edit, Plus, Refresh } from '@element-plus/icons-vue';
 
@@ -320,6 +341,7 @@ import { useAuthStore } from '@/stores/auth';
 type DialogKind = 'definition' | 'type' | 'attribute' | 'template';
 
 const authStore = useAuthStore();
+const router = useRouter();
 const loading = ref(false);
 const loadingTypes = ref(false);
 const loadingAttributes = ref(false);
@@ -749,34 +771,53 @@ function resetForm(kind: DialogKind) {
     });
   }
 }
+
+function goDocumentDelivery() {
+  if (!currentProjectId.value) return;
+  router.push({ name: 'project-work-document-delivery', params: { projectId: currentProjectId.value } });
+}
+
+function goDrawingDelivery() {
+  if (!currentProjectId.value) return;
+  router.push({ name: 'project-work-drawing-delivery', params: { projectId: currentProjectId.value } });
+}
 </script>
 
 <style scoped>
 .deliverable-layout {
   display: grid;
-  gap: 18px;
+  gap: var(--zy-sp-5);
 }
 
 .deliverable-panel {
   display: grid;
-  gap: 12px;
+  gap: var(--zy-sp-3);
+  padding: var(--zy-sp-5);
+  background: var(--zy-surface);
+  border: var(--zy-border);
+  border-radius: var(--zy-radius-base);
+  box-shadow: var(--zy-shadow-xs);
 }
 
 .deliverable-panel__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--zy-sp-3);
 }
 
 .deliverable-panel__header h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--zy-fs-xl);
+  font-weight: var(--zy-fw-semi);
+  color: var(--zy-ink);
+  letter-spacing: -0.01em;
 }
 
 .deliverable-panel__header p {
   margin: 4px 0 0;
-  color: var(--el-text-color-secondary);
-  line-height: 1.6;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-sm);
+  line-height: 1.65;
 }
 </style>

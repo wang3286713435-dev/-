@@ -26,6 +26,12 @@ const router = createRouter({
       meta: { guestOnly: true }
     },
     {
+      path: '/register',
+      name: 'register',
+      component: () => import('@/modules/auth/pages/RegisterPage.vue'),
+      meta: { guestOnly: true }
+    },
+    {
       path: '/',
       component: () => import('@/modules/core/layout/AppLayout.vue'),
       meta: { requiresAuth: true },
@@ -39,6 +45,18 @@ const router = createRouter({
           name: 'home',
           component: () => import('@/modules/work-center/pages/HomePage.vue'),
           meta: { requiresAuth: true }
+        },
+        {
+          path: 'access-pending',
+          name: 'access-pending',
+          component: () => import('@/modules/core/pages/AccessPendingPage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
+          path: 'admin/employees',
+          name: 'admin-employees',
+          component: () => import('@/modules/core/pages/AdminEmployeesPage.vue'),
+          meta: { requiresAuth: true, adminOnly: true }
         },
         {
           path: 'master-data/sections',
@@ -279,7 +297,21 @@ router.beforeEach(async (to) => {
     }
   }
 
+  const noProjectUser = authStore.isAuthenticated && authStore.currentUser?.projects.length === 0;
+
   if (to.meta.guestOnly && authStore.isAuthenticated) {
+    return { name: noProjectUser ? 'access-pending' : 'data-steward-assets' };
+  }
+
+  if (to.meta.requiresAuth && noProjectUser && to.name !== 'access-pending') {
+    return { name: 'access-pending' };
+  }
+
+  if (to.name === 'access-pending' && authStore.isAuthenticated && !noProjectUser) {
+    return { name: 'data-steward-assets' };
+  }
+
+  if (to.meta.adminOnly && !hasEmployeeManagementPermission()) {
     return { name: 'data-steward-assets' };
   }
 
@@ -309,5 +341,11 @@ router.beforeEach(async (to) => {
 
   return true;
 });
+
+function hasEmployeeManagementPermission() {
+  const authStore = useAuthStore();
+  const permissions = authStore.currentUser?.permissions ?? [];
+  return permissions.includes('CORE_USER_MANAGE') || permissions.includes('CORE_PROJECT_ROLE_MANAGE');
+}
 
 export default router;

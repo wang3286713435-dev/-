@@ -208,6 +208,10 @@ public class ProjectInitializationApplicationService {
         AssetOnboardingSnapshot snapshot = loadAssetOnboardingSnapshot(projectId);
         return new OnboardingAssessmentResponse(
             projectId,
+            snapshot.projectCode(),
+            snapshot.projectName(),
+            snapshot.assetSource(),
+            snapshot.realNasProject(),
             true,
             "catalog_only",
             onboardingStatus(snapshot, status),
@@ -229,6 +233,7 @@ public class ProjectInitializationApplicationService {
             true,
             false,
             false,
+            true,
             "catalog_only",
             template.code(),
             template.name(),
@@ -236,7 +241,7 @@ public class ProjectInitializationApplicationService {
             templatePreview,
             onboardingDraftItems(snapshot, templatePreview),
             List.of(
-                "本预览只读取项目目录元数据和标准配置状态，不读取 PDF/Office/DWG/RVT/IFC 正文。",
+                "本预览只读取项目目录元数据、项目来源和标准配置状态，不读取 PDF/Office/DWG/RVT/IFC 正文。",
                 "草案不会触碰、复制、移动、改名或删除 NAS 文件。",
                 "真实工程主数据仍需人工确认；目录证据不能替代模型解析或正文证据。"
             )
@@ -572,46 +577,76 @@ public class ProjectInitializationApplicationService {
 
     private AssetOnboardingSnapshot loadAssetOnboardingSnapshot(Long projectId) {
         return jdbcTemplate.queryForObject("""
-            SELECT COALESCE(file_stats.file_count, 0) AS file_count,
+            SELECT p.code AS project_code,
+                   p.name AS project_name,
+                   p.asset_source,
+                   COALESCE(file_stats.file_count, 0) AS file_count,
                    COALESCE(file_stats.model_file_count, 0) AS model_file_count,
                    COALESCE(file_stats.drawing_file_count, 0) AS drawing_file_count,
                    COALESCE(file_stats.document_file_count, 0) AS document_file_count,
                    COALESCE(path_stats.path_mapping_count, 0) AS path_mapping_count,
+                   COALESCE(scan_stats.scan_task_count, 0) AS scan_task_count,
                    file_stats.dominant_file_kinds,
+                   file_stats.dominant_file_extensions,
+                   file_stats.dominant_disciplines,
+                   file_stats.directory_clues,
                    file_stats.last_asset_seen_at,
                    scan_stats.last_scan_at
-            FROM (SELECT :projectId AS project_id) base
+            FROM core_projects p
             LEFT JOIN (
                 SELECT project_id,
                        COUNT(1) AS file_count,
                        SUM(CASE WHEN file_kind = 'MODEL' THEN 1 ELSE 0 END) AS model_file_count,
                        SUM(CASE WHEN file_kind = 'DRAWING' THEN 1 ELSE 0 END) AS drawing_file_count,
-                       SUM(CASE WHEN file_kind = 'DOCUMENT' THEN 1 ELSE 0 END) AS document_file_count,
+                       SUM(CASE WHEN file_kind IN ('DOCUMENT', 'SPREADSHEET', 'PRESENTATION') THEN 1 ELSE 0 END) AS document_file_count,
                        GROUP_CONCAT(DISTINCT file_kind ORDER BY file_kind SEPARATOR ',') AS dominant_file_kinds,
+                       GROUP_CONCAT(DISTINCT UPPER(SUBSTRING_INDEX(original_name, '.', -1)) ORDER BY UPPER(SUBSTRING_INDEX(original_name, '.', -1)) SEPARATOR ',') AS dominant_file_extensions,
+                       GROUP_CONCAT(DISTINCT discipline ORDER BY discipline SEPARATOR ',') AS dominant_disciplines,
+                       GROUP_CONCAT(DISTINCT
+                           CASE
+                               WHEN logical_path IS NULL OR logical_path = '' THEN NULL
+                               ELSE SUBSTRING_INDEX(TRIM(BOTH '/' FROM logical_path), '/', 1)
+                           END
+                           ORDER BY
+                           CASE
+                               WHEN logical_path IS NULL OR logical_path = '' THEN NULL
+                               ELSE SUBSTRING_INDEX(TRIM(BOTH '/' FROM logical_path), '/', 1)
+                           END
+                           SEPARATOR ',') AS directory_clues,
                        MAX(COALESCE(last_verified_at, updated_at, created_at)) AS last_asset_seen_at
                 FROM data_file_resources
                 WHERE project_id = :projectId AND deleted = 0
                 GROUP BY project_id
-            ) file_stats ON file_stats.project_id = base.project_id
+            ) file_stats ON file_stats.project_id = p.id
             LEFT JOIN (
                 SELECT project_id, COUNT(1) AS path_mapping_count
                 FROM data_asset_project_path_mappings
                 WHERE project_id = :projectId AND deleted = 0 AND enabled = 1
                 GROUP BY project_id
-            ) path_stats ON path_stats.project_id = base.project_id
+            ) path_stats ON path_stats.project_id = p.id
             LEFT JOIN (
-                SELECT project_id, MAX(COALESCE(completed_at, started_at, updated_at)) AS last_scan_at
+                SELECT project_id,
+                       COUNT(1) AS scan_task_count,
+                       MAX(COALESCE(completed_at, started_at, updated_at)) AS last_scan_at
                 FROM data_asset_scan_tasks
                 WHERE project_id = :projectId AND deleted = 0
                 GROUP BY project_id
-            ) scan_stats ON scan_stats.project_id = base.project_id
+            ) scan_stats ON scan_stats.project_id = p.id
+            WHERE p.id = :projectId AND p.deleted = 0
             """, new MapSqlParameterSource("projectId", projectId), (rs, rowNum) -> new AssetOnboardingSnapshot(
+            rs.getString("project_code"),
+            rs.getString("project_name"),
+            rs.getString("asset_source"),
             rs.getInt("file_count"),
             rs.getInt("model_file_count"),
             rs.getInt("drawing_file_count"),
             rs.getInt("document_file_count"),
             rs.getInt("path_mapping_count"),
+            rs.getInt("scan_task_count"),
             splitCsv(rs.getString("dominant_file_kinds")),
+            splitCsv(rs.getString("dominant_file_extensions")),
+            splitCsv(rs.getString("dominant_disciplines")),
+            safeDirectoryClues(rs.getString("directory_clues")),
             toInstant(rs.getTimestamp("last_asset_seen_at")),
             toInstant(rs.getTimestamp("last_scan_at"))
         ));
@@ -619,6 +654,15 @@ public class ProjectInitializationApplicationService {
 
     private List<OnboardingEvidenceClue> onboardingEvidenceClues(AssetOnboardingSnapshot snapshot) {
         List<OnboardingEvidenceClue> clues = new ArrayList<>();
+        clues.add(new OnboardingEvidenceClue(
+            snapshot.realNasProject() ? "REAL_NAS_PROJECT" : "PROJECT_SOURCE",
+            snapshot.realNasProject() ? "真实 NAS 项目" : "非真实 NAS 项目或来源待确认",
+            "catalog_only",
+            true,
+            snapshot.realNasProject()
+                ? "项目来源标记为 " + snapshot.assetSource() + "，评估只使用目录级元数据和标准配置状态。"
+                : "当前项目来源不是 NAS_REAL*，不能按真实 NAS 项目完成接入结论。"
+        ));
         if (snapshot.pathMappingCount() > 0) {
             clues.add(new OnboardingEvidenceClue(
                 "PATH_MAPPING",
@@ -635,6 +679,42 @@ public class ProjectInitializationApplicationService {
                 "catalog_only",
                 true,
                 "可用于判断文件类型、数量、版本和目录级状态，不能证明文件正文或模型内部内容。"
+            ));
+        }
+        if (!snapshot.dominantFileExtensions().isEmpty()) {
+            clues.add(new OnboardingEvidenceClue(
+                "FILE_EXTENSION_METADATA",
+                "主要扩展名线索：" + String.join(" / ", snapshot.dominantFileExtensions()),
+                "catalog_only",
+                true,
+                "扩展名来自文件名元数据，只能辅助判断交付资料类型，不能代表文件内容已解析。"
+            ));
+        }
+        if (!snapshot.dominantDisciplines().isEmpty()) {
+            clues.add(new OnboardingEvidenceClue(
+                "DISCIPLINE_METADATA",
+                "主要专业线索：" + String.join(" / ", snapshot.dominantDisciplines()),
+                "catalog_only",
+                true,
+                "专业来自目录入库或人工治理字段，仍需项目负责人复核。"
+            ));
+        }
+        if (!snapshot.directoryClues().isEmpty()) {
+            clues.add(new OnboardingEvidenceClue(
+                "DIRECTORY_METADATA",
+                "主要目录线索：" + String.join(" / ", snapshot.directoryClues()),
+                "catalog_only",
+                true,
+                "目录名只作为结构线索，不等于真实工程部位树，也不暴露 NAS 原始路径。"
+            ));
+        }
+        if (snapshot.scanTaskCount() > 0) {
+            clues.add(new OnboardingEvidenceClue(
+                "SCAN_TASK_METADATA",
+                "已有只读扫描记录",
+                "catalog_only",
+                true,
+                "平台记录到 " + snapshot.scanTaskCount() + " 条扫描任务，可辅助判断资产登记时间，但不代表读取了文件正文。"
             ));
         }
         if (snapshot.modelFileCount() > 0) {
@@ -669,6 +749,14 @@ public class ProjectInitializationApplicationService {
 
     private List<OnboardingGap> onboardingGaps(AssetOnboardingSnapshot snapshot, StandardStatusResponse status) {
         List<OnboardingGap> gaps = new ArrayList<>();
+        if (!snapshot.realNasProject()) {
+            gaps.add(new OnboardingGap(
+                "REAL_NAS_SOURCE_NOT_CONFIRMED",
+                "warning",
+                "当前项目来源不是 NAS_REAL*，不能作为真实 NAS 项目接入结论。",
+                "real_nas_project_source_missing"
+            ));
+        }
         if (snapshot.fileCount() <= 0 && snapshot.pathMappingCount() <= 0) {
             gaps.add(new OnboardingGap(
                 "ASSET_CATALOG_MISSING",
@@ -710,6 +798,10 @@ public class ProjectInitializationApplicationService {
                 item.category(),
                 item.name(),
                 item.reason(),
+                "catalog_only",
+                draftEvidenceSource(item, snapshot),
+                draftConfidence(item, snapshot),
+                draftRiskHint(item, snapshot),
                 assetClueSupports(item.category(), snapshot),
                 true,
                 true
@@ -729,7 +821,7 @@ public class ProjectInitializationApplicationService {
             actions.add("补齐交付定义、交付类型、交付属性与目录模板");
         }
         if (actions.isEmpty()) {
-            actions.add("进入 Agent 引导式交付治理，继续保持 catalog-only / read-only 边界");
+            actions.add("进入文档交付和图纸交付页面，继续人工复核挂接状态与导出预检查");
         }
         return actions;
     }
@@ -742,6 +834,45 @@ public class ProjectInitializationApplicationService {
             return snapshot.pathMappingCount() > 0 || snapshot.fileCount() > 0;
         }
         return false;
+    }
+
+    private static String draftEvidenceSource(TemplatePreviewItemResponse item, AssetOnboardingSnapshot snapshot) {
+        if ("SKIP".equals(item.action())) {
+            return "EXISTING_PROJECT_MASTERDATA";
+        }
+        if ("DIRECTORY_TEMPLATE".equals(item.category()) && !snapshot.directoryClues().isEmpty()) {
+            return "CATALOG_DIRECTORY_CLUE";
+        }
+        if ("DELIVERABLE_TYPE".equals(item.category()) && assetClueSupports(item.category(), snapshot)) {
+            return "CATALOG_FILE_KIND_CLUE";
+        }
+        return "TEMPLATE_SKELETON";
+    }
+
+    private static String draftConfidence(TemplatePreviewItemResponse item, AssetOnboardingSnapshot snapshot) {
+        if ("SKIP".equals(item.action())) {
+            return "EXISTING";
+        }
+        if (assetClueSupports(item.category(), snapshot)) {
+            return "MEDIUM";
+        }
+        return "LOW";
+    }
+
+    private static String draftRiskHint(TemplatePreviewItemResponse item, AssetOnboardingSnapshot snapshot) {
+        if ("SKIP".equals(item.action())) {
+            return "项目中已存在同编码/同名标准项，本次不会覆盖。仍建议项目负责人复核是否符合真实项目结构。";
+        }
+        if ("DIRECTORY_TEMPLATE".equals(item.category()) && !snapshot.directoryClues().isEmpty()) {
+            return "存在目录线索可辅助组织交付目录，但目录名不能替代真实工程部位或正式交付标准。";
+        }
+        if ("DELIVERABLE_TYPE".equals(item.category()) && assetClueSupports(item.category(), snapshot)) {
+            return "目录中存在相关文件类型线索，但没有读取文件正文、图纸内容或模型构件证据。";
+        }
+        if ("NODE_TYPE".equals(item.category()) || "SECTION_NODE".equals(item.category())) {
+            return "该项来自模板默认骨架，不代表真实楼栋、楼层或系统已经被平台识别。";
+        }
+        return "该项来自建筑机电/BIM交付基础模板，应用后仍需人工确认和项目级调整。";
     }
 
     private static String onboardingStatus(AssetOnboardingSnapshot snapshot, StandardStatusResponse status) {
@@ -827,6 +958,47 @@ public class ProjectInitializationApplicationService {
             .toList();
     }
 
+    private static List<String> safeDirectoryClues(String value) {
+        List<String> rows = splitCsv(value);
+        if (rows.isEmpty()) {
+            return rows;
+        }
+        List<String> safe = rows.stream()
+            .filter(item -> !isRawPathLike(item))
+            .map(ProjectInitializationApplicationService::trimDirectoryClue)
+            .filter(item -> !item.isBlank())
+            .distinct()
+            .limit(8)
+            .toList();
+        if (safe.isEmpty()) {
+            return List.of("项目内目录线索已脱敏");
+        }
+        return safe;
+    }
+
+    private static boolean isRawPathLike(String value) {
+        String text = value == null ? "" : value.toLowerCase(Locale.ROOT);
+        return text.contains("storage_path")
+            || text.contains("storage_uri")
+            || text.contains("nas://")
+            || text.contains("smb://")
+            || text.contains("afp://")
+            || text.contains("/volumes/")
+            || text.contains("/users/")
+            || "volumes".equals(text)
+            || "users".equals(text)
+            || "storage".equals(text)
+            || "nas".equals(text)
+            || "smb".equals(text);
+    }
+
+    private static String trimDirectoryClue(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace('\\', '/').replaceAll("^/+", "").replaceAll("/+$", "");
+    }
+
     private static <T> Map<String, T> mapByCode(List<T> rows, Function<T, String> codeExtractor) {
         return rows.stream()
             .collect(Collectors.toMap(codeExtractor, Function.identity(), (left, right) -> left, LinkedHashMap::new));
@@ -843,12 +1015,19 @@ public class ProjectInitializationApplicationService {
     }
 
     private record AssetOnboardingSnapshot(
+        String projectCode,
+        String projectName,
+        String assetSource,
         int fileCount,
         int modelFileCount,
         int drawingFileCount,
         int documentFileCount,
         int pathMappingCount,
+        int scanTaskCount,
         List<String> dominantFileKinds,
+        List<String> dominantFileExtensions,
+        List<String> dominantDisciplines,
+        List<String> directoryClues,
         Instant lastAssetSeenAt,
         Instant lastScanAt
     ) {
@@ -859,10 +1038,18 @@ public class ProjectInitializationApplicationService {
                 drawingFileCount,
                 documentFileCount,
                 pathMappingCount,
+                scanTaskCount,
                 dominantFileKinds,
+                dominantFileExtensions,
+                dominantDisciplines,
+                directoryClues,
                 lastAssetSeenAt,
                 lastScanAt
             );
+        }
+
+        boolean realNasProject() {
+            return assetSource != null && assetSource.toUpperCase(Locale.ROOT).startsWith("NAS_REAL");
         }
     }
 

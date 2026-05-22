@@ -197,30 +197,30 @@ function formatBytes(value: number | null | undefined) {
   align-items: center;
   min-width: 0;
   padding: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 1px solid var(--zy-line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--zy-surface);
 }
 
 .export-card--disabled {
-  background: #f8fafc;
+  background: var(--zy-bg);
 }
 
 .export-card span {
-  color: #2563eb;
+  color: var(--zy-blue-600);
   font-size: 12px;
   font-weight: 700;
 }
 
 .export-card h2 {
   margin: 4px 0;
-  color: #0f172a;
+  color: var(--zy-ink);
   font-size: 16px;
 }
 
 .export-card p {
   margin: 0;
-  color: #64748b;
+  color: var(--zy-muted);
   font-size: 13px;
 }
 
@@ -242,7 +242,7 @@ function formatBytes(value: number | null | undefined) {
 }
 
 .export-preview__header span {
-  color: #64748b;
+  color: var(--zy-muted);
   font-size: 12px;
 }
 

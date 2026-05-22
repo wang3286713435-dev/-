@@ -33,9 +33,20 @@ public class CurrentUserApplicationService {
     public CurrentUserResponse getCurrentUser(Long userId, Long currentProjectId) {
         var user = userAccountRepository.findById(userId)
             .orElseThrow(() -> new BusinessException("CORE_AUTH_UNAUTHORIZED", "当前用户不存在", HttpStatus.UNAUTHORIZED));
+        if (!"ACTIVE".equalsIgnoreCase(user.status())) {
+            throw new BusinessException("CORE_AUTH_DISABLED", "当前账号已停用", HttpStatus.FORBIDDEN);
+        }
         List<AccessibleProject> projects = projectAccessApplicationService.listAccessibleProjects(userId);
         if (projects.isEmpty()) {
-            throw new BusinessException("CORE_PROJECT_NOT_FOUND", "当前用户未绑定任何项目", HttpStatus.FORBIDDEN);
+            return new CurrentUserResponse(
+                user.id(),
+                user.username(),
+                user.displayName(),
+                null,
+                List.of(),
+                List.of(),
+                List.of()
+            );
         }
         AccessibleProject currentProject = currentProjectId == null
             ? projects.getFirst()
@@ -157,6 +168,11 @@ public class CurrentUserApplicationService {
                 workChildren.add(new MenuItemResponse("visualization-workbench", "3D 工作台", "/visualization/workbench", "Monitor"));
             }
             menus.add(new MenuItemResponse("work-center", "工作中心", "/work/document-delivery", "DataBoard", workChildren));
+        }
+        if (permissions.contains("CORE_USER_MANAGE") || permissions.contains("CORE_PROJECT_ROLE_MANAGE")) {
+            menus.add(new MenuItemResponse("admin", "管理中心", "/admin/employees", "User", List.of(
+                new MenuItemResponse("admin-employees", "员工权限", "/admin/employees", "User")
+            )));
         }
         return menus;
     }

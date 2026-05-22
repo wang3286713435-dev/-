@@ -385,7 +385,7 @@ function queryString(value: unknown) {
 }
 
 .directory-cell span {
-  color: #64748b;
+  color: var(--zy-muted);
 }
 
 @media (max-width: 960px) {

@@ -2,8 +2,8 @@
   <section class="mvp-page asset-page">
     <div class="mvp-page__header">
       <div>
-        <h1>资产总览</h1>
-        <p>默认聚焦真实 NAS 项目，样例、测试和归档项目需主动切换查看</p>
+        <h1>项目启动台</h1>
+        <p>先选项目，再进入文件管理、项目可视化或交付状态</p>
       </div>
       <div class="mvp-page__actions">
         <el-segmented v-model="sourceFilter" :options="sourceOptions" @change="loadPage" />
@@ -24,84 +24,134 @@
       </div>
     </div>
 
-    <section class="asset-governance-hero">
-      <div class="asset-governance-hero__intro">
-        <span>G2 真实项目治理入口</span>
-        <h2>从真实 NAS 资产进入数字化交付</h2>
-        <p>
-          这里先识别真实项目，再按资产目录、接入评估、主数据草案和交付治理助手推进。页面只展示目录级治理线索，不读取文件正文，也不触碰 NAS 文件。
-        </p>
+    <section ref="heroRef" class="asset-launchpad" aria-label="项目启动台">
+      <div class="zy-hero-lightfield" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <div class="zy-spotlight" aria-hidden="true"></div>
+      <ParticleField :count="14" :speed="0.2" :link-distance="120" />
+      <div class="asset-launchpad__copy">
+        <span class="zy-code-chip">PROJECT LAUNCHPAD</span>
+        <h2>选择项目，直接开始工作</h2>
+        <p>默认聚焦真实项目。搜索或选择推荐项目后，直接进入文件管理、项目可视化或交付状态。</p>
       </div>
 
-      <div class="asset-governance-layer">
-        <header>
-          <strong>平台目标</strong>
-          <span>把既有项目从“文件已接管”推进到“可解释、可复核、可交付”。</span>
-        </header>
-        <div class="asset-objective-track">
-          <article v-for="item in objectiveSteps" :key="item.label">
-            <strong>{{ item.label }}</strong>
-            <span>{{ item.description }}</span>
-          </article>
-        </div>
-      </div>
+      <article class="asset-launchpad__recommend">
+        <span>推荐项目</span>
+        <template v-if="recommendedProject">
+          <strong>{{ recommendedProject.code }} {{ recommendedProject.name }}</strong>
+          <div class="asset-launchpad__tags">
+            <el-tag size="small" :type="sourceTagType(recommendedProject.projectSource, recommendedProject.projectCategory)">
+              {{ projectSourceText(recommendedProject.projectSource, recommendedProject.projectCategory) }}
+            </el-tag>
+            <el-tag size="small" :type="onboardingTagType(recommendedProject.onboardingStatus)">
+              {{ onboardingStatusText(recommendedProject.onboardingStatus) }}
+            </el-tag>
+          </div>
+          <div class="asset-launchpad__actions">
+            <el-button type="primary" @click="openDetail(recommendedProject)">进入项目</el-button>
+            <el-button @click="openProjectFiles(recommendedProject)">文件管理</el-button>
+            <el-button @click="openProjectVisualization(recommendedProject)">项目可视化</el-button>
+          </div>
+        </template>
+        <template v-else>
+          <strong>暂无推荐项目</strong>
+          <p>当前筛选下没有可进入项目，可以切换筛选或联系管理员确认权限。</p>
+        </template>
+      </article>
+    </section>
 
-      <div class="asset-governance-layer">
-        <header>
-          <strong>项目状态</strong>
-          <span>按当前已接管真实 NAS 项目统计，不把 smoke / 测试项目混入默认视图。</span>
-        </header>
-        <div class="asset-status-grid">
-          <article v-for="item in statusCards" :key="item.label">
-            <span>{{ item.label }}</span>
-            <strong>{{ item.value }}</strong>
-            <em>{{ item.unit }}</em>
-          </article>
-        </div>
-      </div>
-
-      <div class="asset-governance-layer">
-        <header>
-          <strong>下一步动作</strong>
-          <span>选择一个真实项目后，按治理路径继续处理。</span>
-        </header>
-        <div class="asset-action-grid">
-          <button
-            v-for="item in actionItems"
-            :key="item.key"
-            class="asset-action-tile"
-            type="button"
-            :disabled="!primaryActionProject"
-            @click="openHeroAction(item.key)"
-          >
-            <strong>{{ item.label }}</strong>
-            <span>{{ item.description }}</span>
+    <section class="asset-entry-lanes" aria-label="项目入口台">
+      <article class="asset-entry-card">
+        <span class="asset-entry-card__eyebrow">待处理</span>
+        <strong>{{ pendingProjects.length ? '需要确认规则' : '暂无明显阻塞' }}</strong>
+        <div v-if="pendingProjects.length" class="asset-entry-list">
+          <button v-for="row in pendingProjects" :key="`pending-${row.projectId}`" type="button" @click="openGovernanceNext(row)">
+            <span>{{ row.name }}</span>
+            <em>{{ governanceStage(row).actionLabel }}</em>
           </button>
         </div>
-      </div>
+        <p v-else>真实项目暂无主数据或交付标准阻塞，可继续查看交付状态。</p>
+      </article>
 
-      <div class="asset-governance-layer">
-        <header>
-          <strong>风险提醒</strong>
-          <span>这些问题会影响后续接入评估、交付缺失解释和人工挂接。</span>
-        </header>
+      <article class="asset-entry-card">
+        <span class="asset-entry-card__eyebrow">最近项目</span>
+        <strong>{{ recentProjects.length ? '继续上次项目' : '还没有最近项目' }}</strong>
+        <div v-if="recentProjects.length" class="asset-entry-list">
+          <button v-for="row in recentProjects" :key="`recent-${row.projectId}`" type="button" @click="openDetail(row)">
+            <span>{{ row.name }}</span>
+            <em>进入工作台</em>
+          </button>
+        </div>
+        <p v-else>进入项目工作台后，这里会记录最近打开的项目。</p>
+      </article>
+
+      <article class="asset-entry-card asset-entry-card--summary">
+        <span class="asset-entry-card__eyebrow">项目概况</span>
+        <strong>{{ formatCount(visibleProjects.length) }} 个可见项目</strong>
+        <div class="asset-summary-row">
+          <span>已登记文件</span>
+          <em>{{ statusCards[1]?.value ?? '0' }} 份</em>
+        </div>
+        <div class="asset-summary-row">
+          <span>待补规则</span>
+          <em>{{ statusCards[6]?.value ?? '0' }} 个</em>
+        </div>
+        <el-button text @click="overviewMoreActive = overviewMoreActive.length ? [] : ['summary']">
+          查看统计和风险
+        </el-button>
+      </article>
+    </section>
+
+    <el-collapse v-model="overviewMoreActive" class="asset-overview-more">
+      <el-collapse-item name="summary">
+        <template #title>
+          <span class="asset-overview-more__title">统计和风险摘要</span>
+          <small>低频信息已收起，不影响选项目</small>
+        </template>
+        <div class="asset-status-grid">
+          <article v-for="item in statusCards" :key="item.label">
+            <span class="asset-status-grid__label">{{ item.label }}</span>
+            <strong class="asset-status-grid__value">{{ item.value }}</strong>
+            <em class="asset-status-grid__unit">{{ item.unit }}</em>
+          </article>
+        </div>
         <div class="asset-risk-strip">
           <article v-for="risk in riskSummaryCards" :key="risk.label" :class="{ 'is-warning': risk.count > 0 }">
-            <span>{{ risk.label }}</span>
+            <span class="asset-risk-strip__label">
+              <span class="zy-status-dot" :class="risk.count > 0 ? 'zy-status-dot--warning' : 'zy-status-dot--success'"></span>
+              {{ risk.label }}
+            </span>
             <strong>{{ formatCount(risk.count) }}</strong>
             <em>{{ risk.helper }}</em>
           </article>
         </div>
-      </div>
-    </section>
+      </el-collapse-item>
+    </el-collapse>
 
-    <el-table
-      v-loading="loading"
-      :data="sortedProjects"
-      class="master-table"
-      empty-text="暂无资产项目"
-      @row-dblclick="openDetail"
-    >
+    <section class="asset-table-section" aria-label="项目列表">
+      <div class="asset-table-section__header">
+        <div>
+          <span class="zy-code-chip">PROJECTS</span>
+          <strong>项目列表</strong>
+          <p>选择项目后可直接进入文件管理、项目可视化或交付状态。</p>
+        </div>
+        <el-switch
+          v-model="detailColumnsVisible"
+          active-text="显示详细字段"
+          inactive-text="收起详细字段"
+        />
+      </div>
+
+      <el-table
+        v-loading="loading"
+        :data="sortedProjects"
+        class="master-table"
+        empty-text="暂无资产项目"
+        @row-dblclick="openDetail"
+      >
       <el-table-column label="项目" min-width="260">
         <template #default="{ row }">
           <div class="asset-title-cell">
@@ -124,20 +174,11 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="projectStage" label="阶段" width="120" show-overflow-tooltip />
+      <el-table-column v-if="detailColumnsVisible" prop="projectStage" label="阶段" width="120" show-overflow-tooltip />
       <el-table-column prop="projectManagerName" label="负责人" width="130" show-overflow-tooltip />
-      <el-table-column label="治理路径" min-width="300">
+      <el-table-column label="下一步" min-width="260">
         <template #default="{ row }">
           <div class="asset-governance-cell">
-            <div class="asset-governance-trail">
-              <span
-                v-for="step in governanceTrail(row)"
-                :key="`${row.projectId}-${step.key}`"
-                :class="{ 'is-current': step.current, 'is-done': step.done }"
-              >
-                {{ step.label }}
-              </span>
-            </div>
             <small>{{ governanceStage(row).hint }}</small>
             <el-button text :icon="ArrowRight" @click.stop="openGovernanceNext(row)">
               {{ governanceStage(row).actionLabel }}
@@ -148,10 +189,10 @@
       <el-table-column label="文件数" width="100" align="right">
         <template #default="{ row }">{{ formatCount(row.fileCount) }}</template>
       </el-table-column>
-      <el-table-column label="模型数" width="110" align="right">
+      <el-table-column v-if="detailColumnsVisible" label="模型数" width="110" align="right">
         <template #default="{ row }">{{ formatCount(row.modelCount) }}</template>
       </el-table-column>
-      <el-table-column label="主要类型" min-width="160">
+      <el-table-column v-if="detailColumnsVisible" label="主要类型" min-width="160">
         <template #default="{ row }">
           <div class="asset-kind-tags">
             <el-tag
@@ -166,13 +207,13 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="模型容量" width="130" align="right">
+      <el-table-column v-if="detailColumnsVisible" label="模型容量" width="130" align="right">
         <template #default="{ row }">{{ formatBytes(row.totalSizeBytes) }}</template>
       </el-table-column>
       <el-table-column label="最近扫描/更新" width="170">
         <template #default="{ row }">{{ formatDate(row.lastScanAt || row.lastModelUpdatedAt) }}</template>
       </el-table-column>
-      <el-table-column label="底座" width="160">
+      <el-table-column v-if="detailColumnsVisible" label="底座" width="160">
         <template #default="{ row }">
           <div class="asset-foundation-tags">
             <el-tag size="small" :type="row.hasMasterData ? 'success' : 'info'">主数据</el-tag>
@@ -180,17 +221,22 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="100">
+      <el-table-column v-if="detailColumnsVisible" label="状态" width="100">
         <template #default="{ row }">
           <el-tag :type="row.assetStatus === 'ACTIVE' ? 'success' : 'info'">{{ row.assetStatus }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="120" fixed="right">
+      <el-table-column label="操作" width="230" fixed="right">
         <template #default="{ row }">
-          <el-button text :icon="ArrowRight" @click="openDetail(row)">详情</el-button>
+          <div class="asset-row-actions">
+            <el-button text :icon="ArrowRight" @click="openDetail(row)">工作台</el-button>
+            <el-button text @click="openProjectFiles(row)">文件</el-button>
+            <el-button text @click="openProjectVisualization(row)">可视化</el-button>
+          </div>
         </template>
       </el-table-column>
-    </el-table>
+      </el-table>
+    </section>
   </section>
 </template>
 
@@ -200,20 +246,31 @@ import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { ArrowRight, Refresh, Search } from '@element-plus/icons-vue';
 
+import ParticleField from '@/modules/core/components/ParticleField.vue';
+import { useSpotlight } from '@/modules/core/composables/useSpotlight';
 import {
   fetchAssetProjects,
   fetchAssetQualityOverview,
+  fetchAssetStatistics,
   type AssetProject,
-  type AssetQualityOverview
+  type AssetQualityOverview,
+  type AssetStatistics
 } from '@/modules/data-steward/api/dataSteward';
+
+const heroRef = ref<HTMLElement | null>(null);
+useSpotlight(heroRef);
 
 const router = useRouter();
 const loading = ref(false);
 const keyword = ref('');
 const sourceFilter = ref('REAL_NAS');
 const projectSortOrder = ref<'ASC' | 'DESC'>('ASC');
+const detailColumnsVisible = ref(false);
+const overviewMoreActive = ref<string[]>([]);
 const projects = ref<AssetProject[]>([]);
+const statistics = ref<AssetStatistics | null>(null);
 const qualityOverview = ref<AssetQualityOverview | null>(null);
+const recentProjectIds = ref<number[]>(readRecentProjectIds());
 const sourceOptions = [
   { label: '真实项目', value: 'REAL_NAS' },
   { label: '未完成接入', value: 'UNFINISHED_ONBOARDING' },
@@ -223,39 +280,46 @@ const sourceOptions = [
   { label: '全部', value: 'ALL' }
 ];
 
-const objectiveSteps = [
-  { label: '真实项目接入', description: '先把已接管 NAS 项目识别清楚，区分测试、样例和归档。' },
-  { label: '工程主数据准备', description: '用目录和文件元数据形成接入评估，再生成待确认草案。' },
-  { label: '交付治理闭环', description: '进入助手解释缺失项，由人工确认后再挂接文件。' }
-];
-
 const realNasProjects = computed(() => projects.value.filter(isRealNasProject));
 
 const primaryActionProject = computed(() => {
   return visibleProjects.value.find(isRealNasProject) ?? realNasProjects.value[0] ?? visibleProjects.value[0] ?? null;
 });
 
+const pendingProjects = computed(() => sortedProjects.value
+  .filter((item) => isRealNasProject(item) && (!item.hasMasterData || !item.hasDeliveryStandard || item.onboardingStatus !== 'GOVERNANCE_READY'))
+  .slice(0, 3));
+
+const recentProjects = computed(() => recentProjectIds.value
+  .map((id) => projects.value.find((item) => item.projectId === id))
+  .filter((item): item is AssetProject => Boolean(item))
+  .slice(0, 3));
+
+const recommendedProject = computed(() =>
+  pendingProjects.value[0] ?? recentProjects.value[0] ?? primaryActionProject.value
+);
+
 const statusCards = computed(() => {
-  const rows = realNasProjects.value;
+  const rows = visibleProjects.value;
+  const stats = sourceFilter.value === 'REAL_NAS' ? statistics.value : null;
   const registered = rows.filter((item) => Number(item.fileCount ?? 0) > 0).length;
   const masterData = rows.filter((item) => Boolean(item.hasMasterData)).length;
-  const governance = rows.filter((item) => Boolean(item.governanceReady) || item.onboardingStatus === 'GOVERNANCE_READY').length;
   const pending = rows.filter((item) => !Boolean(item.hasMasterData) || !Boolean(item.hasDeliveryStandard)).length;
+  const fileCount = stats?.fileCount ?? rows.reduce((sum, item) => sum + Number(item.fileCount ?? 0), 0);
+  const modelCount = stats?.modelFileCount ?? rows.reduce((sum, item) => sum + Number(item.modelCount ?? 0), 0);
+  const drawingCount = stats?.drawingFileCount ?? 0;
+  const totalSize = stats?.totalSizeBytes ?? rows.reduce((sum, item) => sum + Number(item.totalSizeBytes ?? 0), 0);
   return [
-    { label: '真实 NAS 项目', value: formatCount(rows.length), unit: '个' },
-    { label: '已登记资产', value: formatCount(registered), unit: '个项目' },
-    { label: '已初始化主数据', value: formatCount(masterData), unit: '个项目' },
-    { label: '已进入交付治理', value: formatCount(governance), unit: '个项目' },
-    { label: '待接入 / 待治理', value: formatCount(pending), unit: '需处理' }
+    { label: '项目', value: formatCount(stats?.projectCount ?? rows.length), unit: '个' },
+    { label: '已登记文件', value: formatCount(fileCount), unit: '份' },
+    { label: '模型文件', value: formatCount(modelCount), unit: '份' },
+    { label: '图纸文件', value: formatCount(drawingCount), unit: '份' },
+    { label: '登记容量', value: formatBytes(totalSize), unit: '目录级' },
+    { label: '主数据已建', value: formatCount(masterData), unit: `/${formatCount(rows.length)} 个项目` },
+    { label: '待补底座', value: formatCount(pending), unit: '需处理' },
+    { label: '有文件项目', value: formatCount(registered), unit: '个项目' }
   ];
 });
-
-const actionItems = [
-  { key: 'enter', label: '进入真实项目', description: '打开项目工作台，先看资产目录、容量和治理风险。' },
-  { key: 'assessment', label: '查看接入评估', description: '查看目录线索和主数据缺口，确认模板只是草案。' },
-  { key: 'master-data', label: '完善工程主数据', description: '补齐部位树、节点类型、交付定义和目录模板。' },
-  { key: 'governance', label: '进入交付治理助手', description: '解释缺失项，生成候选文件，等待人工确认挂接。' }
-] as const;
 
 const riskSummaryCards = computed(() => {
   const rows = realNasProjects.value;
@@ -292,11 +356,13 @@ async function loadPage() {
   loading.value = true;
   try {
     const assetSource = sourceFilter.value === 'REAL_NAS' ? 'NAS_REAL*' : undefined;
-    const [nextProjects, nextQualityOverview] = await Promise.all([
+    const [nextProjects, nextStatistics, nextQualityOverview] = await Promise.all([
       fetchAssetProjects(keyword.value.trim() || undefined, assetSource),
+      fetchAssetStatistics(undefined, assetSource),
       fetchAssetQualityOverview(undefined, assetSource)
     ]);
     projects.value = nextProjects;
+    statistics.value = nextStatistics;
     qualityOverview.value = nextQualityOverview;
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '资产总览加载失败');
@@ -306,25 +372,18 @@ async function loadPage() {
 }
 
 function openDetail(row: AssetProject) {
+  rememberProject(row.projectId);
   router.push({ name: 'data-steward-asset-detail', params: { projectId: row.projectId } });
 }
 
-function openHeroAction(action: typeof actionItems[number]['key']) {
-  const project = primaryActionProject.value;
-  if (!project) return;
-  if (action === 'enter') {
-    openDetail(project);
-    return;
-  }
-  if (action === 'assessment') {
-    router.push({ name: 'project-master-data-initialization', params: { projectId: project.projectId } });
-    return;
-  }
-  if (action === 'master-data') {
-    router.push({ name: 'project-master-data-deliverable-standard', params: { projectId: project.projectId } });
-    return;
-  }
-  router.push({ name: 'project-work-agent-governance', params: { projectId: project.projectId } });
+function openProjectFiles(row: AssetProject) {
+  rememberProject(row.projectId);
+  router.push({ name: 'data-steward-asset-detail', params: { projectId: row.projectId }, query: { tab: 'files' } });
+}
+
+function openProjectVisualization(row: AssetProject) {
+  rememberProject(row.projectId);
+  router.push({ name: 'data-steward-asset-detail', params: { projectId: row.projectId }, query: { tab: 'dashboard' } });
 }
 
 function openGovernanceNext(row: AssetProject) {
@@ -341,17 +400,17 @@ function governanceStage(row: AssetProject) {
   if (status === 'GOVERNANCE_READY') {
     return {
       index: 4,
-      actionLabel: '看缺失解释',
-      hint: '底座已具备，下一步进入交付治理助手解释缺项并人工确认挂接。',
-      routeName: 'project-work-agent-governance'
+      actionLabel: '看交付状态',
+      hint: '底座已具备，下一步在文档/图纸交付页查看缺项、审核和预检查。',
+      routeName: 'project-work-document-delivery'
     } as const;
   }
   if (status === 'MASTERDATA_INITIALIZED') {
     return {
       index: 3,
-      actionLabel: '进入治理助手',
-      hint: '主数据已初始化，下一步用交付治理助手检查文档和图纸缺口。',
-      routeName: 'project-work-agent-governance'
+      actionLabel: '进入文档交付',
+      hint: '主数据已初始化，下一步查看文档/图纸应交项和缺失项。',
+      routeName: 'project-work-document-delivery'
     } as const;
   }
   if (status === 'ASSETS_REGISTERED') {
@@ -378,26 +437,30 @@ function governanceStage(row: AssetProject) {
   } as const;
 }
 
-function governanceTrail(row: AssetProject) {
-  const stage = governanceStage(row);
-  const labels = [
-    ['catalog', '资产目录'],
-    ['assessment', '接入评估'],
-    ['draft', '主数据草案'],
-    ['governance', '交付治理'],
-    ['missing', '缺失解释'],
-    ['binding', '人工挂接']
-  ] as const;
-  return labels.map(([key, label], index) => ({
-    key,
-    label,
-    done: index < stage.index,
-    current: index === stage.index
-  }));
-}
-
 function isRealNasProject(row: AssetProject) {
   return row.projectCategory === 'REAL_NAS_PROJECT' || row.projectSource === 'REAL_NAS';
+}
+
+function readRecentProjectIds() {
+  try {
+    const raw = window.localStorage.getItem('delivery.recentProjectIds');
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.map((item) => Number(item)).filter((item) => Number.isFinite(item)).slice(0, 5)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberProject(projectId: number) {
+  const next = [projectId, ...recentProjectIds.value.filter((item) => item !== projectId)].slice(0, 5);
+  recentProjectIds.value = next;
+  try {
+    window.localStorage.setItem('delivery.recentProjectIds', JSON.stringify(next));
+  } catch {
+    // Browser storage can be unavailable in private mode; recent projects are only a convenience.
+  }
 }
 
 function formatCount(value: number | null | undefined) {
@@ -482,173 +545,553 @@ function onboardingTagType(value?: string | null) {
   width: 130px;
 }
 
-.asset-governance-hero {
-  background: #fbfdfa;
-  border: 1px solid rgba(20, 184, 166, 0.2);
-  border-radius: 8px;
+/* ---- Project launchpad ---- */
+.asset-launchpad {
+  background: var(--zy-panel-tint);
+  -webkit-backdrop-filter: blur(14px) saturate(1.04);
+  backdrop-filter: blur(14px) saturate(1.04);
+  border: 1px solid color-mix(in srgb, var(--zy-line) 72%, transparent);
+  border-radius: var(--zy-radius-lg);
   display: grid;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.72fr);
+  gap: var(--zy-sp-5);
+  align-items: center;
   min-width: 0;
-  padding: 16px;
+  padding: var(--zy-sp-5);
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--zy-shadow-soft);
+  isolation: isolate;
 }
 
-.asset-governance-hero__intro {
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .asset-launchpad {
+    background: var(--zy-surface);
+  }
+}
+
+.asset-launchpad::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image:
+    linear-gradient(to right, rgba(37, 99, 235, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(37, 99, 235, 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+  mask-image: linear-gradient(to bottom, black 0%, transparent 70%);
+}
+
+.asset-launchpad__copy,
+.asset-launchpad__recommend {
+  position: relative;
+  z-index: 2;
+}
+
+.asset-launchpad__copy {
   display: grid;
-  gap: 6px;
-  max-width: 860px;
+  gap: var(--zy-sp-2);
+  max-width: 700px;
 }
 
-.asset-governance-hero__intro span {
-  color: #0f766e;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.asset-governance-hero__intro h2 {
-  color: #0f172a;
-  font-size: 24px;
+.asset-launchpad__copy h2 {
+  margin: 0;
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-3xl);
+  font-weight: var(--zy-fw-semi);
   line-height: 1.25;
-  margin: 0;
+  letter-spacing: -0.02em;
 }
 
-.asset-governance-hero__intro p {
-  color: #475569;
+.asset-launchpad__copy p,
+.asset-launchpad__recommend p {
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: var(--zy-fs-sm);
   line-height: 1.7;
-  margin: 0;
 }
 
-.asset-governance-layer {
-  border-top: 1px solid rgba(15, 118, 110, 0.12);
+.asset-launchpad__recommend {
   display: grid;
-  gap: 10px;
+  gap: var(--zy-sp-3);
   min-width: 0;
-  padding-top: 12px;
+  padding: var(--zy-sp-4);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: var(--zy-shadow-xs);
 }
 
-.asset-governance-layer header {
-  align-items: baseline;
+.asset-launchpad__recommend > span {
+  color: var(--zy-blue-700);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.asset-launchpad__recommend strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-xl);
+  font-weight: var(--zy-fw-semi);
+  line-height: 1.35;
+}
+
+.asset-launchpad__tags,
+.asset-launchpad__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 12px;
+  gap: var(--zy-sp-2);
   min-width: 0;
 }
 
-.asset-governance-layer header strong {
-  color: #0f172a;
-  font-size: 15px;
+.asset-hero__section-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--zy-sp-2) var(--zy-sp-3);
+  min-width: 0;
 }
 
-.asset-governance-layer header span {
-  color: #64748b;
-  font-size: 13px;
+.asset-hero__section-head strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-base);
+  font-weight: var(--zy-fw-semi);
+}
+
+.asset-hero__section-head small {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
   line-height: 1.5;
 }
 
-.asset-objective-track,
-.asset-status-grid,
-.asset-action-grid,
-.asset-risk-strip {
+/* ---- Flow / 三步工作链 ---- */
+.asset-hero__workflow,
+.asset-hero__status,
+.asset-hero__risk {
   display: grid;
-  gap: 10px;
-  min-width: 0;
+  gap: var(--zy-sp-3);
 }
 
-.asset-objective-track {
+.asset-flow {
+  display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--zy-sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  position: relative;
 }
 
+.asset-flow__step {
+  position: relative;
+  background: var(--zy-surface-soft);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  padding: var(--zy-sp-4);
+  display: grid;
+  gap: var(--zy-sp-2);
+  align-content: start;
+  transition:
+    border-color var(--zy-duration-2) var(--zy-ease),
+    transform var(--zy-duration-2) var(--zy-ease);
+}
+
+.asset-flow__step::after {
+  content: "→";
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  background: var(--zy-bg);
+  border: var(--zy-border-soft);
+  border-radius: 999px;
+  color: var(--zy-subtle);
+  font-size: 11px;
+  z-index: 2;
+}
+
+.asset-flow__step:last-child::after {
+  display: none;
+}
+
+.asset-flow__step:hover {
+  border-color: rgba(37, 99, 235, 0.28);
+}
+
+.asset-flow__head {
+  display: flex;
+  align-items: center;
+  gap: var(--zy-sp-2);
+}
+
+.asset-flow__num {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-blue-50);
+  color: var(--zy-blue-700);
+  font-family: var(--zy-font-mono);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-bold);
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.asset-flow__head strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-base);
+  font-weight: var(--zy-fw-semi);
+}
+
+.asset-flow__step p {
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: var(--zy-fs-xs);
+  line-height: 1.7;
+}
+
+.asset-flow__cta {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--zy-blue-700);
+  font-family: inherit;
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-semi);
+  padding: 6px 0 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-self: start;
+  letter-spacing: 0.02em;
+  transition: gap var(--zy-duration-2) var(--zy-ease);
+}
+
+.asset-flow__cta:hover:not(:disabled) {
+  gap: 8px;
+}
+
+.asset-flow__cta:disabled {
+  color: var(--zy-subtle);
+  cursor: not-allowed;
+}
+
+.asset-flow__cta span {
+  font-family: var(--zy-font-mono);
+}
+
+/* ---- 当前视图统计 ---- */
 .asset-status-grid,
 .asset-risk-strip {
-  grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
-}
-
-.asset-action-grid {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-
-.asset-objective-track article,
-.asset-status-grid article,
-.asset-risk-strip article,
-.asset-action-tile {
-  background: #f8fafc;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 8px;
   display: grid;
-  gap: 5px;
+  gap: var(--zy-sp-2);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   min-width: 0;
-  padding: 12px;
-  text-align: left;
 }
 
-.asset-objective-track article {
-  background: #f0fdfa;
+.asset-status-grid article,
+.asset-risk-strip article {
+  background: var(--zy-surface);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  padding: var(--zy-sp-3) var(--zy-sp-4);
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  position: relative;
+  transition: border-color var(--zy-duration-2) var(--zy-ease);
 }
 
-.asset-action-tile {
-  color: inherit;
-  cursor: pointer;
+.asset-status-grid article:hover,
+.asset-risk-strip article:hover {
+  border-color: var(--zy-line);
 }
 
-.asset-action-tile:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
+.asset-status-grid__label,
+.asset-risk-strip__label {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  letter-spacing: 0;
+  display: flex;
+  align-items: center;
 }
 
-.asset-objective-track strong,
-.asset-action-tile strong {
-  color: #0f172a;
-  font-size: 14px;
-}
-
-.asset-objective-track span,
-.asset-action-tile span,
-.asset-risk-strip em,
-.asset-status-grid em {
-  color: #64748b;
-  font-size: 12px;
-  font-style: normal;
-  line-height: 1.5;
-}
-
-.asset-status-grid span,
-.asset-risk-strip span {
-  color: #64748b;
-  font-size: 12px;
-}
-
-.asset-status-grid strong,
+.asset-status-grid__value,
 .asset-risk-strip strong {
-  color: #0f172a;
-  font-size: 21px;
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-3xl);
+  font-weight: var(--zy-fw-bold);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.asset-status-grid__unit,
+.asset-risk-strip em {
+  color: var(--zy-muted);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.4;
 }
 
 .asset-risk-strip article.is-warning {
-  background: #fff7ed;
-  border-color: rgba(251, 146, 60, 0.28);
+  background: var(--zy-amber-50);
+  border-color: rgba(245, 158, 11, 0.28);
 }
 
-.asset-title-cell {
-  min-width: 0;
+.asset-risk-strip article.is-warning strong {
+  color: #b45309;
+}
+
+.asset-risk-strip article.is-warning .asset-risk-strip__label {
+  color: #92400e;
+}
+
+/* ---- 项目入口台 ---- */
+.asset-entry-lanes {
   display: grid;
-  gap: 4px;
+  grid-template-columns: minmax(280px, 1.2fr) repeat(2, minmax(220px, 1fr));
+  gap: var(--zy-sp-4);
+  min-width: 0;
 }
 
-.asset-title-cell strong,
-.asset-title-cell span {
+.asset-entry-card {
+  display: grid;
+  align-content: start;
+  gap: var(--zy-sp-3);
+  min-width: 0;
+  padding: var(--zy-sp-4);
+  border: var(--zy-border);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+  box-shadow: var(--zy-shadow-xs);
+  position: relative;
+  overflow: hidden;
+}
+
+.asset-entry-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: var(--zy-sp-4);
+  bottom: var(--zy-sp-4);
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--zy-blue-500);
+}
+
+.asset-entry-card--primary {
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.78), rgba(255, 255, 255, 0.94)),
+    var(--zy-surface);
+}
+
+.asset-entry-card__eyebrow {
+  color: var(--zy-blue-700);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.asset-entry-card strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-lg);
+  font-weight: var(--zy-fw-semi);
+  line-height: 1.35;
+}
+
+.asset-entry-card p {
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: var(--zy-fs-sm);
+  line-height: 1.7;
+}
+
+.asset-entry-card__meta,
+.asset-entry-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zy-sp-2);
+  min-width: 0;
+}
+
+.asset-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zy-sp-3);
+  min-width: 0;
+  padding: 6px 0;
+  border-top: var(--zy-border-soft);
+}
+
+.asset-summary-row span {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+}
+
+.asset-summary-row em {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-sm);
+  font-style: normal;
+  font-weight: var(--zy-fw-semi);
+}
+
+.asset-overview-more {
+  border: var(--zy-border);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+  box-shadow: var(--zy-shadow-xs);
+  overflow: hidden;
+}
+
+.asset-overview-more :deep(.el-collapse),
+.asset-overview-more :deep(.el-collapse-item__wrap) {
+  border: 0;
+}
+
+.asset-overview-more :deep(.el-collapse-item__header) {
+  min-height: 48px;
+  padding: 0 var(--zy-sp-4);
+  border: 0;
+}
+
+.asset-overview-more :deep(.el-collapse-item__content) {
+  display: grid;
+  gap: var(--zy-sp-3);
+  padding: 0 var(--zy-sp-4) var(--zy-sp-4);
+}
+
+.asset-overview-more__title {
+  margin-right: var(--zy-sp-2);
+  color: var(--zy-ink);
+  font-weight: var(--zy-fw-semi);
+}
+
+.asset-overview-more small {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-regular);
+}
+
+.asset-entry-list {
+  display: grid;
+  gap: var(--zy-sp-2);
+  min-width: 0;
+}
+
+.asset-entry-list button {
+  appearance: none;
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface-soft);
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: var(--zy-sp-2) var(--zy-sp-3);
+  text-align: left;
+  transition:
+    border-color var(--zy-duration-2) var(--zy-ease),
+    background var(--zy-duration-2) var(--zy-ease);
+}
+
+.asset-entry-list button:hover {
+  background: var(--zy-blue-50);
+  border-color: rgba(37, 99, 235, 0.24);
+}
+
+.asset-entry-list span {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-sm);
+  font-weight: var(--zy-fw-medium);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.asset-entry-list em {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  font-style: normal;
+}
+
+.asset-table-section {
+  display: grid;
+  gap: var(--zy-sp-3);
+  min-width: 0;
+}
+
+.asset-table-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zy-sp-4);
+  min-width: 0;
+  padding: var(--zy-sp-4);
+  border: var(--zy-border);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+}
+
+.asset-table-section__header > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.asset-table-section__header strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-lg);
+  font-weight: var(--zy-fw-semi);
+}
+
+.asset-table-section__header p {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  line-height: 1.6;
+}
+
+/* ---- 表格内文案 ---- */
+.asset-title-cell {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.asset-title-cell strong {
+  color: var(--zy-ink);
+  font-weight: var(--zy-fw-semi);
+  font-family: var(--zy-font-mono);
+  font-size: var(--zy-fs-xs);
+  letter-spacing: 0;
+}
+
 .asset-title-cell span {
-  color: #64748b;
+  color: var(--zy-text-soft);
+  font-size: var(--zy-fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .asset-kind-tags,
 .asset-foundation-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -659,8 +1102,9 @@ function onboardingTagType(value?: string | null) {
 }
 
 .asset-governance-cell small {
-  color: #64748b;
-  line-height: 1.45;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
@@ -672,36 +1116,66 @@ function onboardingTagType(value?: string | null) {
 }
 
 .asset-governance-trail span {
-  background: #f1f5f9;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 6px;
-  color: #64748b;
-  font-size: 12px;
+  background: var(--zy-bg);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-sm);
+  color: var(--zy-muted);
+  font-size: 11px;
+  font-weight: var(--zy-fw-medium);
   line-height: 1;
-  padding: 5px 6px;
+  padding: 4px 6px;
 }
 
 .asset-governance-trail span.is-done {
-  background: #ecfdf5;
-  border-color: rgba(16, 185, 129, 0.22);
+  background: var(--zy-green-50);
+  border-color: rgba(34, 197, 94, 0.22);
   color: #047857;
 }
 
 .asset-governance-trail span.is-current {
-  background: #eff6ff;
+  background: var(--zy-blue-50);
   border-color: rgba(59, 130, 246, 0.26);
-  color: #1d4ed8;
-  font-weight: 700;
+  color: var(--zy-blue-700);
+  font-weight: var(--zy-fw-bold);
+}
+
+.asset-row-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.asset-row-actions :deep(.el-button) {
+  margin-left: 0;
 }
 
 @media (max-width: 960px) {
+  .asset-launchpad {
+    grid-template-columns: 1fr;
+    padding: var(--zy-sp-4);
+  }
+
+  .asset-entry-lanes {
+    grid-template-columns: 1fr;
+  }
+
   .asset-search,
   .asset-sort {
     width: 100%;
   }
 
-  .asset-objective-track {
+  .asset-flow {
     grid-template-columns: 1fr;
+  }
+
+  .asset-flow__step::after {
+    display: none;
+  }
+
+  .asset-table-section__header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

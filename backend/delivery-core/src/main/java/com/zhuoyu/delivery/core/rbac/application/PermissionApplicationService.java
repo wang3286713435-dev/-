@@ -18,4 +18,10 @@ public class PermissionApplicationService {
             .map(permission -> permission.code())
             .toList();
     }
+
+    public List<String> listPermissionCodes(Long userId) {
+        return permissionRepository.findByUser(userId).stream()
+            .map(permission -> permission.code())
+            .toList();
+    }
 }

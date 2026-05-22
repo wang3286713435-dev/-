@@ -497,7 +497,7 @@ function queryString(value: unknown) {
 }
 
 .scan-project-cell span {
-  color: #64748b;
+  color: var(--zy-muted);
   font-size: 12px;
 }
 
@@ -516,27 +516,27 @@ function queryString(value: unknown) {
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 12px;
-  background: #fff;
+  background: var(--zy-surface);
   min-width: 0;
 }
 
 .scan-report__summary span {
   display: block;
-  color: #64748b;
+  color: var(--zy-muted);
   font-size: 12px;
   margin-bottom: 6px;
 }
 
 .scan-report__summary strong {
   font-size: 18px;
-  color: #0f172a;
+  color: var(--zy-ink);
 }
 
 .scan-report__json {
   margin: 0;
   padding: 14px;
   border-radius: 8px;
-  background: #0f172a;
+  background: var(--zy-ink);
   color: #e2e8f0;
   overflow: auto;
   max-height: 360px;

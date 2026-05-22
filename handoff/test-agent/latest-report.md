@@ -1,177 +1,187 @@
-# G3 Hermes 平台工作型 Agent MVP 验收报告
+# UX3 主视图聚焦与认知减负验收报告
 
-生成时间：2026-05-20 11:36 CST
+生成时间：2026-05-22 11:18 CST
 
 ## 1. 测试结论
 
 结论：通过。
 
-本轮只验收 `G3：Hermes 平台工作型 Agent MVP`。G3 Action Center、操作草案、待人工确认、执行结果、Missing Evidence 边界和 G2/G1/8A 回归均通过。
+UX3 已达到本轮验收目标：Fresh login 后进入 `/data-steward/assets`，约 3.1 秒内展示项目启动台、推荐项目、文件管理、项目可视化、真实项目列表和下一步动作；资产总览不再被 `FLOW / STATE / ALERT` 类教程块占据；503 / 506 项目工作台首屏聚焦文件管理、项目可视化 / 资产驾驶舱、交付状态；低频入口仍可通过更多工具或旧链接访问；旧链接兼容稳定。
 
-当前无 P0 / P1。
+当前未发现 P0 / P1。发现 3 个 P2，可后续继续打磨，不阻塞 UX3 收口。
 
-是否建议主 agent 收口 G3：建议收口。
+建议主 agent 收口 UX3。
 
-是否建议进入 8B / 8C / 9A：不建议自动进入，仍需用户另行确认。
+## 2. 当前分支和 commit
 
-## 2. P0 / P1 / P2
+- 工作目录：`/Users/vc/Documents/数字化交付平台`
+- 当前分支：`codex/ux3-main-view-focus`
+- 当前 commit：`b5cfb01`
+- UX3 当前 active：已确认。`handoff/main-agent/status.md`、`handoff/dev-agent/current-prompt.md`、`handoff/main-agent/ux3-main-view-focus-plan.md` 均指向 UX3。
+
+## 3. 必读文档
+
+已阅读：
+
+- `handoff/dev-agent/latest-report.md`
+- `handoff/dev-agent/current-prompt.md`
+- `handoff/main-agent/status.md`
+- `handoff/main-agent/development-log.md`
+- `handoff/main-agent/ux3-main-view-focus-plan.md`
+
+## 4. 必跑命令结果
+
+- 后端构建：`cd backend && ./mvnw -pl delivery-app -am -DskipTests package`，通过，`BUILD SUCCESS`。
+- 前端构建：`corepack pnpm --dir frontend build`，通过，仅有既有 Vite chunk size warning。
+- 健康检查：`curl -fsS http://127.0.0.1:8080/actuator/health`，通过，返回 `{"status":"UP"}`。
+- M2B：`bash scripts/dev/check-m2b-nas-write-trial.sh`，通过，`PASS=18 FAIL=0`。
+- M2A：`bash scripts/dev/check-m2a-controlled-nas-write.sh`，通过，`PASS=21 FAIL=0`。
+- M1F：`bash scripts/dev/check-m1f-employee-access-control.sh`，通过，`PASS=20 FAIL=0`。
+- M1E：`bash scripts/dev/check-m1e-file-task-continuity.sh`，通过，`PASS=10 FAIL=0`。
+- M1D：`bash scripts/dev/check-m1d-standard-delivery-loop.sh`，通过，`PASS=29 FAIL=0`。
+- M1C：`bash scripts/dev/check-m1c-real-project-masterdata.sh`，通过，`PASS=14 FAIL=0`。
+- 空白字符检查：`git diff --check`，通过。
+
+## 5. 越界检查结果
+
+已执行：
+
+- `git diff --name-only`
+- `git status --short`
+- `git status --short backend docs`
+- `git status --short backend/delivery-app/src/main/resources/db/migration`
+
+结果：
+
+- `backend/**`：无改动。
+- `docs/**`：无改动。
+- 数据库迁移：无改动。
+- 本轮变更集中在 `frontend/**` 和 handoff 文件。
+- 暂存/修改文件包括：`AssetOverviewPage.vue`、`AssetProjectDetailPage.vue`、`ProjectWorkspaceNav.vue`、`AppLayout.vue` 及 UX3 handoff 文件。
+- 未跟踪非交付文件仍存在：`.claude/skills/frontend-design/`、`CLAUDE.md`、`tmp/**`。按本轮测试 prompt 不判失败，但建议主 agent 收口提交时继续排除。
+- 未发现接口语义、权限、Hermes、BIM、NAS 能力扩展。
+
+## 6. 多分辨率视觉巡检结果
+
+覆盖分辨率：
+
+- `1280 x 800`
+- `1440 x 900`
+- `1920 x 1080`
+
+覆盖页面：
+
+- `/data-steward/assets`
+- `/data-steward/assets/503`
+- `/data-steward/assets/506`
+- `/data-steward/assets/503?tab=files`
+- `/data-steward/assets/503/work/dashboard`
+
+结果：
+
+- 页面均非白屏。
+- 页面级横向溢出为 `0`。
+- 顶部当前项目上下文可读。
+- 左侧菜单文字可读。
+- 文件管理、项目可视化、交付状态入口可见。
+- 未发现按钮丢失、文字明显挤压、表格撑爆。
+- lightfield / spotlight / glass-lite 视觉没有遮挡主要内容。
+- 未发现 `/Volumes`、`smb://`、`nas://`、`storage_path`、`storage_uri`、`storageUri`、raw row、SQL、secret、token、password 泄露。
+
+## 7. 资产总览验收结果
+
+Fresh login 使用 `platform.admin / Admin@123` 后自动进入 `/data-steward/assets`。
+
+结果：
+
+- 登录后约 3.1 秒内出现项目启动台和真实项目列表，满足 5 秒内理解“先选项目”的目标。
+- 首屏核心信息为：`项目启动台`、`选择项目，直接开始工作`、推荐项目、文件管理、项目可视化、待处理项目、最近项目、项目列表。
+- 默认聚焦真实 NAS 项目，显示 16 个可见项目、40,936 份已登记文件。
+- 推荐项目卡片提供 `进入项目`、`文件管理`、`项目可视化` 三个直接动作。
+- 项目列表每行保留 `工作台`、`文件`、`可视化` 快捷操作。
+- `FLOW / STATE / ALERT` 类大块教程未再占据首屏。
+- 统计与风险摘要降级到折叠区，不影响先选项目。
+
+## 8. 项目工作台验收结果
+
+已打开：
+
+- `/data-steward/assets/503`
+- `/data-steward/assets/506`
+
+结果：
+
+- 503 显示启航华居项目 / 编码 105 上下文。
+- 506 显示中建八局国交酒店项目 / 编码 93 上下文。
+- 页面保留 `项目资产 -> 工程主数据 -> 交付工作中心` 三段链路。
+- 首屏核心入口聚焦：项目可视化、文件管理、交付状态。
+- 顶部主操作提供：文件管理、项目可视化、交付状态、项目详情、刷新。
+- 工程主数据仍可进入，但没有比三项核心入口更抢眼。
+- Hermes、模型集成、管理对象、事项、任务、导出、文件服务等低频能力没有从系统消失，可通过更多工具或旧链接访问。
+
+## 9. 文件管理 / 项目可视化入口验收结果
+
+文件管理入口：
+
+- 资产总览推荐项目卡片可直接进入文件管理。
+- 资产总览项目列表每行有 `文件` 快捷操作。
+- 项目工作台顶部有 `文件管理` 主按钮。
+- 项目工作台核心入口卡片包含 `文件管理`。
+- 项目内导航项目资产段保留 `文件管理`。
+
+项目可视化入口：
+
+- 资产总览推荐项目卡片可直接进入项目可视化。
+- 资产总览项目列表每行有 `可视化` 快捷操作。
+- 项目工作台顶部有 `项目可视化` 主按钮。
+- 项目工作台核心入口卡片包含 `项目可视化 / 资产驾驶舱`。
+- 文案没有伪装成真实 BIM 轻量化或 3D 引擎能力。
+
+文件管理页面：
+
+- `/data-steward/assets/503?tab=files` 正常打开。
+- 未出现全局横向溢出。
+- 未触发真实 NAS 写操作。
+- 未发现真实 NAS 路径或敏感字段泄露。
+
+## 10. 旧链接兼容结果
+
+已打开：
+
+- `/master-data/sections`
+- `/master-data/node-types`
+- `/master-data/initialization`
+- `/master-data/deliverable-standard`
+- `/work/document-delivery`
+- `/work/drawing-delivery`
+- `/work/rectifications`
+- `/work/agent-governance`
+- `/work/dashboard`
+- `/data-steward/models`
+- `/data-steward/objects`
+
+结果：
+
+- 全部未白屏。
+- 全部未 404。
+- 在当前有项目上下文时，均跳转到 `/data-steward/assets/503/...` 项目工作台内对应页面。
+- 跳转后仍保留当前项目上下文和三段导航。
+- 未发现旧链接导致项目上下文丢失或串项目。
+
+## 11. P0 / P1 / P2 列表
 
 P0：无。
 
 P1：无。
 
-P2：仅有既有前端 Vite chunk size warning，不影响本轮 G3 收口。
+P2：
 
-## 3. 必读与范围确认
+- 既有 Vite chunk size warning，未阻塞构建。
+- 项目工作台仍可见少量偏技术文本，例如 `INTERNAL_PILOT`、`项目 503`、以及 `项目详情 / 技术信息平台内部 ID、资产来源、工作链路说明已收起`。这些内容没有抢过文件管理、项目可视化、交付状态主路径，也没有泄露真实 NAS 路径，但仍建议后续继续弱化或移入真正的详情抽屉 / 折叠内容。
+- `.claude/**`、`CLAUDE.md`、`tmp/**` 未跟踪非交付文件仍存在，需主 agent 收口提交时继续排除。
 
-已阅读：
+## 12. 是否建议主 agent 收口 UX3
 
-- `handoff/dev-agent/current-prompt.md`
-- `handoff/dev-agent/latest-report.md`
-- `handoff/test-agent/latest-report.md`
-- `handoff/main-agent/status.md`
-- `handoff/main-agent/development-log.md`
-- `handoff/main-agent/phase2-current-roadmap.md`
-- `handoff/main-agent/phase2-g3-hermes-masterdata-delivery-guidance-plan.md`
-- `handoff/main-agent/hermes-layered-integration-decision.md`
-- Hermes capability handoff
-- platform_to_hermes_contract
-- gateway_response_contract
-- missing_evidence_policy
+建议收口 UX3。
 
-范围确认：
-
-- 未进入 8B / 8C / 9A。
-- 未测试生产发布。
-- 未测试真实 NAS 写操作。
-- 未测试正文解析、BIM 构件解析、selective indexing 或 Hermes memory 写入。
-- 未触碰真实 NAS 文件。
-
-## 4. 必跑命令结果
-
-- 后端构建：`cd backend && ./mvnw -pl delivery-app -am -DskipTests package`，通过。
-- 前端构建：`corepack pnpm --dir frontend build`，通过，仅有既有 Vite chunk size warning。
-- 健康检查：`curl -fsS http://127.0.0.1:8080/actuator/health`，通过，返回 `{"status":"UP"}`。
-- Hermes Gateway 回归：`EXPECT_HERMES_AGENT_AVAILABLE=true bash scripts/dev/check-hermes-jarvis-gateway.sh`，通过，`PASS=13 FAIL=0`。
-- G3 专项：`bash scripts/dev/check-phase2-insert-g3-hermes-working-agent.sh`，通过，`PASS=21 FAIL=0`。
-- G2 回归：`bash scripts/dev/check-phase2-insert-g2-real-project-onboarding.sh`，通过，`PASS=11 FAIL=0`。
-- G1 回归：`bash scripts/dev/check-phase2-insert-g1-agent-delivery-governance.sh`，通过，`PASS=34 FAIL=0`，本轮测试夹具已清理，`PHASE2-G1` 可见资源计数未增长。
-- 8A 回归：`bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh`，通过，`PASS=11 FAIL=0`。
-- 格式检查：`git diff --check`，通过。
-
-## 5. Hermes 面板与 Action Center
-
-页面：`/data-steward/assets/503/work/agent-governance`
-
-结果：通过。
-
-浏览器验收记录：
-
-- Hermes 抽屉可打开。
-- 可见 `Hermes Action Center`。
-- 面板明确说明：通过平台受控接口生成计划，只有人工确认后才会执行挂接。
-- 可见四个分区：`回答 / 操作草案 / 待人工确认 / 执行结果`。
-- 页面显示 `Hermes真实回答 已接入`、`运行时写入 未开放`、`数据库 / NAS 写操作 不会执行`。
-- 页面未白屏、未出现 500、未出现 `timeout of 10000ms exceeded`。
-
-## 6. 操作草案验收
-
-结果：通过。
-
-主数据补齐计划：
-
-- 点击 `操作草案 -> 生成主数据补齐计划` 后可生成计划。
-- 计划包含接入状态：`可进入交付治理`。
-- 计划包含部位树状态：已建立节点数。
-- 计划包含节点类型状态：节点类型数量和是否锁定。
-- 计划包含交付标准状态：定义数量和类型数量。
-- 计划包含文档 / 图纸准备度。
-- 计划包含下一步建议。
-- 计划包含页面入口：真实项目接入向导、部位树、节点类型、交付物标准、文档交付、图纸交付。
-- 未发现自动创建主数据动作。
-
-缺失交付方案：
-
-- 文档方案可生成；当前样本项目文档缺失项为 0，页面提示没有可推荐候选文件。
-- 图纸方案可生成；页面展示缺失项和推荐文件。
-- 图纸方案包含目标、推荐文件、版本、推荐原因、置信度、风险提示和“建议先治理元数据”等提示。
-- 方案仍声明只依据当前项目元数据，不读取文件正文。
-
-## 7. 人工确认与执行边界
-
-结果：通过。
-
-浏览器验收记录：
-
-- 进入 `待人工确认` 后可见提示：不会自动挂接，必须勾选推荐、勾选人工确认，再由平台后端二次校验后执行。
-- 初始状态 `确认执行` 按钮禁用。
-- 推荐项展示置信度和风险提示。
-- 未在浏览器中对真实 503 项目点击执行，避免改变真实项目交付数据。
-
-脚本验收记录：
-
-- G3 专项脚本验证未人工确认时拒绝执行挂接。
-- G3 专项脚本验证人工确认后才调用平台挂接并返回执行结果。
-- G3 专项脚本验证审计日志包含 G3 复用的 apply 记录。
-- G1 回归脚本验证 recommend / apply 审计仍存在。
-
-## 8. Hermes 边界与 Missing Evidence
-
-结果：通过。
-
-浏览器提问：
-
-`这个 RVT 里面有哪些构件参数、DWG 图层和模型内容？`
-
-实测结果：
-
-- 返回 Missing Evidence / 缺少证据。
-- 明确缺少 RVT/Revit 解析证据。
-- 明确缺少 DWG/图纸解析证据。
-- 明确缺少模型解析证据。
-- 明确缺少构件级证据。
-- 未编造模型内容、DWG 图层、构件参数、PDF/Office 正文。
-- 响应仍是 catalog-only。
-
-## 9. 安全与泄露检查
-
-结果：通过。
-
-脚本和浏览器响应未发现：
-
-- `/Volumes`
-- `smb://`
-- `nas://`
-- raw `storage_path`
-- raw `storage_uri`
-- raw DB row
-- SQL
-- secret / token / password
-
-禁止项检查：
-
-- 未发现真实 NAS 增删改查。
-- 未发现文件移动、删除、重命名或上传。
-- 未发现 PDF / Office / DWG / RVT / IFC 正文读取。
-- 未发现 BIM 构件级解析。
-- 未发现 selective indexing。
-- 未发现 Hermes memory 写入。
-- 未发现 OpenSearch / Qdrant / MinIO documents/chunks 写入。
-- 未发现生产发布能力。
-- 未发现 Hermes 绕过平台权限或直接写库。
-
-## 10. 回归结论
-
-G2 回归通过。
-
-G1 回归通过。
-
-8A 回归通过。
-
-Hermes Gateway 真实外部接入回归通过。
-
-## 11. 收口建议
-
-建议主 agent 收口 G3。
-
-建议继续保持当前路线边界：G3 收口不等于进入 8B / 8C / 9A；下一阶段仍需用户明确裁决。
+理由：本轮必跑命令和主线回归全部通过；浏览器验收覆盖 fresh login、资产总览、503 / 506 项目工作台、文件管理、项目可视化入口、旧链接兼容和多分辨率布局，未发现 P0 / P1。剩余问题均为 P2，不影响 UX3 整体收口。

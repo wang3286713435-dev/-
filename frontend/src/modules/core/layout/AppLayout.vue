@@ -3,14 +3,24 @@
     <aside class="app-layout__sidebar">
       <div class="app-layout__brand">
         <strong>数字化交付平台</strong>
-        <span>一期基础工程</span>
+        <span>ZHUOYU · BIM DELIVERY</span>
       </div>
       <SidebarMenu :menus="menus" />
+      <div class="app-layout__sidebar-foot">
+        <strong>BUILD · UX3</strong>
+        <span>主视图聚焦 / Main focus</span>
+      </div>
     </aside>
 
     <div class="app-layout__main">
       <header class="app-layout__header">
-        <div class="app-layout__header-left" />
+        <div class="app-layout__header-left">
+          <span class="app-layout__route-eyebrow">{{ shellEyebrow }}</span>
+          <div class="app-layout__route-context">
+            <strong>{{ shellTitle }}</strong>
+            <small>{{ shellSubtitle }}</small>
+          </div>
+        </div>
         <div class="app-layout__actions">
           <div class="app-layout__user">
             <strong>{{ authStore.currentUser?.displayName }}</strong>
@@ -101,7 +111,7 @@ const globalHermesProject = computed(() => {
   const projectId = globalHermesProjectId.value;
   if (!projectId || !authStore.currentUser) return null;
   return authStore.currentUser.projects.find((item) => item.id === projectId)
-    ?? (authStore.currentUser.currentProject.id === projectId ? authStore.currentUser.currentProject : null);
+    ?? (authStore.currentUser.currentProject?.id === projectId ? authStore.currentUser.currentProject : null);
 });
 
 const showHermesEntry = computed(() => {
@@ -133,6 +143,40 @@ const globalHermesPageTitle = computed(() => {
 
 const globalHermesHint = computed(() => globalHermesPageTitle.value);
 
+const shellEyebrow = computed(() => {
+  if (routeProjectId.value) return '当前项目工作台';
+  if (String(route.name ?? '').startsWith('admin-')) return '管理中心';
+  return '平台主入口';
+});
+
+const shellTitle = computed(() => {
+  if (routeProjectId.value) {
+    return globalHermesProject.value?.name ?? `项目 ${routeProjectId.value}`;
+  }
+  const labels: Record<string, string> = {
+    'data-steward-assets': '项目资产总览',
+    'data-steward-scans': '扫描任务',
+    'data-steward-quality': '数据质量',
+    'data-steward-catalog': '资产目录',
+    'admin-employees': '员工权限管理',
+    'access-pending': '等待项目授权'
+  };
+  return labels[String(route.name ?? '')] ?? '数字化交付平台';
+});
+
+const shellSubtitle = computed(() => {
+  if (routeProjectId.value) {
+    return '先看资产，再确认工程主数据，最后进入交付工作中心。';
+  }
+  if (String(route.name ?? '') === 'data-steward-assets') {
+    return '从真实 NAS 项目进入工作台，按项目推进数字化交付。';
+  }
+  if (String(route.name ?? '').startsWith('admin-')) {
+    return '管理员工账号、项目授权和试运行访问范围。';
+  }
+  return '请选择项目或功能入口继续。';
+});
+
 async function handleLogout() {
   await authStore.signOut();
   router.replace({ name: 'login' });
@@ -142,25 +186,41 @@ async function handleLogout() {
 <style scoped>
 .hermes-global-entry {
   align-items: center;
-  bottom: 22px;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
+  bottom: 24px;
+  box-shadow: var(--zy-shadow-md);
   display: inline-flex;
-  gap: 8px;
+  gap: 10px;
   max-width: calc(100vw - 32px);
   position: fixed;
   right: 24px;
   z-index: 40;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-weight: var(--zy-fw-semi);
+  letter-spacing: 0.02em;
+  transition:
+    transform var(--zy-duration-2) var(--zy-ease-out),
+    box-shadow var(--zy-duration-2) var(--zy-ease-out);
+}
+
+.hermes-global-entry:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--zy-shadow-lg);
 }
 
 .hermes-global-entry small {
-  border-left: 1px solid rgba(255, 255, 255, 0.36);
-  font-size: 12px;
+  border-left: 1px solid rgba(255, 255, 255, 0.32);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-medium);
+  letter-spacing: 0.04em;
   line-height: 1;
-  max-width: 120px;
+  max-width: 140px;
   overflow: hidden;
-  padding-left: 8px;
+  padding-left: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
+  opacity: 0.92;
 }
 
 @media (max-width: 720px) {

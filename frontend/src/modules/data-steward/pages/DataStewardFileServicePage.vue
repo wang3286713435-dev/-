@@ -120,9 +120,9 @@ function refresh() {
 .service-section,
 .disabled-action {
   min-width: 0;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 1px solid var(--zy-line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--zy-surface);
 }
 
 .service-card {
@@ -134,7 +134,7 @@ function refresh() {
 
 .service-card h2 {
   margin: 0;
-  color: #0f172a;
+  color: var(--zy-ink);
   font-size: 16px;
 }
 
@@ -142,7 +142,7 @@ function refresh() {
 .disabled-action span,
 .service-section__header span {
   margin: 0;
-  color: #64748b;
+  color: var(--zy-muted);
   font-size: 13px;
 }
 
@@ -174,11 +174,11 @@ function refresh() {
   display: grid;
   gap: 8px;
   padding: 12px;
-  background: #f8fafc;
+  background: var(--zy-bg);
 }
 
 .disabled-action strong {
-  color: #0f172a;
+  color: var(--zy-ink);
   font-size: 14px;
 }
 

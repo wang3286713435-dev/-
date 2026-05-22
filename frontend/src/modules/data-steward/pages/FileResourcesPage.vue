@@ -22,7 +22,11 @@
         </template>
       </el-table-column>
       <el-table-column prop="businessTag" label="业务标签" min-width="120" />
-      <el-table-column prop="storageUri" label="存储地址" min-width="260" show-overflow-tooltip />
+      <el-table-column label="路径状态" min-width="190">
+        <template #default>
+          <el-tag type="info">底层路径已隐藏</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
           <el-button text :icon="CircleCheck" :disabled="row.processStatus === 'PROCESSED'" @click="handleProcess(row.id)">
@@ -119,7 +123,7 @@ const fileKindCreateOptions = fileKindOptions.filter((item) => item.value !== 'A
 const processStatusOptions = ['PENDING', 'PROCESSING', 'PROCESSED', 'FAILED'];
 
 const projectId = computed(() => authStore.currentProjectId);
-const projectLabel = computed(() => authStore.currentUser?.currentProject.name ?? '等待项目上下文');
+const projectLabel = computed(() => authStore.currentUser?.currentProject?.name ?? '等待项目上下文');
 
 watch(projectId, () => {
   pagination.pageNo = 1;

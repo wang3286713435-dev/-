@@ -1,10 +1,17 @@
 <template>
-  <div class="login-shell">
-    <section class="login-panel">
+  <div ref="shellRef" class="login-shell">
+    <div class="zy-hero-lightfield" aria-hidden="true">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+    <div class="zy-spotlight" aria-hidden="true"></div>
+    <ParticleField :count="22" :speed="0.22" :link-distance="160" />
+    <section class="login-panel zy-glass">
       <div class="login-brand">
-        <span class="login-brand__eyebrow">数字化交付平台 v1</span>
-        <h1>登录平台</h1>
-        <p>进入样板项目，验证一期基础工程链路。</p>
+        <span class="login-brand__eyebrow">ZHUOYU · BIM DELIVERY</span>
+        <h1>数字化交付平台</h1>
+        <p>建筑空间的数据底座 · 从 BIM 模型到运营闭环</p>
       </div>
 
       <el-alert type="info" :closable="false" show-icon>
@@ -41,6 +48,11 @@
           登录
         </el-button>
       </el-form>
+
+      <div class="login-helper">
+        <span>还没有账号？</span>
+        <el-button text type="primary" @click="router.push({ name: 'register' })">手机号注册</el-button>
+      </div>
     </section>
   </div>
 </template>
@@ -50,11 +62,16 @@ import { reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useRouter } from 'vue-router';
 
+import ParticleField from '@/modules/core/components/ParticleField.vue';
+import { useSpotlight } from '@/modules/core/composables/useSpotlight';
 import { useAuthStore } from '@/stores/auth';
 
 const authStore = useAuthStore();
 const router = useRouter();
 const submitting = ref(false);
+const shellRef = ref<HTMLElement | null>(null);
+
+useSpotlight(shellRef);
 
 const form = reactive({
   username: 'platform.admin',
@@ -71,7 +88,8 @@ async function handleSubmit() {
   try {
     await authStore.signIn(form.username, form.password);
     ElMessage.success('登录成功');
-    router.push({ name: 'data-steward-assets' });
+    const target = authStore.currentUser?.projects.length === 0 ? 'access-pending' : 'data-steward-assets';
+    router.push({ name: target });
   } catch (error) {
     const message = error instanceof Error ? error.message : '登录失败';
     ElMessage.error(message);

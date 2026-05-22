@@ -168,7 +168,15 @@ export interface DeliveryCompleteness {
   totalRequired: number;
   completedCount: number;
   missingCount: number;
+  draftCount: number;
+  pendingReviewCount: number;
+  approvedCount: number;
+  rejectedCount: number;
+  reviewReadyCount: number;
   completionRate: number;
+  approvedRate: number;
+  nextActionCode: string;
+  nextActionText: string;
   rows: DeliveryCompletenessRow[];
 }
 

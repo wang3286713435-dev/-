@@ -8,7 +8,7 @@ export interface FileResource {
   fileKind: string;
   mimeType: string | null;
   sizeBytes: number;
-  storageUri: string;
+  storageUri: string | null;
   checksum: string | null;
   businessTag: string | null;
   versionNo: string;
@@ -1103,6 +1103,87 @@ export interface CatalogFilesQuery {
   pageSize?: number;
 }
 
+export interface NasOperationResponse {
+  operationId: number;
+  projectId: number;
+  operationType: string;
+  targetType: string;
+  targetId: number | null;
+  fileId: number | null;
+  directoryId: number | null;
+  quarantineRecordId: number | null;
+  status: string;
+  displayName: string;
+  displayPath: string;
+  pathHint: string;
+  message: string;
+  traceId: string;
+  createdAt: string;
+}
+
+export interface NasOperationRecord {
+  operationId: number;
+  projectId: number;
+  operationType: string;
+  targetType: string;
+  targetId: number | null;
+  fileId: number | null;
+  directoryId: number | null;
+  quarantineRecordId: number | null;
+  sourceDisplayPath: string | null;
+  targetDisplayPath: string | null;
+  status: string;
+  message: string | null;
+  failureReason: string | null;
+  traceId: string | null;
+  createdAt: string;
+  createdBy: number | null;
+}
+
+export interface NasQuarantineRecord {
+  quarantineRecordId: number;
+  projectId: number;
+  targetType: string;
+  fileId: number | null;
+  directoryId: number | null;
+  originalDisplayPath: string;
+  displayName: string;
+  status: string;
+  reason: string | null;
+  quarantineUntil: string;
+  createdAt: string;
+  createdBy: number | null;
+  restoredBy: number | null;
+  restoredAt: string | null;
+  failureReason: string | null;
+}
+
+export interface NasWriteTrialStatus {
+  projectId: number;
+  enabled: boolean;
+  allowedRelativeRoots: string[];
+  allowedRoleCodes: string[];
+  allowedUserIds: number[];
+  trialModeNotice: string | null;
+  currentUserRoleCode: string;
+  roleAllowed: boolean;
+  accountAllowed: boolean;
+  directoryAllowed: boolean;
+  canWrite: boolean;
+  checkedDirectory: string;
+  disabledReason: string;
+  traceId: string;
+  updatedAt: string | null;
+}
+
+export interface NasWriteTrialConfigPayload {
+  enabled: boolean;
+  allowedRelativeRoots: string[];
+  allowedRoleCodes?: string[];
+  allowedUserIds?: number[];
+  trialModeNotice?: string;
+}
+
 export async function fetchCatalogProjects(assetSource?: string) {
   const { data } = await http.get<ApiResponse<CatalogProject[]>>('/api/data-steward/catalog/projects', {
     params: assetSource ? { assetSource } : undefined
@@ -1132,6 +1213,119 @@ export async function fetchCatalogFiles(params: CatalogFilesQuery = {}) {
     total: resp.data.data?.total ?? 0,
     rows: resp.data.data?.items ?? []
   };
+}
+
+export async function fetchNasWriteTrialStatus(projectId: number, directoryPath?: string) {
+  const { data } = await http.get<ApiResponse<NasWriteTrialStatus>>(
+    `/api/data-steward/projects/${projectId}/nas/write-trial`,
+    { params: { directoryPath: directoryPath || '' } }
+  );
+  return data.data;
+}
+
+export async function updateNasWriteTrialConfig(projectId: number, payload: NasWriteTrialConfigPayload) {
+  const { data } = await http.put<ApiResponse<NasWriteTrialStatus>>(
+    `/api/data-steward/projects/${projectId}/nas/write-trial`,
+    payload
+  );
+  return data.data;
+}
+
+export async function createNasDirectory(projectId: number, payload: { parentPath?: string; name: string }) {
+  const { data } = await http.post<ApiResponse<NasOperationResponse>>(
+    `/api/data-steward/projects/${projectId}/nas/directories`,
+    payload
+  );
+  return data.data;
+}
+
+export async function uploadNasFile(
+  projectId: number,
+  payload: { parentPath?: string; file: File; fileKind?: string; discipline?: string; versionNo?: string }
+) {
+  const form = new FormData();
+  form.append('file', payload.file);
+  if (payload.parentPath) form.append('parentPath', payload.parentPath);
+  if (payload.fileKind) form.append('fileKind', payload.fileKind);
+  if (payload.discipline) form.append('discipline', payload.discipline);
+  if (payload.versionNo) form.append('versionNo', payload.versionNo);
+  const { data } = await http.post<ApiResponse<NasOperationResponse>>(
+    `/api/data-steward/projects/${projectId}/nas/files:upload`,
+    form,
+    { timeout: 60_000 }
+  );
+  return data.data;
+}
+
+export async function renameNasFile(projectId: number, fileId: number, newName: string) {
+  const { data } = await http.patch<ApiResponse<NasOperationResponse>>(
+    `/api/data-steward/projects/${projectId}/nas/files/${fileId}:rename`,
+    { newName }
+  );
+  return data.data;
+}
+
+export async function moveNasFile(projectId: number, fileId: number, targetDirectory?: string) {
+  const { data } = await http.post<ApiResponse<NasOperationResponse>>(
+    `/api/data-steward/projects/${projectId}/nas/files/${fileId}:move`,
+    { targetDirectory: targetDirectory || '' }
+  );
+  return data.data;
+}
+
+export async function quarantineNasFile(projectId: number, fileId: number, reason?: string) {
+  const { data } = await http.post<ApiResponse<NasOperationResponse>>(
+    `/api/data-steward/projects/${projectId}/nas/files/${fileId}:quarantine`,
+    { reason: reason || '' }
+  );
+  return data.data;
+}
+
+export async function renameNasDirectory(projectId: number, payload: { sourcePath: string; newName: string }) {
+  const { data } = await http.patch<ApiResponse<NasOperationResponse>>(
+    `/api/data-steward/projects/${projectId}/nas/directories:rename`,
+    payload
+  );
+  return data.data;
+}
+
+export async function moveNasDirectory(projectId: number, payload: { sourcePath: string; targetDirectory?: string }) {
+  const { data } = await http.post<ApiResponse<NasOperationResponse>>(
+    `/api/data-steward/projects/${projectId}/nas/directories:move`,
+    { sourcePath: payload.sourcePath, targetDirectory: payload.targetDirectory || '' }
+  );
+  return data.data;
+}
+
+export async function quarantineNasDirectory(projectId: number, payload: { sourcePath: string; reason?: string }) {
+  const { data } = await http.post<ApiResponse<NasOperationResponse>>(
+    `/api/data-steward/projects/${projectId}/nas/directories:quarantine`,
+    { sourcePath: payload.sourcePath, reason: payload.reason || '' }
+  );
+  return data.data;
+}
+
+export async function restoreNasQuarantine(projectId: number, recordId: number) {
+  const { data } = await http.post<ApiResponse<NasOperationResponse>>(
+    `/api/data-steward/projects/${projectId}/nas/quarantine/${recordId}:restore`
+  );
+  return data.data;
+}
+
+export async function fetchNasOperations(projectId: number, limit = 50) {
+  const { data } = await http.get<ApiResponse<NasOperationRecord[]>>(
+    `/api/data-steward/projects/${projectId}/nas/operations`,
+    { params: { limit } }
+  );
+  return data.data;
+}
+
+export async function fetchNasQuarantine(projectId: number, status?: string, limit = 50) {
+  const { data } = await http.get<ApiResponse<NasQuarantineRecord[]>>(
+    `/api/data-steward/projects/${projectId}/nas/quarantine`,
+    { params: { status, limit } }
+  );
+  return data.data;
 }
 
 export async function fetchCatalogFileDetail(fileId: number) {

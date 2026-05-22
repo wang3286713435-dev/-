@@ -12,7 +12,7 @@ export const useAuthStore = defineStore('auth', () => {
   const hermesContextVersion = ref(0);
 
   const isAuthenticated = computed(() => Boolean(session.value?.accessToken));
-  const currentProjectId = computed(() => currentUser.value?.currentProject.id ?? session.value?.currentProjectId ?? null);
+  const currentProjectId = computed(() => currentUser.value?.currentProject?.id ?? session.value?.currentProjectId ?? null);
 
   function saveSession(nextSession: SessionTokens | null) {
     session.value = nextSession;
@@ -39,7 +39,7 @@ export const useAuthStore = defineStore('auth', () => {
     saveSession({
       accessToken: session.value.accessToken,
       refreshToken: session.value.refreshToken,
-      currentProjectId: user.currentProject.id
+      currentProjectId: user.currentProject?.id ?? null
     });
     bootstrapped.value = true;
     return user;
