@@ -1,186 +1,162 @@
-# 开发 Agent 当前任务：UX3 主视图聚焦与认知减负
+# 开发 Agent 当前任务：M2D 真实项目工程主数据接入草案增强
 
-你是数字化交付平台 UX3 批次的开发 agent。工作目录：
+你是数字化交付平台开发 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
-完成承诺固定为：
+## 0. 当前批次
 
-`<promise>MAINLINE_UX3_MAIN_VIEW_FOCUS_COMPLETE</promise>`
+`M2D：真实项目工程主数据接入草案增强`
 
-## 0. 当前状态
+本轮不是新增大功能，也不是继续 BIM / Hermes / NAS 写操作。目标是修复当前真实项目接入的核心问题：工程主数据不能再靠模板演示冒充真实交付标准。
 
-UX2 已验收通过并推送，当前从 UX2 基线切出 UX3 分支：
+105 项目已经由主 agent 清空演示模板数据，当前状态：
 
-`codex/ux3-main-view-focus`
+- 真实项目：`503 / 105 / 深圳市二十八高项目`
+- 文件资产：2928 条
+- 主要文件：DWG 2487、PDF 242、RVT 198、XLSX 1
+- 主要专业线索：建筑、结构、电气、给排水、消防、智能化、暖通、燃气、通用
+- 工程主数据：已重置为空
+- 交付标准：已重置为空
 
-UX3 是 UX 分支内的小批次，不进入 M2C，不新增业务能力。
+## 1. 必须先阅读
 
-用户明确反馈：
-
-- 当前主视图过于混乱。
-- 用户进入后不知道应该干什么。
-- 数据管家最重要的是文件管理、项目管理与可视化。
-- 主视图不要留太多教程与文字。
-- 应通过交互逻辑和 UI 引导用户使用平台。
-- 当前平台内容并不复杂，最主要功能应集中在用户视野中。
-
-## 1. 本轮目标
-
-本轮只做主视图减法和入口聚焦：
-
-1. 资产总览改成更直接的“项目启动台”。
-2. 项目工作台首屏聚焦三个核心入口：
-   - 文件管理。
-   - 项目资产驾驶舱 / 项目可视化。
-   - 交付状态。
-3. 大段教程、长说明、偏技术状态从主视图移到折叠区、详情区或空状态中。
-4. 保留旧路由兼容，不删除功能。
-5. 保留 UX2 视觉升级，不回滚 lightfield / spotlight / glass-lite。
-
-## 2. 必须先阅读
-
-开始前先阅读：
-
-1. `handoff/main-agent/status.md`
-2. `handoff/main-agent/development-log.md`
-3. `handoff/main-agent/ux3-main-view-focus-plan.md`
-4. `handoff/dev-agent/latest-report.md`
-5. `handoff/test-agent/latest-report.md`
-
-重点检查：
-
-1. `frontend/src/modules/data-steward/pages/AssetOverviewPage.vue`
-2. `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
-3. `frontend/src/modules/core/components/ProjectWorkspaceNav.vue`
-4. `frontend/src/modules/core/components/SidebarMenu.vue`
-5. `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
-6. `frontend/src/styles/index.css`
-7. `frontend/src/styles/effects.css`
-8. `frontend/src/styles/tokens.css`
-
-## 3. 允许修改
-
-只允许修改：
-
-- `frontend/**`
+- `handoff/main-agent/status.md`
+- `handoff/main-agent/phase2-current-roadmap.md`
+- `handoff/main-agent/m2d-real-project-masterdata-onboarding-plan.md`
+- `handoff/main-agent/project-105-template-reset-report.md`
 - `handoff/dev-agent/latest-report.md`
+- `handoff/test-agent/latest-report.md`
 
-允许做：
+重点检查代码：
 
-- 调整资产总览首屏结构。
-- 调整项目工作台首屏结构。
-- 调整项目内导航层级。
-- 折叠或降级低频入口。
-- 压缩说明文字。
-- 把偏技术字段移到详情 / 技术信息区。
-- 微调样式以强化核心入口。
+- `backend/delivery-master-data/src/main/java/com/zhuoyu/delivery/masterdata/initialization/application/ProjectInitializationApplicationService.java`
+- `backend/delivery-master-data/src/main/java/com/zhuoyu/delivery/masterdata/initialization/dto/InitializationDtos.java`
+- `backend/delivery-master-data/src/main/java/com/zhuoyu/delivery/masterdata/initialization/controller/ProjectInitializationController.java`
+- `frontend/src/modules/master-data/pages/ProjectInitializationPage.vue`
+- `frontend/src/modules/master-data/api/masterData.ts`
+- `frontend/src/modules/master-data/pages/SectionNodesPage.vue`
+- `frontend/src/modules/master-data/pages/NodeTypesPage.vue`
+- `frontend/src/modules/master-data/pages/DeliverableStandardPage.vue`
+- `frontend/src/modules/work-center/pages/DocumentDeliveryPage.vue`
+- `frontend/src/modules/work-center/pages/DrawingDeliveryPage.vue`
 
-## 4. 严禁越界
+## 2. 问题定义
 
-严禁：
+当前初始化向导虽然已经叫“真实项目接入向导”，但底层仍然很大程度依赖内置模板骨架。对于 105 这类真实 NAS 项目，如果员工点击确认应用，就可能再次生成演示式工程主数据，并让平台看起来像“标准已就绪”。
 
-1. 修改 `backend/**`。
-2. 修改数据库迁移。
-3. 修改 `docs/**`。
-4. 新增或修改后端接口。
-5. 改变权限规则。
-6. 新增 Hermes 能力。
-7. 新增 BIM 轻量化能力。
-8. 新增真实 NAS 写能力。
-9. 读取文件正文。
-10. 删除旧路由导致书签或测试脚本失效。
-11. 物理删除功能入口或破坏既有业务页面。
-12. 为 105 / 503 / 93 / 506 写死逻辑。
-13. 把 `.claude/**`、`CLAUDE.md`、`tmp/**` 纳入提交。
+这会继续误导用户。
 
-如你认为必须改后端才能解决问题，停止并写入报告，不得自行修改后端。
+本轮要把主流程改成：
 
-## 5. 具体开发要求
+`真实资产目录 -> 接入评估 -> 工程主数据草案 -> 人工确认 -> 再进入标准驱动交付`
 
-### A. 资产总览：项目启动台
+而不是：
 
-目标：
+`点击模板 -> 直接变成已完成交付标准`
 
-- 用户进入后第一眼知道：先选项目。
-- 主视图核心是项目管理，不是教程页。
+## 3. 本轮目标
 
-要求：
+### A. 接入评估增强
 
-- 删除或折叠 `FLOW / STATE / ALERT` 等大块教程式首屏内容。
-- 首屏保留并强化：
-  - 项目搜索。
-  - 真实项目列表。
-  - 推荐进入项目。
-  - 最近项目。
-  - 核心动作：进入项目、查看文件管理、查看项目可视化 / 资产驾驶舱。
-- 统计和风险提醒可以保留，但必须降级为紧凑摘要或折叠区，不占据主视觉。
-- 测试 / 样例 / 历史项目筛选能力保留，但默认不抢主视图。
+增强现有接口：
 
-### B. 项目工作台：核心入口优先
+- `GET /api/master-data/projects/{projectId}/onboarding/assessment`
+- `GET /api/master-data/projects/{projectId}/onboarding/preview`
 
-目标：
+让返回结果更适合真实项目接入：
 
-- 用户进入项目后第一眼看到核心工作入口。
+- 文件总数、模型数、图纸数、文档/表格数
+- 扩展名分布
+- 专业分布
+- 目录线索，必须是脱敏/相对目录语义，不得返回 `/Volumes`、`nas://`、`smb://`、`storage_uri`
+- 治理风险：缺 checksum、缺专业、低置信度等
+- 证据模式：始终明确 `catalog_only`
+- Missing Evidence：不得把目录元数据说成文件正文证据
 
-要求：
+### B. 草案从真实资产出发
 
-- 顶部去掉或弱化偏技术标签的强展示：
-  - `平台内部ID`
-  - `NAS_REAL_PILOT`
-  - `ACTIVE`
-- 这些字段如仍需保留，移入“项目详情 / 技术信息”折叠区。
-- 首屏核心入口固定为：
-  - 文件管理。
-  - 项目资产驾驶舱 / 可视化。
-  - 交付状态。
-- 工程主数据入口保留，但不要比上述核心入口更抢眼。
-- Hermes、模型集成、管理对象、事项、任务、导出、文件服务等低频入口放入更多工具。
+草案项必须能体现 105 的真实资产线索，而不是纯模板骨架。
 
-### C. 项目内导航：主入口 + 更多
+至少建议生成这些候选：
 
-目标：
+- 专业候选：建筑、结构、给排水、暖通、电气、消防、智能化、燃气、通用
+- 交付类型候选：RVT 模型、DWG 图纸、PDF 图纸/文档、Excel 清单
+- 交付对象候选：项目级、专业级、文件类型级
 
-- 不再一眼看到大量同级按钮。
+每条草案项必须有：
 
-要求：
+- `evidenceSource`
+- `evidenceMode=catalog_only`
+- `confidenceLevel`
+- `riskHint`
+- `pendingConfirmation=true`
+- 是否来自真实资产线索
+- 是否来自模板骨架
 
-- `ProjectWorkspaceNav` 继续保留三段语义，但视觉上压缩为主入口 + 更多入口。
-- 保留旧页面入口和跳转能力。
-- 当前项目上下文必须持续可见。
-- 不要让主导航像“功能清单墙”。
+### C. 禁止真实 NAS 项目一键套模板变成“标准已就绪”
 
-### D. 文件管理入口
+对 `asset_source` 为 `NAS_REAL*` 的真实项目：
 
-目标：
+- 前端主流程不再出现“确认应用模板后就完成”的表达。
+- 后端 `onboarding/apply` 不得简单调用 `apply-template` 让真实项目直接生成并锁定节点类型。
+- 如果保留 `apply-template` 兼容接口，真实 NAS 项目必须要求更强确认，或返回明确错误，防止误操作。
+- 不要破坏历史测试项目/脚本的模板兼容能力；只收紧真实 NAS 项目主流程。
 
-- 文件管理作为数据管家最重要功能之一，必须更容易进入。
+优先方案：本轮让真实 NAS 项目的 onboarding apply 只允许“生成/展示草案，不直接落成已就绪标准”。如确实需要落库，必须保证不会自动锁定节点类型，且页面仍显示“待人工确认”。
 
-要求：
+### D. 前端体验
 
-- 资产总览的项目行或推荐卡应能快速进入文件管理。
-- 项目工作台首屏必须有明显文件管理入口。
-- 不改变文件管理业务逻辑。
+重点改 `ProjectInitializationPage.vue`：
 
-### E. 项目可视化入口
+- 105 首屏显示：真实资产已接入，工程主数据未确认。
+- 明确展示文件类型、专业、目录线索、治理风险。
+- 文案从“模板”降级为“草案骨架 / 行业参考”。
+- 主按钮不应诱导用户“一键应用模板”。
+- 给出清楚下一步：先确认部位树，再确认节点类型，再确认交付物标准。
+- 技术字段默认不要抢主视觉。
 
-目标：
+## 4. 明确禁止事项
 
-- 当前未接真实 BIM 引擎前，项目可视化可以对应资产驾驶舱 / 项目数据可视化，不伪装成真实 3D。
+本轮严禁：
 
-要求：
+- 不要修改 `docs/**`。
+- 不要触碰真实 NAS 文件。
+- 不要新增真实 NAS 写能力。
+- 不要读取 PDF / Office / DWG / RVT / IFC 正文。
+- 不要接入 Hermes 新能力。
+- 不要接入 BIM 引擎。
+- 不要自动挂接文件。
+- 不要自动审核、整改、交付。
+- 不要把目录元数据当正文 evidence。
+- 不要暴露真实 NAS 路径、`storage_uri`、SQL、token、secret。
 
-- 文案使用“项目可视化 / 资产驾驶舱”，不要承诺真实 BIM 轻量化。
-- 不进入 8B / BIM 引擎能力。
+## 5. 验收标准
+
+必须满足：
+
+1. 105 项目工程主数据页不再显示“标准已就绪”的误导状态。
+2. 105 接入评估展示真实资产统计、专业分布、扩展名分布和治理风险。
+3. 草案项能明显区分资产线索与模板骨架。
+4. 草案项有证据来源、证据模式、置信度、风险提示和人工确认标记。
+5. 真实 NAS 项目不能一键套模板后直接变成 `deliverableStandardReady=true`。
+6. 文档/图纸交付在主数据未确认时继续提示先确认工程主数据。
+7. 响应和页面不泄露真实 NAS 路径。
+8. 不触碰真实 NAS 文件。
+9. M2C / M2B / M2A / M1F / M1E / M1D / M1C 回归通过。
 
 ## 6. 自测要求
 
 至少执行：
 
 ```bash
+cd /Users/vc/Documents/数字化交付平台/backend
+./mvnw -pl delivery-app -am -DskipTests package
+
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-m2c-delivery-package-archive.sh
 bash scripts/dev/check-m2b-nas-write-trial.sh
 bash scripts/dev/check-m2a-controlled-nas-write.sh
 bash scripts/dev/check-m1f-employee-access-control.sh
@@ -190,15 +166,16 @@ bash scripts/dev/check-m1c-real-project-masterdata.sh
 git diff --check
 ```
 
-浏览器至少检查：
+建议新增专项脚本：
 
-1. Fresh login 后进入资产总览，5 秒内能看懂先选项目。
-2. 资产总览首屏核心是项目搜索、项目列表、推荐进入、文件管理、项目可视化。
-3. 503 / 506 项目工作台首屏最显眼的是文件管理、资产驾驶舱 / 可视化、交付状态。
-4. 大段教程文字不再占据主视图。
-5. 技术标签不再抢主视觉。
-6. 旧链接不白屏。
-7. 1280 / 1440 / 1920 宽度下无横向溢出、按钮丢失、文字挤压。
+`scripts/dev/check-m2d-real-project-masterdata-onboarding.sh`
+
+覆盖 105 项目：
+
+- assessment/preview 响应。
+- forbidden fields 扫描。
+- 真实 NAS 项目不能一键模板变 ready。
+- 文档/图纸交付在未确认主数据时为空或阻塞提示。
 
 ## 7. 报告要求
 
@@ -208,13 +185,15 @@ git diff --check
 
 报告必须包含：
 
-1. 主视图减法做了什么。
-2. 资产总览如何变成项目启动台。
-3. 项目工作台核心入口如何调整。
-4. 哪些教程 / 技术信息被折叠或降级。
-5. 文件管理和项目可视化入口是否更明显。
-6. 旧链接兼容结果。
-7. 自测命令结果。
-8. 是否修改后端 / docs / 数据库迁移。
-9. P0 / P1 / P2。
-10. 是否建议进入 UX3 测试验收。
+- 改了哪些文件。
+- 接入评估如何变得更真实。
+- 草案如何从 105 资产线索生成。
+- 如何防止真实 NAS 项目再次被模板误导。
+- 是否有数据库迁移。
+- 是否触碰真实 NAS 文件。
+- 自测结果。
+- 已知风险。
+
+## 8. 完成定义
+
+只有当 105 项目能清楚展示“真实资产已接入，但工程主数据待确认”，并且不会再被一键模板误导成“交付标准已就绪”，才算完成。

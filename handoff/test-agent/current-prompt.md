@@ -1,39 +1,32 @@
-# 测试 Agent 当前任务：UX3 主视图聚焦与认知减负验收
+# 测试 Agent 当前任务：M2D 真实项目工程主数据接入草案增强验收
 
 你是数字化交付平台测试 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
-本轮只验收：
+## 测试策略
 
-`UX3：主视图聚焦与认知减负`
+本轮采用轻量测试策略，先阅读：
+
+- `handoff/main-agent/lightweight-test-strategy.md`
+
+本轮不要做大范围浏览器逐页点击，不要多分辨率视觉巡检。只验证代码可用、接口契约、专项脚本、主线红线和是否偏离 M2D 目标。
+
+## 0. 当前验收批次
+
+`M2D：真实项目工程主数据接入草案增强`
+
+本轮目标是验证 105 真实 NAS 项目不再被模板演示数据误导，而是展示真实资产接入评估和工程主数据草案。
 
 ## 1. 必须先阅读
 
-先阅读：
+- `handoff/main-agent/m2d-real-project-masterdata-onboarding-plan.md`
+- `handoff/main-agent/project-105-template-reset-report.md`
+- `handoff/dev-agent/latest-report.md`
+- `handoff/main-agent/status.md`
+- `handoff/main-agent/phase2-current-roadmap.md`
 
-1. `handoff/dev-agent/latest-report.md`
-2. `handoff/dev-agent/current-prompt.md`
-3. `handoff/main-agent/status.md`
-4. `handoff/main-agent/development-log.md`
-5. `handoff/main-agent/ux3-main-view-focus-plan.md`
-
-## 2. 验收目标
-
-确认 UX3 做到：
-
-1. Fresh login 后进入资产总览，5 秒内能看懂先选项目。
-2. 数据管家核心功能聚焦在项目管理、文件管理、项目可视化。
-3. 资产总览不再被大段教程、`FLOW / STATE / ALERT` 等内容占满首屏。
-4. 项目工作台首屏最显眼的是文件管理、资产驾驶舱 / 可视化、交付状态。
-5. 技术标签不再抢主视觉，例如 `平台内部ID`、`NAS_REAL_PILOT`、`ACTIVE`。
-6. 低频入口仍可找到，但不抢主视觉。
-7. 旧链接继续兼容，不白屏、不 404、不丢项目上下文。
-8. 后端能力、权限、NAS 写安全、路径脱敏不回归。
-
-## 3. 必跑命令
-
-执行：
+## 2. 必跑命令
 
 ```bash
 cd /Users/vc/Documents/数字化交付平台/backend
@@ -42,120 +35,95 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-m2b-nas-write-trial.sh
-bash scripts/dev/check-m2a-controlled-nas-write.sh
-bash scripts/dev/check-m1f-employee-access-control.sh
-bash scripts/dev/check-m1e-file-task-continuity.sh
-bash scripts/dev/check-m1d-standard-delivery-loop.sh
 bash scripts/dev/check-m1c-real-project-masterdata.sh
 git diff --check
 ```
 
-## 4. 越界检查
+如果开发 agent 新增：
 
-必须执行并记录：
+`scripts/dev/check-m2d-real-project-masterdata-onboarding.sh`
+
+必须执行。
+
+另外执行一条与交付包依赖直接相关的轻量回归：
 
 ```bash
-git diff --name-only
-git status --short
-git status --short backend docs
-git status --short backend/delivery-app/src/main/resources/db/migration
+bash scripts/dev/check-m2c-delivery-package-archive.sh
 ```
 
-P0：
+除非发现 P0/P1 或主 agent 另行要求，本轮不需要跑 M2B/M2A/M1F/M1E/M1D 全量脚本。
 
-- 有 `backend/**`、`docs/**`、数据库迁移改动。
-- 有接口语义、权限、Hermes、BIM、NAS 能力扩展。
-- 页面泄露真实 NAS 路径、`storage_uri`、raw row、SQL、token、secret。
+## 3. 专项验收
 
-P1：
+以 `503 / 105` 为重点项目，至少验证：
 
-- 运行期前端文件仍处于未跟踪状态，例如被页面或样式引用的 `.vue`、`.ts`、`.css` 文件显示为 `??`。
-- `.claude/**`、`CLAUDE.md`、`tmp/**` 属于本地非交付文件，不因未跟踪直接判失败，但必须记录。
+1. `GET /api/master-data/projects/503/standard-status`
+   - 不应显示 `deliverableStandardReady=true`。
+2. `GET /api/master-data/projects/503/initialization/status`
+   - 应显示需要确认部位树、节点类型、交付标准。
+3. `GET /api/master-data/projects/503/onboarding/assessment`
+   - 返回真实资产统计。
+   - 返回专业分布、扩展名分布、治理风险。
+   - `evidenceMode=catalog_only`。
+4. `GET /api/master-data/projects/503/onboarding/preview`
+   - 草案项包含 evidenceSource / confidenceLevel / riskHint / pendingConfirmation。
+   - 能看出哪些来自资产线索，哪些来自模板骨架。
+5. 真实 NAS 项目不能一键应用模板后直接变成标准已就绪。
+6. 文档交付 / 图纸交付在主数据未确认时不得显示虚假的应交完成状态。
+7. 105 文档交付 / 图纸交付 / 交付包接口在主数据未确认时，不得显示演示模板产生的虚假应交项。
+8. 如做浏览器短验，只打开 105 工程主数据页确认不白屏、文案不明显误导即可，不要逐页点击。
 
-## 5. 浏览器验收
+## 4. 红线检查
 
-分辨率至少覆盖：
+接口响应、页面文本、日志和新增脚本不得泄露：
 
-- `1280 x 800`
-- `1440 x 900`
-- `1920 x 1080`
+- `/Volumes`
+- `smb://`
+- `nas://`
+- `storage_uri`
+- `storage_path`
+- `storageUri`
+- `storagePath`
+- raw row
+- SQL
+- token
+- secret
+- password
 
-重点检查：
-
-- Fresh login 后资产总览是否清楚。
-- 资产总览首屏是否聚焦项目搜索、真实项目列表、推荐进入、最近项目。
-- 是否能快速进入文件管理。
-- 是否能快速进入项目可视化 / 资产驾驶舱。
-- 项目工作台首屏是否聚焦文件管理、资产驾驶舱 / 可视化、交付状态。
-- 工程主数据、Hermes、模型集成、事项、任务、导出、文件服务等低频入口是否降级但仍可找到。
-- 页面是否有横向溢出、文字挤压、按钮丢失、表格撑爆。
-- 轻量视觉效果是否仍可读，不遮挡主要内容。
-
-## 6. 旧链接兼容验收
-
-打开：
-
-- `/master-data/sections`
-- `/master-data/node-types`
-- `/master-data/initialization`
-- `/master-data/deliverable-standard`
-- `/work/document-delivery`
-- `/work/drawing-delivery`
-- `/work/rectifications`
-- `/work/agent-governance`
-- `/work/dashboard`
-- `/data-steward/models`
-- `/data-steward/objects`
-
-要求：
-
-- 不白屏。
-- 不 404。
-- 不丢项目上下文。
-- 如果无法确定当前项目，应回到 `/data-steward/assets`。
-
-## 7. P0 / P1 / P2 判定
+## 5. 禁止通过的情况
 
 P0：
 
-- 修改后端、docs、数据库迁移。
-- 旧路由白屏。
-- 项目上下文串项目。
+- 真实 NAS 文件被移动、删除、改名、复制或读取正文。
 - 真实 NAS 路径泄露。
-- M2B / M2A / M1F / M1E / M1D / M1C 回归失败。
+- 105 再次被一键模板误判为交付标准已就绪。
+- 项目权限绕过。
+- M2C / M2B / M2A / M1F / M1E / M1D / M1C 回归失败。
 
 P1：
 
-- 资产总览首屏仍然像教程页，用户看不到核心项目入口。
-- 项目工作台首屏仍然被技术标签或说明文字占据。
-- 文件管理和项目可视化入口不明显。
-- 低频入口被隐藏到找不到，影响主链路。
-- 关键页面在 1280 宽度下横向溢出。
+- 105 看不到真实资产统计。
+- 草案项没有证据来源、置信度、风险提示或人工确认标记。
+- 文档/图纸交付仍显示虚假应交项。
+- 代码或接口仍把模板表达成真实项目结构。
 
 P2：
 
-- 个别视觉细节、文案、间距可继续打磨。
-- Vite chunk size warning。
-- 仍有少量技术字段存在但不抢主视觉。
+- 文案或视觉细节粗糙但不影响主链路。
+- 既有 Vite chunk warning。
 
-## 8. 报告要求
+## 6. 报告要求
 
-报告写入：
+完成后写入：
 
 `handoff/test-agent/latest-report.md`
 
-报告必须包含：
+报告至少包含：
 
-1. 测试结论。
-2. 当前分支和 commit。
-3. 是否确认 UX3 当前 active。
-4. 必跑命令结果。
-5. 越界检查结果。
-6. 多分辨率视觉巡检结果。
-7. 资产总览验收结果。
-8. 项目工作台验收结果。
-9. 文件管理 / 项目可视化入口验收结果。
-10. 旧链接兼容结果。
-11. P0 / P1 / P2 列表。
-12. 是否建议主 agent 收口 UX3。
+- 测试结论。
+- P0/P1/P2。
+- 必跑命令结果。
+- M2D 专项脚本或接口结果。
+- 是否做了浏览器短验；如果未做，说明按轻量策略跳过。
+- forbidden field 扫描结果。
+- 是否建议主 agent 收口 M2D。

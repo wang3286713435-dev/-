@@ -18,6 +18,12 @@ import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryBindingRequest;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryBindingResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCompletenessResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCompletenessRow;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.CreateDeliveryPackageDraftRequest;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageArchiveItemResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageDraftDetailResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageDraftSummaryResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageManifestResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackagePrepareResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageSummaryResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageSummaryRow;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageViewSummary;
@@ -40,6 +46,7 @@ public class DeliveryApplicationService {
     private static final String MODULE_CODE = "work-center";
 
     private final DeliveryBindingRepository deliveryBindingRepository;
+    private final DeliveryPackageDraftRepository deliveryPackageDraftRepository;
     private final AuditLogApplicationService auditLogApplicationService;
     private final SectionNodeApplicationService sectionNodeApplicationService;
     private final NodeTypeApplicationService nodeTypeApplicationService;
@@ -49,6 +56,7 @@ public class DeliveryApplicationService {
 
     public DeliveryApplicationService(
         DeliveryBindingRepository deliveryBindingRepository,
+        DeliveryPackageDraftRepository deliveryPackageDraftRepository,
         AuditLogApplicationService auditLogApplicationService,
         SectionNodeApplicationService sectionNodeApplicationService,
         NodeTypeApplicationService nodeTypeApplicationService,
@@ -57,6 +65,7 @@ public class DeliveryApplicationService {
         DirectoryTemplateApplicationService templateApplicationService
     ) {
         this.deliveryBindingRepository = deliveryBindingRepository;
+        this.deliveryPackageDraftRepository = deliveryPackageDraftRepository;
         this.auditLogApplicationService = auditLogApplicationService;
         this.sectionNodeApplicationService = sectionNodeApplicationService;
         this.nodeTypeApplicationService = nodeTypeApplicationService;
@@ -531,6 +540,262 @@ public class DeliveryApplicationService {
             pendingReviewCount, rejectedCount, conversionRequiredCount, unsupportedPreviewCount,
             allRows
         );
+    }
+
+    // ---- delivery package draft / archive directory ----
+
+    public DeliveryPackagePrepareResponse prepareDeliveryPackage(Long projectId, String viewType, String targetType) {
+        String normalizedTarget = normalizeTargetType(targetType);
+        String normalizedView = normalizePackageViewType(viewType);
+        ExportPrecheckResponse precheck = exportPrecheck(
+            projectId,
+            "ALL".equals(normalizedView) ? null : normalizedView,
+            normalizedTarget
+        );
+        List<DeliveryPackageArchiveItemResponse> rows = precheck.rows().stream()
+            .map(row -> toArchiveItem(null, row))
+            .toList();
+        return new DeliveryPackagePrepareResponse(
+            projectId,
+            normalizedView,
+            normalizedTarget,
+            true,
+            false,
+            false,
+            precheck.totalCount(),
+            precheck.readyCount(),
+            precheck.blockedCount(),
+            precheck.missingCount(),
+            precheck.pendingReviewCount(),
+            precheck.rejectedCount(),
+            precheck.conversionRequiredCount(),
+            precheck.unsupportedPreviewCount(),
+            rows
+        );
+    }
+
+    @Transactional
+    public DeliveryPackageDraftDetailResponse createDeliveryPackageDraft(
+        Long userId,
+        Long projectId,
+        CreateDeliveryPackageDraftRequest request
+    ) {
+        String viewType = request == null ? null : request.viewType();
+        String targetType = request == null ? null : request.targetType();
+        DeliveryPackagePrepareResponse prepare = prepareDeliveryPackage(projectId, viewType, targetType);
+        Long draftId = deliveryPackageDraftRepository.insertDraft(
+            projectId,
+            prepare.viewType(),
+            prepare.targetType(),
+            prepare.totalCount(),
+            prepare.readyCount(),
+            prepare.blockedCount(),
+            prepare.missingCount(),
+            prepare.pendingReviewCount(),
+            prepare.rejectedCount(),
+            prepare.conversionRequiredCount(),
+            prepare.unsupportedPreviewCount(),
+            userId
+        );
+        deliveryPackageDraftRepository.insertItems(draftId, projectId, prepare.rows());
+        auditLogApplicationService.record(projectId, MODULE_CODE, "work.delivery-package-draft.create",
+            "DELIVERY_PACKAGE_DRAFT", String.valueOf(draftId), userId,
+            Map.of(
+                "viewType", prepare.viewType(),
+                "targetType", prepare.targetType(),
+                "dryRun", true,
+                "physicalPackageGenerated", false,
+                "nasFileCopied", false,
+                "totalCount", prepare.totalCount()
+            ));
+        return getDeliveryPackageDraft(projectId, draftId);
+    }
+
+    public List<DeliveryPackageDraftSummaryResponse> listDeliveryPackageDrafts(Long projectId) {
+        return deliveryPackageDraftRepository.findDrafts(projectId);
+    }
+
+    public DeliveryPackageDraftDetailResponse getDeliveryPackageDraft(Long projectId, Long draftId) {
+        DeliveryPackageDraftSummaryResponse summary = requireDeliveryPackageDraft(projectId, draftId);
+        return toDraftDetail(summary, deliveryPackageDraftRepository.findItems(projectId, draftId));
+    }
+
+    public List<DeliveryPackageArchiveItemResponse> getDeliveryPackageDraftItems(Long projectId, Long draftId) {
+        requireDeliveryPackageDraft(projectId, draftId);
+        return deliveryPackageDraftRepository.findItems(projectId, draftId);
+    }
+
+    @Transactional
+    public DeliveryPackageManifestResponse exportDeliveryPackageManifest(Long userId, Long projectId, Long draftId) {
+        DeliveryPackageDraftDetailResponse draft = getDeliveryPackageDraft(projectId, draftId);
+        auditLogApplicationService.record(projectId, MODULE_CODE, "work.delivery-package-draft.export-manifest",
+            "DELIVERY_PACKAGE_DRAFT", String.valueOf(draftId), userId,
+            Map.of(
+                "viewType", draft.viewType(),
+                "targetType", draft.targetType(),
+                "dryRun", true,
+                "physicalPackageGenerated", false,
+                "nasFileCopied", false,
+                "totalCount", draft.totalCount()
+            ));
+        StringBuilder csv = new StringBuilder();
+        csv.append('\uFEFF')
+            .append(csvLine(
+                "草案ID", "项目ID", "视图类型", "目标类型", "目标名称",
+                "交付定义", "交付物类型", "文件ID", "文件名", "文件类型", "版本",
+                "审核状态", "预览状态", "导出状态", "阻塞原因", "档案目录",
+                "dryRun", "physicalPackageGenerated", "nasFileCopied"
+            ))
+            .append('\n');
+        for (DeliveryPackageArchiveItemResponse item : draft.rows()) {
+            csv.append(csvLine(
+                draft.draftId(),
+                draft.projectId(),
+                draft.viewType(),
+                item.targetType(),
+                item.targetName(),
+                item.deliverableDefinitionName(),
+                item.deliverableTypeName(),
+                item.fileId(),
+                item.fileName(),
+                item.fileKind(),
+                item.versionNo(),
+                item.reviewStatus(),
+                item.previewStatus(),
+                item.exportStatus(),
+                item.blockReason(),
+                item.archiveDirectoryPath(),
+                draft.dryRun(),
+                draft.physicalPackageGenerated(),
+                draft.nasFileCopied()
+            )).append('\n');
+        }
+        return new DeliveryPackageManifestResponse(
+            projectId,
+            draftId,
+            "delivery-package-manifest-" + projectId + "-" + draftId + ".csv",
+            "text/csv;charset=UTF-8",
+            true,
+            false,
+            false,
+            draft.rows().size(),
+            csv.toString()
+        );
+    }
+
+    private DeliveryPackageDraftSummaryResponse requireDeliveryPackageDraft(Long projectId, Long draftId) {
+        return deliveryPackageDraftRepository.findDraft(projectId, draftId)
+            .orElseThrow(() -> new BusinessException("WORK_DELIVERY_PACKAGE_DRAFT_NOT_FOUND",
+                "交付包草案不存在", HttpStatus.NOT_FOUND));
+    }
+
+    private DeliveryPackageDraftDetailResponse toDraftDetail(
+        DeliveryPackageDraftSummaryResponse summary,
+        List<DeliveryPackageArchiveItemResponse> rows
+    ) {
+        return new DeliveryPackageDraftDetailResponse(
+            summary.projectId(),
+            summary.draftId(),
+            summary.viewType(),
+            summary.targetType(),
+            summary.totalCount(),
+            summary.readyCount(),
+            summary.blockedCount(),
+            summary.missingCount(),
+            summary.pendingReviewCount(),
+            summary.rejectedCount(),
+            summary.conversionRequiredCount(),
+            summary.unsupportedPreviewCount(),
+            summary.dryRun(),
+            summary.physicalPackageGenerated(),
+            summary.nasFileCopied(),
+            summary.createdBy(),
+            summary.createdAt(),
+            rows
+        );
+    }
+
+    private DeliveryPackageArchiveItemResponse toArchiveItem(Long itemId, ExportPrecheckRow row) {
+        return new DeliveryPackageArchiveItemResponse(
+            itemId,
+            row.targetType(),
+            row.targetId(),
+            row.targetName(),
+            row.deliverableDefinitionId(),
+            row.deliverableDefinitionName(),
+            row.deliverableTypeId(),
+            row.deliverableTypeName(),
+            row.bindingId(),
+            row.fileResourceId(),
+            row.fileName(),
+            row.fileKind(),
+            row.versionNo(),
+            row.reviewStatus(),
+            row.previewStatus(),
+            row.exportStatus(),
+            row.blockReason(),
+            archiveDirectoryPath(row)
+        );
+    }
+
+    private String archiveDirectoryPath(ExportPrecheckRow row) {
+        String viewLabel = "DRAWING".equals(row.fileKind()) ? "图纸交付" : "文档交付";
+        String targetLabel = "OBJECT".equals(row.targetType()) ? "管理对象" : "工程部位";
+        String target = safeArchiveSegment(row.targetName(), "未命名目标");
+        String definition = safeArchiveSegment(row.deliverableDefinitionName(), "未命名交付定义");
+        String type = safeArchiveSegment(row.deliverableTypeName(), "未命名交付物类型");
+        String file = row.fileName() == null || row.fileName().isBlank()
+            ? "未挂接文件"
+            : safeArchiveSegment(row.fileName(), "文件名已脱敏");
+        return "交付档案/" + viewLabel + "/" + targetLabel + "/" + target + "/" + definition + "/" + type + "/" + file;
+    }
+
+    private String safeArchiveSegment(String value, String fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        String trimmed = value.trim();
+        String lower = trimmed.toLowerCase();
+        if (lower.contains("/volumes")
+            || lower.contains("smb://")
+            || lower.contains("nas://")
+            || lower.contains("storage_path")
+            || lower.contains("storage_uri")
+            || lower.matches("^[a-z]:\\\\.*")
+            || trimmed.contains("/")
+            || trimmed.contains("\\")) {
+            return fallback;
+        }
+        String sanitized = trimmed
+            .replaceAll("[\\r\\n\\t]+", " ")
+            .replaceAll("[<>:\"|?*]+", "-")
+            .replaceAll("\\s{2,}", " ")
+            .trim();
+        if (sanitized.isBlank()) {
+            return fallback;
+        }
+        return sanitized.length() > 120 ? sanitized.substring(0, 120) : sanitized;
+    }
+
+    private String normalizePackageViewType(String viewType) {
+        if (viewType == null || viewType.isBlank() || "ALL".equalsIgnoreCase(viewType.trim())) {
+            return "ALL";
+        }
+        return normalizeViewType(viewType);
+    }
+
+    private static String csvLine(Object... values) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < values.length; i++) {
+            if (i > 0) sb.append(',');
+            String v = values[i] == null ? "" : values[i].toString();
+            if (v.contains(",") || v.contains("\"") || v.contains("\n") || v.contains("\r")) {
+                sb.append('"').append(v.replace("\"", "\"\"")).append('"');
+            } else {
+                sb.append(v);
+            }
+        }
+        return sb.toString();
     }
 
     private ExportPrecheckRow enrichPrecheckRow(ExportPrecheckRow row) {

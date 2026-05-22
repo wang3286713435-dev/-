@@ -278,13 +278,13 @@ assert_no_forbidden "file quarantine response" "${quarantine_response}"
 QUARANTINE_ID="$(json_expr "${quarantine_response}" "data['data']['quarantineRecordId']")"
 [[ ! -f "${NAS_ROOT}/moved/renamed.txt" ]]
 [[ -d "${NAS_ROOT}/.delivery-quarantine" ]]
-pass "文件删除仅进入隔离区，不做永久删除"
+pass "文件删除仅进入回收站，不做永久删除"
 
 restore_response="$(post_json "${ADMIN_TOKEN}" "/api/data-steward/projects/${PROJECT_ID}/nas/quarantine/${QUARANTINE_ID}:restore" "{}")"
 assert_ok "${restore_response}"
 assert_no_forbidden "file restore response" "${restore_response}"
 [[ -f "${NAS_ROOT}/moved/renamed.txt" ]]
-pass "隔离文件可恢复到原位置"
+pass "回收站文件可恢复到原位置"
 
 echo ""
 echo "--- 4. Directory rename, move, quarantine and restore ---"
@@ -309,13 +309,13 @@ assert_ok "${dir_quarantine_response}"
 assert_no_forbidden "directory quarantine response" "${dir_quarantine_response}"
 DIR_QUARANTINE_ID="$(json_expr "${dir_quarantine_response}" "data['data']['quarantineRecordId']")"
 [[ ! -d "${NAS_ROOT}/target/folder-b" ]]
-pass "文件夹删除仅进入隔离区"
+pass "文件夹删除仅进入回收站"
 
 dir_restore_response="$(post_json "${ADMIN_TOKEN}" "/api/data-steward/projects/${PROJECT_ID}/nas/quarantine/${DIR_QUARANTINE_ID}:restore" "{}")"
 assert_ok "${dir_restore_response}"
 assert_no_forbidden "directory restore response" "${dir_restore_response}"
 [[ -d "${NAS_ROOT}/target/folder-b" ]]
-pass "隔离文件夹可恢复"
+pass "回收站文件夹可恢复"
 
 echo ""
 echo "--- 5. Permission and path safety ---"
@@ -354,7 +354,7 @@ pass "操作记录可查且不泄露真实路径"
 quarantine_list_response="$(get_json "${ADMIN_TOKEN}" "/api/data-steward/projects/${PROJECT_ID}/nas/quarantine?limit=50")"
 assert_ok "${quarantine_list_response}"
 assert_no_forbidden "quarantine list response" "${quarantine_list_response}"
-pass "隔离记录可查且不泄露真实路径"
+pass "回收站记录可查且不泄露真实路径"
 
 audit_count="$(mysql_exec "SELECT COUNT(1) FROM core_audit_logs WHERE project_id=${PROJECT_ID} AND module_code='data-steward' AND action_code LIKE 'nas.%';")"
 if [[ "${audit_count}" -lt 8 ]]; then

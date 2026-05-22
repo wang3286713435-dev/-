@@ -11,10 +11,13 @@ import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.Onbo
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingApplyResponse;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingAssetSummary;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingAssessmentResponse;
+import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingDistributionItem;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingDraftItem;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingDraftPreviewResponse;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingEvidenceClue;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingGap;
+import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingGovernanceRisk;
+import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.OnboardingMissingEvidence;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.InitializationStatusResponse;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.StandardTemplateDetailResponse;
 import com.zhuoyu.delivery.masterdata.initialization.dto.InitializationDtos.StandardTemplateSummaryResponse;
@@ -219,6 +222,7 @@ public class ProjectInitializationApplicationService {
             status,
             onboardingEvidenceClues(snapshot),
             onboardingGaps(snapshot, status),
+            missingEvidence(snapshot),
             onboardingNextActions(snapshot, status)
         );
     }
@@ -240,6 +244,7 @@ public class ProjectInitializationApplicationService {
             snapshot.toSummary(),
             templatePreview,
             onboardingDraftItems(snapshot, templatePreview),
+            missingEvidence(snapshot),
             List.of(
                 "本预览只读取项目目录元数据、项目来源和标准配置状态，不读取 PDF/Office/DWG/RVT/IFC 正文。",
                 "草案不会触碰、复制、移动、改名或删除 NAS 文件。",
@@ -252,6 +257,14 @@ public class ProjectInitializationApplicationService {
     public TemplateApplyResponse apply(Long operatorId, Long projectId, TemplateApplyRequest request) {
         if (!Boolean.TRUE.equals(request.confirmApply())) {
             throw new BusinessException("MASTERDATA_INITIALIZATION_CONFIRM_REQUIRED", "应用模板前需要确认", HttpStatus.BAD_REQUEST);
+        }
+        AssetOnboardingSnapshot snapshot = loadAssetOnboardingSnapshot(projectId);
+        if (snapshot.disableDirectTemplateApply()) {
+            throw new BusinessException(
+                "REAL_PROJECT_TEMPLATE_APPLY_DISABLED",
+                "真实 NAS 项目不能通过一键模板直接生成就绪标准，请先使用接入评估草案并由项目负责人逐项确认。",
+                HttpStatus.CONFLICT
+            );
         }
         StandardTemplateSpec template = requireTemplate(request.templateCode());
         TemplatePreviewResponse preview = preview(projectId, new TemplatePreviewRequest(template.code()));
@@ -303,6 +316,34 @@ public class ProjectInitializationApplicationService {
             throw new BusinessException("REAL_PROJECT_ONBOARDING_CONFIRM_REQUIRED", "应用真实项目接入草案前需要人工确认", HttpStatus.BAD_REQUEST);
         }
         String templateCode = defaultTemplateCode(request.templateCode());
+        AssetOnboardingSnapshot snapshot = loadAssetOnboardingSnapshot(projectId);
+        if (snapshot.disableDirectTemplateApply()) {
+            StandardStatusResponse status = standardStatusApplicationService.getStatus(projectId);
+            auditLogApplicationService.record(
+                projectId,
+                "master-data",
+                "masterdata.onboarding.real-project-draft-confirm",
+                "REAL_PROJECT_ONBOARDING_DRAFT",
+                templateCode,
+                operatorId,
+                Map.of(
+                    "templateCode", templateCode,
+                    "assetCatalogOnly", true,
+                    "draftApplied", false,
+                    "reason", "real_nas_project_requires_manual_masterdata_confirmation"
+                )
+            );
+            return new OnboardingApplyResponse(
+                projectId,
+                true,
+                false,
+                false,
+                false,
+                "catalog_only",
+                null,
+                onboardingNextActions(snapshot, status)
+            );
+        }
         TemplateApplyResponse templateResult = apply(operatorId, projectId, new TemplateApplyRequest(templateCode, true));
         return new OnboardingApplyResponse(
             projectId,
@@ -576,7 +617,7 @@ public class ProjectInitializationApplicationService {
     }
 
     private AssetOnboardingSnapshot loadAssetOnboardingSnapshot(Long projectId) {
-        return jdbcTemplate.queryForObject("""
+        AssetOnboardingSnapshot snapshot = jdbcTemplate.queryForObject("""
             SELECT p.code AS project_code,
                    p.name AS project_name,
                    p.asset_source,
@@ -584,8 +625,12 @@ public class ProjectInitializationApplicationService {
                    COALESCE(file_stats.model_file_count, 0) AS model_file_count,
                    COALESCE(file_stats.drawing_file_count, 0) AS drawing_file_count,
                    COALESCE(file_stats.document_file_count, 0) AS document_file_count,
+                   COALESCE(file_stats.spreadsheet_file_count, 0) AS spreadsheet_file_count,
                    COALESCE(path_stats.path_mapping_count, 0) AS path_mapping_count,
                    COALESCE(scan_stats.scan_task_count, 0) AS scan_task_count,
+                   COALESCE(file_stats.missing_checksum_count, 0) AS missing_checksum_count,
+                   COALESCE(file_stats.missing_discipline_count, 0) AS missing_discipline_count,
+                   COALESCE(file_stats.low_confidence_count, 0) AS low_confidence_count,
                    file_stats.dominant_file_kinds,
                    file_stats.dominant_file_extensions,
                    file_stats.dominant_disciplines,
@@ -598,7 +643,19 @@ public class ProjectInitializationApplicationService {
                        COUNT(1) AS file_count,
                        SUM(CASE WHEN file_kind = 'MODEL' THEN 1 ELSE 0 END) AS model_file_count,
                        SUM(CASE WHEN file_kind = 'DRAWING' THEN 1 ELSE 0 END) AS drawing_file_count,
-                       SUM(CASE WHEN file_kind IN ('DOCUMENT', 'SPREADSHEET', 'PRESENTATION') THEN 1 ELSE 0 END) AS document_file_count,
+                       SUM(CASE
+                               WHEN file_kind IN ('DOCUMENT', 'PRESENTATION')
+                                    OR UPPER(SUBSTRING_INDEX(original_name, '.', -1)) IN ('PDF', 'DOC', 'DOCX', 'PPT', 'PPTX')
+                               THEN 1 ELSE 0
+                           END) AS document_file_count,
+                       SUM(CASE
+                               WHEN file_kind = 'SPREADSHEET'
+                                    OR UPPER(SUBSTRING_INDEX(original_name, '.', -1)) IN ('XLS', 'XLSX', 'CSV')
+                               THEN 1 ELSE 0
+                           END) AS spreadsheet_file_count,
+                       SUM(CASE WHEN checksum IS NULL OR checksum = '' THEN 1 ELSE 0 END) AS missing_checksum_count,
+                       SUM(CASE WHEN discipline IS NULL OR discipline = '' OR discipline IN ('OTHER', 'UNKNOWN', '未分类') THEN 1 ELSE 0 END) AS missing_discipline_count,
+                       SUM(CASE WHEN confidence_level IS NULL OR confidence_level = '' OR confidence_level = 'LOW' THEN 1 ELSE 0 END) AS low_confidence_count,
                        GROUP_CONCAT(DISTINCT file_kind ORDER BY file_kind SEPARATOR ',') AS dominant_file_kinds,
                        GROUP_CONCAT(DISTINCT UPPER(SUBSTRING_INDEX(original_name, '.', -1)) ORDER BY UPPER(SUBSTRING_INDEX(original_name, '.', -1)) SEPARATOR ',') AS dominant_file_extensions,
                        GROUP_CONCAT(DISTINCT discipline ORDER BY discipline SEPARATOR ',') AS dominant_disciplines,
@@ -641,15 +698,90 @@ public class ProjectInitializationApplicationService {
             rs.getInt("model_file_count"),
             rs.getInt("drawing_file_count"),
             rs.getInt("document_file_count"),
+            rs.getInt("spreadsheet_file_count"),
             rs.getInt("path_mapping_count"),
             rs.getInt("scan_task_count"),
+            rs.getInt("missing_checksum_count"),
+            rs.getInt("missing_discipline_count"),
+            rs.getInt("low_confidence_count"),
             splitCsv(rs.getString("dominant_file_kinds")),
             splitCsv(rs.getString("dominant_file_extensions")),
-            splitCsv(rs.getString("dominant_disciplines")),
+            splitCsv(rs.getString("dominant_disciplines")).stream().map(ProjectInitializationApplicationService::disciplineLabel).toList(),
             safeDirectoryClues(rs.getString("directory_clues")),
+            List.of(),
+            List.of(),
+            List.of(),
             toInstant(rs.getTimestamp("last_asset_seen_at")),
             toInstant(rs.getTimestamp("last_scan_at"))
         ));
+        return snapshot.withDistributions(
+            loadFileKindDistribution(projectId, snapshot.fileCount()),
+            loadExtensionDistribution(projectId, snapshot.fileCount()),
+            loadDisciplineDistribution(projectId, snapshot.fileCount())
+        );
+    }
+
+    private List<OnboardingDistributionItem> loadFileKindDistribution(Long projectId, int totalCount) {
+        return jdbcTemplate.query("""
+            SELECT COALESCE(NULLIF(file_kind, ''), 'UNKNOWN') AS item_code,
+                   COALESCE(NULLIF(file_kind, ''), 'UNKNOWN') AS item_label,
+                   COUNT(1) AS item_count
+            FROM data_file_resources
+            WHERE project_id = :projectId AND deleted = 0
+            GROUP BY COALESCE(NULLIF(file_kind, ''), 'UNKNOWN')
+            ORDER BY item_count DESC, item_code
+            LIMIT 12
+            """, new MapSqlParameterSource("projectId", projectId), (rs, rowNum) -> distributionItem(
+            rs.getString("item_code"),
+            fileKindLabel(rs.getString("item_label")),
+            rs.getInt("item_count"),
+            totalCount
+        ));
+    }
+
+    private List<OnboardingDistributionItem> loadExtensionDistribution(Long projectId, int totalCount) {
+        return jdbcTemplate.query("""
+            SELECT CASE
+                       WHEN original_name IS NULL OR original_name = '' OR original_name NOT LIKE '%.%' THEN 'UNKNOWN'
+                       ELSE UPPER(SUBSTRING_INDEX(original_name, '.', -1))
+                   END AS item_code,
+                   COUNT(1) AS item_count
+            FROM data_file_resources
+            WHERE project_id = :projectId AND deleted = 0
+            GROUP BY CASE
+                         WHEN original_name IS NULL OR original_name = '' OR original_name NOT LIKE '%.%' THEN 'UNKNOWN'
+                         ELSE UPPER(SUBSTRING_INDEX(original_name, '.', -1))
+                     END
+            ORDER BY item_count DESC, item_code
+            LIMIT 16
+            """, new MapSqlParameterSource("projectId", projectId), (rs, rowNum) -> distributionItem(
+            rs.getString("item_code"),
+            extensionLabel(rs.getString("item_code")),
+            rs.getInt("item_count"),
+            totalCount
+        ));
+    }
+
+    private List<OnboardingDistributionItem> loadDisciplineDistribution(Long projectId, int totalCount) {
+        return jdbcTemplate.query("""
+            SELECT COALESCE(NULLIF(discipline, ''), 'UNSPECIFIED') AS item_code,
+                   COUNT(1) AS item_count
+            FROM data_file_resources
+            WHERE project_id = :projectId AND deleted = 0
+            GROUP BY COALESCE(NULLIF(discipline, ''), 'UNSPECIFIED')
+            ORDER BY item_count DESC, item_code
+            LIMIT 16
+            """, new MapSqlParameterSource("projectId", projectId), (rs, rowNum) -> distributionItem(
+            rs.getString("item_code"),
+            disciplineLabel(rs.getString("item_code")),
+            rs.getInt("item_count"),
+            totalCount
+        ));
+    }
+
+    private static OnboardingDistributionItem distributionItem(String code, String label, int count, int totalCount) {
+        double ratio = totalCount <= 0 ? 0D : Math.round((count * 10000D) / totalCount) / 10000D;
+        return new OnboardingDistributionItem(code, label, count, ratio);
     }
 
     private List<OnboardingEvidenceClue> onboardingEvidenceClues(AssetOnboardingSnapshot snapshot) {
@@ -792,8 +924,161 @@ public class ProjectInitializationApplicationService {
         return gaps;
     }
 
+    private static List<OnboardingGovernanceRisk> governanceRisks(AssetOnboardingSnapshot snapshot) {
+        List<OnboardingGovernanceRisk> risks = new ArrayList<>();
+        if (snapshot.missingChecksumCount() > 0) {
+            risks.add(new OnboardingGovernanceRisk(
+                "MISSING_CHECKSUM",
+                "warning",
+                snapshot.missingChecksumCount(),
+                "部分文件尚未形成 checksum，暂不能作为最终交付一致性依据。",
+                "catalog_only",
+                "checksum_metadata_missing"
+            ));
+        }
+        if (snapshot.missingDisciplineCount() > 0) {
+            risks.add(new OnboardingGovernanceRisk(
+                "MISSING_DISCIPLINE",
+                "warning",
+                snapshot.missingDisciplineCount(),
+                "部分文件缺少专业标注或仍为通用/未分类，需要人工治理后再形成正式标准。",
+                "catalog_only",
+                "discipline_metadata_missing"
+            ));
+        }
+        if (snapshot.lowConfidenceCount() > 0) {
+            risks.add(new OnboardingGovernanceRisk(
+                "LOW_CONFIDENCE",
+                "info",
+                snapshot.lowConfidenceCount(),
+                "部分文件目录识别置信度偏低，草案只能作为候选线索。",
+                "catalog_only",
+                "classification_confidence_low"
+            ));
+        }
+        if (snapshot.fileCount() > 0 && risks.isEmpty()) {
+            risks.add(new OnboardingGovernanceRisk(
+                "CATALOG_REVIEW_REQUIRED",
+                "info",
+                0,
+                "目录治理字段暂无明显风险，但真实主数据仍需项目负责人确认。",
+                "catalog_only",
+                "manual_confirmation_required"
+            ));
+        }
+        return risks;
+    }
+
+    private static List<OnboardingMissingEvidence> missingEvidence(AssetOnboardingSnapshot snapshot) {
+        List<OnboardingMissingEvidence> evidence = new ArrayList<>();
+        evidence.add(new OnboardingMissingEvidence(
+            "ASSET_CATALOG_ONLY",
+            "当前评估只基于文件目录、扩展名、专业字段和扫描记录，不能把目录元数据当作文件正文或模型内部证据。",
+            "full_text_evidence / drawing_parse_evidence / model_parse_evidence",
+            "catalog_only"
+        ));
+        if (snapshot.modelFileCount() > 0) {
+            evidence.add(new OnboardingMissingEvidence(
+                "MODEL_PARSE_EVIDENCE_MISSING",
+                "目录中存在模型文件，但没有 RVT/IFC/NWD 解析结果，不能确认 Level、Grid、Family、Type 或构件参数。",
+                "rvt_parse_evidence / component_evidence / model_parse_evidence",
+                "catalog_only"
+            ));
+        }
+        if (snapshot.drawingFileCount() > 0) {
+            evidence.add(new OnboardingMissingEvidence(
+                "DRAWING_PARSE_EVIDENCE_MISSING",
+                "目录中存在图纸文件，但没有 DWG/PDF 图纸解析结果，不能确认图层、标题栏、外参或图纸正文。",
+                "dwg_parse_evidence / drawing_parse_evidence",
+                "catalog_only"
+            ));
+        }
+        if (snapshot.documentFileCount() > 0 || snapshot.spreadsheetFileCount() > 0) {
+            evidence.add(new OnboardingMissingEvidence(
+                "DOCUMENT_TEXT_EVIDENCE_MISSING",
+                "目录中存在文档或清单文件，但没有 PDF/Office 正文证据，不能总结条款或表格内容。",
+                "full_text_evidence / office_parse_evidence",
+                "catalog_only"
+            ));
+        }
+        return evidence;
+    }
+
     private List<OnboardingDraftItem> onboardingDraftItems(AssetOnboardingSnapshot snapshot, TemplatePreviewResponse preview) {
-        return preview.items().stream()
+        List<OnboardingDraftItem> items = new ArrayList<>();
+        snapshot.disciplineDistribution().stream()
+            .filter(item -> item.count() != null && item.count() > 0)
+            .limit(8)
+            .forEach(item -> items.add(new OnboardingDraftItem(
+                "DISCIPLINE_CANDIDATE",
+                item.label(),
+                "真实资产目录中出现 " + item.count() + " 个该专业文件，可作为专业候选，但需要项目负责人确认。",
+                "catalog_only",
+                "CATALOG_DISCIPLINE_DISTRIBUTION",
+                item.count() >= 100 ? "HIGH" : "MEDIUM",
+                "专业字段来自目录入库或人工治理，不代表文件正文、图纸内容或模型构件已经被解析。",
+                true,
+                false,
+                true
+            )));
+        snapshot.extensionDistribution().stream()
+            .filter(item -> item.count() != null && item.count() > 0)
+            .filter(item -> List.of("RVT", "DWG", "PDF", "XLS", "XLSX", "CSV").contains(item.code()))
+            .forEach(item -> items.add(new OnboardingDraftItem(
+                "DELIVERABLE_TYPE_CANDIDATE",
+                item.label(),
+                "真实资产目录中出现 " + item.count() + " 个 " + item.code() + " 文件，可作为交付类型候选。",
+                "catalog_only",
+                "CATALOG_EXTENSION_DISTRIBUTION",
+                item.count() >= 50 ? "HIGH" : "MEDIUM",
+                extensionRiskHint(item.code()),
+                true,
+                false,
+                true
+            )));
+        if (snapshot.fileCount() > 0) {
+            items.add(new OnboardingDraftItem(
+                "TARGET_CANDIDATE",
+                "项目级交付对象",
+                "真实资产已按项目归集，可先建立项目级交付对象，再逐步拆分到专业、部位或文件类型。",
+                "catalog_only",
+                "CATALOG_PROJECT_ASSET_SUMMARY",
+                "MEDIUM",
+                "项目级对象只能作为接入草案入口，不能替代正式部位树和节点类型。",
+                true,
+                false,
+                true
+            ));
+        }
+        if (!snapshot.disciplineDistribution().isEmpty()) {
+            items.add(new OnboardingDraftItem(
+                "TARGET_CANDIDATE",
+                "专业级交付对象",
+                "真实资产目录中已有专业分布，可将专业作为人工确认的候选维度。",
+                "catalog_only",
+                "CATALOG_DISCIPLINE_DISTRIBUTION",
+                "MEDIUM",
+                "专业维度需要与真实工程部位树和交付责任人确认后才能成为正式规则。",
+                true,
+                false,
+                true
+            ));
+        }
+        if (!snapshot.extensionDistribution().isEmpty()) {
+            items.add(new OnboardingDraftItem(
+                "TARGET_CANDIDATE",
+                "文件类型级交付对象",
+                "真实资产目录中已有 DWG/PDF/RVT/Excel 等文件类型线索，可辅助规划交付物类型。",
+                "catalog_only",
+                "CATALOG_EXTENSION_DISTRIBUTION",
+                "MEDIUM",
+                "文件扩展名只能说明目录层面的文件类型，不能证明文件内容符合交付要求。",
+                true,
+                false,
+                true
+            ));
+        }
+        preview.items().stream()
             .map(item -> new OnboardingDraftItem(
                 item.category(),
                 item.name(),
@@ -806,7 +1091,8 @@ public class ProjectInitializationApplicationService {
                 true,
                 true
             ))
-            .toList();
+            .forEach(items::add);
+        return items;
     }
 
     private List<String> onboardingNextActions(AssetOnboardingSnapshot snapshot, StandardStatusResponse status) {
@@ -815,10 +1101,14 @@ public class ProjectInitializationApplicationService {
             actions.add("先完成真实项目路径映射或只读资产目录登记");
         }
         if (!Boolean.TRUE.equals(status.hasSectionTree()) || !Boolean.TRUE.equals(status.hasNodeTypes())) {
-            actions.add("生成真实项目接入草案并人工确认工程部位/节点类型");
+            actions.add(snapshot.disableDirectTemplateApply()
+                ? "基于真实资产线索人工确认工程部位树和节点类型，不直接套用模板"
+                : "生成真实项目接入草案并人工确认工程部位/节点类型");
         }
         if (!Boolean.TRUE.equals(status.deliverableStandardReady())) {
-            actions.add("补齐交付定义、交付类型、交付属性与目录模板");
+            actions.add(snapshot.disableDirectTemplateApply()
+                ? "根据 DWG/PDF/RVT/Excel 线索逐项配置交付定义、交付类型和目录模板"
+                : "补齐交付定义、交付类型、交付属性与目录模板");
         }
         if (actions.isEmpty()) {
             actions.add("进入文档交付和图纸交付页面，继续人工复核挂接状态与导出预检查");
@@ -873,6 +1163,17 @@ public class ProjectInitializationApplicationService {
             return "该项来自模板默认骨架，不代表真实楼栋、楼层或系统已经被平台识别。";
         }
         return "该项来自建筑机电/BIM交付基础模板，应用后仍需人工确认和项目级调整。";
+    }
+
+    private static String extensionRiskHint(String extension) {
+        String normalized = extension == null ? "" : extension.toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "RVT" -> "当前只有 RVT 文件目录线索，没有模型解析证据，不能判断 Level/Grid/Family/Type 或构件参数。";
+            case "DWG" -> "当前只有 DWG 文件目录线索，没有图纸解析证据，不能判断图层、标题栏、外参或图纸内容。";
+            case "PDF" -> "当前只有 PDF 文件目录线索，没有正文/图纸解析证据，不能总结条款或确认图纸内容。";
+            case "XLS", "XLSX", "CSV" -> "当前只有清单文件目录线索，没有表格正文证据，不能确认清单内容。";
+            default -> "当前只有文件扩展名线索，不能替代文件正文或模型解析证据。";
+        };
     }
 
     private static String onboardingStatus(AssetOnboardingSnapshot snapshot, StandardStatusResponse status) {
@@ -941,6 +1242,49 @@ public class ProjectInitializationApplicationService {
 
     private static boolean sameText(String left, String right) {
         return left == null ? right == null : left.equals(right);
+    }
+
+    private static String fileKindLabel(String value) {
+        String normalized = value == null ? "" : value.toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "MODEL" -> "模型";
+            case "DRAWING" -> "图纸";
+            case "DOCUMENT" -> "文档";
+            case "SPREADSHEET" -> "清单/表格";
+            case "PRESENTATION" -> "演示文档";
+            case "ARCHIVE" -> "压缩包";
+            case "IMAGE" -> "图片";
+            default -> "未分类";
+        };
+    }
+
+    private static String extensionLabel(String value) {
+        String normalized = value == null ? "" : value.toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "RVT" -> "RVT 模型";
+            case "IFC" -> "IFC 模型";
+            case "NWD", "NWC" -> "Navisworks 模型";
+            case "DWG" -> "DWG 图纸";
+            case "PDF" -> "PDF 图纸/文档";
+            case "XLS", "XLSX", "CSV" -> "Excel/清单";
+            default -> normalized.isBlank() || "UNKNOWN".equals(normalized) ? "未知格式" : normalized + " 文件";
+        };
+    }
+
+    private static String disciplineLabel(String value) {
+        String normalized = value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "ARCHITECTURE", "ARCH", "建筑" -> "建筑";
+            case "STRUCTURE", "STRUCT", "结构" -> "结构";
+            case "ELECTRICAL", "ELEC", "电气" -> "电气";
+            case "PLUMBING", "给排水" -> "给排水";
+            case "FIRE", "FIRE_PROTECTION", "消防" -> "消防";
+            case "WEAK_CURRENT", "INTELLIGENT", "SMART", "智能化" -> "智能化";
+            case "HVAC", "暖通" -> "暖通";
+            case "GAS", "燃气" -> "燃气";
+            case "GENERAL", "COMPREHENSIVE", "OTHER", "UNSPECIFIED", "UNKNOWN", "未分类", "" -> "通用/未标注";
+            default -> value;
+        };
     }
 
     private static Instant toInstant(Timestamp timestamp) {
@@ -1022,12 +1366,19 @@ public class ProjectInitializationApplicationService {
         int modelFileCount,
         int drawingFileCount,
         int documentFileCount,
+        int spreadsheetFileCount,
         int pathMappingCount,
         int scanTaskCount,
+        int missingChecksumCount,
+        int missingDisciplineCount,
+        int lowConfidenceCount,
         List<String> dominantFileKinds,
         List<String> dominantFileExtensions,
         List<String> dominantDisciplines,
         List<String> directoryClues,
+        List<OnboardingDistributionItem> fileKindDistribution,
+        List<OnboardingDistributionItem> extensionDistribution,
+        List<OnboardingDistributionItem> disciplineDistribution,
         Instant lastAssetSeenAt,
         Instant lastScanAt
     ) {
@@ -1037,12 +1388,49 @@ public class ProjectInitializationApplicationService {
                 modelFileCount,
                 drawingFileCount,
                 documentFileCount,
+                spreadsheetFileCount,
                 pathMappingCount,
                 scanTaskCount,
                 dominantFileKinds,
                 dominantFileExtensions,
                 dominantDisciplines,
                 directoryClues,
+                fileKindDistribution,
+                extensionDistribution,
+                disciplineDistribution,
+                governanceRisks(this),
+                missingEvidence(this),
+                lastAssetSeenAt,
+                lastScanAt
+            );
+        }
+
+        AssetOnboardingSnapshot withDistributions(
+            List<OnboardingDistributionItem> nextFileKindDistribution,
+            List<OnboardingDistributionItem> nextExtensionDistribution,
+            List<OnboardingDistributionItem> nextDisciplineDistribution
+        ) {
+            return new AssetOnboardingSnapshot(
+                projectCode,
+                projectName,
+                assetSource,
+                fileCount,
+                modelFileCount,
+                drawingFileCount,
+                documentFileCount,
+                spreadsheetFileCount,
+                pathMappingCount,
+                scanTaskCount,
+                missingChecksumCount,
+                missingDisciplineCount,
+                lowConfidenceCount,
+                dominantFileKinds,
+                dominantFileExtensions,
+                dominantDisciplines,
+                directoryClues,
+                nextFileKindDistribution,
+                nextExtensionDistribution,
+                nextDisciplineDistribution,
                 lastAssetSeenAt,
                 lastScanAt
             );
@@ -1050,6 +1438,11 @@ public class ProjectInitializationApplicationService {
 
         boolean realNasProject() {
             return assetSource != null && assetSource.toUpperCase(Locale.ROOT).startsWith("NAS_REAL");
+        }
+
+        boolean disableDirectTemplateApply() {
+            String source = assetSource == null ? "" : assetSource.toUpperCase(Locale.ROOT);
+            return source.startsWith("NAS_REAL") && !source.contains("SMOKE");
         }
     }
 

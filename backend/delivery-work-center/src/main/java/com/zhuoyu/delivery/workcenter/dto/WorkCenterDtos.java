@@ -325,6 +325,111 @@ public final class WorkCenterDtos {
     ) {
     }
 
+    // ---- delivery package draft / archive directory ----
+
+    public record CreateDeliveryPackageDraftRequest(
+        String viewType,
+        String targetType
+    ) {
+    }
+
+    public record DeliveryPackageArchiveItemResponse(
+        Long itemId,
+        String targetType,
+        Long targetId,
+        String targetName,
+        Long deliverableDefinitionId,
+        String deliverableDefinitionName,
+        Long deliverableTypeId,
+        String deliverableTypeName,
+        Long bindingId,
+        Long fileId,
+        String fileName,
+        String fileKind,
+        String versionNo,
+        String reviewStatus,
+        String previewStatus,
+        String exportStatus,
+        String blockReason,
+        String archiveDirectoryPath
+    ) {
+    }
+
+    public record DeliveryPackagePrepareResponse(
+        Long projectId,
+        String viewType,
+        String targetType,
+        Boolean dryRun,
+        Boolean physicalPackageGenerated,
+        Boolean nasFileCopied,
+        Integer totalCount,
+        Integer readyCount,
+        Integer blockedCount,
+        Integer missingCount,
+        Integer pendingReviewCount,
+        Integer rejectedCount,
+        Integer conversionRequiredCount,
+        Integer unsupportedPreviewCount,
+        java.util.List<DeliveryPackageArchiveItemResponse> rows
+    ) {
+    }
+
+    public record DeliveryPackageDraftSummaryResponse(
+        Long projectId,
+        Long draftId,
+        String viewType,
+        String targetType,
+        Integer totalCount,
+        Integer readyCount,
+        Integer blockedCount,
+        Integer missingCount,
+        Integer pendingReviewCount,
+        Integer rejectedCount,
+        Integer conversionRequiredCount,
+        Integer unsupportedPreviewCount,
+        Boolean dryRun,
+        Boolean physicalPackageGenerated,
+        Boolean nasFileCopied,
+        Long createdBy,
+        LocalDateTime createdAt
+    ) {
+    }
+
+    public record DeliveryPackageDraftDetailResponse(
+        Long projectId,
+        Long draftId,
+        String viewType,
+        String targetType,
+        Integer totalCount,
+        Integer readyCount,
+        Integer blockedCount,
+        Integer missingCount,
+        Integer pendingReviewCount,
+        Integer rejectedCount,
+        Integer conversionRequiredCount,
+        Integer unsupportedPreviewCount,
+        Boolean dryRun,
+        Boolean physicalPackageGenerated,
+        Boolean nasFileCopied,
+        Long createdBy,
+        LocalDateTime createdAt,
+        java.util.List<DeliveryPackageArchiveItemResponse> rows
+    ) {
+    }
+
+    public record DeliveryPackageManifestResponse(
+        Long projectId,
+        Long draftId,
+        String fileName,
+        String contentType,
+        Boolean dryRun,
+        Boolean physicalPackageGenerated,
+        Boolean nasFileCopied,
+        Integer rowCount,
+        String csvContent
+    ) {
+    }
+
     // ---- Agent guided delivery governance ----
 
     public record AgentGovernanceStandardStatus(

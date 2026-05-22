@@ -221,6 +221,14 @@
               <el-button
                 text
                 size="small"
+                :type="isActive(['project-work-delivery-package']) ? 'primary' : undefined"
+                @click="goWorkCenter('project-work-delivery-package')"
+              >
+                交付包 / 档案目录
+              </el-button>
+              <el-button
+                text
+                size="small"
                 :type="isActive(['project-work-agent-governance']) ? 'primary' : undefined"
                 @click="goWorkCenter('project-work-agent-governance')"
               >
@@ -277,6 +285,7 @@ const isMasterDataMoreActive = computed(() => isActive([
 const isWorkMoreActive = computed(() => isActive([
   'project-work-drawing-delivery',
   'project-work-rectifications',
+  'project-work-delivery-package',
   'project-work-agent-governance'
 ]));
 

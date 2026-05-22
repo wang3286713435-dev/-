@@ -1,176 +1,134 @@
-# 开发 Agent 报告：UX3 主视图聚焦与认知减负
+# 开发 Agent 报告：M2D 真实项目工程主数据接入草案增强
 
 时间：2026-05-22
 
-`<promise>MAINLINE_UX3_MAIN_VIEW_FOCUS_COMPLETE</promise>`
-
 ## 1. 本轮目标
 
-本轮执行 `UX3：主视图聚焦与认知减负`。
+本轮执行 `M2D：真实项目工程主数据接入草案增强`。
 
-目标不是新增业务能力，而是做主视图减法：
+目标是让 105 真实项目在已接入 2928 个资产文件、但工程主数据和交付标准已清空的状态下，能够基于 catalog-only 目录证据生成可解释的接入评估和草案预览，同时避免真实 NAS 项目被“一键应用模板”误置为 ready。
 
-- 资产总览改成更直接的“项目启动台”。
-- 项目工作台首屏聚焦三个核心入口：文件管理、项目可视化、交付状态。
-- 大段教程、偏技术标签和低频入口降级到折叠区或更多入口。
-- 保留 UX2 lightfield / spotlight / glass-lite 视觉升级。
-- 保留旧路由兼容。
+## 2. 读取的关键文档
 
-## 2. 改动文件列表
+- `handoff/dev-agent/current-prompt.md`
+- `handoff/main-agent/status.md`
+- `handoff/main-agent/phase2-current-roadmap.md`
+- `handoff/main-agent/m2d-real-project-masterdata-onboarding-plan.md`
+- `handoff/main-agent/project-105-template-reset-report.md`
+- `handoff/dev-agent/latest-report.md`
+- `handoff/test-agent/latest-report.md`
 
-本轮修改：
+## 3. 改动文件列表
 
-- `frontend/src/modules/data-steward/pages/AssetOverviewPage.vue`
-- `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
-- `frontend/src/modules/core/components/ProjectWorkspaceNav.vue`
-- `frontend/src/modules/core/layout/AppLayout.vue`
+本轮新增 / 修改：
+
+- `backend/delivery-master-data/src/main/java/com/zhuoyu/delivery/masterdata/initialization/application/ProjectInitializationApplicationService.java`
+- `backend/delivery-master-data/src/main/java/com/zhuoyu/delivery/masterdata/initialization/dto/InitializationDtos.java`
+- `frontend/src/modules/master-data/api/masterData.ts`
+- `frontend/src/modules/master-data/pages/ProjectInitializationPage.vue`
+- `scripts/dev/check-m2d-real-project-masterdata-onboarding.sh`
 - `handoff/dev-agent/latest-report.md`
 
-未修改：
+工作区仍有 M2A/M2B/M2C 及主 agent 留下的其他未提交改动，本轮未回退、未改动这些无关文件。
 
-- `backend/**`
-- `docs/**`
-- 数据库迁移
-- 后端接口
-- 权限规则
+## 4. 后端实现说明
 
-当前工作区仍存在其他 agent / 主 agent 留下的 handoff 状态文件、`.claude/**`、`CLAUDE.md`、`tmp/**` 等非本轮交付内容。本轮未编辑这些文件。
+- `GET /api/master-data/projects/{projectId}/onboarding/assessment` 增强为真实资产线索评估：
+  - 返回文件总数、模型、图纸、文档、清单表格计数。
+  - 返回文件类型、扩展名、专业分布。
+  - 返回脱敏目录线索、治理风险、Missing Evidence。
+  - 所有证据模式保持 `evidenceMode=catalog_only`。
+- `GET /api/master-data/projects/{projectId}/onboarding/preview` 增强为真实资产候选草案：
+  - 增加专业候选、交付类型候选、目标候选。
+  - 每个草案项返回 `evidenceSource`、`confidenceLevel`、`riskHint`、`pendingConfirmation=true`、`fromRealAssetClue`、`fromTemplateSkeleton`。
+  - 模板项保留为参考骨架，不当作真实项目已确认标准。
+- 对真实 NAS 项目保护：
+  - `initialization:apply-template` 对 `NAS_REAL*` 且非 smoke 项目返回明确错误，不直接应用模板。
+  - `onboarding/apply` 对真实 NAS 项目只记录草案确认审计，返回 `draftApplied=false`、`templateResult=null`，不会把 `deliverableStandardReady` 改成 true。
+  - M1C smoke 项目仍保留可应用模板能力，避免回归脚本失效。
 
-## 3. 主视图减法
+## 5. 前端实现说明
 
-### 3.1 资产总览
+- 初始化页顶部文案改为“真实资产已接入，工程主数据未确认”。
+- 真实项目显示警示：不会通过一键模板直接变成就绪标准。
+- 展示资产统计、文件类型分布、扩展名分布、专业分布、治理风险和 Missing Evidence。
+- 模板区改为“参考草案模板 / 参考骨架”，降低模板一键应用误导。
+- 真实 NAS 项目的主按钮改为“进入人工配置”，跳转到部位树，不调用真实应用模板接口。
 
-资产总览标题从“资产总览”改为“项目启动台”。
+## 6. 脚本说明
 
-首屏去掉原先占据主视觉的 `FLOW / STATE / ALERT` 大块教程式区域，改为：
+新增：
 
-- 简短一句说明：先选项目，再进入文件管理、项目可视化或交付状态。
-- 推荐项目卡片。
-- 推荐项目的三个直接动作：进入项目、文件管理、项目可视化。
-- 待处理项目。
-- 最近项目。
-- 项目概况小摘要。
-- 项目列表。
+- `scripts/dev/check-m2d-real-project-masterdata-onboarding.sh`
 
-统计和风险没有删除，但进入“统计和风险摘要”折叠区，不再抢首屏。
+覆盖：
 
-### 3.2 项目工作台
+- 管理员登录和切换 503/105。
+- 标准状态保持未就绪。
+- assessment 返回真实文件数量、DWG/PDF/RVT/XLSX 分布、专业分布、治理风险、Missing Evidence。
+- preview 返回 dry-run、无 NAS 触碰、资产候选草案、模板骨架、Missing Evidence。
+- 真实项目 direct apply-template 被拒绝。
+- onboarding apply 不写正式标准，ready 仍为 false。
+- forbidden-field scan 未发现 raw path / SQL / secret。
 
-项目工作台首屏从“命令中心 + 三段教程 + 5 个下一步动作”收敛为：
+## 7. 数据库迁移
 
-- 顶部命令中心直接提供：文件管理、项目可视化、交付状态、项目详情、刷新。
-- 核心入口固定为三张卡：项目可视化、文件管理、交付状态。
-- 工程主数据仍保留，但不再比三个核心入口更抢眼。
-- 未就绪提示移到核心入口之后，作为交付前置条件提示。
-
-`平台内部ID`、`NAS_REAL_PILOT`、`ACTIVE` 等偏技术标签从顶部强展示移入“项目详情 / 技术信息”折叠区。
-
-### 3.3 项目内导航
-
-`ProjectWorkspaceNav` 继续保留三段语义：
-
-- 项目资产
-- 工程主数据
-- 交付工作中心
-
-但视觉上压缩为主入口 + 更多入口：
-
-- 项目资产主入口：项目可视化、文件管理。
-- 工程主数据主入口：工程主数据。
-- 交付工作中心主入口：交付状态、文档交付。
-- 模型集成、管理对象、事项、任务、导出、文件服务、部位树、节点类型、交付物标准、图纸交付、整改闭环、交付治理助手进入“更多入口”。
-
-低频入口没有删除，旧页面仍可访问。
-
-## 4. 文件管理和项目可视化入口
-
-文件管理入口更明显：
-
-- 资产总览推荐项目卡片有“文件管理”按钮。
-- 项目列表每行有“文件”快捷操作。
-- 项目工作台顶部命令中心有“文件管理”按钮。
-- 项目工作台核心入口卡片包含“文件管理”。
-- 项目内导航项目资产段保留“文件管理”主入口。
-
-项目可视化入口更明显：
-
-- 资产总览推荐项目卡片有“项目可视化”按钮。
-- 项目列表每行有“可视化”快捷操作。
-- 项目工作台顶部命令中心有“项目可视化”按钮。
-- 项目工作台核心入口卡片包含“项目可视化”。
-- 文案使用“项目可视化 / 资产驾驶舱”，没有承诺真实 BIM 轻量化。
-
-## 5. 旧链接兼容
-
-浏览器检查以下旧入口，均未白屏、未 404，并跳转到当前项目工作台对应页面：
-
-- `/master-data/sections`
-- `/master-data/node-types`
-- `/master-data/initialization`
-- `/master-data/deliverable-standard`
-- `/work/document-delivery`
-- `/work/drawing-delivery`
-- `/work/rectifications`
-- `/work/agent-governance`
-- `/work/dashboard`
-- `/data-steward/models`
-- `/data-steward/objects`
-
-## 6. 浏览器自测结果
-
-使用本地浏览器登录 `platform.admin` 后检查：
-
-- Fresh login 进入 `/data-steward/assets`，首屏可见“项目启动台 / 推荐项目 / 进入项目 / 文件管理 / 项目可视化 / 项目列表”。
-- 资产总览首屏未再出现 `FLOW`、`ALERT` 大块教程。
-- `/data-steward/assets/503` 和 `/data-steward/assets/506` 首屏核心卡片均为：项目可视化、文件管理、交付状态。
-- 工作台顶部不再直接展示 `平台内部ID`、`NAS_REAL_PILOT`、`ACTIVE`。
-- “更多入口”默认折叠，低频按钮不再铺满主视图。
-- 1280 / 1440 / 1920 宽度下检查资产总览、503 工作台、506 工作台，未发现横向溢出。
-
-## 7. 自测命令结果
-
-```text
-corepack pnpm --dir frontend build                   PASS（仅既有 Vite chunk size 警告）
-curl -fsS http://127.0.0.1:8080/actuator/health       PASS：{"status":"UP"}
-bash scripts/dev/check-m2b-nas-write-trial.sh         PASS=18 FAIL=0
-bash scripts/dev/check-m2a-controlled-nas-write.sh    PASS=21 FAIL=0
-bash scripts/dev/check-m1f-employee-access-control.sh PASS=20 FAIL=0
-bash scripts/dev/check-m1e-file-task-continuity.sh    PASS=10 FAIL=0
-bash scripts/dev/check-m1d-standard-delivery-loop.sh  PASS=29 FAIL=0
-bash scripts/dev/check-m1c-real-project-masterdata.sh PASS=14 FAIL=0
-git diff --check                                      PASS
-```
+本轮未新增数据库迁移，未修改旧迁移。
 
 ## 8. 边界确认
 
-- 是否修改 `backend/**`：否。
-- 是否修改数据库迁移：否。
+- 是否触碰真实 NAS 文件：否。
+- 是否读取 PDF / Office / DWG / RVT / IFC 正文：否。
+- 是否做 parser / writer / indexing：否。
+- 是否写 OpenSearch / Qdrant / MinIO documents/chunks：否。
+- 是否修改 Hermes：否。
+- 是否暴露 `storage_path` / `storage_uri` / raw NAS path / raw DB row / SQL / secret：未发现。
 - 是否修改 `docs/**`：否。
-- 是否新增或修改后端接口：否。
-- 是否改变权限规则：否。
-- 是否新增 Hermes 能力：否。
-- 是否新增 BIM 轻量化能力：否。
-- 是否新增真实 NAS 写能力：否。
-- 是否读取文件正文：否。
-- 是否删除旧路由：否。
-- 是否为 105 / 503 / 93 / 506 写死逻辑：否。
+- 是否扩大到 M2E 或后续批次：否。
 
-## 9. P0 / P1 / P2
+说明：M2A/M2B 回归脚本会按既有设计使用隔离临时目录验证受控 NAS 写入能力；这不是 M2D 新增能力，也未触碰真实项目 NAS 文件。
 
-- P0：无。
-- P1：无。
-- P2：
-  - 前端构建仍有历史 Vite chunk size warning，不影响本轮功能。
-  - 工作区仍存在非本轮交付的 `.claude/**`、`CLAUDE.md`、`tmp/**` 和部分 handoff 状态文件，建议提交时继续排除或由主 agent 单独处理。
+## 9. 自测命令与结果
 
-## 10. 是否建议进入 UX3 测试验收
+```text
+cd backend && ./mvnw -pl delivery-master-data -am -DskipTests compile       PASS
+cd backend && ./mvnw -pl delivery-app -am -DskipTests package              PASS
+corepack pnpm --dir frontend build                                        PASS（仅既有 Vite chunk size 警告）
+curl -fsS http://127.0.0.1:8080/actuator/health                           PASS：{"status":"UP"}
+bash scripts/dev/check-m2d-real-project-masterdata-onboarding.sh           PASS=8 FAIL=0
+bash scripts/dev/check-m2c-delivery-package-archive.sh                    PASS=11 FAIL=0
+bash scripts/dev/check-m2b-nas-write-trial.sh                             PASS=18 FAIL=0
+bash scripts/dev/check-m2a-controlled-nas-write.sh                        PASS=21 FAIL=0
+bash scripts/dev/check-m1f-employee-access-control.sh                     PASS=20 FAIL=0
+bash scripts/dev/check-m1e-file-task-continuity.sh                        PASS=10 FAIL=0
+bash scripts/dev/check-m1d-standard-delivery-loop.sh                      PASS=29 FAIL=0
+bash scripts/dev/check-m1c-real-project-masterdata.sh                     PASS=14 FAIL=0
+git diff --check                                                          PASS
+```
 
-建议进入 UX3 测试 agent 验收。
+后端已用最新构建包重启，当前 `127.0.0.1:8080` 健康检查为 UP。
 
-建议重点验收：
+## 10. 已知风险
 
-1. Fresh login 后员工是否能在 5 秒内理解“先选项目”。
-2. 资产总览首屏是否聚焦项目搜索、推荐项目、文件管理、项目可视化和项目列表。
-3. 503 / 506 项目工作台首屏是否最突出文件管理、项目可视化、交付状态。
-4. 技术信息和低频入口是否不再抢主视图。
-5. 旧链接、回归脚本和多分辨率布局是否稳定。
+- 105 项目当前仍处于工程主数据未确认状态，这是本轮目标状态，不是故障。
+- `documentFileCount` 为方便项目接入评估按 PDF/Office 线索统计，可能与文件原始 `file_kind=DRAWING` 有交叉；草案页面已明确这是 catalog-only 线索。
+- 目录线索在真实路径不可安全展示时返回“项目内目录线索已脱敏”，避免泄露路径，但也会降低目录结构判断颗粒度。
+
+## 11. 未完成事项
+
+- 未自动生成正式部位树、节点类型、交付定义、交付类型、交付属性或目录模板。
+- 未做真实交付标准应用。
+- 未做文件正文解析、图纸解析、BIM 构件级识别。
+- 未做生产发布。
+
+## 12. 是否建议进入 M2D 测试验收
+
+建议进入测试 agent 验收。
+
+重点验收：
+
+1. 503/105 初始化页显示真实资产已接入、工程主数据未确认。
+2. assessment / preview 均只返回 catalog-only 证据和 Missing Evidence。
+3. 真实项目不会通过模板应用直接 ready。
+4. 文档 / 图纸交付页继续提示工程主数据未就绪。
+5. 响应中无 raw NAS path、`storage_uri`、SQL、secret。

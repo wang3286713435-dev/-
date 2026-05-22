@@ -147,14 +147,43 @@ export interface OnboardingAssetSummary {
   modelFileCount: number;
   drawingFileCount: number;
   documentFileCount: number;
+  spreadsheetFileCount: number;
   pathMappingCount: number;
   scanTaskCount: number;
   dominantFileKinds: string[];
   dominantFileExtensions: string[];
   dominantDisciplines: string[];
   directoryClues: string[];
+  fileKindDistribution: OnboardingDistributionItem[];
+  extensionDistribution: OnboardingDistributionItem[];
+  disciplineDistribution: OnboardingDistributionItem[];
+  governanceRisks: OnboardingGovernanceRisk[];
+  missingEvidence: OnboardingMissingEvidence[];
   lastAssetSeenAt: string | null;
   lastScanAt: string | null;
+}
+
+export interface OnboardingDistributionItem {
+  code: string;
+  label: string;
+  count: number;
+  ratio: number;
+}
+
+export interface OnboardingGovernanceRisk {
+  code: string;
+  severity: string;
+  count: number;
+  description: string;
+  evidenceMode: string;
+  missingEvidenceReason: string;
+}
+
+export interface OnboardingMissingEvidence {
+  code: string;
+  reason: string;
+  requiredEvidence: string;
+  currentEvidenceMode: string;
 }
 
 export interface OnboardingEvidenceClue {
@@ -185,6 +214,7 @@ export interface OnboardingAssessment {
   standardStatus: StandardStatus;
   evidenceClues: OnboardingEvidenceClue[];
   gaps: OnboardingGap[];
+  missingEvidence: OnboardingMissingEvidence[];
   nextActions: string[];
 }
 
@@ -214,6 +244,7 @@ export interface OnboardingDraftPreview {
   assetSummary: OnboardingAssetSummary;
   templatePreview: TemplatePreview;
   draftItems: OnboardingDraftItem[];
+  missingEvidence: OnboardingMissingEvidence[];
   warnings: string[];
 }
 
@@ -224,7 +255,7 @@ export interface OnboardingApplyResult {
   contentRead: boolean;
   draftApplied: boolean;
   evidenceMode: string;
-  templateResult: TemplateApplyResult;
+  templateResult: TemplateApplyResult | null;
   nextActions: string[];
 }
 

@@ -120,6 +120,7 @@ public final class InitializationDtos {
         StandardStatusResponse standardStatus,
         List<OnboardingEvidenceClue> evidenceClues,
         List<OnboardingGap> gaps,
+        List<OnboardingMissingEvidence> missingEvidence,
         List<String> nextActions
     ) {
     }
@@ -129,14 +130,46 @@ public final class InitializationDtos {
         Integer modelFileCount,
         Integer drawingFileCount,
         Integer documentFileCount,
+        Integer spreadsheetFileCount,
         Integer pathMappingCount,
         Integer scanTaskCount,
         List<String> dominantFileKinds,
         List<String> dominantFileExtensions,
         List<String> dominantDisciplines,
         List<String> directoryClues,
+        List<OnboardingDistributionItem> fileKindDistribution,
+        List<OnboardingDistributionItem> extensionDistribution,
+        List<OnboardingDistributionItem> disciplineDistribution,
+        List<OnboardingGovernanceRisk> governanceRisks,
+        List<OnboardingMissingEvidence> missingEvidence,
         Instant lastAssetSeenAt,
         Instant lastScanAt
+    ) {
+    }
+
+    public record OnboardingDistributionItem(
+        String code,
+        String label,
+        Integer count,
+        Double ratio
+    ) {
+    }
+
+    public record OnboardingGovernanceRisk(
+        String code,
+        String severity,
+        Integer count,
+        String description,
+        String evidenceMode,
+        String missingEvidenceReason
+    ) {
+    }
+
+    public record OnboardingMissingEvidence(
+        String code,
+        String reason,
+        String requiredEvidence,
+        String currentEvidenceMode
     ) {
     }
 
@@ -170,6 +203,7 @@ public final class InitializationDtos {
         OnboardingAssetSummary assetSummary,
         TemplatePreviewResponse templatePreview,
         List<OnboardingDraftItem> draftItems,
+        List<OnboardingMissingEvidence> missingEvidence,
         List<String> warnings
     ) {
     }

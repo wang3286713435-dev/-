@@ -322,7 +322,7 @@ pass "成功操作记录可查且不泄露真实路径"
 quarantine_response="$(get_json "${ADMIN_TOKEN}" "/api/data-steward/projects/${PROJECT_ID}/nas/quarantine?limit=50")"
 assert_ok "${quarantine_response}"
 assert_no_forbidden "quarantine response" "${quarantine_response}"
-pass "隔离区查询仍可用且不泄露真实路径"
+pass "回收站查询仍可用且不泄露真实路径"
 
 audit_count="$(mysql_exec "SELECT COUNT(1) FROM core_audit_logs WHERE project_id=${PROJECT_ID} AND module_code='data-steward' AND action_code IN ('nas.write.trial.update', 'nas.directory.create', 'nas.file.upload');")"
 if [[ "${audit_count}" -lt 4 ]]; then

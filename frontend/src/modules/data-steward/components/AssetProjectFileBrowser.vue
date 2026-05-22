@@ -65,11 +65,11 @@
           <el-tooltip :content="quarantineActionTip" placement="top">
             <span>
               <el-button type="danger" plain :disabled="!canQuarantineActiveDirectory || nasBusy" @click="quarantineActiveDirectory">
-                删除到隔离区
+                删除到回收站
               </el-button>
             </span>
           </el-tooltip>
-          <el-button :loading="quarantineLoading" @click="openQuarantineDrawer">隔离区</el-button>
+          <el-button :loading="quarantineLoading" @click="openQuarantineDrawer">回收站</el-button>
           <el-button :loading="operationsLoading" @click="openOperationsDrawer">操作记录</el-button>
         </div>
         <div class="file-browser__search">
@@ -222,7 +222,7 @@
                   <el-dropdown-item command="checksum">补 checksum</el-dropdown-item>
                   <el-dropdown-item :disabled="!canWriteNas || nasBusy" command="rename-file" divided>重命名</el-dropdown-item>
                   <el-dropdown-item :disabled="!canWriteNas || nasBusy" command="move-file">移动</el-dropdown-item>
-                  <el-dropdown-item :disabled="!canAdminNas || nasBusy" command="quarantine-file">删除到隔离区</el-dropdown-item>
+                  <el-dropdown-item :disabled="!canAdminNas || nasBusy" command="quarantine-file">删除到回收站</el-dropdown-item>
                   <el-dropdown-item disabled>更新版本</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -261,20 +261,20 @@
       </div>
     </el-drawer>
 
-    <el-drawer v-model="quarantineDrawerVisible" title="隔离区" size="560px" @open="loadNasQuarantine">
+    <el-drawer v-model="quarantineDrawerVisible" title="回收站" size="560px" @open="loadNasQuarantine">
       <el-alert
         class="file-browser__drawer-alert"
         type="warning"
         show-icon
         :closable="false"
-        title="隔离区支持恢复，不提供永久删除；列表不展示真实 NAS 绝对路径。"
+        title="回收站支持恢复，不提供永久删除；列表不展示真实 NAS 绝对路径。"
       />
       <div v-loading="quarantineLoading" class="file-browser__drawer-list">
         <article v-for="item in nasQuarantine" :key="item.quarantineRecordId" class="file-browser__drawer-item">
           <div>
             <strong>{{ item.displayName }} / {{ item.targetType }}</strong>
             <span>{{ item.originalDisplayPath }}</span>
-            <em>隔离编号 {{ item.quarantineRecordId }} / {{ formatDate(item.createdAt) }}</em>
+            <em>回收站编号 {{ item.quarantineRecordId }} / {{ formatDate(item.createdAt) }}</em>
           </div>
           <el-button
             size="small"
@@ -285,7 +285,7 @@
             恢复
           </el-button>
         </article>
-        <el-empty v-if="!quarantineLoading && nasQuarantine.length === 0" description="暂无隔离项" :image-size="64" />
+        <el-empty v-if="!quarantineLoading && nasQuarantine.length === 0" description="回收站暂无项目" :image-size="64" />
       </div>
     </el-drawer>
   </div>
@@ -479,10 +479,10 @@ const activeDirectoryActionTip = computed(() => {
 });
 
 const quarantineActionTip = computed(() => {
-  if (currentProjectRole.value !== 'PROJECT_ADMIN') return '删除到隔离区和恢复仅限项目管理员。';
+  if (currentProjectRole.value !== 'PROJECT_ADMIN') return '删除到回收站和恢复仅限项目管理员。';
   if (!canAdminNas.value) return nasTrialStatus.value?.disabledReason || '当前目录暂不可执行真实 NAS 写操作。';
   if (!activeDir.value) return '请先选择要隔离的文件夹。';
-  return '删除只会移入隔离区，不提供永久删除。';
+  return '删除只会移入回收站，不提供永久删除。';
 });
 
 const nasTrialAlertType = computed(() => {
@@ -899,12 +899,12 @@ async function moveActiveDirectory() {
 
 async function quarantineActiveDirectory() {
   if (!canQuarantineActiveDirectory.value) return;
-  const { value } = await ElMessageBox.prompt('可填写隔离原因', '删除到隔离区', {
-    confirmButtonText: '确认移入隔离区',
+  const { value } = await ElMessageBox.prompt('可填写删除原因', '删除到回收站', {
+    confirmButtonText: '确认移入回收站',
     cancelButtonText: '取消',
     inputPlaceholder: '例如：误传资料，待管理员复核'
   });
-  await confirmNasOperation('删除到隔离区', activeDir.value);
+  await confirmNasOperation('删除到回收站', activeDir.value);
   const previousDir = activeDir.value;
   const ok = await runNasOperation(() => quarantineNasDirectory(props.projectId, { sourcePath: previousDir, reason: value }));
   if (ok) selectDir(parentPath(previousDir));
@@ -932,12 +932,12 @@ async function moveFileAction(row: CatalogFile) {
 }
 
 async function quarantineFileAction(row: CatalogFile) {
-  const { value } = await ElMessageBox.prompt('可填写隔离原因', '删除文件到隔离区', {
-    confirmButtonText: '确认移入隔离区',
+  const { value } = await ElMessageBox.prompt('可填写删除原因', '删除文件到回收站', {
+    confirmButtonText: '确认移入回收站',
     cancelButtonText: '取消',
     inputPlaceholder: '例如：误传资料，待管理员复核'
   });
-  await confirmNasOperation('删除文件到隔离区', row.fileName);
+  await confirmNasOperation('删除文件到回收站', row.fileName);
   await runNasOperation(() => quarantineNasFile(props.projectId, row.fileId, value));
 }
 
@@ -969,14 +969,14 @@ async function loadNasQuarantine(showError = true) {
   try {
     nasQuarantine.value = await fetchNasQuarantine(props.projectId, undefined, 50);
   } catch (error) {
-    if (showError) ElMessage.error(error instanceof Error ? error.message : '隔离区加载失败');
+    if (showError) ElMessage.error(error instanceof Error ? error.message : '回收站加载失败');
   } finally {
     quarantineLoading.value = false;
   }
 }
 
 async function restoreQuarantineItem(recordId: number) {
-  await confirmNasOperation('恢复隔离项', `隔离编号 ${recordId}`);
+  await confirmNasOperation('恢复回收站项目', `回收站编号 ${recordId}`);
   await runNasOperation(() => restoreNasQuarantine(props.projectId, recordId));
 }
 
@@ -1183,11 +1183,11 @@ function operationLabel(value: string) {
     FILE_UPLOAD: '上传文件',
     FILE_RENAME: '重命名文件',
     FILE_MOVE: '移动文件',
-    FILE_QUARANTINE: '删除文件到隔离区',
+    FILE_QUARANTINE: '删除文件到回收站',
     DIRECTORY_RENAME: '重命名文件夹',
     DIRECTORY_MOVE: '移动文件夹',
-    DIRECTORY_QUARANTINE: '删除文件夹到隔离区',
-    QUARANTINE_RESTORE: '恢复隔离项'
+    DIRECTORY_QUARANTINE: '删除文件夹到回收站',
+    QUARANTINE_RESTORE: '恢复回收站项目'
   };
   return labels[value] ?? value;
 }

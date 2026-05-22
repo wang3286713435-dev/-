@@ -901,6 +901,7 @@ const moduleCards: ModuleCard[] = [
   { label: '文档交付', group: '交付工作中心', description: '查看文档应交项、挂接和预检查', phase: 'WORK_CENTER', name: 'project-work-document-delivery', requiresMasterData: true },
   { label: '图纸交付', group: '交付工作中心', description: '查看图纸交付状态和缺失原因', phase: 'WORK_CENTER', name: 'project-work-drawing-delivery', requiresMasterData: true },
   { label: '整改闭环', group: '交付工作中心', description: '跟踪审核驳回、整改和复核', phase: 'WORK_CENTER', name: 'project-work-rectifications', requiresMasterData: true },
+  { label: '交付包 / 档案目录', group: '交付工作中心', description: '生成只读草案、档案目录和清单导出', phase: 'WORK_CENTER', name: 'project-work-delivery-package', requiresMasterData: true },
   { label: '交付状态', group: '交付工作中心', description: '查看交付数量、绑定、审核和整改状态', phase: 'WORK_CENTER', name: 'project-work-dashboard', requiresMasterData: true }
 ];
 

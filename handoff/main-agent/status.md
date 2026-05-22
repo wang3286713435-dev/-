@@ -1,5 +1,174 @@
 # 主 Agent 项目状态
 
+## 2026-05-22 M2D 收口
+
+- 测试 agent 已完成 `M2D：真实项目工程主数据接入草案增强` 轻量验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：`通过`。
+- 当前未发现 P0 / P1。
+- P2：
+  - 既有 Vite chunk size warning。
+  - 轻量策略下未做全量浏览器逐页验收。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪文件，以及 M2A / M2B / M2C 既有改动，提交时需要确认归属。
+- 已通过：
+  - 后端构建。
+  - 前端构建。
+  - 健康检查。
+  - M2D 专项脚本，`PASS=8 FAIL=0`。
+  - M1C 回归。
+  - M2C 回归。
+  - `git diff --check`。
+- 已确认：
+  - `503 / 105` 保持 `deliverableStandardReady=false`。
+  - 105 真实资产已接入，工程主数据未确认。
+  - 接入评估返回真实资产统计、扩展名分布、专业分布、治理风险和 Missing Evidence。
+  - 草案预览返回 catalog-only 证据、证据来源、置信度、风险提示和人工确认标记。
+  - 文档 / 图纸交付与交付包接口没有生成虚假应交项或虚假交付包。
+  - 未泄露真实 NAS 路径或敏感字段。
+  - 未触碰真实 NAS 文件。
+  - 未新增 Hermes、BIM、parser、writer、indexing 能力。
+- 主 agent 裁决：M2D 正式收口。
+- 当前 active 批次：`待用户确认`。
+
+## 2026-05-22 M2D 启动
+
+- 用户确认继续下一步。
+- 主 agent 裁决：当前进入 `M2D：真实项目工程主数据接入草案增强`。
+- 启动原因：
+  - 105 项目演示模板数据已软删除。
+  - 105 仍有 2928 条真实资产文件。
+  - 当前必须把真实资产目录和工程主数据接起来，不能再靠模板演示冒充真实项目交付标准。
+- 105 当前资产线索：
+  - DWG：2487。
+  - PDF：242。
+  - RVT：198。
+  - XLSX：1。
+  - 专业线索：建筑、结构、电气、给排水、消防、智能化、暖通、燃气、通用。
+- M2D 目标：
+  - 强化接入评估。
+  - 生成真实资产驱动的工程主数据草案。
+  - 区分资产线索与模板骨架。
+  - 明确 catalog-only 证据边界。
+  - 防止真实 NAS 项目一键套模板后直接变成 `deliverableStandardReady=true`。
+- M2D 禁止：
+  - 触碰真实 NAS 文件。
+  - 读取文件正文。
+  - 新增 Hermes / BIM / parser / indexing 能力。
+  - 自动挂接、审核、整改或生成真实交付结论。
+- 当前交接：
+  - 计划：`handoff/main-agent/m2d-real-project-masterdata-onboarding-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-05-22 M2D 开发完成，进入测试验收
+
+- 开发 agent 已完成 `M2D：真实项目工程主数据接入草案增强`，报告写入 `handoff/dev-agent/latest-report.md`。
+- 主 agent 已审计开发报告和核心代码改动。
+- 已确认：
+  - 105 真实项目仍保持 `deliverableStandardReady=false`。
+  - `onboarding/assessment` 返回真实资产统计、专业分布、扩展名分布、治理风险和 Missing Evidence。
+  - `onboarding/preview` 返回 catalog-only 草案项，包含证据来源、置信度、风险提示和人工确认标记。
+  - 真实 NAS 项目直接调用 `initialization:apply-template` 会被阻断。
+  - 真实 NAS 项目调用 `onboarding/apply` 只确认草案，不写成正式标准，`draftApplied=false`。
+  - 未新增数据库迁移。
+  - 未触碰真实 NAS 文件。
+  - 未新增 Hermes / BIM / parser / writer / indexing 能力。
+- 主 agent 已补强测试 prompt，要求测试 agent 额外验证页面下一步入口：
+  - 去人工确认部位树。
+  - 去人工确认节点类型。
+  - 去人工配置交付物标准。
+- 当前状态：进入测试 agent 验收，尚未收口。
+
+## 2026-05-22 测试策略调整
+
+- 用户要求：测试 agent 每次不再花大量时间逐页浏览器点击，只测试代码可用性和是否偏离主线。
+- 主 agent 已新增轻量测试策略：
+  - `handoff/main-agent/lightweight-test-strategy.md`
+- 后续默认测试范围：
+  - 构建。
+  - 健康检查。
+  - 当前批次专项脚本。
+  - 1-3 条必要回归脚本。
+  - 核心 API 抽查。
+  - forbidden field / 路径泄露 / 敏感字段扫描。
+  - `git diff --check`。
+  - 越界检查。
+- 浏览器验收仅在 UI/UX、路由、页面问题或主 agent 明确要求时执行。
+- 已同步简化 M2D 测试 prompt，默认不做大范围浏览器逐页点击。
+
+## 2026-05-22 105 项目演示模板数据重置
+
+- 用户确认：105 项目中的工程主数据模板属于演示数据，没有真实数字化交付作用，继续保留会误导员工认为项目已经完成交付规则配置。
+- 已处理真实项目：`503 / 105 / 深圳市二十八高项目`。
+- 处理方式：
+  - 软删除 105 项目下演示工程主数据、交付物标准、目录模板、交付挂接、整改记录和交付包草案。
+  - 不触碰真实 NAS 文件。
+  - 不删除文件资产元数据。
+  - 保留审计和可追溯备份。
+- 处理后状态：
+  - 工程部位树：0。
+  - 节点类型：0。
+  - 交付物定义 / 类型 / 属性：0。
+  - 目录模板：0。
+  - 有效交付挂接：0。
+  - 文件资产仍保留：2928 条。
+  - 105 项目初始化状态回到 `SECTION_TREE`，`deliverableStandardReady=false`。
+- 审计：
+  - `action_code=master-data.template-demo.reset`
+  - `trace_id=manual-reset-105-template`
+- 报告：
+  - `handoff/main-agent/project-105-template-reset-report.md`
+
+## 2026-05-22 M2C 收口
+
+- 测试 agent 已完成 `M2C：交付包与档案目录能力` 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：`通过`。
+- 当前未发现 P0 / P1。
+- P2：
+  - 既有 Vite chunk size warning。
+  - 506 / 93 当前无应交项，交付包页面展示 0 条空状态。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪文件需要收口提交时排除。
+- 已通过：
+  - 后端构建。
+  - 前端构建。
+  - 健康检查。
+  - M2C 专项脚本。
+  - M2B / M2A / M1F / M1E / M1D / M1C 回归。
+  - `git diff --check`。
+  - 当前库和临时干净库 Flyway 迁移。
+- 已确认：
+  - 交付包草案、草案明细、档案目录、CSV 清单导出可用。
+  - 页面与接口未泄露真实 NAS 路径或敏感字段。
+  - 未触发真实打包、复制、移动、删除、改名或正文读取。
+  - 未新增 Hermes、BIM、parser、writer、indexing 能力。
+- 主 agent 裁决：M2C 可以正式收口。
+- 当前 active 批次：`待用户确认`。
+- 下一步不自动启动；候选方向见 `handoff/main-agent/phase2-current-roadmap.md`。
+
+## 2026-05-22 MAIN-0 主线回归与 M2C 启动
+
+- 当前分支：`main`。
+- UX1 / UX2 / UX3 已完成验收并合并回主线，主线继续保持 `绿灯`。
+- 当前 active 批次正式切换为：`M2C：交付包与档案目录能力`。
+- M2C 目标：
+  - 将已有 `导出预检查 dry-run` 推进为可保存、可查看、可导出清单的 `交付包草案 / 档案目录`。
+  - 让项目负责人清楚看到哪些交付项可交付、缺失、待审核、已驳回或被阻塞。
+  - 当前只生成清单 / 草案，不生成真实物理文件包。
+- M2C 禁止：
+  - 复制、移动、删除、重命名真实 NAS 文件。
+  - 生成真实压缩包。
+  - 泄露真实 NAS 路径或 `storage_uri`。
+  - 新增 Hermes 能力。
+  - 接入真实 BIM 引擎。
+  - 进入 8B / 8C / 9A。
+- 真实 NAS 写入灰度：
+  - 项目 `504 / 100 / 深圳市二十八高项目` 允许进入受控灰度试运行。
+  - 灰度仍为项目级、目录级、角色级、账号级边界，不代表全项目或全公司默认开放。
+  - 用户可见命名从 `隔离区` 收束为 `回收站`；内部接口和数据库仍保持 quarantine 命名以兼容既有契约。
+- 当前交接：
+  - M2C 计划：`handoff/main-agent/m2c-delivery-package-archive-directory-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
 ## 2026-05-22 UX3 启动
 
 - 当前 active 批次：`UX3：主视图聚焦与认知减负`。
@@ -278,8 +447,8 @@
   - 项目内上传文件。
   - 项目内文件 / 文件夹重命名。
   - 项目内文件 / 文件夹移动。
-  - 删除到隔离区。
-  - 隔离区恢复。
+  - 删除到回收站。
+  - 回收站恢复。
   - 操作记录与审计。
   - 操作后元数据同步。
 - 测试边界：
@@ -324,15 +493,15 @@
 
 - 用户确认进入 `M2A：NAS 受控文件操作安全底座`。
 - 当前 active 批次：`M2A`。
-- M2A 第一批范围固定为：`低风险写操作 + 删除到隔离区，不开放永久删除与批量操作`。
+- M2A 第一批范围固定为：`低风险写操作 + 删除到回收站，不开放永久删除与批量操作`。
 - 本批目标：在员工注册、项目授权和局域网试运行通过后，开始让平台具备真实 NAS 操作能力，但必须先建立权限、路径、审计、隔离和恢复底座。
 - 允许范围：
   - 项目内新建文件夹。
   - 项目内上传文件。
   - 项目内文件 / 文件夹重命名。
   - 项目内文件 / 文件夹移动。
-  - 删除到隔离区。
-  - 隔离区恢复。
+  - 删除到回收站。
+  - 回收站恢复。
   - 操作记录与审计。
   - 操作后元数据同步。
 - 禁止范围：
@@ -658,7 +827,7 @@
 - 文件范围：一期扫描 `.rvt`、`.dwg`、`.ifc`、`.nwd`、`.nwc`、`.dxf`、`.pdf`。
 - 模型/图纸资源库：记录文件名、格式、大小、版本、专业、checksum、状态、更新时间和项目归属置信度。
 - 审核队列：高置信自动入库，低置信进入待审核，人工可修正项目归属、文件类型、专业和版本。
-- 异步任务：扫描、checksum、隔离清理、永久删除采用数据库任务表 + 应用内 worker。
+- 异步任务：扫描、checksum、回收站清理、永久删除采用数据库任务表 + 应用内 worker。
 - 搜索与看板：支持按项目、文件名、专业、阶段检索，展示容量统计。
 - 审计与事件流：导入、扫描、审核、修改、删除申请、agent 行为和任务状态变化必须留痕，并支持事件流增量同步。
 - 企业 agent：提供 MySQL SQL View、REST/OpenAPI、API Key 项目范围授权，支持 `元数据 + 路径` 检索。

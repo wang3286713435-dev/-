@@ -11,6 +11,7 @@ const legacyProjectRouteMap: Record<string, string> = {
   'master-data-deliverable-standard': 'project-master-data-deliverable-standard',
   'work-document-delivery': 'project-work-document-delivery',
   'work-drawing-delivery': 'project-work-drawing-delivery',
+  'work-delivery-package': 'project-work-delivery-package',
   'work-rectifications': 'project-work-rectifications',
   'work-agent-governance': 'project-work-agent-governance',
   'work-dashboard': 'project-work-dashboard'
@@ -200,6 +201,12 @@ const router = createRouter({
           meta: { requiresAuth: true }
         },
         {
+          path: 'data-steward/assets/:projectId/work/delivery-package',
+          name: 'project-work-delivery-package',
+          component: () => import('@/modules/work-center/pages/DeliveryPackageArchivePage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
           path: 'data-steward/assets/:projectId/work/rectifications',
           name: 'project-work-rectifications',
           component: () => import('@/modules/work-center/pages/RectificationsPage.vue'),
@@ -245,6 +252,12 @@ const router = createRouter({
           path: 'work/drawing-delivery',
           name: 'work-drawing-delivery',
           component: () => import('@/modules/work-center/pages/DrawingDeliveryPage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
+          path: 'work/delivery-package',
+          name: 'work-delivery-package',
+          component: () => import('@/modules/work-center/pages/DeliveryPackageArchivePage.vue'),
           meta: { requiresAuth: true }
         },
         {

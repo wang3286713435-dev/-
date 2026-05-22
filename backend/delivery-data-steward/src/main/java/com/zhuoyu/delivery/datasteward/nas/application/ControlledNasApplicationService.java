@@ -232,7 +232,7 @@ public class ControlledNasApplicationService {
         ProjectRoot root = resolveProjectRoot(projectId);
         FileRecord file = requireFile(projectId, fileId);
         if ("QUARANTINED".equalsIgnoreCase(file.processStatus())) {
-            throw new BusinessException("NAS_FILE_ALREADY_QUARANTINED", "文件已在隔离区", HttpStatus.BAD_REQUEST);
+            throw new BusinessException("NAS_FILE_ALREADY_QUARANTINED", "文件已在回收站", HttpStatus.BAD_REQUEST);
         }
         Path source = resolveExistingFileFromRecord(root, file);
         String originalRelativePath = root.relativePath(source);
@@ -249,9 +249,9 @@ public class ControlledNasApplicationService {
             repository.markBindingsFileQuarantined(projectId, fileId, userId);
             return recordSuccess(userId, projectId, "FILE_QUARANTINE", "FILE", fileId, fileId,
                 null, quarantineId, source, quarantineTarget, file.originalName(), originalRelativePath,
-                "文件已移入隔离区，可在保留期内恢复");
+                "文件已移入回收站，可在保留期内恢复");
         } catch (IOException exception) {
-            throw sanitizedIo("NAS_FILE_QUARANTINE_FAILED", "文件移入隔离区失败，请稍后重试");
+            throw sanitizedIo("NAS_FILE_QUARANTINE_FAILED", "文件移入回收站失败，请稍后重试");
         }
     }
 
@@ -330,9 +330,9 @@ public class ControlledNasApplicationService {
                 logicalPath(source), logicalPath(quarantineTarget), "QUARANTINED", userId);
             return recordSuccess(userId, projectId, "DIRECTORY_QUARANTINE", "DIRECTORY", directoryId, null,
                 directoryId, quarantineId, source, quarantineTarget, displayName, sourceRelativePath,
-                "文件夹已移入隔离区，可在保留期内恢复");
+                "文件夹已移入回收站，可在保留期内恢复");
         } catch (IOException exception) {
-            throw sanitizedIo("NAS_DIRECTORY_QUARANTINE_FAILED", "文件夹移入隔离区失败，请稍后重试");
+            throw sanitizedIo("NAS_DIRECTORY_QUARANTINE_FAILED", "文件夹移入回收站失败，请稍后重试");
         }
     }
 
@@ -341,9 +341,9 @@ public class ControlledNasApplicationService {
         requireAdminRoleWithoutTrial(userId, projectId);
         ProjectRoot root = resolveProjectRoot(projectId);
         QuarantineRecord record = repository.findQuarantineRecord(projectId, quarantineRecordId)
-            .orElseThrow(() -> new BusinessException("NAS_QUARANTINE_NOT_FOUND", "隔离记录不存在", HttpStatus.NOT_FOUND));
+            .orElseThrow(() -> new BusinessException("NAS_QUARANTINE_NOT_FOUND", "回收站记录不存在", HttpStatus.NOT_FOUND));
         if (!"QUARANTINED".equalsIgnoreCase(record.status())) {
-            throw new BusinessException("NAS_QUARANTINE_STATUS_INVALID", "当前隔离记录不能恢复", HttpStatus.BAD_REQUEST);
+            throw new BusinessException("NAS_QUARANTINE_STATUS_INVALID", "当前回收站记录不能恢复", HttpStatus.BAD_REQUEST);
         }
         requireTrialWriteAllowed(userId, projectId, ADMIN_ROLES, List.of(record.originalRelativePath()));
         Path source = resolveExistingPath(root, record.quarantineRelativePath());
@@ -366,10 +366,10 @@ public class ControlledNasApplicationService {
             return recordSuccess(userId, projectId, "QUARANTINE_RESTORE", record.targetType(),
                 record.targetType().equalsIgnoreCase("FILE") ? record.fileId() : record.directoryId(),
                 record.fileId(), record.directoryId(), quarantineRecordId, source, target,
-                record.displayName(), record.originalRelativePath(), "隔离项已恢复到原位置");
+                record.displayName(), record.originalRelativePath(), "回收站项目已恢复到原位置");
         } catch (IOException exception) {
             repository.markQuarantineRestored(projectId, quarantineRecordId, userId, "恢复失败");
-            throw sanitizedIo("NAS_RESTORE_FAILED", "隔离项恢复失败，请稍后重试");
+            throw sanitizedIo("NAS_RESTORE_FAILED", "回收站项目恢复失败，请稍后重试");
         }
     }
 
@@ -636,7 +636,7 @@ public class ControlledNasApplicationService {
     private AccessibleProject requireBaseRole(Long userId, Long projectId, Set<String> allowedRoles) {
         AccessibleProject project = projectAccessApplicationService.requireAccessibleProject(userId, projectId);
         if (allowedRoles.equals(ADMIN_ROLES) && !ADMIN_ROLES.contains(project.roleCode())) {
-            throw new BusinessException("NAS_ADMIN_WRITE_FORBIDDEN", "删除到隔离区和恢复仅限项目管理员", HttpStatus.FORBIDDEN);
+            throw new BusinessException("NAS_ADMIN_WRITE_FORBIDDEN", "删除到回收站和恢复仅限项目管理员", HttpStatus.FORBIDDEN);
         }
         if (!allowedRoles.equals(ADMIN_ROLES) && !allowedRoles.contains(project.roleCode())) {
             throw new BusinessException("NAS_WRITE_FORBIDDEN", "当前项目角色只能查看，不能操作公司 NAS 文件", HttpStatus.FORBIDDEN);
@@ -669,7 +669,7 @@ public class ControlledNasApplicationService {
 
     private Path resolveExistingFileFromRecord(ProjectRoot root, FileRecord file) {
         if ("QUARANTINED".equalsIgnoreCase(file.processStatus())) {
-            throw new BusinessException("NAS_FILE_QUARANTINED", "文件已在隔离区，请先恢复后再操作", HttpStatus.BAD_REQUEST);
+            throw new BusinessException("NAS_FILE_QUARANTINED", "文件已在回收站，请先恢复后再操作", HttpStatus.BAD_REQUEST);
         }
         Path source = root.resolveStorageUri(file.storageUri());
         if (!Files.isRegularFile(source) || Files.isSymbolicLink(source)) {
@@ -690,7 +690,7 @@ public class ControlledNasApplicationService {
     private Path resolveExistingPath(ProjectRoot root, String relativePath) {
         Path path = root.resolveRelative(relativePath);
         if (!Files.exists(path)) {
-            throw new BusinessException("NAS_QUARANTINE_SOURCE_MISSING", "隔离区文件不存在", HttpStatus.BAD_REQUEST);
+            throw new BusinessException("NAS_QUARANTINE_SOURCE_MISSING", "回收站文件不存在", HttpStatus.BAD_REQUEST);
         }
         ensureParentInsideRoot(root, path);
         return path;
@@ -764,7 +764,7 @@ public class ControlledNasApplicationService {
             validateSegment(segment);
         }
         if (sameOrChild(normalized, QUARANTINE_DIR)) {
-            throw new BusinessException("NAS_QUARANTINE_DIRECTORY_FORBIDDEN", "隔离区目录不能作为操作目标", HttpStatus.BAD_REQUEST);
+            throw new BusinessException("NAS_QUARANTINE_DIRECTORY_FORBIDDEN", "回收站目录不能作为操作目标", HttpStatus.BAD_REQUEST);
         }
         return normalized;
     }
@@ -779,7 +779,7 @@ public class ControlledNasApplicationService {
         }
         validateSegment(name);
         if (QUARANTINE_DIR.equals(name)) {
-            throw new BusinessException("NAS_NAME_RESERVED", "该名称为平台隔离区保留名称", HttpStatus.BAD_REQUEST);
+            throw new BusinessException("NAS_NAME_RESERVED", "该名称为平台回收站保留名称", HttpStatus.BAD_REQUEST);
         }
         return name;
     }

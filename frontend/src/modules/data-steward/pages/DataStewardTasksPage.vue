@@ -188,7 +188,7 @@ function jobTypeLabel(value: string) {
   const labels: Record<string, string> = {
     NAS_SCAN: 'NAS 扫描',
     CHECKSUM_CALC: 'checksum',
-    QUARANTINE_CLEANUP: '隔离清理',
+    QUARANTINE_CLEANUP: '回收站清理',
     PERMANENT_DELETE: '受控删除'
   };
   return labels[value] ?? value;

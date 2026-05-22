@@ -10,16 +10,26 @@
 
     <section class="initialization-hero">
       <div>
-        <span class="initialization-hero__eyebrow">M1C 真实项目接入</span>
-        <h2>用目录证据生成草案，再由项目负责人确认</h2>
+        <span class="initialization-hero__eyebrow">M2D 真实项目主数据草案</span>
+        <h2>{{ assessment?.realNasProject ? '真实资产已接入，工程主数据未确认' : '用目录证据生成草案，再由项目负责人确认' }}</h2>
         <p>
-          接入向导只读取 catalog metadata、项目来源、扫描记录和受控路径映射状态，不读取文件正文，不解析 BIM 构件，不访问或复制 NAS 文件。模板内容只是基础骨架，应用后仍需人工复核。
+          接入向导只读取 catalog metadata、项目来源、扫描记录和受控路径映射状态，不读取文件正文，不解析 BIM 构件，不访问或复制 NAS 文件。模板内容只是参考骨架，真实项目需要人工确认部位树、节点类型和交付物标准。
         </p>
       </div>
       <el-tag size="large" :type="status?.ready ? 'success' : 'warning'">
         {{ status?.ready ? '标准已就绪' : '待初始化' }}
       </el-tag>
     </section>
+
+    <el-alert
+      v-if="realProjectManualMode"
+      class="initialization-alert"
+      type="warning"
+      :closable="false"
+      show-icon
+      title="真实项目不会通过一键模板直接变成就绪标准"
+      description="当前页面只展示真实资产目录线索和标准草案。下一步请进入部位树、节点类型、交付物标准逐项确认。"
+    />
 
     <section class="masterdata-next-action">
       <div>
@@ -94,6 +104,19 @@
         </article>
       </div>
 
+      <div class="onboarding-distribution-grid">
+        <article v-for="group in distributionGroups" :key="group.label">
+          <h3>{{ group.label }}</h3>
+          <el-empty v-if="!group.rows.length" description="暂无目录分布" />
+          <ul v-else class="onboarding-list">
+            <li v-for="row in group.rows" :key="`${group.label}-${row.code}`">
+              <strong>{{ row.label }} · {{ formatCount(row.count) }}</strong>
+              <span>{{ formatPercent(row.ratio) }}，仅代表目录级统计。</span>
+            </li>
+          </ul>
+        </article>
+      </div>
+
       <div class="onboarding-columns">
         <section>
           <h3>目录线索</h3>
@@ -119,14 +142,40 @@
           </ul>
         </section>
       </div>
+
+      <div class="onboarding-columns">
+        <section>
+          <h3>治理风险</h3>
+          <el-empty v-if="!assessment?.assetSummary?.governanceRisks?.length" description="暂无明显治理风险" />
+          <ul v-else class="onboarding-list">
+            <li v-for="risk in assessment.assetSummary.governanceRisks" :key="risk.code">
+              <strong>
+                <el-tag size="small" :type="gapSeverityType(risk.severity)">{{ risk.severity }}</el-tag>
+                {{ risk.description }}
+              </strong>
+              <span>{{ formatCount(risk.count) }} 项 · {{ risk.missingEvidenceReason }}</span>
+            </li>
+          </ul>
+        </section>
+        <section>
+          <h3>Missing Evidence</h3>
+          <el-empty v-if="!assessment?.missingEvidence?.length" description="暂无证据缺口" />
+          <ul v-else class="onboarding-list">
+            <li v-for="item in assessment.missingEvidence" :key="item.code">
+              <strong>{{ item.code }}</strong>
+              <span>{{ item.reason }} 需要：{{ item.requiredEvidence }}</span>
+            </li>
+          </ul>
+        </section>
+      </div>
     </section>
 
     <div class="initialization-grid">
       <section class="initialization-panel">
         <div class="initialization-panel__header">
           <div>
-            <h2>接入草案模板</h2>
-            <p>先用稳定的建筑机电/BIM草案补齐标准底座，再由项目负责人复核。</p>
+            <h2>参考草案模板</h2>
+            <p>模板只作为行业参考骨架；真实 105 项目以已登记资产线索为主，不会直接一键写成正式标准。</p>
           </div>
         </div>
         <div class="template-list" v-loading="loadingTemplates">
@@ -149,8 +198,8 @@
       <section class="initialization-panel">
         <div class="initialization-panel__header">
           <div>
-            <h2>草案内容</h2>
-            <p>预览将要补齐的部位、节点类型、交付物和目录；所有项默认待人工确认。</p>
+            <h2>参考骨架</h2>
+            <p>这里展示模板包含的标准项。真实项目需要结合 DWG / PDF / RVT / Excel 线索人工取舍。</p>
           </div>
           <el-button :disabled="!selectedTemplateCode" :loading="previewing" @click="() => handlePreview()">
             预览草案
@@ -177,7 +226,7 @@
       <div class="initialization-panel__header">
         <div>
           <h2>草案预览</h2>
-          <p>这是只读预检查，不生成交付结论，不读取文件正文，不触碰 NAS。确认无阻塞后再应用草案。</p>
+          <p>这是只读预检查，不生成交付结论，不读取文件正文，不触碰 NAS。真实项目草案只用于人工配置，不会直接变成就绪标准。</p>
         </div>
         <el-button
           type="primary"
@@ -185,7 +234,7 @@
           :loading="applying"
           @click="confirmApply"
         >
-          确认应用草案
+          {{ realProjectManualMode ? '进入人工配置' : '确认应用草案' }}
         </el-button>
       </div>
 
@@ -337,6 +386,10 @@ const onboardingPreview = ref<OnboardingDraftPreview | null>(null);
 const applyResult = ref<TemplateApplyResult | null>(null);
 
 const projectId = computed(() => workspaceProjectId.value ?? 0);
+const realProjectManualMode = computed(() => {
+  const source = assessment.value?.assetSource?.toUpperCase() ?? '';
+  return source.startsWith('NAS_REAL') && !source.includes('SMOKE');
+});
 const projectLabel = computed(() => {
   const project = authStore.currentUser?.projects.find((item) => item.id === projectId.value);
   return project ? `${project.code} | ${project.name}` : `项目 ${projectId.value || '-'}`;
@@ -363,6 +416,7 @@ const onboardingCards = computed(() => {
     { label: '模型文件', value: formatCount(summary?.modelFileCount), unit: 'catalog-only' },
     { label: '图纸文件', value: formatCount(summary?.drawingFileCount), unit: 'catalog-only' },
     { label: '文档文件', value: formatCount(summary?.documentFileCount), unit: 'catalog-only' },
+    { label: '清单表格', value: formatCount(summary?.spreadsheetFileCount), unit: 'catalog-only' },
     { label: '路径映射', value: formatCount(summary?.pathMappingCount), unit: '不展示原始路径' },
     { label: '扫描记录', value: formatCount(summary?.scanTaskCount), unit: '只读任务' },
     { label: '最近扫描', value: formatDate(summary?.lastScanAt || summary?.lastAssetSeenAt), unit: '只读记录' }
@@ -386,6 +440,24 @@ const assetClueGroups = computed(() => {
       label: '主要目录线索',
       values: summary?.directoryClues ?? [],
       helper: '仅展示脱敏后的项目内目录线索，不代表真实工程结构。'
+    }
+  ];
+});
+
+const distributionGroups = computed(() => {
+  const summary = assessment.value?.assetSummary;
+  return [
+    {
+      label: '文件类型分布',
+      rows: summary?.fileKindDistribution ?? []
+    },
+    {
+      label: '扩展名分布',
+      rows: summary?.extensionDistribution ?? []
+    },
+    {
+      label: '专业分布',
+      rows: summary?.disciplineDistribution ?? []
     }
   ];
 });
@@ -453,6 +525,18 @@ async function handlePreview(resetApplyResult = true) {
 
 async function confirmApply() {
   if (!projectId.value || !selectedTemplateCode.value) return;
+  if (realProjectManualMode.value) {
+    await ElMessageBox.alert(
+      '真实项目接入草案不会直接应用模板，也不会让交付标准自动变为就绪。请进入部位树、节点类型和交付物标准页面，结合资产线索逐项确认。',
+      '进入人工配置',
+      {
+        type: 'warning',
+        confirmButtonText: '查看部位树'
+      }
+    );
+    await router.push({ name: 'project-master-data-sections', params: { projectId: projectId.value } });
+    return;
+  }
   try {
     await ElMessageBox.confirm(
       '确认应用当前接入草案？本操作仅基于目录元数据和模板草案补齐主数据，不读取文件正文，不触碰 NAS 文件，生成内容仍需人工复核。',
@@ -465,6 +549,12 @@ async function confirmApply() {
     );
     applying.value = true;
     const result = await applyOnboardingDraft(projectId.value, selectedTemplateCode.value);
+    if (!result.templateResult) {
+      applyResult.value = null;
+      ElMessage.info('真实项目草案已确认待人工配置，未直接应用模板');
+      await Promise.all([loadStatus(), loadAssessment(), handlePreview(false)]);
+      return;
+    }
     applyResult.value = result.templateResult;
     ElMessage.success('接入草案已应用，请继续人工复核');
     await Promise.all([loadStatus(), loadAssessment(), handlePreview(false)]);
@@ -527,7 +617,10 @@ function categoryLabel(value: string) {
     DELIVERABLE_DEFINITION: '交付定义',
     DELIVERABLE_TYPE: '交付类型',
     DELIVERABLE_ATTRIBUTE: '交付属性',
-    DIRECTORY_TEMPLATE: '目录模板'
+    DIRECTORY_TEMPLATE: '目录模板',
+    DISCIPLINE_CANDIDATE: '专业候选',
+    DELIVERABLE_TYPE_CANDIDATE: '交付类型候选',
+    TARGET_CANDIDATE: '交付对象候选'
   };
   return labels[value] ?? value;
 }
@@ -537,6 +630,9 @@ function evidenceSourceLabel(value: string) {
     EXISTING_PROJECT_MASTERDATA: '项目中已有同编码/同名项',
     CATALOG_DIRECTORY_CLUE: '目录线索支持',
     CATALOG_FILE_KIND_CLUE: '文件类型线索支持',
+    CATALOG_DISCIPLINE_DISTRIBUTION: '专业分布线索',
+    CATALOG_EXTENSION_DISTRIBUTION: '扩展名分布线索',
+    CATALOG_PROJECT_ASSET_SUMMARY: '项目资产汇总线索',
     TEMPLATE_SKELETON: '模板默认骨架'
   };
   return labels[value] ?? value;
@@ -545,6 +641,7 @@ function evidenceSourceLabel(value: string) {
 function confidenceLabel(value: string) {
   const labels: Record<string, string> = {
     EXISTING: '已有',
+    HIGH: '高',
     MEDIUM: '中',
     LOW: '低'
   };
@@ -552,7 +649,7 @@ function confidenceLabel(value: string) {
 }
 
 function confidenceType(value: string) {
-  if (value === 'EXISTING') return 'success';
+  if (value === 'EXISTING' || value === 'HIGH') return 'success';
   if (value === 'MEDIUM') return 'warning';
   return 'info';
 }
@@ -565,6 +662,10 @@ function gapSeverityType(value: string) {
 
 function formatCount(value: number | null | undefined) {
   return Number(value ?? 0).toLocaleString('zh-CN');
+}
+
+function formatPercent(value: number | null | undefined) {
+  return `${Math.round(Number(value ?? 0) * 1000) / 10}%`;
 }
 
 function formatDate(value: string | null | undefined) {
@@ -750,6 +851,14 @@ function formatDate(value: string | null | undefined) {
   min-width: 0;
 }
 
+.onboarding-distribution-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--zy-sp-3);
+  margin-top: var(--zy-sp-3);
+  min-width: 0;
+}
+
 .onboarding-clue-grid article {
   display: grid;
   gap: 6px;
@@ -798,6 +907,13 @@ function formatDate(value: string | null | undefined) {
 }
 
 .onboarding-columns h3 {
+  margin: 0 0 var(--zy-sp-2);
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-sm);
+  font-weight: var(--zy-fw-semi);
+}
+
+.onboarding-distribution-grid h3 {
   margin: 0 0 var(--zy-sp-2);
   color: var(--zy-ink);
   font-size: var(--zy-fs-sm);
@@ -972,7 +1088,8 @@ function formatDate(value: string | null | undefined) {
 @media (max-width: 1120px) {
   .initialization-grid,
   .onboarding-columns,
-  .onboarding-clue-grid {
+  .onboarding-clue-grid,
+  .onboarding-distribution-grid {
     grid-template-columns: 1fr;
   }
 

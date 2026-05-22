@@ -5,10 +5,16 @@ import com.zhuoyu.delivery.core.project.application.ProjectContextApplicationSer
 import com.zhuoyu.delivery.shared.api.ApiResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.BatchDeliveryBindingRequest;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.BatchDeliveryBindingResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.CreateDeliveryPackageDraftRequest;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DashboardSummaryResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryBindingRequest;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryBindingResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCompletenessResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageArchiveItemResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageDraftDetailResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageDraftSummaryResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageManifestResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackagePrepareResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageSummaryResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryViewResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.ExportPrecheckResponse;
@@ -120,6 +126,64 @@ public class DeliveryController {
         var principal = securityPrincipalAccessor.requireCurrentPrincipal();
         projectContextApplicationService.requireCurrentProject(principal, projectId);
         return ApiResponse.success(deliveryApplicationService.exportPrecheck(projectId, viewType, targetType));
+    }
+
+    @GetMapping("/delivery-package/prepare")
+    public ApiResponse<DeliveryPackagePrepareResponse> prepareDeliveryPackage(
+        @PathVariable Long projectId,
+        @RequestParam(required = false) String viewType,
+        @RequestParam(defaultValue = "SECTION") String targetType
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(deliveryApplicationService.prepareDeliveryPackage(projectId, viewType, targetType));
+    }
+
+    @PostMapping("/delivery-package/drafts")
+    public ApiResponse<DeliveryPackageDraftDetailResponse> createDeliveryPackageDraft(
+        @PathVariable Long projectId,
+        @RequestBody(required = false) CreateDeliveryPackageDraftRequest request
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(deliveryApplicationService.createDeliveryPackageDraft(principal.userId(), projectId, request));
+    }
+
+    @GetMapping("/delivery-package/drafts")
+    public ApiResponse<List<DeliveryPackageDraftSummaryResponse>> listDeliveryPackageDrafts(@PathVariable Long projectId) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(deliveryApplicationService.listDeliveryPackageDrafts(projectId));
+    }
+
+    @GetMapping("/delivery-package/drafts/{draftId}")
+    public ApiResponse<DeliveryPackageDraftDetailResponse> getDeliveryPackageDraft(
+        @PathVariable Long projectId,
+        @PathVariable Long draftId
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(deliveryApplicationService.getDeliveryPackageDraft(projectId, draftId));
+    }
+
+    @GetMapping("/delivery-package/drafts/{draftId}/items")
+    public ApiResponse<List<DeliveryPackageArchiveItemResponse>> getDeliveryPackageDraftItems(
+        @PathVariable Long projectId,
+        @PathVariable Long draftId
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(deliveryApplicationService.getDeliveryPackageDraftItems(projectId, draftId));
+    }
+
+    @GetMapping("/delivery-package/drafts/{draftId}:export-manifest")
+    public ApiResponse<DeliveryPackageManifestResponse> exportDeliveryPackageManifest(
+        @PathVariable Long projectId,
+        @PathVariable Long draftId
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(deliveryApplicationService.exportDeliveryPackageManifest(principal.userId(), projectId, draftId));
     }
 
     // ---- review ----

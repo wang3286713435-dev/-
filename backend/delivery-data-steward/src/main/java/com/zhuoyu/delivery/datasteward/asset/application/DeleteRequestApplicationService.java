@@ -241,7 +241,7 @@ public class DeleteRequestApplicationService {
 
             eventApplicationService.record("DELETE_QUARANTINE", dr.projectId(), "QUARANTINE_RECORD",
                 String.valueOf(qId), "delete.quarantine", userId, "API",
-                "物理隔离文件: " + originalPath + " -> " + quarantinePath + " request=" + dr.requestNo(),
+                "物理移动到回收站: " + originalPath + " -> " + quarantinePath + " request=" + dr.requestNo(),
                 null);
 
             return deleteRequestRepository.findById(dr.id()).orElseThrow();
@@ -263,7 +263,7 @@ public class DeleteRequestApplicationService {
     public QuarantineRecordResponse getQuarantineRecord(Long userId, Long id) {
         QuarantineRecordResponse qr = quarantineRepository.findById(id)
             .orElseThrow(() -> new BusinessException("QUARANTINE_RECORD_NOT_FOUND",
-                "隔离记录不存在", HttpStatus.NOT_FOUND));
+                "回收站记录不存在", HttpStatus.NOT_FOUND));
         requireProjectAccess(userId, qr.projectId());
         return qr;
     }
@@ -274,19 +274,19 @@ public class DeleteRequestApplicationService {
     public QuarantineRecordResponse restoreQuarantine(Long userId, Long quarantineId) {
         QuarantineRecordResponse qr = quarantineRepository.findById(quarantineId)
             .orElseThrow(() -> new BusinessException("QUARANTINE_RECORD_NOT_FOUND",
-                "隔离记录不存在", HttpStatus.NOT_FOUND));
+                "回收站记录不存在", HttpStatus.NOT_FOUND));
         requireProjectAccess(userId, qr.projectId());
 
         if (!"QUARANTINED".equals(qr.status())) {
             throw new BusinessException("QUARANTINE_STATUS_INVALID",
-                "隔离记录状态不允许恢复: " + qr.status(), HttpStatus.BAD_REQUEST);
+                "回收站记录状态不允许恢复: " + qr.status(), HttpStatus.BAD_REQUEST);
         }
 
         Path source = Paths.get(qr.quarantinePath());
         Path target = Paths.get(qr.originalPath());
 
         if (!Files.exists(source)) {
-            String failReason = "隔离文件不存在: " + qr.quarantinePath();
+            String failReason = "回收站文件不存在: " + qr.quarantinePath();
             quarantineRepository.markRestored(quarantineId, userId, failReason);
             return quarantineRepository.findById(quarantineId).orElseThrow();
         }
@@ -307,7 +307,7 @@ public class DeleteRequestApplicationService {
 
             eventApplicationService.record("DELETE_RESTORE", qr.projectId(), "QUARANTINE_RECORD",
                 String.valueOf(quarantineId), "delete.restore", userId, "API",
-                "恢复隔离文件: " + qr.originalPath() + " from " + qr.quarantinePath(), null);
+                "恢复回收站文件: " + qr.originalPath() + " from " + qr.quarantinePath(), null);
 
             return quarantineRepository.findById(quarantineId).orElseThrow();
         } catch (IOException e) {
@@ -324,18 +324,18 @@ public class DeleteRequestApplicationService {
     public QuarantineRecordResponse permanentDelete(Long userId, Long quarantineId) {
         QuarantineRecordResponse qr = quarantineRepository.findById(quarantineId)
             .orElseThrow(() -> new BusinessException("QUARANTINE_RECORD_NOT_FOUND",
-                "隔离记录不存在", HttpStatus.NOT_FOUND));
+                "回收站记录不存在", HttpStatus.NOT_FOUND));
         requireProjectAccess(userId, qr.projectId());
 
         if (!"QUARANTINED".equals(qr.status())) {
             throw new BusinessException("QUARANTINE_STATUS_INVALID",
-                "隔离记录状态不允许永久删除: " + qr.status(), HttpStatus.BAD_REQUEST);
+                "回收站记录状态不允许永久删除: " + qr.status(), HttpStatus.BAD_REQUEST);
         }
 
         // Check quarantine retention period (30 days)
         if (qr.quarantineUntil() != null && qr.quarantineUntil().isAfter(Instant.now())) {
             throw new BusinessException("QUARANTINE_RETENTION_NOT_EXPIRED",
-                "隔离保留期未满，不允许永久删除。到期时间: " + qr.quarantineUntil(), HttpStatus.BAD_REQUEST);
+                "回收站保留期未满，不允许永久删除。到期时间: " + qr.quarantineUntil(), HttpStatus.BAD_REQUEST);
         }
 
         Path quarantineFile = Paths.get(qr.quarantinePath());
@@ -345,7 +345,7 @@ public class DeleteRequestApplicationService {
             quarantineRepository.markPermanentDeleted(quarantineId, userId, null);
             eventApplicationService.record("DELETE_PERMANENT", qr.projectId(), "QUARANTINE_RECORD",
                 String.valueOf(quarantineId), "delete.permanent", userId, "API",
-                "永久删除隔离文件(文件已不存在): " + qr.quarantinePath(), null);
+                "永久删除回收站文件(文件已不存在): " + qr.quarantinePath(), null);
             return quarantineRepository.findById(quarantineId).orElseThrow();
         }
 
@@ -356,7 +356,7 @@ public class DeleteRequestApplicationService {
 
             eventApplicationService.record("DELETE_PERMANENT", qr.projectId(), "QUARANTINE_RECORD",
                 String.valueOf(quarantineId), "delete.permanent", userId, "API",
-                "永久删除隔离文件: " + qr.quarantinePath(), null);
+                "永久删除回收站文件: " + qr.quarantinePath(), null);
 
             return quarantineRepository.findById(quarantineId).orElseThrow();
         } catch (IOException e) {

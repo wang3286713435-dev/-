@@ -1,5 +1,191 @@
 # 主 Agent 开发监控日志
 
+## 2026-05-22：M2D 收口裁决
+
+- 测试 agent 已完成 `M2D：真实项目工程主数据接入草案增强` 轻量验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：通过，当前未发现 P0 / P1。
+- 已通过：
+  - 后端构建。
+  - 前端构建。
+  - 健康检查。
+  - M2D 专项脚本，结果 `PASS=8 FAIL=0`。
+  - M1C 回归。
+  - M2C 回归。
+  - `git diff --check`。
+- 已确认：
+  - `503 / 105` 保持 `deliverableStandardReady=false`，未被模板误导为交付标准已就绪。
+  - 105 保持真实资产已接入、工程主数据未确认状态。
+  - 接入评估和草案预览均基于 catalog metadata，不读取正文，不生成虚假交付结论。
+  - 文档 / 图纸交付和交付包接口未生成虚假应交项或虚假交付包。
+  - 未泄露真实 NAS 路径或敏感字段。
+  - 未触碰真实 NAS 文件。
+  - 未新增 Hermes、BIM、parser、writer、indexing 能力。
+- P2：
+  - 既有 Vite chunk size warning。
+  - 轻量测试策略下未做全量浏览器逐页验收。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪文件，以及 M2A / M2B / M2C 既有改动，提交时需要确认归属。
+- 主 agent 裁决：
+  - M2D 正式收口。
+  - 当前 active 批次切换为 `待用户确认`。
+  - 不自动进入 M2E、M2F、8B-0、8B / 8C 或 9A。
+
+## 2026-05-22：M2D 启动
+
+- 用户确认继续下一步。
+- 主 agent 裁决：启动 `M2D：真实项目工程主数据接入草案增强`。
+- 背景：
+  - 105 项目演示模板数据已软删除。
+  - 105 仍保留 2928 条真实资产文件。
+  - 真实资产线索显示 DWG、PDF、RVT、XLSX 均已登记，专业线索覆盖建筑、结构、电气、给排水、消防、智能化、暖通、燃气、通用。
+- 当前问题：
+  - 初始化向导已有接入评估和草案预览雏形，但仍可能让真实 NAS 项目通过内置模板变成“交付标准已就绪”。
+  - 这与用户要求的真实项目交付路径不一致。
+- M2D 目标：
+  - 强化 `onboarding/assessment` 和 `onboarding/preview`。
+  - 草案必须从真实资产线索出发，并区分资产线索与模板骨架。
+  - 每条草案项必须具备证据来源、证据模式、置信度、风险提示和人工确认标记。
+  - 真实 NAS 项目不得一键套模板后直接变成 `deliverableStandardReady=true`。
+- 已写入：
+  - 计划：`handoff/main-agent/m2d-real-project-masterdata-onboarding-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+- 边界：
+  - 不触碰真实 NAS 文件。
+  - 不读取正文。
+  - 不新增 Hermes、BIM、parser、writer、indexing。
+  - 不自动挂接、审核、整改或交付。
+
+## 2026-05-22：M2D 开发审计
+
+- 开发 agent 已完成 M2D，报告写入 `handoff/dev-agent/latest-report.md`。
+- 主 agent 审计重点：
+  - 是否防止 105 再次通过模板进入假 ready。
+  - 是否泄露真实 NAS 路径。
+  - 是否越界新增 Hermes、BIM、parser、writer、indexing 或真实 NAS 操作。
+- 主 agent 抽查结果：
+  - `scripts/dev/check-m2d-real-project-masterdata-onboarding.sh` 通过，结果 `PASS=8 FAIL=0`。
+  - 真实项目 `503 / 105` 直接 `apply-template` 被阻断。
+  - `onboarding/apply` 只确认草案，不写正式标准。
+  - `deliverableStandardReady` 在草案确认后仍为 `false`。
+  - 草案项包含 `evidenceSource / confidenceLevel / riskHint / pendingConfirmation`。
+  - 未发现本批新增数据库迁移。
+  - 未发现 M2D 范围内真实 NAS 文件操作。
+- 已补强 `handoff/test-agent/current-prompt.md`：
+  - 要求测试 agent 验证页面下一步入口是否清晰。
+  - 要求验证页面主按钮不会让真实项目一键套模板成功。
+  - 要求验证文档/图纸交付/交付包页面不显示演示模板虚假应交项。
+- 当前裁决：
+  - 可以进入 M2D 测试 agent 验收。
+  - 尚不收口 M2D。
+
+## 2026-05-22：测试策略轻量化
+
+- 用户要求：测试 agent 后续不再每批大量浏览器逐页点击，只测试代码可用性和是否偏离主线。
+- 主 agent 裁决：
+  - 默认采用轻量测试策略。
+  - 浏览器验收只在 UI/UX、路由、页面问题或主 agent 明确要求时执行。
+  - 普通后端 / 接口 / 主线纠偏批次只跑构建、健康检查、专项脚本、少量必要回归、接口抽查、越界检查和 `git diff --check`。
+- 已新增：
+  - `handoff/main-agent/lightweight-test-strategy.md`
+- 已更新：
+  - `handoff/test-agent/current-prompt.md`
+- M2D 测试已改为轻量验收：
+  - 后端构建。
+  - 前端构建。
+  - 健康检查。
+  - M2D 专项脚本。
+  - M2C 与 M1C 必要回归。
+  - forbidden field 扫描。
+  - 越界检查。
+  - 默认不做逐页浏览器点击。
+
+## 2026-05-22：105 项目演示模板数据重置
+
+- 用户指出：当前工程主数据仍处于架空状态，没有实际应用到项目交付；105 项目中的模板应删除，避免误导员工认为项目已经完成交付。
+- 主 agent 确认真实项目为 `503 / 105 / 深圳市二十八高项目`。
+- 执行前备份：
+  - `tmp/backups/project-503-before-template-reset-20260522153500.sql`
+- 本次采用软删除，不触碰真实 NAS 文件，不删除资产文件元数据。
+- 已软删除 105 项目有效业务数据：
+  - 工程部位树。
+  - 节点类型。
+  - 交付物定义 / 类型 / 属性。
+  - 目录模板。
+  - 交付挂接。
+  - 整改记录。
+  - 交付包草案。
+- 保留：
+  - 105 项目文件资产元数据，当前仍有 2928 条。
+  - 审计记录。
+  - 历史 review record。
+- 验证：
+  - `standard-status` 返回 `deliverableStandardReady=false`。
+  - 初始化状态回到 `SECTION_TREE`。
+  - 初始化阻塞项提示需要建立部位树、配置节点类型、补齐交付物标准和目录模板。
+  - 文档 / 图纸交付包准备均返回 `totalCount=0`。
+- 已写入审计：
+  - `action_code=master-data.template-demo.reset`
+  - `trace_id=manual-reset-105-template`
+- 详细报告：
+  - `handoff/main-agent/project-105-template-reset-report.md`
+- 主 agent 裁决：
+  - 105 不再保留演示模板交付假象。
+  - 后续 105 应作为真实项目接入样本，从资产目录推导工程主数据草案并人工确认。
+
+## 2026-05-22：M2C 收口裁决
+
+- 测试 agent 已完成 `M2C：交付包与档案目录能力` 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结果：
+  - 后端构建通过。
+  - 前端构建通过，仅保留既有 Vite chunk size warning。
+  - 健康检查通过。
+  - M2C 专项脚本通过。
+  - M2B / M2A / M1F / M1E / M1D / M1C 回归通过。
+  - 当前库与临时干净库 Flyway 迁移均通过。
+  - `git diff --check` 通过。
+- 功能验收：
+  - `prepare / drafts / draft detail / items / export-manifest` 可用。
+  - 草案保存、草案明细、档案目录预览、CSV 清单导出可用。
+  - 503 / 105 页面可展示交付包草案能力；506 / 93 当前无应交项，可安全展示空状态。
+- 红线验收：
+  - 未生成真实压缩包。
+  - 未复制、移动、删除、重命名真实 NAS 文件。
+  - 未读取 PDF / Office / DWG / RVT / IFC 正文。
+  - 未泄露真实 NAS 路径、`storage_uri`、SQL、token、secret。
+  - 未新增 Hermes、BIM、parser、writer、indexing 能力。
+- P2：
+  - 既有 Vite chunk size warning。
+  - 506 / 93 无应交项，客户演示建议优先使用 503 / 105 或已具备交付标准的项目。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 非交付未跟踪文件需要提交时排除。
+- 主 agent 裁决：
+  - M2C 正式收口。
+  - 当前 active 批次切换为 `待用户确认`。
+  - 下一步不自动进入 M2D、M2E、8B-0、8B/8C 或 9A。
+
+## 2026-05-22：MAIN-0 主线回归与 M2C 启动
+
+- 用户确认按主线规划进入下一步，并要求：
+  - 开启真实 NAS 写入灰度开关。
+  - 将用户可见的 `隔离区` 统一改为 `回收站`。
+- 主 agent 裁决：
+  - 当前不进入 8B / 8C / 9A。
+  - 当前不继续 Hermes / G4。
+  - 当前 active 批次切换为 `M2C：交付包与档案目录能力`。
+  - M2C 只做交付包草案、档案目录和交付清单导出，不复制、不移动、不打包真实 NAS 文件。
+- 真实 NAS 写入灰度：
+  - 项目 `504 / 100 / 深圳市二十八高项目` 作为当前受控灰度项目。
+  - 灰度必须继续受项目、目录、角色、账号边界控制。
+  - 不做全公司、全项目、全目录默认开放。
+- 命名收束：
+  - 前端用户可见文案统一为 `回收站`。
+  - 后端用户可见错误 / 成功消息同步为 `回收站`。
+  - 内部接口、数据库字段、状态码仍保留 `quarantine` / `QUARANTINED`，避免破坏既有契约。
+- 已写入：
+  - M2C 计划：`handoff/main-agent/m2c-delivery-package-archive-directory-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+  - 当前路线：`handoff/main-agent/phase2-current-roadmap.md`
+
 ## 2026-05-22：UX2 前端使用逻辑重构专项待启动
 
 - 用户确认 UX2 方向：
@@ -147,10 +333,10 @@
 - 已确认：
   - M2A 专项脚本 `scripts/dev/check-m2a-controlled-nas-write.sh` 通过，结果 `PASS=20 FAIL=0`。
   - M1F / M1E / M1D / M1C / Phase2 batch4 回归均通过。
-  - 项目内新建文件夹、上传、重命名、移动、删除到隔离区、恢复、操作记录、审计和元数据同步均在隔离测试项目内通过。
+  - 项目内新建文件夹、上传、重命名、移动、删除到回收站、恢复、操作记录、审计和元数据同步均在隔离测试项目内通过。
   - 查看者写操作被拒绝，未授权用户写操作被拒绝，路径穿越被拒绝。
   - 自动化写操作只发生在脚本创建的 `/tmp` 隔离项目根目录内。
-  - 真实项目页面只读检查了 `隔离区` 和 `操作记录` 抽屉，未在真实业务 NAS 目录执行上传、移动、删除、重命名等写操作。
+  - 真实项目页面只读检查了 `回收站` 和 `操作记录` 抽屉，未在真实业务 NAS 目录执行上传、移动、删除、重命名等写操作。
   - 未发现 raw NAS 路径、`storage_uri`、`storage_path`、raw row、SQL、token、secret、password 泄露。
 - 主 agent 裁决：
   - M2A 可以正式收口。
@@ -166,11 +352,11 @@
 - 主 agent 裁决：
   - 不能一次性开放完整 CRUD。
   - 当前 active 批次固定为 `M2A：NAS 受控文件操作安全底座`。
-  - M2A 第一批只做 `低风险写操作 + 删除到隔离区，不开放永久删除与批量操作`。
+  - M2A 第一批只做 `低风险写操作 + 删除到回收站，不开放永久删除与批量操作`。
   - 本批必须先建立权限、路径、审计、隔离和恢复边界。
 - 允许范围：
   - 项目内新建文件夹、上传、重命名、移动。
-  - 删除到隔离区、隔离区恢复。
+  - 删除到回收站、回收站恢复。
   - 操作记录、审计和元数据同步。
 - 当前禁止：
   - 永久物理删除、跨项目移动、批量不可逆操作。
@@ -745,7 +931,7 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - agent 不得直接修改正式资产、审批、隔离、恢复或永久删除。
   - 未审批物理删除不得移动或删除文件。
   - 逻辑删除不得触碰 NAS 文件。
-  - 永久删除只能作用于隔离区文件，且必须满足隔离期。
+  - 永久删除只能作用于回收站文件，且必须满足保留期。
   - 验收脚本只能移动/删除 `/tmp` 测试文件，不能触碰真实 NAS `/Volumes/zyzn/卓羽智能项目`。
 - 后续 Claude Code 开发 agent 必须使用 Pro 模型和 Ralph Loop，完成承诺为 `<promise>BATCH3_DEV_COMPLETE</promise>`。
 - 实际启动时 Claude CLI 拒绝 `deepseek-pro`，提示可用 Pro 型号为 `deepseek-v4-pro`；已按用户“切换为 pro”的意图改用 `deepseek-v4-pro`。

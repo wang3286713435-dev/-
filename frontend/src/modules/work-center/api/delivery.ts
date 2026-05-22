@@ -443,6 +443,146 @@ export async function fetchExportPrecheck(
   return data.data;
 }
 
+// ---- delivery package draft / archive directory ----
+
+export interface DeliveryPackageArchiveItem {
+  itemId: number | null;
+  targetType: string;
+  targetId: number | null;
+  targetName: string | null;
+  deliverableDefinitionId: number | null;
+  deliverableDefinitionName: string | null;
+  deliverableTypeId: number | null;
+  deliverableTypeName: string | null;
+  bindingId: number | null;
+  fileId: number | null;
+  fileName: string | null;
+  fileKind: string | null;
+  versionNo: string | null;
+  reviewStatus: string | null;
+  previewStatus: string | null;
+  exportStatus: string;
+  blockReason: string | null;
+  archiveDirectoryPath: string;
+}
+
+export interface DeliveryPackagePrepareResponse {
+  projectId: number;
+  viewType: string;
+  targetType: string;
+  dryRun: boolean;
+  physicalPackageGenerated: boolean;
+  nasFileCopied: boolean;
+  totalCount: number;
+  readyCount: number;
+  blockedCount: number;
+  missingCount: number;
+  pendingReviewCount: number;
+  rejectedCount: number;
+  conversionRequiredCount: number;
+  unsupportedPreviewCount: number;
+  rows: DeliveryPackageArchiveItem[];
+}
+
+export interface DeliveryPackageDraftSummary {
+  projectId: number;
+  draftId: number;
+  viewType: string;
+  targetType: string;
+  totalCount: number;
+  readyCount: number;
+  blockedCount: number;
+  missingCount: number;
+  pendingReviewCount: number;
+  rejectedCount: number;
+  conversionRequiredCount: number;
+  unsupportedPreviewCount: number;
+  dryRun: boolean;
+  physicalPackageGenerated: boolean;
+  nasFileCopied: boolean;
+  createdBy: number | null;
+  createdAt: string;
+}
+
+export interface DeliveryPackageDraftDetail extends DeliveryPackageDraftSummary {
+  rows: DeliveryPackageArchiveItem[];
+}
+
+export interface DeliveryPackageManifestResponse {
+  projectId: number;
+  draftId: number;
+  fileName: string;
+  contentType: string;
+  dryRun: boolean;
+  physicalPackageGenerated: boolean;
+  nasFileCopied: boolean;
+  rowCount: number;
+  csvContent: string;
+}
+
+export interface CreateDeliveryPackageDraftPayload {
+  viewType?: string;
+  targetType?: string;
+}
+
+export async function fetchDeliveryPackagePrepare(
+  projectId: number,
+  viewType?: string,
+  targetType = 'SECTION'
+) {
+  const { data } = await http.get<ApiResponse<DeliveryPackagePrepareResponse>>(
+    `/api/work-center/projects/${projectId}/delivery-package/prepare`,
+    { params: { viewType, targetType } }
+  );
+  return data.data;
+}
+
+export async function createDeliveryPackageDraft(
+  projectId: number,
+  payload: CreateDeliveryPackageDraftPayload
+) {
+  const { data } = await http.post<ApiResponse<DeliveryPackageDraftDetail>>(
+    `/api/work-center/projects/${projectId}/delivery-package/drafts`,
+    payload
+  );
+  return data.data;
+}
+
+export async function fetchDeliveryPackageDrafts(projectId: number) {
+  const { data } = await http.get<ApiResponse<DeliveryPackageDraftSummary[]>>(
+    `/api/work-center/projects/${projectId}/delivery-package/drafts`
+  );
+  return data.data;
+}
+
+export async function fetchDeliveryPackageDraft(projectId: number, draftId: number) {
+  const { data } = await http.get<ApiResponse<DeliveryPackageDraftDetail>>(
+    `/api/work-center/projects/${projectId}/delivery-package/drafts/${draftId}`
+  );
+  return data.data;
+}
+
+export async function fetchDeliveryPackageDraftItems(projectId: number, draftId: number) {
+  const { data } = await http.get<ApiResponse<DeliveryPackageArchiveItem[]>>(
+    `/api/work-center/projects/${projectId}/delivery-package/drafts/${draftId}/items`
+  );
+  return data.data;
+}
+
+export async function exportDeliveryPackageManifest(projectId: number, draftId: number) {
+  const { data } = await http.get<ApiResponse<DeliveryPackageManifestResponse>>(
+    `/api/work-center/projects/${projectId}/delivery-package/drafts/${draftId}:export-manifest`
+  );
+  const manifest = data.data;
+  const blob = new Blob([manifest.csvContent], { type: manifest.contentType || 'text/csv;charset=UTF-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = manifest.fileName || `delivery-package-manifest-${projectId}-${draftId}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+  return manifest;
+}
+
 // ---- Agent delivery governance ----
 
 export interface AgentGovernanceStandardStatus {
