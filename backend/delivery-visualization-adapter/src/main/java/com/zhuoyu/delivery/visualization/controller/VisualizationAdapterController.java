@@ -7,6 +7,7 @@ import com.zhuoyu.delivery.shared.api.ApiResponse;
 import com.zhuoyu.delivery.visualization.application.VisualizationAdapterApplicationService;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ContextInjectRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ContextInjectResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.DigitalTwinDashboardResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LinkageRequest;
@@ -46,6 +47,13 @@ public class VisualizationAdapterController {
         var principal = securityPrincipalAccessor.requireCurrentPrincipal();
         projectContextApplicationService.requireCurrentProject(principal, projectId);
         return ApiResponse.success(visualizationAdapterApplicationService.context(projectId));
+    }
+
+    @GetMapping("/digital-twin-dashboard")
+    public ApiResponse<DigitalTwinDashboardResponse> digitalTwinDashboard(@PathVariable Long projectId) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(visualizationAdapterApplicationService.digitalTwinDashboard(principal.userId(), projectId));
     }
 
     @PostMapping("/model-integrations/{integrationId}:publish")
