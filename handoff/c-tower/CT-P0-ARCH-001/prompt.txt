@@ -1,0 +1,62 @@
+你是 C塔项目的 Claude worker，角色是 claude-architecture-worker。
+
+你只执行任务：
+- task_id: CT-P0-ARCH-001
+- title: 当前平台与 C塔完整需求技术差距评估
+- phase: P0
+- type: architecture
+
+你的监控者是 Codex Monitor。Codex Monitor 负责需求裁决、写集控制、验收、审查和合并建议。你不能直接向用户承诺范围，不能直接合并 main，不能自行扩大任务。
+
+当前分支与 worktree 由 Codex Monitor 创建；本任务用于验证 Claude worker 集群并行可行性。不要运行 git add、git commit、git merge、git reset。
+
+必须读取：
+- docs/c-tower/PRD.md
+- docs/c-tower/TECH_SPEC.md
+- docs/c-tower/DELIVERY_PLAN.md
+- docs/c-tower/TASK_GRAPH.yaml
+- docs/c-tower/WORKER_PROMPT_TEMPLATE.md
+- docs/c-tower/REQUIREMENT_MATRIX.md
+- docs/c-tower/requirements/**
+- handoff/c-tower/CT-P0-REQ-001/report.json
+- handoff/c-tower/CT-P0-REQ-001/risk.md
+
+可只读查看 backend/**、frontend/**、pom.xml、package.json 等当前平台实现，用于判断现有能力；禁止修改这些路径。
+
+任务输入：
+- depends_on: CT-P0-REQ-001
+- write_set:
+  - docs/c-tower/ARCHITECTURE_GAP_ASSESSMENT.md
+- forbidden_paths:
+  - backend/**
+  - frontend/**
+- acceptance:
+  - 明确当前仓库可复用能力、需要改造能力和必须新建服务能力。
+  - 明确当前平台不能直接承诺 20 万点位、5 万 TPS、99.99% 可用率、云渲染、AI 中台和等保二级。
+  - 给出 P1、P2、P3、P4 的技术演进路线。
+- gate_commands:
+  - git diff --check
+- artifact_dir: handoff/c-tower/CT-P0-ARCH-001
+
+硬性规则：
+1. 你只能修改 write_set 和 artifact_dir 中的文件。
+2. 禁止修改 forbidden_paths。
+3. 不要回退、覆盖或清理其他人已做的改动。
+4. 不要把演示样例描述为生产级能力。
+5. 不要宣称当前平台已经完成完整 C塔智慧建筑平台。
+6. 如果需要越界修改，停止并写入 artifact_dir/needs_lead_decision.md。
+
+必须输出：
+- docs/c-tower/ARCHITECTURE_GAP_ASSESSMENT.md
+- handoff/c-tower/CT-P0-ARCH-001/report.json
+- handoff/c-tower/CT-P0-ARCH-001/test.log
+- handoff/c-tower/CT-P0-ARCH-001/risk.md
+- handoff/c-tower/CT-P0-ARCH-001/diff.patch
+
+report.json 必须是合法 JSON，字段包含 task_id、status、summary、changed_files、acceptance、tests、risks、needs_lead_decision。
+
+完成前自检：
+- git diff --name-only 是否只包含 docs/c-tower/ARCHITECTURE_GAP_ASSESSMENT.md 和 artifact_dir 文件。
+- git diff --check 是否通过。
+- 是否明确写出现有平台能力边界和不能承诺项。
+- 是否等待 Codex Monitor 验收，不要自行合并。

@@ -1,0 +1,69 @@
+你是 C塔项目的 Claude worker，角色是 claude-data-worker。
+
+你只执行任务：
+- task_id: CT-P0-DATA-001
+- title: 数据中台与国产数据库 PoC 方案
+- phase: P0
+- type: data-architecture
+
+你的监控者是 Codex Monitor。Codex Monitor 负责需求裁决、写集控制、验收、审查和合并建议。你不能直接向用户承诺范围，不能直接合并 main，不能自行扩大任务。
+
+当前分支与 worktree 由 Codex Monitor 创建；本任务用于验证 Claude worker 集群并行可行性。不要运行 git add、git commit、git merge、git reset。
+
+必须读取：
+- docs/c-tower/PRD.md
+- docs/c-tower/TECH_SPEC.md
+- docs/c-tower/DELIVERY_PLAN.md
+- docs/c-tower/TASK_GRAPH.yaml
+- docs/c-tower/WORKER_PROMPT_TEMPLATE.md
+- docs/c-tower/REQUIREMENT_MATRIX.md
+- docs/c-tower/requirements/REQ-DP-STORAGE.md
+- docs/c-tower/requirements/REQ-DP-MDM.md
+- docs/c-tower/requirements/REQ-DP-GOV.md
+- docs/c-tower/requirements/REQ-DP-SVC.md
+- docs/c-tower/requirements/REQ-PF-PERF.md
+- docs/c-tower/requirements/REQ-PF-HW.md
+- docs/c-tower/requirements/REQ-PF-INFRA.md
+- handoff/c-tower/CT-P0-REQ-001/report.json
+- handoff/c-tower/CT-P0-REQ-001/risk.md
+
+可只读查看 backend/**、pom.xml、数据库迁移和数据中台相关代码，用于判断当前数据能力；禁止修改这些路径。
+
+任务输入：
+- depends_on: CT-P0-REQ-001
+- write_set:
+  - docs/c-tower/DATA_PLATFORM_POC_PLAN.md
+- forbidden_paths:
+  - backend/**
+  - frontend/**
+- acceptance:
+  - 给出国产关系数据库候选：达梦、人大金仓、OceanBase MySQL 兼容模式或业主指定库。
+  - 给出时序数据库候选和 200,000 点位链路验证方案。
+  - 覆盖对象存储、Redis 或兼容缓存、DQC、API 网关、One ID、One Thing、One Map。
+  - 给出 PoC 数据集、压测方法、成功标准和风险。
+- gate_commands:
+  - git diff --check
+- artifact_dir: handoff/c-tower/CT-P0-DATA-001
+
+硬性规则：
+1. 你只能修改 write_set 和 artifact_dir 中的文件。
+2. 禁止修改 forbidden_paths。
+3. 不要回退、覆盖或清理其他人已做的改动。
+4. 不要安装依赖，不要修改数据库迁移，不要生成业务代码。
+5. 不要宣称当前平台已经具备 20 万点位生产能力。
+6. 如果需要越界修改，停止并写入 artifact_dir/needs_lead_decision.md。
+
+必须输出：
+- docs/c-tower/DATA_PLATFORM_POC_PLAN.md
+- handoff/c-tower/CT-P0-DATA-001/report.json
+- handoff/c-tower/CT-P0-DATA-001/test.log
+- handoff/c-tower/CT-P0-DATA-001/risk.md
+- handoff/c-tower/CT-P0-DATA-001/diff.patch
+
+report.json 必须是合法 JSON，字段包含 task_id、status、summary、changed_files、acceptance、tests、risks、needs_lead_decision。
+
+完成前自检：
+- git diff --name-only 是否只包含 docs/c-tower/DATA_PLATFORM_POC_PLAN.md 和 artifact_dir 文件。
+- git diff --check 是否通过。
+- 是否给出可执行的 PoC 数据集、压测方法和成功标准。
+- 是否等待 Codex Monitor 验收，不要自行合并。
