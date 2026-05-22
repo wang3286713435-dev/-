@@ -1,4 +1,4 @@
-# 开发 Agent 当前任务：M2F 真实项目交付闭环试运行
+# 开发 Agent 当前任务：M2G 真实 NAS 文件管理器灰度完善
 
 你是数字化交付平台开发 agent。工作目录：
 
@@ -6,95 +6,148 @@
 
 ## 0. 当前批次
 
-`M2F：真实项目交付闭环试运行`
+`M2G：真实 NAS 文件管理器灰度完善`
 
-本批不是继续堆新功能，而是把 `105 / 503` 真实 NAS 项目中已人工确认的工程主数据真正放进交付链路里跑通。
+本批目标是把当前平台最核心的文件管理能力打磨成“员工愿意日常使用的文件管理器”。
 
-核心链路：
+产品形态：
 
-`真实资产 -> 工程主数据 -> 交付标准 -> 文档/图纸应交项 -> 文件挂接 -> 审核/整改 -> 交付包草案`
+`类 Windows / macOS 文件管理器 + 工程资料字段`
+
+不是网盘，不是 BIM 引擎，不是 Hermes 自动治理。
 
 ## 1. 必须先阅读
 
 - `handoff/main-agent/status.md`
 - `handoff/main-agent/phase2-current-roadmap.md`
-- `handoff/main-agent/m2f-real-project-delivery-loop-trial-plan.md`
-- `handoff/main-agent/m2e-real-project-masterdata-confirmation-plan.md`
-- `handoff/main-agent/m2d-real-project-masterdata-onboarding-plan.md`
+- `handoff/main-agent/m2g-real-nas-file-manager-polish-plan.md`
+- `handoff/main-agent/m2b-nas-write-trial-plan.md`
 - `handoff/main-agent/lightweight-test-strategy.md`
+- `handoff/main-agent/digital-twin-pr-compatibility-check.md`
 - `handoff/test-agent/latest-report.md`
 - `handoff/dev-agent/latest-report.md`
 
-## 2. 本轮目标
+## 2. 必查代码
 
-确认并修复 105 真实项目从正式工程主数据进入交付闭环时的断点。
+至少检查：
 
-至少覆盖：
+- `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
+- `frontend/src/modules/data-steward/components/DirectoryTreePanel.vue`
+- `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
+- `frontend/src/modules/data-steward/api/dataSteward.ts`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/application/ControlledNasApplicationService.java`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/controller/ControlledNasController.java`
+- `scripts/dev/check-m2b-nas-write-trial.sh`
 
-1. 105 的部位树、节点类型、交付物定义、交付物类型是否已经被交付页面正确识别。
-2. 文档交付和图纸交付是否能基于正式规则展示应交项、缺失项或合理阻塞原因。
-3. 缺失项解释是否面向业务用户，而不是只展示技术字段。
-4. 文件补交 / 挂接是否仍需人工确认。
-5. 审核、驳回、整改、复审是否不回归。
-6. 交付包 / 档案目录草案是否能反映当前交付状态。
+## 3. 本轮目标
 
-## 3. 开发策略
+围绕文件管理器完成以下体验和稳定性优化：
 
-先审计链路，再做最小修复。
+1. 新建文件夹不再出现“请先切换到当前项目”这类项目上下文误判。
+2. 所有文件管理器 NAS 写操作优先按路由 `projectId` 执行，前端不因全局 currentProject 不一致直接误判。
+3. 上传 / 新建 / 重命名 / 移动 / 删除到回收站 / 恢复形成顺畅单项闭环。
+4. 操作成功后刷新当前文件列表，必要时刷新目录树。
+5. 当前目录可写状态和不可写原因更清楚。
+6. 回收站、操作记录、失败原因使用业务语言，不暴露真实 NAS 路径。
+7. 移动目标尽量使用目录选择或明确目录输入校验，不让用户盲填真实路径。
 
-请先用接口或脚本确认当前 105 链路状态：
-
-- 标准状态。
-- 部位树。
-- 节点类型。
-- 交付物定义 / 类型。
-- 文档交付视图。
-- 图纸交付视图。
-- 缺失项。
-- 文件补交候选。
-- 审核 / 整改。
-- 交付包草案 / 档案目录。
-
-发现断点时只修断点，不扩展新业务能力。
-
-## 4. 必须新增或增强的脚本
-
-新增：
-
-`scripts/dev/check-m2f-real-project-delivery-loop.sh`
-
-脚本至少验证：
-
-1. 管理员登录并切换到 `503 / 105`。
-2. 105 标准状态为人工确认后的正式状态。
-3. 部位树、节点类型、交付物定义、交付物类型可查。
-4. 文档 / 图纸交付视图能基于正式规则返回应交项或合理阻塞说明。
-5. 缺失项解释包含交付定义、交付类型、目标和需要补的文件类型。
-6. 文件补交 / 批量挂接接口仍要求明确人工确认或合法参数。
-7. 审核 / 整改 / 交付包草案接口不回归。
-8. 响应不包含 `/Volumes`、`smb://`、`nas://`、`storage_path`、`storage_uri`、raw row、SQL、token、secret。
-
-## 5. 允许修改范围
+## 4. 允许修改范围
 
 允许：
 
-- `backend/**` 中与交付闭环断点直接相关的最小修复。
-- `frontend/**` 中与 105 交付闭环可用性直接相关的文案、入口、空状态和提示修复。
-- `scripts/dev/**` 新增或增强 M2F 专项脚本。
+- `frontend/**` 中与文件管理器体验直接相关的修改。
+- `backend/delivery-data-steward/**` 中与受控 NAS 文件管理器 bug 直接相关的最小修复。
+- `scripts/dev/**` 新增或增强 M2G 专项脚本。
 - `handoff/dev-agent/latest-report.md`。
 
-## 6. 明确禁止
+## 5. 禁止事项
 
 禁止：
 
-- 真实 NAS 文件写入、移动、删除、重命名、复制。
-- 读取 PDF / Office / DWG / RVT / IFC 正文。
-- 新增 Hermes 能力。
-- 接入 BIM 引擎、构件解析、parser、writer、indexing、向量库。
-- Agent 自动挂接、自动审核、自动整改。
-- 让模板数据冒充真实工程结构。
-- 启动 8B / 8C / 9A。
 - 修改 `docs/**`。
+- 永久删除作为普通员工能力开放。
+- 绕过灰度开关、项目权限、角色权限或审计。
+- 直接暴露真实 NAS 绝对路径。
+- 读取 PDF / Office / DWG / RVT / IFC 正文。
+- 新增 Hermes 自动操作。
+- 新增 BIM 轻量化或构件解析。
+- 新增 parser / writer / indexing / 向量库。
+- 修改数字孪生主线能力。
+
+## 6. 推荐实现重点
+
+### A. 项目上下文修复
+
+- 文件管理页内的 NAS 写操作必须使用路由项目 ID。
+- 如果全局 currentProject 与路由项目不一致，不要让前端先报“请先切换到当前项目”。
+- 如需提示，只能提示“正在使用当前项目工作台项目执行操作”。
+- 后端仍必须按 JWT 和项目权限校验。
+
+### B. 文件管理器操作体验
+
+顶部工具栏建议保留常用操作：
+
+- 上传文件。
+- 新建文件夹。
+- 刷新。
+- 回收站。
+- 操作记录。
+
+文件和目录的重命名、移动、删除建议放到“更多操作”或目录操作里，不要把顶部堆满。
+
+当前目录区域建议显示：
+
+- 当前目录。
+- 可写 / 不可写。
+- 不可写原因。
+
+### C. 操作后刷新
+
+以下操作成功后必须刷新必要视图：
+
+- 上传文件：刷新当前文件列表。
+- 新建文件夹：刷新目录树；如合适，可进入新文件夹或保持当前目录但新目录可见。
+- 重命名文件：刷新当前文件列表。
+- 移动文件：刷新当前文件列表和目标目录相关状态。
+- 删除到回收站：刷新当前文件列表和回收站。
+- 恢复：刷新目录树、当前文件列表和回收站。
+- 重命名 / 移动 / 删除当前目录：当前目录如果失效，应回到上级或项目根目录。
+
+### D. 回收站
+
+- 用户可见命名统一为“回收站”。
+- 不显示“隔离区”。
+- 不开放永久删除。
+- 恢复冲突时给出清楚提示：原位置已有同名文件或文件夹，需要人工处理。
+
+### E. M2G 专项脚本
+
+新增：
+
+`scripts/dev/check-m2g-nas-file-manager-polish.sh`
+
+脚本必须使用隔离测试项目或隔离临时目录，不得写真实业务目录。
+
+至少验证：
+
+1. 默认无灰度配置时写操作被拒绝。
+2. 开启灰度后允许目录内：
+   - 新建文件夹。
+   - 上传文件。
+   - 重命名文件。
+   - 移动文件。
+   - 删除到回收站。
+   - 恢复。
+3. 目录操作：
+   - 新建目录。
+   - 重命名目录。
+   - 移动目录。
+   - 删除到回收站。
+   - 恢复。
+4. 查看者不能写。
+5. 越过允许范围的写操作被拒绝。
+6. 操作记录和回收站响应不泄露真实路径。
+7. 审计日志有记录。
 
 ## 7. 自测要求
 
@@ -107,13 +160,18 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-m2f-real-project-delivery-loop.sh
-bash scripts/dev/check-m2e-real-project-masterdata-confirmation.sh
-bash scripts/dev/check-m2c-delivery-package-archive.sh
+bash scripts/dev/check-m2g-nas-file-manager-polish.sh
+bash scripts/dev/check-m2b-nas-write-trial.sh
+bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
 
-除非你改动了明显影响文件权限或 NAS 写操作的代码，否则不要扩展成全量脚本回归。
+如果你修改了核心文件列表或目录树交互，请手动打开一个真实项目文件管理页做短验：
+
+- 文件管理页能打开。
+- 目录树、文件表、工具栏不白屏。
+- 按钮状态和当前目录可写提示清楚。
+- 不出现页面级横向溢出。
 
 ## 8. 报告要求
 
@@ -123,24 +181,25 @@ git diff --check
 
 报告必须包含：
 
-1. 当前 105 交付闭环审计结果。
-2. 修复了哪些断点。
-3. 是否新增 M2F 专项脚本。
-4. 文档 / 图纸交付、缺失项、挂接、审核整改、交付包草案的当前状态。
-5. 自测命令结果。
-6. 是否触碰真实 NAS 文件。
-7. 是否读取正文。
-8. 是否新增 Hermes / BIM / parser / indexing 能力。
-9. 已知风险和未完成事项。
+1. 当前文件管理器问题审计。
+2. 修复了哪些体验和上下文问题。
+3. 是否新增 M2G 专项脚本。
+4. 上传 / 新建 / 重命名 / 移动 / 删除到回收站 / 恢复各自状态。
+5. 是否触碰真实业务目录。
+6. 是否泄露真实 NAS 路径。
+7. 是否新增 Hermes / BIM / parser / indexing 能力。
+8. 自测结果。
+9. 已知风险和未做项。
 
 ## 9. 完成定义
 
 只有同时满足以下条件，才能标记完成：
 
-- 105 正式工程主数据能驱动文档 / 图纸交付链路。
-- 缺失项和阻塞说明对员工可理解。
-- 人工挂接、审核整改、交付包草案链路不回归。
-- 未触碰真实 NAS 文件。
-- 未读取正文。
-- 未泄露真实路径或敏感字段。
-- 构建、健康检查、M2F 专项脚本和必要回归通过。
+- 新建文件夹不再出现项目上下文误判。
+- 隔离目录内完整文件管理器写操作链路通过。
+- 当前目录可写状态清楚。
+- 操作成功后视图能刷新。
+- 回收站命名统一且恢复可用。
+- 操作记录和失败原因脱敏。
+- M2B 和文件访问安全回归通过。
+- 未新增 Hermes / BIM / parser / indexing。

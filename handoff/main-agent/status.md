@@ -1,5 +1,32 @@
 # 主 Agent 项目状态
 
+## 2026-05-23 M2G 启动
+
+- 用户确认进入下一批次 M2G，重点优化当前平台文件管理器。
+- 主 agent 裁决：当前进入 `M2G：真实 NAS 文件管理器灰度完善`。
+- M2G 定位：
+  - 文件管理器产品化专项。
+  - 类 Windows / macOS 文件管理器体验。
+  - 融合必要工程资料字段。
+  - 不扩展成网盘，不启动 BIM / Hermes 新能力。
+- M2G 目标：
+  - 新建文件夹不再出现项目上下文误判。
+  - 上传 / 新建 / 重命名 / 移动 / 删除到回收站 / 恢复形成顺畅单项闭环。
+  - 当前目录可写状态和不可写原因清楚。
+  - 操作成功后文件列表、目录树、回收站和操作记录能自然刷新。
+  - 回收站命名统一，不暴露“隔离区”等技术词。
+  - 操作记录和失败原因脱敏，不泄露真实 NAS 路径。
+- M2G 禁止：
+  - 永久删除作为普通员工能力开放。
+  - 绕过灰度开关、项目权限、角色权限或审计。
+  - 读取文件正文。
+  - 新增 Hermes / BIM / parser / indexing。
+  - 修改数字孪生主线能力。
+- 当前交接：
+  - 计划：`handoff/main-agent/m2g-real-nas-file-manager-polish-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
 ## 2026-05-23 M2F 正式收口
 
 - 测试 agent 已完成 `M2F：真实项目交付闭环试运行` 轻量验收，报告写入 `handoff/test-agent/latest-report.md`。

@@ -3529,3 +3529,25 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - 数字孪生 PR 可视为兼容并入。
   - 可以继续进入下一批次。
   - 下一批次建议仍为 `M2G：真实 NAS 文件管理器灰度完善`，不要在 M2G 中继续扩展数字孪生。
+
+## 2026-05-23 M2G 启动
+
+- 用户确认进入 `M2G：真实 NAS 文件管理器灰度完善`。
+- 主 agent 已新增：
+  - M2G 计划：`handoff/main-agent/m2g-real-nas-file-manager-polish-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+- M2G 批次产品定位：
+  - 类 Windows / macOS 文件管理器。
+  - 融合工程资料字段。
+  - 核心目标是让员工日常好用，而不是新增大模块。
+- 本批重点：
+  - 修复文件管理器项目上下文误判。
+  - 打磨上传、新建、重命名、移动、删除到回收站、恢复闭环。
+  - 强化当前目录可写状态、操作反馈、回收站和操作记录。
+- 本批边界：
+  - 不开放普通用户永久删除。
+  - 不绕过灰度和权限。
+  - 不读取正文。
+  - 不扩展 Hermes / BIM / parser / indexing。
+  - 不继续扩展数字孪生。

@@ -8,7 +8,7 @@
 
 当前 active 批次：
 
-`待用户确认`
+`M2G：真实 NAS 文件管理器灰度完善`
 
 主线健康度：
 
@@ -75,6 +75,29 @@ M2F 收口依据：
 下一批次建议：
 
 `M2G：真实 NAS 文件管理器灰度完善`
+
+M2G 当前目标：
+
+- 打磨文件管理器作为平台核心能力。
+- 修复新建文件夹等操作的项目上下文误判。
+- 让上传、新建、重命名、移动、删除到回收站、恢复形成顺畅闭环。
+- 当前目录可写状态、失败原因、操作记录和回收站体验更清楚。
+- 自动化写入只在隔离测试项目或隔离目录执行，不写真实业务目录。
+
+M2G 不做：
+
+- 普通用户永久删除。
+- 文件正文读取。
+- Hermes 新能力。
+- BIM 轻量化或构件解析。
+- parser / writer / indexing。
+- 数字孪生继续扩展。
+
+M2G 交接：
+
+- 计划：`handoff/main-agent/m2g-real-nas-file-manager-polish-plan.md`
+- 开发 prompt：`handoff/dev-agent/current-prompt.md`
+- 测试 prompt：`handoff/test-agent/current-prompt.md`
 
 M2D 已完成：
 

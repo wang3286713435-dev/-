@@ -1,4 +1,4 @@
-# 测试 Agent 当前任务：M2F 真实项目交付闭环试运行验收
+# 测试 Agent 当前任务：M2G 真实 NAS 文件管理器灰度完善验收
 
 你是数字化交付平台测试 agent。工作目录：
 
@@ -6,21 +6,21 @@
 
 ## 测试策略
 
-本轮继续采用轻量测试策略，先阅读：
+本轮采用轻量测试策略，但 M2G 涉及文件管理器真实写操作，所以必须跑专项脚本。浏览器只做短验，不做全站巡检。
+
+先阅读：
 
 - `handoff/main-agent/lightweight-test-strategy.md`
 
-不要做大范围浏览器逐页点击，不做多分辨率视觉巡检。只验证代码可用、接口契约、专项脚本、主线红线和是否偏离 M2F 目标。
-
 ## 0. 当前验收批次
 
-`M2F：真实项目交付闭环试运行`
+`M2G：真实 NAS 文件管理器灰度完善`
 
-目标是验证 `105 / 503` 真实 NAS 项目已确认的工程主数据，能进入文档 / 图纸交付、缺失项、人工挂接、审核整改和交付包草案链路。
+目标是验证文件管理器的上传、新建、重命名、移动、删除到回收站、恢复、操作记录和可写状态提示是否形成可用闭环。
 
 ## 1. 必须先阅读
 
-- `handoff/main-agent/m2f-real-project-delivery-loop-trial-plan.md`
+- `handoff/main-agent/m2g-real-nas-file-manager-polish-plan.md`
 - `handoff/dev-agent/latest-report.md`
 - `handoff/main-agent/status.md`
 - `handoff/main-agent/phase2-current-roadmap.md`
@@ -34,36 +34,50 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-m2f-real-project-delivery-loop.sh
-bash scripts/dev/check-m2e-real-project-masterdata-confirmation.sh
-bash scripts/dev/check-m2c-delivery-package-archive.sh
+bash scripts/dev/check-m2g-nas-file-manager-polish.sh
+bash scripts/dev/check-m2b-nas-write-trial.sh
+bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
 
-如果没有 `scripts/dev/check-m2f-real-project-delivery-loop.sh`，记 P1。
-
-除非发现 P0/P1，本轮不跑全量历史脚本。
+如果没有 `scripts/dev/check-m2g-nas-file-manager-polish.sh`，记 P1。
 
 ## 3. 专项验收
 
-以 `503 / 105` 为重点项目，确认：
+脚本必须确认：
 
-1. 标准状态已处于 M2E 人工确认后的正式规则状态。
-2. 部位树、节点类型、交付物定义、交付物类型可查。
-3. 文档交付 / 图纸交付能基于正式规则返回应交项，或返回合理阻塞说明。
-4. 缺失项解释必须包含：
-   - 目标或部位。
-   - 交付定义。
-   - 交付类型。
-   - 需要补什么文件。
-   - 为什么现在缺失或阻塞。
-5. 文件补交 / 挂接仍需要人工确认或合法参数，不能自动挂接。
-6. 审核、驳回、整改、复审接口不回归。
-7. 交付包草案 / 档案目录能反映当前交付状态。
+1. 默认无灰度配置时写操作被拒绝。
+2. 开启灰度后，隔离目录内可完成：
+   - 新建文件夹。
+   - 上传文件。
+   - 重命名文件。
+   - 移动文件。
+   - 删除到回收站。
+   - 恢复。
+3. 目录操作可完成：
+   - 新建目录。
+   - 重命名目录。
+   - 移动目录。
+   - 删除到回收站。
+   - 恢复。
+4. 查看者不能写。
+5. 越过允许范围的操作被拒绝。
+6. 操作记录和回收站响应不泄露真实 NAS 路径。
+7. 审计日志有记录。
 
-如开发 agent 修改了关键 Vue 页面，可以做一次极短浏览器验收，只打开 105 文档交付或图纸交付页面确认不白屏、缺失项和入口清晰即可。
+## 4. 浏览器短验
 
-## 4. 红线检查
+本轮需要做一次短浏览器验收，只打开一个真实项目文件管理页：
+
+- 文件管理页可打开。
+- 左目录树、右文件表、工具栏不白屏。
+- 当前目录可写 / 不可写状态清楚。
+- 上传、新建文件夹、回收站、操作记录按钮可见。
+- 页面无横向撑爆。
+
+不要在真实业务目录执行写操作。真实写操作只由专项脚本在隔离目录完成。
+
+## 5. 红线检查
 
 接口响应、页面文本、日志和新增脚本不得泄露：
 
@@ -80,30 +94,31 @@ git diff --check
 - secret
 - password
 
-## 5. 禁止通过的情况
+## 6. 禁止通过的情况
 
 P0：
 
-- 真实 NAS 文件被移动、删除、改名、复制或读取正文。
+- 真实业务目录被脚本写入、移动、删除、改名或复制。
 - 真实 NAS 路径泄露。
 - 权限绕过。
-- 自动挂接、自动审核、自动整改。
-- 启动 Hermes / BIM / parser / indexing 新能力。
+- 永久删除被普通用户开放。
+- 新增 Hermes / BIM / parser / indexing 能力。
 
 P1：
 
-- 没有 M2F 专项脚本。
-- 105 已确认主数据不能驱动文档 / 图纸交付。
-- 缺失项没有可理解解释。
-- 挂接、审核整改或交付包草案主链路断裂。
-- M2E 或 M2C 回归失败。
+- 没有 M2G 专项脚本。
+- 新建文件夹仍出现项目上下文误判。
+- 上传 / 新建 / 重命名 / 移动 / 删除到回收站 / 恢复任一核心链路不可用。
+- 回收站恢复不可用。
+- 操作成功后文件列表或目录树不刷新，导致用户看不到结果。
+- M2B 或文件访问安全回归失败。
 
 P2：
 
-- 文案或视觉细节粗糙但不影响主链路。
+- 文案、布局、按钮位置仍有细节粗糙，但不影响主链路。
 - 既有 Vite chunk warning。
 
-## 6. 报告要求
+## 7. 报告要求
 
 完成后写入：
 
@@ -114,8 +129,7 @@ P2：
 - 测试结论。
 - P0/P1/P2。
 - 必跑命令结果。
-- M2F 专项脚本结果。
-- 105 真实项目交付闭环状态。
-- forbidden field 扫描结果。
-- 是否做了浏览器短验；如果未做，说明按轻量策略跳过。
-- 是否建议主 agent 收口 M2F。
+- M2G 专项脚本结果。
+- 浏览器短验结果。
+- 是否发现真实路径或敏感字段泄露。
+- 是否建议主 agent 收口 M2G。
