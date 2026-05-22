@@ -103,12 +103,17 @@ public class SecurityConfig {
             "http://127.0.0.1:5173",
             "http://localhost:5174",
             "http://127.0.0.1:5174",
+            "http://localhost:5188",
+            "http://127.0.0.1:5188",
             "http://10.*.*.*:5173",
             "http://172.*.*.*:5173",
             "http://192.168.*.*:5173",
             "http://10.*.*.*:5174",
             "http://172.*.*.*:5174",
-            "http://192.168.*.*:5174"
+            "http://192.168.*.*:5174",
+            "http://10.*.*.*:5188",
+            "http://172.*.*.*:5188",
+            "http://192.168.*.*:5188"
         ));
         if (configuredCorsAllowedOrigins != null && !configuredCorsAllowedOrigins.isBlank()) {
             Arrays.stream(configuredCorsAllowedOrigins.split(","))
