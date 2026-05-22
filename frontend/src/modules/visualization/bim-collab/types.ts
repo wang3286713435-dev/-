@@ -22,6 +22,53 @@ export interface BimLegendItem {
   color: string;
 }
 
+export interface BimOperationsSummary {
+  equipmentCount: number;
+  spaceObjectCount: number;
+  systemObjectCount: number;
+  componentPlaceholderCount: number;
+  sectionNodeCount: number;
+  linkedObjectCount: number;
+  unlinkedObjectCount: number;
+  byObjectType: BimChartBar[];
+  byDiscipline: BimChartBar[];
+  systems: BimSystemItem[];
+  spaces: BimSpaceItem[];
+  workItems: BimWorkItem[];
+  unavailableModules: string[];
+}
+
+export interface BimSystemItem {
+  id: number;
+  code: string;
+  name: string;
+  discipline: string;
+  linkedEquipmentCount: number;
+  status: string;
+  source: string;
+}
+
+export interface BimSpaceItem {
+  id: number;
+  parentId: number | null;
+  code: string;
+  name: string;
+  level: number;
+  path: string;
+  objectCount: number;
+  equipmentCount: number;
+  systemCount: number;
+}
+
+export interface BimWorkItem {
+  id: string;
+  category: string;
+  title: string;
+  status: string;
+  source: string;
+  updatedAt: string;
+}
+
 export interface BimSceneNode {
   id: string;
   modelFileId: number;
@@ -70,4 +117,5 @@ export interface BimCollaborationData {
   versionInfo: BimMetric[];
   safetyNotes: string[];
   nextActionText: string;
+  operations: BimOperationsSummary;
 }

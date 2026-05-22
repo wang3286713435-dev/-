@@ -112,7 +112,49 @@ export interface DigitalTwinDashboard {
       name: string;
       objectType: string;
       sectionNodeId: number | null;
+      discipline: string | null;
+      status: string | null;
     }>;
+  };
+  operationsSummary: {
+    equipmentCount: number;
+    spaceObjectCount: number;
+    systemObjectCount: number;
+    componentPlaceholderCount: number;
+    sectionNodeCount: number;
+    linkedObjectCount: number;
+    unlinkedObjectCount: number;
+    byObjectType: DistributionItem[];
+    byDiscipline: DistributionItem[];
+    systems: Array<{
+      id: number;
+      code: string;
+      name: string;
+      discipline: string | null;
+      linkedEquipmentCount: number;
+      status: string | null;
+      source: string;
+    }>;
+    spaces: Array<{
+      id: number;
+      parentId: number | null;
+      code: string;
+      name: string;
+      level: number;
+      path: string;
+      objectCount: number;
+      equipmentCount: number;
+      systemCount: number;
+    }>;
+    workItems: Array<{
+      id: string;
+      category: string;
+      title: string;
+      status: string | null;
+      source: string | null;
+      updatedAt: string | null;
+    }>;
+    unavailableModules: string[];
   };
   activity: {
     latestAssetUpdatedAt: string | null;

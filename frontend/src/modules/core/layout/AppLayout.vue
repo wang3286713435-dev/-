@@ -96,7 +96,14 @@ const hermesEnabledRouteNames = new Set([
 ]);
 
 const menus = computed(() => {
-  const all = authStore.currentUser?.menus ?? [];
+  const all = (authStore.currentUser?.menus ?? []).map((item) => {
+    if (item.key !== 'digital-twin') return item;
+    return {
+      ...item,
+      label: 'BIM协同管理',
+      path: '/bim-collaboration'
+    };
+  });
   const visibleMenus = all.filter((m) => {
     if (hiddenTopLevelKeys.has(m.key)) return false;
     return !hiddenTopLevelPathPrefixes.some((prefix) => m.path === prefix || m.path.startsWith(`${prefix}/`));
@@ -108,8 +115,8 @@ const menus = computed(() => {
   if (!canUseDigitalTwin) return visibleMenus;
   const digitalTwinMenu: MenuItem = {
     key: 'digital-twin',
-    label: '数字孪生',
-    path: '/digital-twin',
+    label: 'BIM协同管理',
+    path: '/bim-collaboration',
     icon: 'Monitor'
   };
   const dataStewardIndex = visibleMenus.findIndex((item) => item.key === 'data-steward');
@@ -164,7 +171,7 @@ const globalHermesHint = computed(() => globalHermesPageTitle.value);
 
 const shellEyebrow = computed(() => {
   if (routeProjectId.value) return '当前项目工作台';
-  if (String(route.name ?? '') === 'digital-twin') return '数字孪生平台';
+  if (String(route.name ?? '') === 'bim-collaboration') return 'BIM协同管理';
   if (String(route.name ?? '').startsWith('admin-')) return '管理中心';
   return '平台主入口';
 });
@@ -178,7 +185,7 @@ const shellTitle = computed(() => {
     'data-steward-scans': '扫描任务',
     'data-steward-quality': '数据质量',
     'data-steward-catalog': '资产目录',
-    'digital-twin': '数字孪生',
+    'bim-collaboration': 'BIM协同管理',
     'admin-employees': '员工权限管理',
     'access-pending': '等待项目授权'
   };
@@ -192,8 +199,8 @@ const shellSubtitle = computed(() => {
   if (String(route.name ?? '') === 'data-steward-assets') {
     return '从真实 NAS 项目进入工作台，按项目推进数字化交付。';
   }
-  if (String(route.name ?? '') === 'digital-twin') {
-    return '按项目查看 BIM 协同管理、模型适配和交付风险联动。';
+  if (String(route.name ?? '') === 'bim-collaboration') {
+    return '按项目查看模型、设备设施、房屋空间、交付风险和协同任务。';
   }
   if (String(route.name ?? '').startsWith('admin-')) {
     return '管理员工账号、项目授权和试运行访问范围。';

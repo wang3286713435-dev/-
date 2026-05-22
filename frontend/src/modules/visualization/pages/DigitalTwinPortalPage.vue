@@ -1,13 +1,25 @@
 <template>
   <section class="digital-twin-portal">
-    <section class="digital-twin-intro" aria-label="数字孪生亮点功能">
+    <section class="digital-twin-intro" aria-label="BIM协同管理亮点功能">
       <div>
         <span>BIM 协同管理</span>
-        <h1>数字孪生平台</h1>
-        <p>以项目为单位串联模型、图纸、交付、整改和质量风险，让 BIM 协同成为数字化交付平台的高频入口。</p>
+        <h1>BIM协同管理</h1>
+        <p>以项目为单位串联模型、图纸、设备设施、房屋空间、整改和质量风险，让 BIM 协同成为数字化交付平台的高频入口。</p>
       </div>
       <div class="digital-twin-highlights">
-        <article v-for="item in highlights" :key="item.label">
+        <button
+          class="digital-twin-highlight digital-twin-highlight--project"
+          type="button"
+          aria-controls="digital-twin-project-panel"
+          :aria-expanded="projectPanelOpen"
+          @click="projectPanelOpen = true"
+        >
+          <span>项目选择</span>
+          <strong>{{ activeProject?.name ?? '请选择项目' }}</strong>
+          <em>{{ activeProject?.code ?? `${filteredProjects.length} 个项目可选` }}</em>
+        </button>
+
+        <article v-for="item in highlights" :key="item.label" class="digital-twin-highlight">
           <span>{{ item.label }}</span>
           <strong>{{ item.value }}</strong>
           <em>{{ item.hint }}</em>
@@ -15,11 +27,34 @@
       </div>
     </section>
 
-    <aside class="digital-twin-projects" aria-label="数字孪生项目选择">
+    <div
+      v-if="projectPanelOpen"
+      class="digital-twin-project-overlay"
+      aria-hidden="true"
+      @click="projectPanelOpen = false"
+    />
+
+    <aside
+      v-if="projectPanelOpen"
+      id="digital-twin-project-panel"
+      class="digital-twin-projects"
+      :class="{ 'is-open': projectPanelOpen }"
+      aria-label="BIM协同项目选择"
+      @keydown.esc.stop="projectPanelOpen = false"
+    >
       <div class="digital-twin-projects__head">
-        <span>DIGITAL TWIN · {{ filteredProjects.length }} 个项目</span>
-        <h2>项目选择</h2>
-        <p>选择项目后，大屏会读取该项目的真实协同数据。</p>
+        <div>
+          <span>DIGITAL TWIN · {{ filteredProjects.length }} 个项目</span>
+          <h2>项目选择</h2>
+          <p>选择项目后，大屏会读取该项目的真实协同数据。</p>
+        </div>
+        <el-button
+          text
+          circle
+          :icon="Close"
+          aria-label="收起项目选择"
+          @click="projectPanelOpen = false"
+        />
       </div>
 
       <el-input
@@ -37,6 +72,7 @@
             class="digital-twin-project"
             :class="{ 'is-active': project.id === activeProjectId }"
             type="button"
+            :disabled="switchingProjectId === project.id"
             @click="selectProject(project.id)"
           >
             <span>{{ project.code }}</span>
@@ -63,20 +99,21 @@
       />
 
       <DigitalTwinDashboardPage v-if="activeProjectId" />
-      <el-empty v-else description="请选择项目后查看数字孪生平台" />
+      <el-empty v-else description="请选择项目后查看 BIM 协同管理" />
     </main>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { Search } from '@element-plus/icons-vue';
+import { Close, Search } from '@element-plus/icons-vue';
 
 import DigitalTwinDashboardPage from '@/modules/visualization/pages/DigitalTwinDashboardPage.vue';
 import { useAuthStore } from '@/stores/auth';
 
 const authStore = useAuthStore();
 const keyword = ref('');
+const projectPanelOpen = ref(false);
 const switchingProjectId = ref<number | null>(null);
 const switchError = ref('');
 
@@ -100,14 +137,9 @@ const activeProject = computed(() => {
 
 const highlights = computed(() => [
   {
-    label: '当前项目',
-    value: activeProject.value?.name ?? '未选择',
-    hint: activeProject.value?.code ?? '请选择项目'
-  },
-  {
     label: '能力定位',
     value: 'BIM协同',
-    hint: '模型、图纸、交付一屏联动'
+    hint: '模型、设备、空间、交付联动'
   },
   {
     label: '数据来源',
@@ -117,11 +149,16 @@ const highlights = computed(() => [
 ]);
 
 async function selectProject(projectId: number) {
-  if (projectId === activeProjectId.value || switchingProjectId.value) return;
+  if (projectId === activeProjectId.value) {
+    projectPanelOpen.value = false;
+    return;
+  }
+  if (switchingProjectId.value) return;
   switchingProjectId.value = projectId;
   switchError.value = '';
   try {
     await authStore.changeProject(projectId);
+    projectPanelOpen.value = false;
   } catch (error) {
     switchError.value = error instanceof Error ? error.message : '项目切换失败';
   } finally {
@@ -132,13 +169,12 @@ async function selectProject(projectId: number) {
 
 <style scoped>
 .digital-twin-portal {
-  --digital-twin-project-panel-h: clamp(760px, calc(100dvh - var(--zy-header-h) - 48px), 980px);
-
   align-items: start;
   display: grid;
   gap: var(--zy-sp-4);
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
+  position: relative;
 }
 
 .digital-twin-projects,
@@ -151,23 +187,46 @@ async function selectProject(projectId: number) {
 
 .digital-twin-projects {
   align-content: start;
-  align-self: start;
   display: flex;
   flex-direction: column;
   gap: var(--zy-sp-3);
-  height: var(--digital-twin-project-panel-h);
-  max-height: none;
+  height: min(760px, calc(100dvh - var(--zy-header-h) - 96px));
+  left: calc(var(--zy-sidebar-w) + var(--zy-content-pad));
+  max-height: calc(100dvh - var(--zy-header-h) - 96px);
   min-height: 0;
   min-width: 0;
+  opacity: 0;
   overflow: hidden;
   padding: var(--zy-sp-4);
-  position: sticky;
-  top: calc(var(--zy-header-h) + var(--zy-content-pad));
+  pointer-events: none;
+  position: fixed;
+  top: calc(var(--zy-header-h) + var(--zy-content-pad) + 56px);
+  transform: translateX(-14px);
+  transition:
+    opacity var(--zy-duration-2) var(--zy-ease-out),
+    transform var(--zy-duration-2) var(--zy-ease-out);
+  width: min(420px, calc(100vw - var(--zy-sidebar-w) - var(--zy-content-pad) * 2));
+  z-index: 40;
+}
+
+.digital-twin-projects.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
 }
 
 .digital-twin-projects__head {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--zy-sp-3);
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.digital-twin-projects__head > div {
   display: grid;
   gap: 4px;
+  min-width: 0;
 }
 
 .digital-twin-projects__head span,
@@ -254,6 +313,18 @@ async function selectProject(projectId: number) {
   white-space: nowrap;
 }
 
+.digital-twin-project:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.digital-twin-project-overlay {
+  background: rgba(15, 23, 42, 0.08);
+  inset: 0;
+  position: fixed;
+  z-index: 35;
+}
+
 .digital-twin-main {
   display: grid;
   gap: var(--zy-sp-4);
@@ -291,14 +362,33 @@ async function selectProject(projectId: number) {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.digital-twin-highlights article {
+.digital-twin-highlight {
+  background: var(--zy-surface);
   border: 1px solid color-mix(in srgb, var(--zy-line) 74%, transparent);
   border-radius: var(--zy-radius-base);
+  color: var(--zy-ink);
   display: grid;
   gap: 5px;
   min-height: 86px;
   min-width: 0;
   padding: var(--zy-sp-3);
+  text-align: left;
+}
+
+.digital-twin-highlight--project {
+  cursor: pointer;
+}
+
+.digital-twin-highlight--project:hover,
+.digital-twin-highlight--project:focus-visible {
+  border-color: color-mix(in srgb, var(--zy-blue-500) 48%, transparent);
+  box-shadow: var(--zy-shadow-sm);
+  outline: none;
+}
+
+.digital-twin-highlight--project span {
+  color: var(--zy-blue-600);
+  font-weight: var(--zy-fw-semi);
 }
 
 .digital-twin-highlights strong {
@@ -310,23 +400,20 @@ async function selectProject(projectId: number) {
 }
 
 @media (max-width: 1280px) {
-  .digital-twin-portal,
   .digital-twin-intro {
     grid-template-columns: 1fr;
-  }
-
-  .digital-twin-projects {
-    height: clamp(520px, 58dvh, 680px);
-    min-height: 0;
-    position: static;
-  }
-
-  .digital-twin-project-scroll {
-    max-height: none;
   }
 }
 
 @media (max-width: 820px) {
+  .digital-twin-projects {
+    height: min(680px, calc(100dvh - 48px));
+    left: var(--zy-content-pad);
+    max-height: calc(100dvh - 48px);
+    top: var(--zy-content-pad);
+    width: calc(100vw - var(--zy-content-pad) * 2);
+  }
+
   .digital-twin-highlights {
     grid-template-columns: 1fr;
   }

@@ -46,7 +46,7 @@
           </div>
           <div>
             <el-tag size="small" type="success" effect="plain">真实项目数据</el-tag>
-            <el-tag size="small" effect="plain">{{ dashboard.modelSummary.engineMode }} 适配</el-tag>
+            <el-tag size="small" effect="plain">{{ engineModeLabel(dashboard.modelSummary.engineMode) }}</el-tag>
             <el-tag v-if="!dashboard.modelSummary.viewerAvailable" size="small" type="warning" effect="plain">元数据视图</el-tag>
           </div>
         </div>
@@ -112,7 +112,7 @@ const kpiCards = computed(() => {
     { label: '资产文件', value: formatCount(item.assetSummary.fileCount), hint: formatBytes(item.assetSummary.totalSizeBytes) },
     { label: '模型文件', value: formatCount(item.assetSummary.modelFileCount), hint: `${formatCount(item.modelSummary.publishedModelCount)} 已发布` },
     { label: '图纸文件', value: formatCount(item.assetSummary.drawingFileCount), hint: '平台真实资产' },
-    { label: '管理对象', value: formatCount(item.modelSummary.managedObjectCount), hint: item.modelSummary.engineMode },
+    { label: '管理对象', value: formatCount(item.modelSummary.managedObjectCount), hint: engineModeLabel(item.modelSummary.engineMode) },
     { label: '质量风险', value: formatCount(item.qualitySummary.riskSignalCount), hint: `${formatCount(item.qualitySummary.pendingReviewCount)} 待审核` },
     { label: '交付完成', value: formatPercent(item.deliverySummary.completionRate), hint: `${formatCount(item.deliverySummary.missingCount)} 缺失` }
   ];
@@ -181,6 +181,11 @@ function formatBytes(value: number | null | undefined) {
   if (size >= 1024 ** 2) return `${(size / 1024 ** 2).toFixed(1)} MB`;
   if (size >= 1024) return `${(size / 1024).toFixed(1)} KB`;
   return `${size} B`;
+}
+
+function engineModeLabel(value: string | null | undefined) {
+  if (!value || value === 'MOCK' || value === 'METADATA_ADAPTER') return '元数据适配';
+  return value;
 }
 </script>
 

@@ -147,6 +147,7 @@ public final class VisualizationDtos {
         QualitySummary qualitySummary,
         ModelSummary modelSummary,
         ActivitySummary activity,
+        CollaborationOperationsSummary operationsSummary,
         SafetyBoundary safetyBoundary
     ) {
     }
@@ -258,7 +259,60 @@ public final class VisualizationDtos {
         String code,
         String name,
         String objectType,
-        Long sectionNodeId
+        Long sectionNodeId,
+        String discipline,
+        String status
+    ) {
+    }
+
+    public record CollaborationOperationsSummary(
+        Integer equipmentCount,
+        Integer spaceObjectCount,
+        Integer systemObjectCount,
+        Integer componentPlaceholderCount,
+        Integer sectionNodeCount,
+        Integer linkedObjectCount,
+        Integer unlinkedObjectCount,
+        List<DistributionItem> byObjectType,
+        List<DistributionItem> byDiscipline,
+        List<SystemSummaryItem> systems,
+        List<SpaceSummaryItem> spaces,
+        List<WorkItemSummary> workItems,
+        List<String> unavailableModules
+    ) {
+    }
+
+    public record SystemSummaryItem(
+        Long id,
+        String code,
+        String name,
+        String discipline,
+        Integer linkedEquipmentCount,
+        String status,
+        String source
+    ) {
+    }
+
+    public record SpaceSummaryItem(
+        Long id,
+        Long parentId,
+        String code,
+        String name,
+        Integer level,
+        String path,
+        Integer objectCount,
+        Integer equipmentCount,
+        Integer systemCount
+    ) {
+    }
+
+    public record WorkItemSummary(
+        String id,
+        String category,
+        String title,
+        String status,
+        String source,
+        String updatedAt
     ) {
     }
 

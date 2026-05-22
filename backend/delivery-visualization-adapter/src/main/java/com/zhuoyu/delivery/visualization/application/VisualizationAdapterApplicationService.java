@@ -18,8 +18,11 @@ import com.zhuoyu.delivery.datasteward.dto.DataStewardDtos.ModelIntegrationRespo
 import com.zhuoyu.delivery.datasteward.file.FileResourceApplicationService;
 import com.zhuoyu.delivery.datasteward.model.ModelIntegrationApplicationService;
 import com.zhuoyu.delivery.datasteward.object.ManagedObjectApplicationService;
+import com.zhuoyu.delivery.masterdata.section.application.SectionNodeApplicationService;
+import com.zhuoyu.delivery.masterdata.section.dto.SectionNodeResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ActivityItem;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ActivitySummary;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.CollaborationOperationsSummary;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ContextInjectRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ContextInjectResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.DeliverySummary;
@@ -43,16 +46,23 @@ import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.QualitySummary;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.AssetSummary;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.SafetyBoundary;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ScanTaskActivityItem;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.SpaceSummaryItem;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.SystemSummaryItem;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.VisualizationContextResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.WorkItemSummary;
 import com.zhuoyu.delivery.workcenter.delivery.DeliveryApplicationService;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCompletenessResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.RectificationResponse;
 import com.zhuoyu.delivery.workcenter.rectification.RectificationApplicationService;
 import com.zhuoyu.delivery.shared.preview.FilePreviewPolicy;
 import com.zhuoyu.delivery.shared.preview.PreviewDecision;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -83,6 +93,7 @@ public class VisualizationAdapterApplicationService {
     private final DeliveryApplicationService deliveryApplicationService;
     private final RectificationApplicationService rectificationApplicationService;
     private final AuditLogApplicationService auditLogApplicationService;
+    private final SectionNodeApplicationService sectionNodeApplicationService;
 
     public VisualizationAdapterApplicationService(
         ModelIntegrationApplicationService modelIntegrationApplicationService,
@@ -93,7 +104,8 @@ public class VisualizationAdapterApplicationService {
         AssetQualityApplicationService assetQualityApplicationService,
         DeliveryApplicationService deliveryApplicationService,
         RectificationApplicationService rectificationApplicationService,
-        AuditLogApplicationService auditLogApplicationService
+        AuditLogApplicationService auditLogApplicationService,
+        SectionNodeApplicationService sectionNodeApplicationService
     ) {
         this.modelIntegrationApplicationService = modelIntegrationApplicationService;
         this.managedObjectApplicationService = managedObjectApplicationService;
@@ -104,6 +116,7 @@ public class VisualizationAdapterApplicationService {
         this.deliveryApplicationService = deliveryApplicationService;
         this.rectificationApplicationService = rectificationApplicationService;
         this.auditLogApplicationService = auditLogApplicationService;
+        this.sectionNodeApplicationService = sectionNodeApplicationService;
     }
 
     public VisualizationContextResponse context(Long projectId) {
@@ -133,18 +146,24 @@ public class VisualizationAdapterApplicationService {
         List<RectificationResponse> rectifications = rectificationApplicationService.list(projectId, null);
         List<ModelIntegrationResponse> models = modelIntegrationApplicationService.list(projectId);
         List<ManagedObjectResponse> objects = managedObjectApplicationService.list(projectId);
+        List<SectionNodeResponse> sections = sectionNodeApplicationService.tree(projectId);
         List<ScanTaskResponse> scans = assetApplicationService.listScansForUser(userId).stream()
             .filter(task -> projectId.equals(task.projectId()))
             .limit(6)
             .toList();
+        DeliverySummary deliverySummary = toDeliverySummary(documentCompleteness, drawingCompleteness, rectifications);
+        QualitySummary qualitySummary = toQualitySummary(qualityOverview);
+        ModelSummary modelSummary = toModelSummary(models, objects);
+        ActivitySummary activitySummary = toActivitySummary(qualityOverview, scans);
 
         return new DigitalTwinDashboardResponse(
             toProjectSnapshot(projectId, project),
             toAssetSummary(assetStatistics),
-            toDeliverySummary(documentCompleteness, drawingCompleteness, rectifications),
-            toQualitySummary(qualityOverview),
-            toModelSummary(models, objects),
-            toActivitySummary(qualityOverview, scans),
+            deliverySummary,
+            qualitySummary,
+            modelSummary,
+            activitySummary,
+            toOperationsSummary(objects, sections, rectifications, scans),
             defaultSafetyBoundary()
         );
     }
@@ -160,7 +179,7 @@ public class VisualizationAdapterApplicationService {
             modelFile.originalName(),
             format,
             integration.status(),
-            "MOCK",
+            "METADATA_ADAPTER",
             false,
             "NOT_CONNECTED",
             false,
@@ -168,8 +187,8 @@ public class VisualizationAdapterApplicationService {
             true,
             "NOT_STARTED",
             "BIM_LIGHTWEIGHT",
-            "Mock 适配未连接",
-            "当前为 Mock 适配，未执行真实轻量化转换；接入真实 BIM 引擎后才能打开 3D 预览。",
+            "元数据适配",
+            "当前为元数据适配，未执行真实轻量化转换；接入真实 BIM 引擎后才能打开 3D 预览。",
             "未配置真实 BIM 轻量化引擎适配器",
             LIGHTWEIGHT_SUPPORTED_OPERATIONS,
             LIGHTWEIGHT_FORBIDDEN_OPERATIONS
@@ -186,7 +205,7 @@ public class VisualizationAdapterApplicationService {
             integration.modelFileId(),
             modelFile.originalName(),
             format,
-            "MOCK",
+            "METADATA_ADAPTER",
             true,
             false,
             true,
@@ -210,7 +229,7 @@ public class VisualizationAdapterApplicationService {
             List.of(
                 "当前返回仅用于准备检查，不代表真实预览可用",
                 "本接口不读取模型正文，不解析构件，不生成轻量化产物",
-                "未接入真实引擎前，禁止把 Mock 状态包装为可预览"
+                "未接入真实引擎前，禁止把适配状态包装为可预览"
             ),
             LIGHTWEIGHT_SUPPORTED_OPERATIONS,
             LIGHTWEIGHT_FORBIDDEN_OPERATIONS
@@ -379,7 +398,7 @@ public class VisualizationAdapterApplicationService {
     private ModelSummary toModelSummary(List<ModelIntegrationResponse> models, List<ManagedObjectResponse> objects) {
         int published = (int) models.stream().filter(model -> "PUBLISHED".equals(model.status())).count();
         String lightweightStatus = models.isEmpty() ? "NOT_STARTED" : "NOT_CONNECTED";
-        String statusLabel = models.isEmpty() ? "暂无模型集成" : "Mock 适配未连接";
+        String statusLabel = models.isEmpty() ? "暂无模型集成" : "真实 Viewer 未接入";
         String actionHint = models.isEmpty()
             ? "当前项目还没有模型集成元数据，可先在数据管家登记模型。"
             : "当前只展示模型元数据和适配状态，未执行真实轻量化转换。";
@@ -387,7 +406,7 @@ public class VisualizationAdapterApplicationService {
             models.size(),
             published,
             objects.size(),
-            "MOCK",
+            "METADATA_ADAPTER",
             false,
             lightweightStatus,
             false,
@@ -397,9 +416,173 @@ public class VisualizationAdapterApplicationService {
                 .map(this::toModelSceneItem)
                 .toList(),
             objects.stream()
-                .map(object -> new ObjectSceneItem(object.id(), object.code(), object.name(), object.objectType(), object.sectionNodeId()))
+                .map(object -> new ObjectSceneItem(
+                    object.id(),
+                    object.code(),
+                    object.name(),
+                    object.objectType(),
+                    object.sectionNodeId(),
+                    object.discipline(),
+                    object.status()
+                ))
                 .toList()
         );
+    }
+
+    private CollaborationOperationsSummary toOperationsSummary(
+        List<ManagedObjectResponse> objects,
+        List<SectionNodeResponse> sectionTree,
+        List<RectificationResponse> rectifications,
+        List<ScanTaskResponse> scans
+    ) {
+        List<SectionNodeResponse> sections = flattenSections(sectionTree);
+        List<ManagedObjectResponse> activeObjects = objects.stream()
+            .filter(item -> item.status() == null || "ACTIVE".equalsIgnoreCase(item.status()))
+            .toList();
+        int equipmentCount = countObjects(activeObjects, "EQUIPMENT");
+        int spaceObjectCount = countObjects(activeObjects, "SPACE");
+        int systemObjectCount = countObjects(activeObjects, "SYSTEM");
+        int componentPlaceholderCount = countObjects(activeObjects, "COMPONENT_PLACEHOLDER");
+        int linkedObjectCount = (int) activeObjects.stream().filter(item -> item.sectionNodeId() != null).count();
+        return new CollaborationOperationsSummary(
+            equipmentCount,
+            spaceObjectCount,
+            systemObjectCount,
+            componentPlaceholderCount,
+            sections.size(),
+            linkedObjectCount,
+            Math.max(0, activeObjects.size() - linkedObjectCount),
+            objectTypeDistribution(activeObjects),
+            objectDisciplineDistribution(activeObjects),
+            systemItems(activeObjects),
+            spaceItems(sections, activeObjects),
+            workItems(rectifications, scans),
+            List.of(
+                "未接入真实设备在线率、传感器实时点位和环境监测",
+                "未接入真实水电气冷热能耗采集",
+                "未接入真实巡检保养工单系统"
+            )
+        );
+    }
+
+    private List<SectionNodeResponse> flattenSections(List<SectionNodeResponse> roots) {
+        List<SectionNodeResponse> result = new ArrayList<>();
+        appendSections(roots, result);
+        return result;
+    }
+
+    private void appendSections(List<SectionNodeResponse> nodes, List<SectionNodeResponse> result) {
+        if (nodes == null) {
+            return;
+        }
+        nodes.forEach(node -> {
+            result.add(node);
+            appendSections(node.children(), result);
+        });
+    }
+
+    private int countObjects(List<ManagedObjectResponse> objects, String objectType) {
+        return (int) objects.stream().filter(item -> objectType.equalsIgnoreCase(defaultText(item.objectType(), "UNKNOWN"))).count();
+    }
+
+    private List<DistributionItem> objectTypeDistribution(List<ManagedObjectResponse> objects) {
+        return objects.stream()
+            .collect(Collectors.groupingBy(item -> defaultText(item.objectType(), "UNKNOWN"), Collectors.counting()))
+            .entrySet().stream()
+            .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+            .map(item -> new DistributionItem(item.getKey(), objectTypeLabel(item.getKey()), item.getValue().intValue(), 0L))
+            .toList();
+    }
+
+    private List<DistributionItem> objectDisciplineDistribution(List<ManagedObjectResponse> objects) {
+        return objects.stream()
+            .collect(Collectors.groupingBy(item -> defaultText(item.discipline(), "UNSPECIFIED"), Collectors.counting()))
+            .entrySet().stream()
+            .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+            .map(item -> new DistributionItem(item.getKey(), disciplineLabel(item.getKey()), item.getValue().intValue(), 0L))
+            .toList();
+    }
+
+    private List<SystemSummaryItem> systemItems(List<ManagedObjectResponse> objects) {
+        List<ManagedObjectResponse> activeEquipment = objects.stream()
+            .filter(item -> "EQUIPMENT".equalsIgnoreCase(defaultText(item.objectType(), "")))
+            .toList();
+        return objects.stream()
+            .filter(item -> "SYSTEM".equalsIgnoreCase(defaultText(item.objectType(), "")))
+            .sorted(Comparator.comparing(ManagedObjectResponse::id))
+            .map(system -> {
+                String discipline = defaultText(system.discipline(), "");
+                int linkedEquipment = discipline.isBlank()
+                    ? 0
+                    : (int) activeEquipment.stream()
+                        .filter(item -> discipline.equalsIgnoreCase(defaultText(item.discipline(), "")))
+                        .count();
+                return new SystemSummaryItem(
+                    system.id(),
+                    system.code(),
+                    system.name(),
+                    discipline,
+                    linkedEquipment,
+                    system.status(),
+                    "平台管理对象"
+                );
+            })
+            .toList();
+    }
+
+    private List<SpaceSummaryItem> spaceItems(List<SectionNodeResponse> sections, List<ManagedObjectResponse> objects) {
+        Map<Long, List<ManagedObjectResponse>> objectsBySection = objects.stream()
+            .filter(item -> item.sectionNodeId() != null)
+            .collect(Collectors.groupingBy(ManagedObjectResponse::sectionNodeId));
+        return sections.stream()
+            .limit(80)
+            .map(section -> {
+                List<ManagedObjectResponse> linkedObjects = objectsBySection.getOrDefault(section.id(), List.of());
+                return new SpaceSummaryItem(
+                    section.id(),
+                    section.parentId(),
+                    section.code(),
+                    section.name(),
+                    section.level(),
+                    section.path(),
+                    linkedObjects.size(),
+                    countObjects(linkedObjects, "EQUIPMENT"),
+                    countObjects(linkedObjects, "SYSTEM")
+                );
+            })
+            .toList();
+    }
+
+    private List<WorkItemSummary> workItems(List<RectificationResponse> rectifications, List<ScanTaskResponse> scans) {
+        List<WorkItemSummary> items = new ArrayList<>();
+        rectifications.stream()
+            .filter(item -> item.status() == null || !"CLOSED".equalsIgnoreCase(item.status()))
+            .limit(8)
+            .map(item -> new WorkItemSummary(
+                "rectification-" + item.id(),
+                "整改",
+                item.title(),
+                item.status(),
+                "交付闭环",
+                item.updatedAt() == null ? null : item.updatedAt().toString()
+            ))
+            .forEach(items::add);
+        scans.stream()
+            .filter(item -> item.failedCount() != null && item.failedCount() > 0)
+            .limit(6)
+            .map(item -> new WorkItemSummary(
+                "scan-" + item.id(),
+                "扫描治理",
+                "扫描任务存在失败项",
+                item.status(),
+                item.projectCode(),
+                item.updatedAt() == null ? null : item.updatedAt().toString()
+            ))
+            .forEach(items::add);
+        return items.stream()
+            .filter(Objects::nonNull)
+            .limit(12)
+            .toList();
     }
 
     private ModelSceneItem toModelSceneItem(ModelIntegrationResponse model) {
@@ -478,7 +661,7 @@ public class VisualizationAdapterApplicationService {
                 "构件级解析或搜索",
                 "NAS 文件写入、移动、删除"
             ),
-            "当前中央场景为模型元数据驱动的数字孪生视图，真实 3D Viewer 待 BIM 引擎选型后接入。"
+            "当前中央场景为模型元数据驱动的 BIM 协同视图，真实 3D Viewer 待 BIM 引擎选型后接入。"
         );
     }
 
@@ -553,6 +736,21 @@ public class VisualizationAdapterApplicationService {
             case "UNKNOWN" -> "未标注";
             default -> code;
         };
+    }
+
+    private String objectTypeLabel(String code) {
+        return switch (code) {
+            case "EQUIPMENT" -> "设备设施";
+            case "SYSTEM" -> "专业系统";
+            case "SPACE" -> "房屋空间";
+            case "COMPONENT_PLACEHOLDER" -> "构件占位";
+            case "UNKNOWN" -> "未分类";
+            default -> code;
+        };
+    }
+
+    private String defaultText(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.trim();
     }
 
     private int intValue(Integer value) {

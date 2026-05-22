@@ -35,7 +35,7 @@ export function mapDashboardToBimCollab(dashboard: DigitalTwinDashboard): BimCol
     projectCode: project.code,
     projectStage: project.projectStage || '未维护',
     managerName: project.projectManagerName || '待维护',
-    engineMode: model.engineMode,
+    engineMode: engineModeLabel(model.engineMode),
     statusLabel: model.statusLabel,
     viewerAvailable: model.viewerAvailable,
     viewerMessage: dashboard.safetyBoundary.viewerMessage,
@@ -69,11 +69,80 @@ export function mapDashboardToBimCollab(dashboard: DigitalTwinDashboard): BimCol
     events: recentEvents(dashboard),
     versionInfo: [
       { label: '模型发布', value: formatCount(model.publishedModelCount), hint: `${formatCount(model.modelIntegrationCount)} 个集成`, tone: 'normal' },
-      { label: '轻量化', value: model.lightweightStatus || 'MOCK', hint: model.engineMode, tone: model.viewerAvailable ? 'normal' : 'focus' },
+      { label: '轻量化', value: model.lightweightStatus || '未接入', hint: engineModeLabel(model.engineMode), tone: model.viewerAvailable ? 'normal' : 'focus' },
       { label: '更新于', value: formatDateTime(updatedAt) || '暂无', hint: '平台事件', tone: 'muted' }
     ],
     safetyNotes: dashboard.safetyBoundary.guarantees,
-    nextActionText: delivery.nextActionText
+    nextActionText: delivery.nextActionText,
+    operations: operationsSummary(dashboard)
+  };
+}
+
+function operationsSummary(dashboard: DigitalTwinDashboard): BimCollaborationData['operations'] {
+  const operations = dashboard.operationsSummary ?? {
+    equipmentCount: 0,
+    spaceObjectCount: 0,
+    systemObjectCount: 0,
+    componentPlaceholderCount: 0,
+    sectionNodeCount: 0,
+    linkedObjectCount: 0,
+    unlinkedObjectCount: 0,
+    byObjectType: [],
+    byDiscipline: [],
+    systems: [],
+    spaces: [],
+    workItems: [],
+    unavailableModules: ['当前后端暂未返回 BIM 协同扩展摘要']
+  };
+  return {
+    equipmentCount: operations.equipmentCount,
+    spaceObjectCount: operations.spaceObjectCount,
+    systemObjectCount: operations.systemObjectCount,
+    componentPlaceholderCount: operations.componentPlaceholderCount,
+    sectionNodeCount: operations.sectionNodeCount,
+    linkedObjectCount: operations.linkedObjectCount,
+    unlinkedObjectCount: operations.unlinkedObjectCount,
+    byObjectType: operations.byObjectType.map((item, index) => ({
+      label: item.label,
+      value: item.count,
+      displayValue: formatCount(item.count),
+      color: chartColors[index % chartColors.length]
+    })),
+    byDiscipline: operations.byDiscipline.map((item, index) => ({
+      label: item.label,
+      value: item.count,
+      displayValue: formatCount(item.count),
+      color: chartColors[index % chartColors.length]
+    })),
+    systems: operations.systems.map((item) => ({
+      id: item.id,
+      code: item.code,
+      name: item.name,
+      discipline: item.discipline || '未标注专业',
+      linkedEquipmentCount: item.linkedEquipmentCount,
+      status: item.status || 'ACTIVE',
+      source: item.source
+    })),
+    spaces: operations.spaces.map((item) => ({
+      id: item.id,
+      parentId: item.parentId,
+      code: item.code,
+      name: item.name,
+      level: item.level,
+      path: item.path,
+      objectCount: item.objectCount,
+      equipmentCount: item.equipmentCount,
+      systemCount: item.systemCount
+    })),
+    workItems: operations.workItems.map((item) => ({
+      id: item.id,
+      category: item.category,
+      title: item.title,
+      status: item.status || '待处理',
+      source: item.source || '平台任务',
+      updatedAt: formatDateTime(item.updatedAt) || '暂无时间'
+    })),
+    unavailableModules: operations.unavailableModules
   };
 }
 
@@ -243,4 +312,10 @@ function formatDateTime(value: string | null | undefined) {
     hour: '2-digit',
     minute: '2-digit'
   }).format(date);
+}
+
+function engineModeLabel(value: string | null | undefined) {
+  if (!value) return '元数据适配';
+  if (value === 'METADATA_ADAPTER' || value === 'MOCK') return '元数据适配';
+  return value;
 }
