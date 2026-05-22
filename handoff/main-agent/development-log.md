@@ -3507,3 +3507,25 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - 未触碰真实 NAS 文件，未读取正文，未新增 Hermes / BIM / parser / indexing 能力。
 - 主 agent 裁决：`M2F：真实项目交付闭环试运行` 正式收口。
 - 下一批次暂不自动启动，等待用户确认。
+
+## 2026-05-23 数字孪生 PR 并入兼容性检查
+
+- 用户说明数字孪生分支已通过 GitHub PR 合并回主线，要求进入下一批次前检查兼容性和并入情况。
+- 主 agent 已确认：
+  - 本地 `main` 与 `origin/main` 一致。
+  - 当前 `HEAD` 为 `a5f7064 feat: add digital twin collaboration dashboard (#1)`。
+  - 数字孪生 PR 已并入主线。
+- 已执行兼容检查：
+  - 后端构建通过。
+  - 前端构建通过。
+  - 健康检查通过。
+  - M2F / M2E / M2C / M2B 回归通过。
+  - 数字孪生聚合接口在登录和项目上下文下返回 `code=OK`。
+  - 未登录访问数字孪生接口返回 `401`。
+  - 未发现真实 NAS 路径或敏感字段泄露。
+- 已写入报告：
+  - `handoff/main-agent/digital-twin-pr-compatibility-check.md`
+- 当前裁决：
+  - 数字孪生 PR 可视为兼容并入。
+  - 可以继续进入下一批次。
+  - 下一批次建议仍为 `M2G：真实 NAS 文件管理器灰度完善`，不要在 M2G 中继续扩展数字孪生。
