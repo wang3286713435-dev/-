@@ -176,11 +176,10 @@ public class CatalogApplicationService {
     public PageResponse<CatalogFileResponse> listCatalogFiles(
         Long userId, Long projectId, String keyword, String directoryPath, String fileExt,
         String fileKind, String disciplineCode, String version, String qualityIssue,
-        int page, int pageSize
+        boolean directOnly, int page, int pageSize
     ) {
         int offset = Math.max(0, (page - 1) * pageSize);
         int limit = Math.max(1, Math.min(pageSize, 200));
-        String directoryPathExpression = directoryPathExpression("f.logical_path");
 
         StringBuilder sb = new StringBuilder("""
             SELECT f.id AS file_id, f.project_id, p.code AS project_code, p.name AS project_name,
@@ -203,8 +202,10 @@ public class CatalogApplicationService {
             sb.append(" AND (p.code LIKE :likeKw OR p.name LIKE :likeKw OR f.original_name LIKE :likeKw OR f.storage_uri LIKE :likeKw)");
             params.addValue("likeKw", "%" + keyword.trim() + "%");
         }
-        if (directoryPath != null && !directoryPath.isBlank()) {
-            String normalizedDirectoryPath = directoryPath.trim().replaceAll("/+$", "");
+        String normalizedDirectoryPath = normalizeCatalogDirectoryPath(directoryPath);
+        if (directOnly) {
+            appendDirectDirectoryFilter(sb, params, projectId, normalizedDirectoryPath);
+        } else if (!normalizedDirectoryPath.isBlank()) {
             appendDirectoryFilter(sb, params, projectId, normalizedDirectoryPath);
         }
         if (fileExt != null && !fileExt.isBlank()) {
@@ -1143,6 +1144,49 @@ public class CatalogApplicationService {
         sb.append("f.logical_path LIKE :dirPathSuffix OR f.logical_path LIKE :dirPathSuffixSlash");
         params.addValue("dirPathSuffix", "%/" + safeDirectoryPath);
         params.addValue("dirPathSuffixSlash", "%/" + safeDirectoryPath + "/%");
+        sb.append(")");
+    }
+
+    private void appendDirectDirectoryFilter(StringBuilder sb, MapSqlParameterSource params, Long projectId, String safeDirectoryPath) {
+        String parentExpression = directoryPathExpression("f.logical_path");
+        List<String> nasRoots = projectId == null ? List.of() : pathMappingRepository.list(projectId, true).stream()
+            .map(PathMappingResponse::nasPath)
+            .filter(Objects::nonNull)
+            .map(this::normalizeProviderPath)
+            .filter(root -> !root.isBlank())
+            .toList();
+
+        sb.append(" AND (");
+        boolean appended = false;
+
+        if (safeDirectoryPath.isBlank()) {
+            sb.append(parentExpression).append(" = :directRootPath");
+            params.addValue("directRootPath", "");
+            appended = true;
+            for (int i = 0; i < nasRoots.size(); i++) {
+                String param = "directRootRaw" + i;
+                sb.append(" OR ").append(parentExpression).append(" = :").append(param);
+                params.addValue(param, nasRoots.get(i));
+            }
+        } else {
+            for (int i = 0; i < nasRoots.size(); i++) {
+                String param = "directRaw" + i;
+                if (appended) {
+                    sb.append(" OR ");
+                }
+                sb.append(parentExpression).append(" = :").append(param);
+                params.addValue(param, nasRoots.get(i) + "/" + safeDirectoryPath);
+                appended = true;
+            }
+            if (appended) {
+                sb.append(" OR ");
+            }
+            sb.append(parentExpression).append(" = :directSafePath")
+              .append(" OR ").append(parentExpression).append(" LIKE :directSafePathSuffix");
+            params.addValue("directSafePath", safeDirectoryPath);
+            params.addValue("directSafePathSuffix", "%/" + safeDirectoryPath);
+        }
+
         sb.append(")");
     }
 

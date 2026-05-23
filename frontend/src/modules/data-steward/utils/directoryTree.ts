@@ -48,7 +48,7 @@ export function buildDirectoryTree(directories: CatalogDirectory[]): DirectoryTr
     };
   }
 
-  const prefixLength = computeDisplayPrefixLength(parsed);
+  const prefixLength = 0;
   const labelByPath = new Map<string, string>();
   const rootMap = new Map<string, MutableDirectoryTreeNode>();
   let rootFileCount = 0;
@@ -119,34 +119,6 @@ function normalizeDirectoryPath(path: string): string {
 
 function splitSegments(path: string): string[] {
   return path.split('/').filter(Boolean);
-}
-
-function computeDisplayPrefixLength(parsed: ParsedDirectory[]): number {
-  if (!parsed.length) return 0;
-
-  const [first, ...rest] = parsed;
-  let prefixLength = first.segments.length;
-
-  for (const item of rest) {
-    prefixLength = Math.min(prefixLength, item.segments.length);
-    for (let index = 0; index < prefixLength; index += 1) {
-      if (first.segments[index] !== item.segments[index]) {
-        prefixLength = index;
-        break;
-      }
-    }
-  }
-
-  if (parsed.length === 1) {
-    return Math.max(0, first.segments.length - 1);
-  }
-
-  const allIdentical = parsed.every((item) => item.normalizedPath === first.normalizedPath);
-  if (allIdentical) {
-    return Math.max(0, first.segments.length - 1);
-  }
-
-  return prefixLength;
 }
 
 function joinSegments(segments: string[], hasLeadingSlash: boolean): string {

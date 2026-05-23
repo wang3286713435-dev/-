@@ -49,7 +49,7 @@
           </el-tooltip>
           <el-tooltip :content="nasWriteActionTip" placement="top">
             <span>
-              <el-button :disabled="!canWriteNas || nasBusy" :icon="FolderAdd" @click="createDirectoryAction">新建文件夹</el-button>
+              <el-button :disabled="!canWriteNas || nasBusy" :icon="FolderAdd" @click="handleCreateDirectoryClick">新建文件夹</el-button>
             </span>
           </el-tooltip>
           <el-button :icon="Refresh" :loading="fileLoading || dirLoading || nasTrialLoading" @click="refreshBrowserViews(true)">
@@ -174,79 +174,127 @@
         </template>
       </div>
 
-      <el-table
-        ref="tableRef"
-        v-loading="fileLoading"
-        :data="files"
-        class="master-table"
-        empty-text="暂无文件资产"
-      >
-        <el-table-column label="文件名" min-width="320" show-overflow-tooltip>
-          <template #default="{ row }">
-            <div class="file-browser__name-cell">
-              <el-icon><Document /></el-icon>
-              <div>
-                <strong>{{ row.fileName }}</strong>
-              </div>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="fileKind" label="类型" width="100">
-          <template #default="{ row }">
-            <el-tag :type="fileKindTag(row.fileKind)">{{ row.fileKind }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="version" label="版本" width="90" />
-        <el-table-column label="大小" width="120" align="right">
-          <template #default="{ row }">{{ formatBytes(row.sizeBytes) }}</template>
-        </el-table-column>
-        <el-table-column label="专业" width="120" show-overflow-tooltip>
-          <template #default="{ row }">
-            <el-tag type="info">{{ row.disciplineName || disciplineLabel(row.disciplineCode) || '-' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="150">
-          <template #default="{ row }">
-            <div class="file-browser__status-cell">
-              <el-tag v-if="!row.qualityFlags || row.qualityFlags.length === 0" type="success" size="small">正常</el-tag>
-              <el-tag v-else type="warning" size="small">{{ row.qualityFlags.length }} 项待处理</el-tag>
-              <span>{{ row.confidenceLevel === 'HIGH' ? '高置信度' : '需复核' }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column v-if="diagnosticInfoVisible" label="技术信息 / 诊断" min-width="260">
-          <template #default="{ row }">
-            <div class="file-browser__diagnostic-cell">
-              <span>平台文件ID：{{ row.fileId }}</span>
-              <span>扩展名：{{ row.fileExt || '-' }}</span>
-              <span>置信度：{{ row.confidenceLevel ?? '-' }}</span>
-              <span>更新时间：{{ formatDate(row.updatedAt) }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
-          <template #default="{ row }">
-            <el-dropdown trigger="click" @command="handleRowCommand($event, row)">
-              <el-button text>
-                更多
-                <el-icon><MoreFilled /></el-icon>
+      <div class="file-browser__selection-bar">
+        <div>
+          <strong>{{ selectionSummary }}</strong>
+          <span>单击选择，Ctrl / Command 多选，Shift 连续选择；双击打开，右键查看操作。</span>
+        </div>
+        <div class="file-browser__selection-actions">
+          <el-tooltip :content="batchDownloadActionTip" placement="top">
+            <span>
+              <el-button size="small" :disabled="!selectedFileEntries.length" @click="handleBatchDownloadClick">
+                批量下载入口清单
               </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="preview">预览/下载</el-dropdown-item>
-                  <el-dropdown-item command="detail">详情</el-dropdown-item>
-                  <el-dropdown-item command="metadata">治理</el-dropdown-item>
-                  <el-dropdown-item command="checksum">补 checksum</el-dropdown-item>
-                  <el-dropdown-item :disabled="!canWriteNas || nasBusy" command="rename-file" divided>重命名</el-dropdown-item>
-                  <el-dropdown-item :disabled="!canWriteNas || nasBusy" command="move-file">移动</el-dropdown-item>
-                  <el-dropdown-item :disabled="!canAdminNas || nasBusy" command="quarantine-file">删除到回收站</el-dropdown-item>
-                  <el-dropdown-item disabled>更新版本</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </template>
-        </el-table-column>
-      </el-table>
+            </span>
+          </el-tooltip>
+          <el-tooltip :content="batchMoveActionTip" placement="top">
+            <span>
+              <el-button size="small" :disabled="!selectedEntries.length || Boolean(writeDisabledReason(false)) || nasBusy" @click="handleMoveSelectedClick">
+                移动
+              </el-button>
+            </span>
+          </el-tooltip>
+          <el-tooltip :content="batchQuarantineActionTip" placement="top">
+            <span>
+              <el-button
+                size="small"
+                type="danger"
+                plain
+                :disabled="!selectedEntries.length || Boolean(writeDisabledReason(true)) || nasBusy"
+                @click="handleQuarantineSelectedClick"
+              >
+                移入回收站
+              </el-button>
+            </span>
+          </el-tooltip>
+          <el-button v-if="selectedEntries.length" size="small" text @click="clearSelection">取消选择</el-button>
+        </div>
+      </div>
+
+      <div class="file-browser__entry-surface" @click="handleTableSurfaceClick" @contextmenu.prevent="handleEmptyContextMenu">
+        <el-table
+          ref="tableRef"
+          v-loading="fileLoading"
+          :data="browserEntries"
+          :row-key="entryRowKey"
+          :row-class-name="entryRowClassName"
+          class="master-table file-browser__entry-table"
+          empty-text="当前文件夹暂无文件或直接子文件夹"
+          @row-click="handleEntryClick"
+          @row-dblclick="handleEntryDblClick"
+          @row-contextmenu="handleEntryContextMenu"
+        >
+          <el-table-column label="名称" min-width="320" show-overflow-tooltip>
+            <template #default="{ row }">
+              <div class="file-browser__name-cell" :class="{ 'is-directory': row.kind === 'DIRECTORY' }">
+                <el-icon>
+                  <component :is="row.kind === 'DIRECTORY' ? Folder : Document" />
+                </el-icon>
+                <div>
+                  <strong>{{ row.name }}</strong>
+                  <span v-if="row.kind === 'DIRECTORY'">{{ row.path || '项目根目录' }}</span>
+                </div>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="类型" width="110">
+            <template #default="{ row }">
+              <el-tag v-if="row.kind === 'DIRECTORY'" type="info">文件夹</el-tag>
+              <el-tag v-else :type="fileKindTag(row.file.fileKind)">{{ row.file.fileKind }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="版本" width="90">
+            <template #default="{ row }">{{ row.kind === 'FILE' ? row.file.version : '-' }}</template>
+          </el-table-column>
+          <el-table-column label="大小" width="120" align="right">
+            <template #default="{ row }">{{ formatBytes(row.sizeBytes) }}</template>
+          </el-table-column>
+          <el-table-column label="专业" width="120" show-overflow-tooltip>
+            <template #default="{ row }">
+              <el-tag v-if="row.kind === 'FILE'" type="info">
+                {{ row.file.disciplineName || disciplineLabel(row.file.disciplineCode) || '-' }}
+              </el-tag>
+              <span v-else class="file-browser__muted">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="160">
+            <template #default="{ row }">
+              <div v-if="row.kind === 'FILE'" class="file-browser__status-cell">
+                <el-tag v-if="!row.file.qualityFlags || row.file.qualityFlags.length === 0" type="success" size="small">正常</el-tag>
+                <el-tag v-else type="warning" size="small">{{ row.file.qualityFlags.length }} 项待处理</el-tag>
+                <span>{{ row.file.confidenceLevel === 'HIGH' ? '高置信度' : '需复核' }}</span>
+              </div>
+              <div v-else class="file-browser__status-cell">
+                <el-tag type="info" size="small">目录</el-tag>
+                <span>{{ row.fileCount }} 个登记文件</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column v-if="diagnosticInfoVisible" label="技术信息 / 诊断" min-width="260">
+            <template #default="{ row }">
+              <div v-if="row.kind === 'FILE'" class="file-browser__diagnostic-cell">
+                <span>平台文件ID：{{ row.file.fileId }}</span>
+                <span>扩展名：{{ row.file.fileExt || '-' }}</span>
+                <span>置信度：{{ row.file.confidenceLevel ?? '-' }}</span>
+                <span>更新时间：{{ formatDate(row.file.updatedAt) }}</span>
+              </div>
+              <div v-else class="file-browser__diagnostic-cell">
+                <span>类型：项目内文件夹</span>
+                <span>文件夹路径提示：{{ row.path || '项目根目录' }}</span>
+                <span>不展示真实 NAS 绝对路径</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="150" fixed="right">
+            <template #default="{ row }">
+              <div class="file-browser__row-actions">
+                <el-button text @click.stop="handleOpenEntryButtonClick(row)">打开</el-button>
+                <el-button text :icon="MoreFilled" aria-label="打开右键菜单" @click.stop="openContextMenuFromButton(row, $event)" />
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
 
       <div class="file-browser__pagination">
         <el-pagination
@@ -259,6 +307,117 @@
         />
       </div>
     </section>
+
+    <div
+      v-if="contextMenu.visible"
+      ref="contextMenuRef"
+      class="file-browser__context-menu"
+      :style="contextMenuStyle"
+      @click.stop
+      @contextmenu.prevent
+    >
+      <button
+        v-for="item in contextMenuItems"
+        :key="item.command"
+        type="button"
+        :class="{ 'is-danger': item.danger, 'is-disabled': item.disabled, 'is-divided': item.divided }"
+        :disabled="item.disabled"
+        @click="handleContextMenuItemClick(item)"
+      >
+        <span>{{ item.label }}</span>
+        <small v-if="item.reason">{{ item.reason }}</small>
+      </button>
+    </div>
+
+    <el-dialog v-model="modelPreviewDialogVisible" title="模型预览占位" width="560px">
+      <div class="file-browser__model-placeholder">
+        <el-alert
+          title="当前只登记模型目录信息，不做 BIM 轻量化、不读取模型正文、不解析构件参数。"
+          type="info"
+          show-icon
+          :closable="false"
+        />
+        <el-descriptions v-if="modelPreviewEntry?.kind === 'FILE'" :column="1" border size="small">
+          <el-descriptions-item label="文件名">{{ modelPreviewEntry.file.fileName }}</el-descriptions-item>
+          <el-descriptions-item label="文件类型">{{ modelPreviewEntry.file.fileKind }} {{ modelPreviewEntry.file.fileExt || '' }}</el-descriptions-item>
+          <el-descriptions-item label="平台文件ID">{{ modelPreviewEntry.file.fileId }}</el-descriptions-item>
+          <el-descriptions-item label="处理方式">后续接入 BIM 轻量化引擎后再进入真实模型预览。</el-descriptions-item>
+        </el-descriptions>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="previewFallbackDialogVisible" title="打开受控预览入口" width="560px">
+      <div class="file-browser__preview-fallback">
+        <el-alert
+          type="warning"
+          show-icon
+          :closable="false"
+          title="浏览器可能拦截了新窗口。平台已创建受控访问票据，未读取文件正文，也未暴露真实 NAS 路径。"
+        />
+        <el-descriptions :column="1" border size="small">
+          <el-descriptions-item label="文件名">{{ previewFallbackFileName }}</el-descriptions-item>
+          <el-descriptions-item label="入口类型">{{ previewFallbackAction === 'PREVIEW' ? '预览' : '下载' }}</el-descriptions-item>
+          <el-descriptions-item label="有效期">
+            {{ previewFallbackTicket ? formatDate(previewFallbackTicket.expiresAt) : '-' }}
+          </el-descriptions-item>
+        </el-descriptions>
+        <a
+          v-if="previewFallbackTicket?.accessUrl"
+          class="file-browser__fallback-link"
+          :href="previewFallbackTicket.accessUrl"
+          target="_blank"
+          rel="noopener"
+          @click="previewFallbackDialogVisible = false"
+        >
+          点击打开受控{{ previewFallbackAction === 'PREVIEW' ? '预览' : '下载' }}入口
+        </a>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="batchDownloadDialogVisible" title="批量下载入口清单" width="720px">
+      <el-alert
+        class="file-browser__drawer-alert"
+        type="info"
+        show-icon
+        :closable="false"
+        title="本批只为已选文件逐个创建平台 DOWNLOAD 访问票据；不生成 ZIP，不复制 NAS 文件，文件夹会被跳过。"
+      />
+      <div v-loading="batchDownloadLoading" class="file-browser__batch-list">
+        <article v-for="item in batchDownloadRows" :key="item.key" class="file-browser__batch-item">
+          <div>
+            <strong>{{ item.name }}</strong>
+            <span>{{ item.message }}</span>
+          </div>
+          <el-tag :type="batchStatusTag(item.status)" size="small">{{ batchStatusLabel(item.status) }}</el-tag>
+          <el-button v-if="item.accessUrl" size="small" type="primary" @click="openBatchDownloadLink(item)">
+            打开下载入口
+          </el-button>
+        </article>
+        <el-empty v-if="!batchDownloadLoading && batchDownloadRows.length === 0" description="暂无下载入口" :image-size="56" />
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="batchResultDialogVisible" title="批量操作结果" width="720px">
+      <template v-if="batchOperationResult">
+        <div class="file-browser__batch-summary">
+          <strong>{{ batchOperationResult.title }}</strong>
+          <span>
+            成功 {{ batchOperationResult.successCount }} 项 /
+            失败 {{ batchOperationResult.failedCount }} 项 /
+            跳过 {{ batchOperationResult.skippedCount }} 项
+          </span>
+        </div>
+        <div class="file-browser__batch-list">
+          <article v-for="item in batchOperationResult.rows" :key="item.key" class="file-browser__batch-item">
+            <div>
+              <strong>{{ item.name }}</strong>
+              <span>{{ item.message }}</span>
+            </div>
+            <el-tag :type="batchStatusTag(item.status)" size="small">{{ batchStatusLabel(item.status) }}</el-tag>
+          </article>
+        </div>
+      </template>
+    </el-dialog>
 
     <el-drawer v-model="operationsDrawerVisible" title="文件管理操作记录" size="520px" @open="loadNasOperations">
       <el-alert
@@ -297,7 +456,7 @@
             size="small"
             type="primary"
             :disabled="item.status !== 'QUARANTINED' || !canAdminNasProjectTrial || nasBusy"
-            @click="restoreQuarantineItem(item.quarantineRecordId)"
+            @click="handleRestoreQuarantineClick(item.quarantineRecordId)"
           >
             恢复
           </el-button>
@@ -311,10 +470,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { ArrowDown, Document, FolderAdd, MoreFilled, Refresh, Search, Upload } from '@element-plus/icons-vue';
+import { ArrowDown, Document, Folder, FolderAdd, MoreFilled, Refresh, Search, Upload } from '@element-plus/icons-vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import {
+  createFileAccessTicket,
   createNasDirectory,
   fetchCatalogDirectories,
   fetchCatalogFiles,
@@ -332,11 +492,18 @@ import {
   type CatalogDirectory,
   type CatalogFile,
   type AssetDiscipline,
+  type FileAccessTicket,
   type NasOperationRecord,
   type NasQuarantineRecord,
   type NasWriteTrialStatus
 } from '@/modules/data-steward/api/dataSteward';
 import DirectoryTreePanel from '@/modules/data-steward/components/DirectoryTreePanel.vue';
+import { buildDirectoryTree, type DirectoryTreeNode } from '@/modules/data-steward/utils/directoryTree';
+import {
+  previewActionHint,
+  previewFromFileName,
+  type PreviewStatusLike
+} from '@/modules/data-steward/utils/previewStatus';
 import { useAuthStore } from '@/stores/auth';
 
 const props = defineProps<{
@@ -407,6 +574,26 @@ const advancedSearchVisible = ref(false);
 const diagnosticInfoVisible = ref(false);
 const treeWidth = ref(DEFAULT_TREE_WIDTH);
 const resizingTree = ref(false);
+const contextMenuRef = ref<HTMLElement | null>(null);
+const selectedEntryKeys = ref<Set<string>>(new Set());
+const lastSelectionAnchorKey = ref<string | null>(null);
+const contextMenu = reactive({
+  visible: false,
+  x: 0,
+  y: 0
+});
+const modelPreviewDialogVisible = ref(false);
+const modelPreviewEntry = ref<BrowserEntry | null>(null);
+const previewFallbackDialogVisible = ref(false);
+const previewFallbackTicket = ref<FileAccessTicket | null>(null);
+const previewFallbackFileName = ref('');
+const previewFallbackAction = ref<'PREVIEW' | 'DOWNLOAD'>('PREVIEW');
+const fileAccessOpening = ref(false);
+const batchDownloadDialogVisible = ref(false);
+const batchDownloadLoading = ref(false);
+const batchDownloadRows = ref<BatchDownloadRow[]>([]);
+const batchResultDialogVisible = ref(false);
+const batchOperationResult = ref<BatchOperationResult | null>(null);
 let resizePointerId: number | null = null;
 let tableLayoutFrame = 0;
 let directoryRequestId = 0;
@@ -461,6 +648,74 @@ type FileBrowserState = {
   lastFileId?: number | null;
   lastFileName?: string;
   updatedAt?: string;
+};
+
+type DirectoryBrowserEntry = {
+  kind: 'DIRECTORY';
+  key: string;
+  name: string;
+  path: string;
+  fileCount: number;
+  sizeBytes: number;
+  directory: DirectoryTreeNode;
+};
+
+type FileBrowserEntry = {
+  kind: 'FILE';
+  key: string;
+  name: string;
+  path: string;
+  fileCount: 0;
+  sizeBytes: number;
+  file: CatalogFile;
+};
+
+type BrowserEntry = DirectoryBrowserEntry | FileBrowserEntry;
+
+type ContextMenuCommand =
+  | 'open'
+  | 'preview'
+  | 'detail'
+  | 'metadata'
+  | 'checksum'
+  | 'rename'
+  | 'move'
+  | 'quarantine'
+  | 'download'
+  | 'batch-download';
+
+type ContextMenuItem = {
+  command: ContextMenuCommand;
+  label: string;
+  disabled?: boolean;
+  reason?: string;
+  danger?: boolean;
+  divided?: boolean;
+};
+
+type BatchStatus = 'SUCCESS' | 'FAILED' | 'SKIPPED';
+
+type BatchDownloadRow = {
+  key: string;
+  name: string;
+  status: BatchStatus;
+  message: string;
+  accessUrl?: string;
+};
+
+type BatchOperationRow = {
+  key: string;
+  name: string;
+  status: BatchStatus;
+  message: string;
+};
+
+type BatchOperationResult = {
+  title: string;
+  rows: BatchOperationRow[];
+  successCount: number;
+  failedCount: number;
+  skippedCount: number;
 };
 
 const fileBrowserStyle = computed(() => ({
@@ -578,25 +833,88 @@ const breadcrumbItems = computed(() => {
 });
 
 const directoryPrefixLength = computed(() => {
-  const parsed = directories.value
-    .map((directory) => splitPath(normalizeDirectoryPath(directory.directoryPath)))
-    .filter((parts) => parts.length > 0);
-
-  if (!parsed.length) return 0;
-
-  const [first, ...rest] = parsed;
-  let prefixLength = first.length;
-  for (const parts of rest) {
-    prefixLength = Math.min(prefixLength, parts.length);
-    for (let index = 0; index < prefixLength; index += 1) {
-      if (first[index] !== parts[index]) {
-        prefixLength = index;
-        break;
-      }
-    }
-  }
-  return prefixLength;
+  return 0;
 });
+
+const directoryTreeModel = computed(() => buildDirectoryTree(directories.value));
+
+const currentDirectoryNodes = computed(() => {
+  if (!activeDir.value) return directoryTreeModel.value.nodes;
+  return findDirectoryNode(directoryTreeModel.value.nodes, activeDir.value)?.children ?? [];
+});
+
+const directoryEntries = computed<DirectoryBrowserEntry[]>(() =>
+  currentDirectoryNodes.value.map((directory) => ({
+    kind: 'DIRECTORY',
+    key: `DIRECTORY:${directory.fullPath}`,
+    name: directory.name,
+    path: directory.fullPath,
+    fileCount: directory.fileCount,
+    sizeBytes: directory.totalSizeBytes,
+    directory
+  }))
+);
+
+const fileEntries = computed<FileBrowserEntry[]>(() =>
+  files.value.map((file) => ({
+    kind: 'FILE',
+    key: `FILE:${file.fileId}`,
+    name: file.fileName,
+    path: file.logicalPath || activeDir.value,
+    fileCount: 0,
+    sizeBytes: file.sizeBytes,
+    file
+  }))
+);
+
+const browserEntries = computed<BrowserEntry[]>(() => [
+  ...directoryEntries.value,
+  ...fileEntries.value
+]);
+
+const selectedEntries = computed(() => {
+  const keys = selectedEntryKeys.value;
+  return browserEntries.value.filter((entry) => keys.has(entry.key));
+});
+
+const selectedFileEntries = computed(() => selectedEntries.value.filter((entry): entry is FileBrowserEntry => entry.kind === 'FILE'));
+const selectedDirectoryEntries = computed(() =>
+  selectedEntries.value.filter((entry): entry is DirectoryBrowserEntry => entry.kind === 'DIRECTORY')
+);
+
+const selectionSummary = computed(() => {
+  if (!selectedEntries.value.length) {
+    return `当前文件夹：${directoryEntries.value.length} 个文件夹 / ${pagination.total} 个文件`;
+  }
+  return `已选 ${selectedEntries.value.length} 项：文件 ${selectedFileEntries.value.length} 个，文件夹 ${selectedDirectoryEntries.value.length} 个`;
+});
+
+const batchDownloadActionTip = computed(() => {
+  if (selectedFileEntries.value.length) {
+    return selectedDirectoryEntries.value.length
+      ? '将为已选文件创建下载入口，文件夹会跳过；本批不生成 ZIP。'
+      : '将为已选文件逐个创建平台下载入口；本批不生成 ZIP。';
+  }
+  if (selectedDirectoryEntries.value.length) return '文件夹打包下载待交付包能力支持，本次只处理已选文件。';
+  return '请先选择要下载的文件。';
+});
+
+const batchMoveActionTip = computed(() => {
+  if (!selectedEntries.value.length) return '请先选择要移动的文件或文件夹。';
+  return writeDisabledReason(false) || '将逐项调用平台现有移动接口，后端继续校验权限、灰度和路径。';
+});
+
+const batchQuarantineActionTip = computed(() => {
+  if (!selectedEntries.value.length) return '请先选择要移入回收站的文件或文件夹。';
+  return writeDisabledReason(true) || '将逐项移入回收站，不会永久删除。';
+});
+
+const contextMenuStyle = computed(() => ({
+  left: `${contextMenu.x}px`,
+  top: `${contextMenu.y}px`
+}));
+
+const contextMenuItems = computed<ContextMenuItem[]>(() => buildContextMenuItems(selectedEntries.value));
 
 watch(
   () => [props.projectId, props.initialQualityIssue] as const,
@@ -645,14 +963,25 @@ watch(
   }
 );
 
+watch(
+  () => browserEntries.value.map((entry) => entry.key).join('|'),
+  () => {
+    pruneSelection();
+  }
+);
+
 onMounted(() => {
   treeWidth.value = clampTreeWidth(readStoredTreeWidth());
   window.addEventListener('resize', handleWindowResize);
+  window.addEventListener('click', closeContextMenu);
+  window.addEventListener('keydown', handleGlobalKeydown);
 });
 
 onUnmounted(() => {
   stopTreeResize();
   window.removeEventListener('resize', handleWindowResize);
+  window.removeEventListener('click', closeContextMenu);
+  window.removeEventListener('keydown', handleGlobalKeydown);
   if (tableLayoutFrame) {
     window.cancelAnimationFrame(tableLayoutFrame);
   }
@@ -779,6 +1108,199 @@ function resetViewState() {
   ElMessage.success('文件管理视图已重置');
 }
 
+function findDirectoryNode(nodes: DirectoryTreeNode[], path: string): DirectoryTreeNode | null {
+  for (const node of nodes) {
+    if (node.fullPath === path) return node;
+    const found = findDirectoryNode(node.children, path);
+    if (found) return found;
+  }
+  return null;
+}
+
+function isEntrySelected(key: string) {
+  return selectedEntryKeys.value.has(key);
+}
+
+function setSelectedKeys(keys: string[], anchorKey = keys.at(-1) ?? null) {
+  selectedEntryKeys.value = new Set(keys);
+  lastSelectionAnchorKey.value = anchorKey;
+}
+
+function clearSelection() {
+  selectedEntryKeys.value = new Set();
+  lastSelectionAnchorKey.value = null;
+  closeContextMenu();
+}
+
+function pruneSelection() {
+  if (!selectedEntryKeys.value.size) return;
+  const existing = new Set(browserEntries.value.map((entry) => entry.key));
+  const next = Array.from(selectedEntryKeys.value).filter((key) => existing.has(key));
+  selectedEntryKeys.value = new Set(next);
+  if (lastSelectionAnchorKey.value && !existing.has(lastSelectionAnchorKey.value)) {
+    lastSelectionAnchorKey.value = next.at(-1) ?? null;
+  }
+}
+
+function handleEntryClick(row: BrowserEntry, _column: unknown, event: MouseEvent) {
+  selectEntryByMouse(row, event);
+}
+
+function selectEntryByMouse(row: BrowserEntry, event: MouseEvent) {
+  closeContextMenu();
+  const keys = browserEntries.value.map((entry) => entry.key);
+  if (event.shiftKey && lastSelectionAnchorKey.value) {
+    const anchorIndex = keys.indexOf(lastSelectionAnchorKey.value);
+    const currentIndex = keys.indexOf(row.key);
+    if (anchorIndex >= 0 && currentIndex >= 0) {
+      const [start, end] = anchorIndex <= currentIndex
+        ? [anchorIndex, currentIndex]
+        : [currentIndex, anchorIndex];
+      setSelectedKeys(keys.slice(start, end + 1), lastSelectionAnchorKey.value);
+      return;
+    }
+  }
+
+  if (event.metaKey || event.ctrlKey) {
+    const next = new Set(selectedEntryKeys.value);
+    if (next.has(row.key)) {
+      next.delete(row.key);
+    } else {
+      next.add(row.key);
+    }
+    selectedEntryKeys.value = next;
+    lastSelectionAnchorKey.value = row.key;
+    return;
+  }
+
+  setSelectedKeys([row.key], row.key);
+}
+
+function handleEntryDblClick(row: BrowserEntry) {
+  closeContextMenu();
+  runAsyncAction(() => openEntry(row), '文件打开失败');
+}
+
+function handleOpenEntryButtonClick(row: BrowserEntry) {
+  runAsyncAction(() => openEntry(row), '文件打开失败');
+}
+
+function handleContextMenuItemClick(item: ContextMenuItem) {
+  runAsyncAction(() => runContextMenuCommand(item), '菜单操作失败');
+}
+
+function handleCreateDirectoryClick() {
+  runAsyncAction(createDirectoryAction, '新建文件夹失败');
+}
+
+function handleBatchDownloadClick() {
+  runAsyncAction(createBatchDownloadTickets, '批量下载入口清单创建失败');
+}
+
+function handleMoveSelectedClick() {
+  runAsyncAction(moveSelectedEntries, '移动失败');
+}
+
+function handleQuarantineSelectedClick() {
+  runAsyncAction(quarantineSelectedEntries, '移入回收站失败');
+}
+
+function handleRestoreQuarantineClick(recordId: number) {
+  runAsyncAction(() => restoreQuarantineItem(recordId), '恢复回收站项目失败');
+}
+
+function runAsyncAction(action: () => Promise<unknown>, fallbackMessage: string) {
+  void action().catch((error) => {
+    if (isUserCancel(error)) return;
+    ElMessage.error(toUserErrorMessage(error, fallbackMessage));
+  });
+}
+
+function isUserCancel(error: unknown) {
+  if (error === 'cancel' || error === 'close') return true;
+  if (typeof error !== 'object' || error === null) return false;
+  const action = (error as { action?: unknown }).action;
+  return action === 'cancel' || action === 'close';
+}
+
+function toUserErrorMessage(error: unknown, fallbackMessage: string) {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error.trim()) return error;
+  return fallbackMessage;
+}
+
+function handleEntryContextMenu(row: BrowserEntry, _column: unknown, event: MouseEvent) {
+  event.preventDefault();
+  if (!selectedEntryKeys.value.has(row.key)) {
+    setSelectedKeys([row.key], row.key);
+  }
+  void showContextMenu(event.clientX, event.clientY);
+}
+
+function openContextMenuFromButton(row: BrowserEntry, event: MouseEvent) {
+  if (!selectedEntryKeys.value.has(row.key)) {
+    setSelectedKeys([row.key], row.key);
+  }
+  const target = event.currentTarget as HTMLElement;
+  const rect = target.getBoundingClientRect();
+  void showContextMenu(rect.left, rect.bottom + 6);
+}
+
+function handleTableSurfaceClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null;
+  if (!target) return;
+  if (target.closest('.el-table__row') || target.closest('.file-browser__context-menu')) return;
+  clearSelection();
+}
+
+function handleEmptyContextMenu(event: MouseEvent) {
+  const target = event.target as HTMLElement | null;
+  if (target?.closest('.el-table__row')) return;
+  clearSelection();
+}
+
+function handleGlobalKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    closeContextMenu();
+  }
+}
+
+function entryRowClassName({ row }: { row: BrowserEntry }) {
+  const classes = ['file-browser__entry-row'];
+  if (row.kind === 'DIRECTORY') classes.push('is-directory');
+  if (isEntrySelected(row.key)) classes.push('is-selected');
+  return classes.join(' ');
+}
+
+function entryRowKey(row: BrowserEntry) {
+  return row.key;
+}
+
+async function showContextMenu(x: number, y: number) {
+  const position = clampContextMenuPosition(x, y, 260, 360);
+  contextMenu.x = position.x;
+  contextMenu.y = position.y;
+  contextMenu.visible = true;
+  await nextTick();
+  const rect = contextMenuRef.value?.getBoundingClientRect();
+  if (!rect) return;
+  const adjusted = clampContextMenuPosition(contextMenu.x, contextMenu.y, rect.width, rect.height);
+  contextMenu.x = adjusted.x;
+  contextMenu.y = adjusted.y;
+}
+
+function clampContextMenuPosition(x: number, y: number, width: number, height: number) {
+  const padding = 8;
+  return {
+    x: Math.max(padding, Math.min(x, window.innerWidth - width - padding)),
+    y: Math.max(padding, Math.min(y, window.innerHeight - height - padding))
+  };
+}
+
+function closeContextMenu() {
+  contextMenu.visible = false;
+}
+
 async function loadNasWriteTrialStatus() {
   if (!Number.isFinite(props.projectId)) return;
   nasTrialLoading.value = true;
@@ -825,6 +1347,7 @@ async function loadFiles() {
     const result = await fetchCatalogFiles({
       projectId: props.projectId,
       directoryPath: activeDir.value || undefined,
+      directOnly: true,
       keyword: filters.keyword.trim() || undefined,
       fileKind: filters.fileKind === 'ALL' ? undefined : filters.fileKind,
       disciplineCode: filters.disciplineCode || undefined,
@@ -879,6 +1402,348 @@ async function runNasOperation(action: () => Promise<{ operationId: number; mess
     nasBusy.value = false;
     uploadingNasFile.value = false;
   }
+}
+
+function writeDisabledReason(requireAdmin: boolean) {
+  if (nasBusy.value) return '操作正在执行中';
+  if (nasTrialLoading.value) return '正在读取灰度状态';
+  if (!hasRouteProjectAccess.value) return '无写权限：当前账号没有本项目权限';
+  if (requireAdmin && currentProjectRole.value !== 'PROJECT_ADMIN') return '无写权限：需要项目管理员';
+  if (!requireAdmin && !hasNasWriteRole.value) return '无写权限：当前项目角色只能查看';
+  if (!nasTrialStatus.value?.enabled) return '灰度未开启';
+  if (!nasTrialStatus.value.roleAllowed || !nasTrialStatus.value.accountAllowed) {
+    return nasTrialStatus.value.disabledReason || '当前账号不在灰度范围内';
+  }
+  if (!nasTrialStatus.value.directoryAllowed) return nasTrialStatus.value.disabledReason || '当前目录不可写';
+  if (requireAdmin && !canAdminNas.value) return nasTrialStatus.value.disabledReason || '当前目录不可写';
+  if (!requireAdmin && !canWriteNas.value) return nasTrialStatus.value.disabledReason || '当前目录不可写';
+  return '';
+}
+
+function buildContextMenuItems(entries: BrowserEntry[]): ContextMenuItem[] {
+  if (!entries.length) return [];
+  const writeReason = writeDisabledReason(false);
+  const adminReason = writeDisabledReason(true);
+  const fileCount = entries.filter((entry) => entry.kind === 'FILE').length;
+  const directoryCount = entries.length - fileCount;
+
+  if (entries.length > 1) {
+    return [
+      {
+        command: 'move',
+        label: `移动所选 ${entries.length} 项`,
+        disabled: Boolean(writeReason),
+        reason: writeReason || undefined
+      },
+      {
+        command: 'quarantine',
+        label: `移入回收站 ${entries.length} 项`,
+        disabled: Boolean(adminReason),
+        reason: adminReason || undefined,
+        danger: true
+      },
+      {
+        command: 'batch-download',
+        label: '批量下载入口清单',
+        disabled: fileCount === 0,
+        reason: fileCount === 0
+          ? '文件夹打包下载待交付包能力支持'
+          : directoryCount > 0
+            ? '只处理文件，文件夹会跳过'
+            : undefined,
+        divided: true
+      },
+      {
+        command: 'rename',
+        label: '重命名',
+        disabled: true,
+        reason: '多选时不能重命名'
+      }
+    ];
+  }
+
+  const [entry] = entries;
+  if (entry.kind === 'DIRECTORY') {
+    return [
+      { command: 'open', label: '打开' },
+      {
+        command: 'rename',
+        label: '重命名',
+        disabled: Boolean(writeReason),
+        reason: writeReason || undefined,
+        divided: true
+      },
+      {
+        command: 'move',
+        label: '移动',
+        disabled: Boolean(writeReason),
+        reason: writeReason || undefined
+      },
+      {
+        command: 'quarantine',
+        label: '移入回收站',
+        disabled: Boolean(adminReason),
+        reason: adminReason || undefined,
+        danger: true
+      },
+      {
+        command: 'download',
+        label: '下载',
+        disabled: true,
+        reason: '文件夹打包下载待交付包能力支持',
+        divided: true
+      }
+    ];
+  }
+
+  const preview = previewForFileEntry(entry);
+  const isModel = preview.previewMode === 'BIM_LIGHTWEIGHT';
+  return [
+    {
+      command: 'open',
+      label: isModel ? '模型预览占位' : '打开 / 预览',
+      reason: isModel ? '模型预览引擎未接入' : undefined
+    },
+    { command: 'detail', label: '详情' },
+    { command: 'metadata', label: '治理' },
+    { command: 'checksum', label: '补 checksum' },
+    {
+      command: 'rename',
+      label: '重命名',
+      disabled: Boolean(writeReason),
+      reason: writeReason || undefined,
+      divided: true
+    },
+    {
+      command: 'move',
+      label: '移动',
+      disabled: Boolean(writeReason),
+      reason: writeReason || undefined
+    },
+    {
+      command: 'quarantine',
+      label: '移入回收站',
+      disabled: Boolean(adminReason),
+      reason: adminReason || undefined,
+      danger: true
+    },
+    { command: 'download', label: '下载', divided: true }
+  ];
+}
+
+async function runContextMenuCommand(item: ContextMenuItem) {
+  if (item.disabled) return;
+  closeContextMenu();
+  const entries = selectedEntries.value;
+  if (!entries.length) return;
+  if (item.command === 'batch-download') {
+    await createBatchDownloadTickets();
+    return;
+  }
+  if (item.command === 'move') {
+    if (entries.length > 1) {
+      await moveSelectedEntries();
+    } else {
+      await moveEntry(entries[0]);
+    }
+    return;
+  }
+  if (item.command === 'quarantine') {
+    if (entries.length > 1) {
+      await quarantineSelectedEntries();
+    } else {
+      await quarantineEntry(entries[0]);
+    }
+    return;
+  }
+
+  const [entry] = entries;
+  if (item.command === 'open' || item.command === 'preview') {
+    await openEntry(entry);
+  } else if (item.command === 'detail' && entry.kind === 'FILE') {
+    rememberFile(entry.file);
+    emit('open-detail', entry.file.fileId);
+  } else if (item.command === 'metadata' && entry.kind === 'FILE') {
+    rememberFile(entry.file);
+    emit('open-metadata', entry.file.fileId);
+  } else if (item.command === 'checksum' && entry.kind === 'FILE') {
+    rememberFile(entry.file);
+    emit('create-checksum', entry.file.fileId);
+  } else if (item.command === 'rename') {
+    await renameEntry(entry);
+  } else if (item.command === 'download' && entry.kind === 'FILE') {
+    await openControlledFileAccess(entry.file, 'DOWNLOAD');
+  }
+}
+
+async function openEntry(entry: BrowserEntry) {
+  if (entry.kind === 'DIRECTORY') {
+    selectDir(entry.path);
+    return;
+  }
+  await openFileByPreviewStrategy(entry);
+}
+
+async function openFileByPreviewStrategy(entry: FileBrowserEntry) {
+  rememberFile(entry.file);
+  const preview = previewForFileEntry(entry);
+  if (preview.previewMode === 'BROWSER_NATIVE' && preview.previewAvailable) {
+    await openControlledFileAccess(entry.file, 'PREVIEW');
+    return;
+  }
+  if (preview.previewMode === 'BIM_LIGHTWEIGHT') {
+    openModelPreviewPlaceholder(entry);
+    return;
+  }
+  if (preview.previewMode === 'OFFICE_CONVERSION' || preview.previewMode === 'CAD_CONVERSION') {
+    emit('open-preview', entry.file.fileId);
+    ElMessage.info(previewActionHint(preview));
+    return;
+  }
+  emit('open-detail', entry.file.fileId);
+}
+
+async function openControlledFileAccess(row: CatalogFile, action: 'PREVIEW' | 'DOWNLOAD') {
+  if (fileAccessOpening.value) return;
+  let popup = tryOpenBlankPopup();
+  fileAccessOpening.value = true;
+  try {
+    const ticket = await createFileAccessTicket(row.fileId, action);
+    if (openAccessTicket(ticket, popup)) {
+      ElMessage.success(action === 'PREVIEW' ? '预览入口已打开' : '下载入口已打开');
+      return;
+    }
+    popup = null;
+    showAccessFallback(ticket, row.fileName, action);
+  } catch (error) {
+    closePopupQuietly(popup);
+    if (!isUserCancel(error)) {
+      ElMessage.error(toUserErrorMessage(error, '文件访问票据创建失败，平台未执行任何写操作'));
+    }
+  } finally {
+    fileAccessOpening.value = false;
+  }
+}
+
+function tryOpenBlankPopup() {
+  try {
+    const popup = window.open('about:blank', '_blank');
+    if (popup) {
+      try {
+        popup.opener = null;
+      } catch {
+        // Ignore browsers that do not allow mutating opener on the blank popup.
+      }
+    }
+    return popup;
+  } catch {
+    return null;
+  }
+}
+
+function openAccessTicket(ticket: FileAccessTicket, popup: Window | null) {
+  if (popup) {
+    try {
+      popup.location.href = ticket.accessUrl;
+      return true;
+    } catch {
+      closePopupQuietly(popup);
+    }
+  }
+  return tryOpenAccessUrl(ticket.accessUrl);
+}
+
+function tryOpenAccessUrl(accessUrl: string) {
+  try {
+    return Boolean(window.open(accessUrl, '_blank', 'noopener'));
+  } catch {
+    return false;
+  }
+}
+
+function closePopupQuietly(popup: Window | null) {
+  try {
+    popup?.close();
+  } catch {
+    // Ignore browser-specific popup close failures.
+  }
+}
+
+function showAccessFallback(ticket: FileAccessTicket, fileName: string, action: 'PREVIEW' | 'DOWNLOAD') {
+  previewFallbackTicket.value = ticket;
+  previewFallbackFileName.value = ticket.fileName || fileName;
+  previewFallbackAction.value = action;
+  previewFallbackDialogVisible.value = true;
+  ElMessage.warning('浏览器可能拦截了新窗口，请在弹窗中手动打开受控访问入口。');
+}
+
+function openModelPreviewPlaceholder(entry: BrowserEntry) {
+  modelPreviewEntry.value = entry;
+  modelPreviewDialogVisible.value = true;
+}
+
+function previewForFileEntry(entry: FileBrowserEntry): PreviewStatusLike {
+  return previewFromFileName(entry.file.fileName, entry.file.fileKind);
+}
+
+async function renameEntry(entry: BrowserEntry) {
+  if (entry.kind === 'DIRECTORY') {
+    await renameDirectoryEntry(entry);
+  } else {
+    await renameFileAction(entry.file);
+  }
+}
+
+async function moveEntry(entry: BrowserEntry) {
+  if (entry.kind === 'DIRECTORY') {
+    await moveDirectoryEntry(entry);
+  } else {
+    await moveFileAction(entry.file);
+  }
+}
+
+async function quarantineEntry(entry: BrowserEntry) {
+  if (entry.kind === 'DIRECTORY') {
+    await quarantineDirectoryEntry(entry);
+  } else {
+    await quarantineFileAction(entry.file);
+  }
+}
+
+async function renameDirectoryEntry(entry: DirectoryBrowserEntry) {
+  if (writeDisabledReason(false)) return;
+  const { value } = await ElMessageBox.prompt('请输入新的文件夹名称', '重命名文件夹', {
+    inputValue: pathLeaf(entry.path),
+    confirmButtonText: '确认重命名',
+    cancelButtonText: '取消',
+    inputPattern: /^(?!\.{1,2}$)[^/\\:]+$/,
+    inputErrorMessage: '名称不能包含路径分隔符或特殊符号'
+  });
+  await confirmNasOperation('重命名文件夹', entry.path);
+  const ok = await runNasOperation(() => renameNasDirectory(props.projectId, { sourcePath: entry.path, newName: value }));
+  if (ok && activeDir.value === entry.path) {
+    selectDir(parentPath(entry.path) ? `${parentPath(entry.path)}/${value}` : value);
+  }
+}
+
+async function moveDirectoryEntry(entry: DirectoryBrowserEntry) {
+  if (writeDisabledReason(false)) return;
+  const targetDirectory = await promptTargetDirectory('移动文件夹', entry.path);
+  await confirmNasOperation('移动文件夹', `${entry.path} -> ${targetDirectory || '项目根目录'}`);
+  const ok = await runNasOperation(() => moveNasDirectory(props.projectId, { sourcePath: entry.path, targetDirectory }));
+  if (ok && activeDir.value === entry.path) selectDir(joinDirectoryPath(targetDirectory, pathLeaf(entry.path)));
+}
+
+async function quarantineDirectoryEntry(entry: DirectoryBrowserEntry) {
+  if (writeDisabledReason(true)) return;
+  const { value } = await ElMessageBox.prompt('可填写删除原因', '移入回收站', {
+    confirmButtonText: '确认移入回收站',
+    cancelButtonText: '取消',
+    inputPlaceholder: '例如：误传资料，待管理员复核'
+  });
+  await confirmNasOperation('移入回收站', entry.path);
+  const ok = await runNasOperation(() => quarantineNasDirectory(props.projectId, { sourcePath: entry.path, reason: value }));
+  if (ok && activeDir.value === entry.path) selectDir(parentPath(entry.path));
 }
 
 async function confirmNasOperation(actionLabel: string, targetLabel: string) {
@@ -991,6 +1856,160 @@ async function quarantineFileAction(row: CatalogFile) {
   await runNasOperation(() => quarantineNasFile(props.projectId, row.fileId, value));
 }
 
+async function createBatchDownloadTickets() {
+  if (!selectedEntries.value.length) {
+    ElMessage.warning('请先选择要下载的文件');
+    return;
+  }
+  batchDownloadRows.value = selectedEntries.value
+    .filter((entry) => entry.kind === 'DIRECTORY')
+    .map((entry) => ({
+      key: entry.key,
+      name: entry.name,
+      status: 'SKIPPED' as BatchStatus,
+      message: '文件夹打包下载待交付包能力支持，本次只处理已选文件。'
+    }));
+  batchDownloadDialogVisible.value = true;
+  if (!selectedFileEntries.value.length) {
+    return;
+  }
+
+  batchDownloadLoading.value = true;
+  for (const entry of selectedFileEntries.value) {
+    const row: BatchDownloadRow = {
+      key: entry.key,
+      name: entry.file.fileName,
+      status: 'FAILED',
+      message: '正在创建平台下载入口'
+    };
+    batchDownloadRows.value = [...batchDownloadRows.value, row];
+    try {
+      const ticket = await createFileAccessTicket(entry.file.fileId, 'DOWNLOAD');
+      Object.assign(row, ticketToDownloadRow(entry, ticket));
+    } catch (error) {
+      row.status = 'FAILED';
+      row.message = error instanceof Error ? error.message : '下载入口创建失败';
+    }
+    batchDownloadRows.value = [...batchDownloadRows.value];
+  }
+  batchDownloadLoading.value = false;
+}
+
+function ticketToDownloadRow(entry: FileBrowserEntry, ticket: FileAccessTicket): BatchDownloadRow {
+  return {
+    key: entry.key,
+    name: ticket.fileName || entry.file.fileName,
+    status: 'SUCCESS',
+    message: `下载入口已创建，有效期至 ${formatDate(ticket.expiresAt)}。`,
+    accessUrl: ticket.accessUrl
+  };
+}
+
+function openBatchDownloadLink(item: BatchDownloadRow) {
+  if (!item.accessUrl) return;
+  if (!tryOpenAccessUrl(item.accessUrl)) {
+    ElMessage.warning('浏览器可能拦截了新窗口，请允许本站弹窗后重试下载入口。');
+  }
+}
+
+async function moveSelectedEntries() {
+  const entries = [...selectedEntries.value];
+  if (!entries.length) {
+    ElMessage.warning('请先选择要移动的文件或文件夹');
+    return;
+  }
+  const reason = writeDisabledReason(false);
+  if (reason) {
+    ElMessage.warning(reason);
+    return;
+  }
+  const targetDirectory = await promptTargetDirectory('批量移动所选项目');
+  await confirmNasOperation('批量移动', `${entries.length} 项 -> ${targetDirectory || '项目根目录'}`);
+  await runBatchNasOperation('批量移动', entries, async (entry) => {
+    if (entry.kind === 'DIRECTORY') {
+      if (sameOrChild(targetDirectory, entry.path)) {
+        return {
+          status: 'SKIPPED',
+          message: '不能把文件夹移动到自身或子文件夹内。'
+        };
+      }
+      const result = await moveNasDirectory(props.projectId, { sourcePath: entry.path, targetDirectory });
+      return { status: 'SUCCESS', message: result.message };
+    }
+    const result = await moveNasFile(props.projectId, entry.file.fileId, targetDirectory);
+    return { status: 'SUCCESS', message: result.message };
+  });
+}
+
+async function quarantineSelectedEntries() {
+  const entries = [...selectedEntries.value];
+  if (!entries.length) {
+    ElMessage.warning('请先选择要移入回收站的文件或文件夹');
+    return;
+  }
+  const reason = writeDisabledReason(true);
+  if (reason) {
+    ElMessage.warning(reason);
+    return;
+  }
+  const { value } = await ElMessageBox.prompt('可填写批量移入回收站原因', '批量移入回收站', {
+    confirmButtonText: '继续确认',
+    cancelButtonText: '取消',
+    inputPlaceholder: '例如：误传资料，待管理员复核'
+  });
+  await confirmNasOperation('批量移入回收站', `${entries.length} 项；不会永久删除`);
+  await runBatchNasOperation('批量移入回收站', entries, async (entry) => {
+    if (entry.kind === 'DIRECTORY') {
+      const result = await quarantineNasDirectory(props.projectId, { sourcePath: entry.path, reason: value });
+      return { status: 'SUCCESS', message: result.message };
+    }
+    const result = await quarantineNasFile(props.projectId, entry.file.fileId, value);
+    return { status: 'SUCCESS', message: result.message };
+  });
+}
+
+async function runBatchNasOperation(
+  title: string,
+  entries: BrowserEntry[],
+  worker: (entry: BrowserEntry) => Promise<{ status: BatchStatus; message: string }>
+) {
+  if (nasBusy.value) return;
+  nasBusy.value = true;
+  const rows: BatchOperationRow[] = [];
+  try {
+    for (const entry of entries) {
+      try {
+        const result = await worker(entry);
+        rows.push({
+          key: entry.key,
+          name: entry.name,
+          status: result.status,
+          message: result.message
+        });
+      } catch (error) {
+        rows.push({
+          key: entry.key,
+          name: entry.name,
+          status: 'FAILED',
+          message: error instanceof Error ? error.message : '操作失败'
+        });
+      }
+    }
+    batchOperationResult.value = {
+      title,
+      rows,
+      successCount: rows.filter((item) => item.status === 'SUCCESS').length,
+      failedCount: rows.filter((item) => item.status === 'FAILED').length,
+      skippedCount: rows.filter((item) => item.status === 'SKIPPED').length
+    };
+    batchResultDialogVisible.value = true;
+    await refreshBrowserViews();
+    pruneSelection();
+  } finally {
+    nasBusy.value = false;
+  }
+}
+
 async function openOperationsDrawer() {
   operationsDrawerVisible.value = true;
   await loadNasOperations();
@@ -1096,15 +2115,18 @@ function sameOrChild(path: string, root: string) {
 function handleActiveDirectoryCommand(command: string | number | object) {
   const action = String(command);
   if (action === 'rename') {
-    void renameActiveDirectory();
+    runAsyncAction(renameActiveDirectory, '重命名当前文件夹失败');
   } else if (action === 'move') {
-    void moveActiveDirectory();
+    runAsyncAction(moveActiveDirectory, '移动当前文件夹失败');
   } else if (action === 'quarantine') {
-    void quarantineActiveDirectory();
+    runAsyncAction(quarantineActiveDirectory, '移入回收站失败');
   }
 }
 
 function selectDir(dirPath: string) {
+  closeContextMenu();
+  selectedEntryKeys.value = new Set();
+  lastSelectionAnchorKey.value = null;
   activeDir.value = dirPath;
   rememberExpandedAncestors(dirPath);
   pagination.page = 1;
@@ -1259,11 +2281,11 @@ function handleRowCommand(command: string | number | object, row: CatalogFile) {
   } else if (action === 'checksum') {
     emit('create-checksum', row.fileId);
   } else if (action === 'rename-file') {
-    void renameFileAction(row);
+    runAsyncAction(() => renameFileAction(row), '重命名文件失败');
   } else if (action === 'move-file') {
-    void moveFileAction(row);
+    runAsyncAction(() => moveFileAction(row), '移动文件失败');
   } else if (action === 'quarantine-file') {
-    void quarantineFileAction(row);
+    runAsyncAction(() => quarantineFileAction(row), '移入回收站失败');
   }
 }
 
@@ -1346,6 +2368,24 @@ function targetTypeLabel(value: string) {
     DIRECTORY: '文件夹'
   };
   return labels[value] ?? value;
+}
+
+function batchStatusLabel(value: BatchStatus) {
+  const labels: Record<BatchStatus, string> = {
+    SUCCESS: '成功',
+    FAILED: '失败',
+    SKIPPED: '跳过'
+  };
+  return labels[value];
+}
+
+function batchStatusTag(value: BatchStatus) {
+  const tags: Record<BatchStatus, 'success' | 'danger' | 'info'> = {
+    SUCCESS: 'success',
+    FAILED: 'danger',
+    SKIPPED: 'info'
+  };
+  return tags[value];
 }
 
 function projectStateKey() {
@@ -1745,6 +2785,75 @@ function formatDate(value: string | null | undefined) {
   font-size: var(--zy-fs-xs);
 }
 
+.file-browser__selection-bar {
+  display: flex;
+  gap: var(--zy-sp-3);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--zy-sp-3);
+  padding: var(--zy-sp-2) var(--zy-sp-3);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+}
+
+.file-browser__selection-bar > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.file-browser__selection-bar strong,
+.file-browser__selection-bar span {
+  display: block;
+  min-width: 0;
+}
+
+.file-browser__selection-bar strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-sm);
+  font-weight: var(--zy-fw-semi);
+}
+
+.file-browser__selection-bar span {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  line-height: 1.45;
+}
+
+.file-browser__selection-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: var(--zy-sp-2);
+  justify-content: flex-end;
+}
+
+.file-browser__entry-surface {
+  min-width: 0;
+}
+
+.file-browser__entry-table :deep(.file-browser__entry-row) {
+  cursor: default;
+  user-select: none;
+}
+
+.file-browser__entry-table :deep(.file-browser__entry-row.is-directory .el-table__cell) {
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.file-browser__entry-table :deep(.file-browser__entry-row.is-selected .el-table__cell) {
+  background: var(--zy-blue-50) !important;
+  box-shadow: inset 0 1px 0 rgba(37, 99, 235, 0.12), inset 0 -1px 0 rgba(37, 99, 235, 0.12);
+}
+
+.file-browser__entry-table :deep(.file-browser__entry-row.is-selected .el-table__cell:first-child) {
+  box-shadow:
+    inset 3px 0 0 var(--zy-blue-500),
+    inset 0 1px 0 rgba(37, 99, 235, 0.12),
+    inset 0 -1px 0 rgba(37, 99, 235, 0.12);
+}
+
 .file-browser__name-cell {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -1755,6 +2864,10 @@ function formatDate(value: string | null | undefined) {
 
 .file-browser__name-cell .el-icon {
   color: var(--zy-muted);
+}
+
+.file-browser__name-cell.is-directory .el-icon {
+  color: var(--zy-blue-600);
 }
 
 .file-browser__name-cell strong,
@@ -1776,6 +2889,17 @@ function formatDate(value: string | null | undefined) {
   margin-top: 2px;
   color: var(--zy-muted);
   font-size: var(--zy-fs-xs);
+}
+
+.file-browser__muted {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+}
+
+.file-browser__row-actions {
+  display: inline-flex;
+  gap: var(--zy-sp-1);
+  align-items: center;
 }
 
 .file-browser__status-cell,
@@ -1802,6 +2926,156 @@ function formatDate(value: string | null | undefined) {
   display: flex;
   justify-content: flex-end;
   margin-top: var(--zy-sp-3);
+}
+
+.file-browser__context-menu {
+  position: fixed;
+  z-index: 3000;
+  display: grid;
+  min-width: 240px;
+  max-width: 300px;
+  padding: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.36);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18);
+}
+
+.file-browser__context-menu button {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--zy-radius-sm);
+  background: transparent;
+  color: var(--zy-ink);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--zy-fs-sm);
+  text-align: left;
+}
+
+.file-browser__context-menu button:hover:not(:disabled) {
+  background: var(--zy-blue-50);
+  color: var(--zy-blue-700);
+}
+
+.file-browser__context-menu button.is-divided {
+  margin-top: 5px;
+  border-top: var(--zy-border-soft);
+  border-radius: 0 0 var(--zy-radius-sm) var(--zy-radius-sm);
+}
+
+.file-browser__context-menu button.is-danger {
+  color: #b91c1c;
+}
+
+.file-browser__context-menu button.is-disabled,
+.file-browser__context-menu button:disabled {
+  color: var(--zy-subtle);
+  cursor: not-allowed;
+}
+
+.file-browser__context-menu span {
+  font-weight: var(--zy-fw-medium);
+}
+
+.file-browser__context-menu small {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  line-height: 1.35;
+}
+
+.file-browser__model-placeholder {
+  display: grid;
+  gap: var(--zy-sp-3);
+}
+
+.file-browser__preview-fallback {
+  display: grid;
+  gap: var(--zy-sp-3);
+}
+
+.file-browser__fallback-link {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: fit-content;
+  min-height: 34px;
+  padding: 0 var(--zy-sp-4);
+  border-radius: var(--zy-radius-sm);
+  background: var(--el-color-primary);
+  color: #fff;
+  font-size: var(--zy-fs-sm);
+  font-weight: var(--zy-fw-medium);
+  text-decoration: none;
+}
+
+.file-browser__fallback-link:hover {
+  background: var(--el-color-primary-dark-2);
+}
+
+.file-browser__batch-summary {
+  display: grid;
+  gap: 4px;
+  margin-bottom: var(--zy-sp-3);
+  padding: var(--zy-sp-3);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface-soft);
+}
+
+.file-browser__batch-summary strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-sm);
+}
+
+.file-browser__batch-summary span {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+}
+
+.file-browser__batch-list {
+  display: grid;
+  gap: var(--zy-sp-2);
+  max-height: 420px;
+  overflow: auto;
+}
+
+.file-browser__batch-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--zy-sp-2);
+  align-items: center;
+  padding: var(--zy-sp-3);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface);
+}
+
+.file-browser__batch-item > div {
+  min-width: 0;
+}
+
+.file-browser__batch-item strong,
+.file-browser__batch-item span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-browser__batch-item strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-sm);
+}
+
+.file-browser__batch-item span {
+  margin-top: 3px;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
 }
 
 .file-browser__drawer-alert {
@@ -1881,6 +3155,19 @@ function formatDate(value: string | null | undefined) {
 
   .file-browser__continuity-actions {
     justify-content: flex-start;
+  }
+
+  .file-browser__selection-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .file-browser__selection-actions {
+    justify-content: flex-start;
+  }
+
+  .file-browser__batch-item {
+    grid-template-columns: 1fr;
   }
 }
 </style>

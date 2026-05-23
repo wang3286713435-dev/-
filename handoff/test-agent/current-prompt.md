@@ -1,29 +1,28 @@
-# 测试 Agent 当前任务：M2G 真实 NAS 文件管理器灰度完善验收
+# 测试 Agent 当前任务：M2H 目录直达子项返工极短验收
 
 你是数字化交付平台测试 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
-## 测试策略
+## 0. 当前背景
 
-本轮采用轻量测试策略，但 M2G 涉及文件管理器真实写操作，所以必须跑专项脚本。浏览器只做短验，不做全站巡检。
+用户在 105 项目文件管理器中发现真实使用问题：
 
-先阅读：
+- 左侧文件夹显示不全，只看到 `01`、`03`、`05` 等部分文件夹。
+- 根目录右侧混入了不属于根目录的深层文件。
+- 文件管理器应像 Windows 资源管理器一样，右侧只显示当前目录的直接子文件夹和直接文件。
 
-- `handoff/main-agent/lightweight-test-strategy.md`
+开发 agent 已完成 M2H 目录直达子项返工，报告写入：
 
-## 0. 当前验收批次
+- `handoff/dev-agent/latest-report.md`
 
-`M2G：真实 NAS 文件管理器灰度完善`
-
-目标是验证文件管理器的上传、新建、重命名、移动、删除到回收站、恢复、操作记录和可写状态提示是否形成可用闭环。
+本轮只做极短验收，不做全站巡检。
 
 ## 1. 必须先阅读
 
-- `handoff/main-agent/m2g-real-nas-file-manager-polish-plan.md`
 - `handoff/dev-agent/latest-report.md`
 - `handoff/main-agent/status.md`
-- `handoff/main-agent/phase2-current-roadmap.md`
+- `handoff/main-agent/development-log.md`
 
 ## 2. 必跑命令
 
@@ -34,113 +33,99 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-m2g-nas-file-manager-polish.sh
-bash scripts/dev/check-m2b-nas-write-trial.sh
-bash scripts/dev/check-phase2-batch4-file-access.sh
+bash scripts/dev/check-m2h-windows-file-manager.sh
 git diff --check
 ```
 
-如果没有 `scripts/dev/check-m2g-nas-file-manager-polish.sh`，记 P1。
+建议补跑：
 
-## 3. 专项验收
+```bash
+bash scripts/dev/check-m2g-nas-file-manager-polish.sh
+bash scripts/dev/check-m2b-nas-write-trial.sh
+bash scripts/dev/check-phase2-batch4-file-access.sh
+```
 
-脚本必须确认：
+## 3. 接口极短验收
 
-1. 默认无灰度配置时写操作被拒绝。
-2. 开启灰度后，隔离目录内可完成：
-   - 新建文件夹。
-   - 上传文件。
-   - 重命名文件。
-   - 移动文件。
-   - 删除到回收站。
-   - 恢复。
-3. 目录操作可完成：
-   - 新建目录。
-   - 重命名目录。
-   - 移动目录。
-   - 删除到回收站。
-   - 恢复。
-4. 查看者不能写。
-5. 越过允许范围的操作被拒绝。
-6. 操作记录和回收站响应不泄露真实 NAS 路径。
-7. 审计日志有记录。
+必须抽查 `catalog/files` 的新旧语义：
 
-## 4. 浏览器短验
+1. `directOnly=true` 根目录：
+   - 只返回项目根目录直接文件。
+   - 不返回 `01/...`、`03/...`、`05/...` 等深层文件。
+2. `directoryPath=某子目录&directOnly=true`：
+   - 只返回该目录直接文件。
+   - 不返回孙目录或更深层文件。
+3. 默认 `directOnly=false` 或不传：
+   - 旧递归语义仍保留，不能破坏其他目录检索页面。
 
-本轮需要做一次短浏览器验收，只打开一个真实项目文件管理页：
+可以优先信任 `scripts/dev/check-m2h-windows-file-manager.sh` 的隔离数据断言，但报告里需要写清楚脚本结果。
 
-- 文件管理页可打开。
-- 左目录树、右文件表、工具栏不白屏。
-- 当前目录可写 / 不可写状态清楚。
-- 上传、新建文件夹、回收站、操作记录按钮可见。
-- 页面无横向撑爆。
+## 4. 浏览器极短验收
 
-不要在真实业务目录执行写操作。真实写操作只由专项脚本在隔离目录完成。
+打开真实项目文件管理页，例如：
 
-## 5. 红线检查
+- `http://127.0.0.1:5173/data-steward/assets/503?tab=files`
 
-接口响应、页面文本、日志和新增脚本不得泄露：
+或用户当前关注的 105 项目对应项目页。
 
-- `/Volumes`
-- `smb://`
-- `nas://`
-- `storage_uri`
-- `storage_path`
-- `storageUri`
-- `storagePath`
-- raw row
-- SQL
-- token
-- secret
-- password
+必须验证：
 
-## 5.1 批次边界检查
+1. 项目根目录右侧只显示根目录直接子文件夹和直接文件。
+2. 根目录右侧不再铺满整个项目的深层文件。
+3. 进入 `01_文件收发` 或任一真实子目录后，右侧只显示该目录直接子项。
+4. 左侧目录树明显完整，不应只剩 `01`、`03`、`05` 等部分顶层目录。
+5. 双击文件夹仍进入目录。
+6. PDF / 图片受控预览不回归。
+7. RVT / IFC / NWD / NWC / GLB / GLTF 等模型文件仍打开“模型预览占位”，不得伪装成真实 3D。
+8. 页面不出现横向撑爆、白屏或卡死。
 
-本轮主线批次是 `M2G：真实 NAS 文件管理器灰度完善`，核心改动应集中在文件管理器前端、M2G 专项脚本和交接报告。
+不要在真实业务目录执行上传、重命名、移动、移入回收站等写操作。
 
-请额外检查工作区改动范围：
+## 5. 边界检查
+
+执行：
 
 ```bash
 git diff --name-only
 git status --short
 ```
 
-如果发现以下非 M2G 范围文件仍处于修改状态，请在报告中单独列为“并行分支改动观察项”，并按严重程度判断：
+本轮允许的交付改动范围：
 
-- `backend/delivery-visualization-adapter/**`
-- `frontend/src/modules/visualization/**`
-- 其他与文件管理器、M2G 脚本、handoff 报告无关的业务文件
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/controller/CatalogController.java`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/CatalogApplicationService.java`
+- `frontend/src/modules/data-steward/api/dataSteward.ts`
+- `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
+- `frontend/src/modules/data-steward/utils/directoryTree.ts`
+- `scripts/dev/check-m2h-windows-file-manager.sh`
+- `handoff/**`
 
-判断规则：
+如果发现 `docs/**`、数据库迁移、Hermes、真实 BIM、parser、indexing 或文件正文读取相关改动，按影响记 P1 或 P0。
 
-- 如果这些改动导致构建、回归或页面异常，记 P1。
-- 如果这些改动未导致回归，且主 agent 已确认来源为“另一个 agent 在数字孪生 / 可视化分支上的并行改动”，不阻塞 M2G；报告中记录即可。
-- M2G 收口提交时应选择性提交文件管理器、M2G 脚本和 handoff 文件，不应把数字孪生 / 可视化改动混入 M2G 提交。
-- 不要因为存在 `.claude/**`、`CLAUDE.md`、`tmp/**` 这类既有非交付未跟踪文件直接判失败，但需要在 P2 中提醒收口时排除。
+`.claude/**`、`CLAUDE.md`、`tmp/**` 为既有非交付未跟踪项，不直接判失败，但报告中提醒收口时排除。
 
-## 6. 禁止通过的情况
+## 6. 判定标准
 
 P0：
 
-- 真实业务目录被脚本写入、移动、删除、改名或复制。
 - 真实 NAS 路径泄露。
 - 权限绕过。
-- 永久删除被普通用户开放。
-- 新增 Hermes / BIM / parser / indexing 能力。
+- 测试在真实业务目录执行写操作。
+- 新增真实 BIM 渲染、Hermes、parser、indexing、正文读取能力。
 
 P1：
 
-- 没有 M2G 专项脚本。
-- 新建文件夹仍出现项目上下文误判。
-- 上传 / 新建 / 重命名 / 移动 / 删除到回收站 / 恢复任一核心链路不可用。
-- 回收站恢复不可用。
-- 操作成功后文件列表或目录树不刷新，导致用户看不到结果。
-- M2B 或文件访问安全回归失败。
+- 根目录右侧仍显示整个项目深层文件。
+- 子目录右侧仍显示孙目录或更深层文件。
+- 左侧目录树仍明显不完整。
+- `directOnly=true` 破坏旧递归接口兼容。
+- M2H 文件夹双击、PDF 预览、模型占位任一主交互回归。
+- 后端构建、前端构建、M2H 脚本或 `git diff --check` 失败。
 
 P2：
 
-- 文案、布局、按钮位置仍有细节粗糙，但不影响主链路。
 - 既有 Vite chunk warning。
+- 非阻塞文案、间距或交互细节问题。
 
 ## 7. 报告要求
 
@@ -150,10 +135,11 @@ P2：
 
 报告至少包含：
 
-- 测试结论。
-- P0/P1/P2。
+- 极短验收结论。
+- P0 / P1 / P2。
 - 必跑命令结果。
-- M2G 专项脚本结果。
-- 浏览器短验结果。
+- M2H 脚本结果。
+- `directOnly=true` 与旧递归兼容结果。
+- 105 / 503 文件管理页浏览器短验结果。
 - 是否发现真实路径或敏感字段泄露。
-- 是否建议主 agent 收口 M2G。
+- 是否建议主 agent 收口 M2H 返工。

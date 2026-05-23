@@ -68,12 +68,13 @@ public class CatalogController {
         @RequestParam(required = false) String disciplineCode,
         @RequestParam(required = false) String version,
         @RequestParam(required = false) String qualityIssue,
+        @RequestParam(defaultValue = "false") boolean directOnly,
         @RequestParam(defaultValue = "1") int page,
         @RequestParam(defaultValue = "20") int pageSize
     ) {
         Long userId = currentUserId();
         return ApiResponse.success(catalogApplicationService.listCatalogFiles(
-            userId, projectId, keyword, directoryPath, fileExt, fileKind, disciplineCode, version, qualityIssue, page, pageSize));
+            userId, projectId, keyword, directoryPath, fileExt, fileKind, disciplineCode, version, qualityIssue, directOnly, page, pageSize));
     }
 
     @PostMapping("/search")

@@ -3604,3 +3604,188 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
 - 主 agent 裁决：`M2G：真实 NAS 文件管理器灰度完善` 正式收口。
 - 当前 active 批次：`待用户确认`。
 - 下一步建议：进入 `M2H：多真实项目复制试点`，验证当前能力不是为单一项目特化。
+
+## 2026-05-23 M2H 开发完成，进入测试验收
+
+- 用户提出文件管理器要接近 Windows 文件资源管理器：
+  - 左键高亮选中。
+  - Ctrl / Command 多选。
+  - Shift 连选。
+  - 右键重命名、移入回收站等操作。
+  - 双击文件夹进入目录。
+  - PDF / 图片 / Office / CAD 按现有预览策略处理。
+  - RVT / BIM 等模型进入预览占位，等待后续引擎接入。
+- 主 agent 曾误入直接开发路径，用户纠正后已恢复为“开发 agent 开发、主 agent 监控审计”的模式。
+- 开发 agent 已完成 `M2H：Windows 风格文件管理器交互升级`，报告写入 `handoff/dev-agent/latest-report.md`。
+- 本批实际改动范围：
+  - `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
+  - `scripts/dev/check-m2h-windows-file-manager.sh`
+  - `handoff/dev-agent/latest-report.md`
+- 本批新增能力：
+  - 文件夹 + 文件统一列表。
+  - 单选、多选、连选、空白处取消选择。
+  - 右键上下文菜单。
+  - 双击文件夹进入。
+  - 双击文件按预览策略分流。
+  - 模型预览占位。
+  - 批量移动、批量移入回收站、批量下载入口清单。
+- 本批明确没做：
+  - 未改后端、数据库、`docs/**`。
+  - 未新增 Hermes / BIM / parser / indexing / 正文读取能力。
+  - 未开放永久删除。
+  - 未在真实业务目录执行破坏性写操作。
+- 主 agent 初审与回归：
+  - 前端构建通过，仅既有 Vite chunk warning。
+  - 健康检查通过。
+  - M2H 专项脚本通过，`PASS=23 FAIL=0`。
+  - M2G 回归通过，`PASS=26 FAIL=0`。
+  - M2B 回归通过，`PASS=18 FAIL=0`。
+  - 文件访问安全回归通过，`PASS=18 FAIL=0`。
+  - `git diff --check` 通过。
+- 当前裁决：
+  - 进入测试 agent 轻量验收。
+  - M2H 尚未收口，不提交不推送。
+  - 已将 `handoff/test-agent/current-prompt.md` 更新为 M2H 验收 prompt。
+
+## 2026-05-23 M2H 测试不通过，进入 P1 修复
+
+- 测试 agent 报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：不通过。
+- P0：无。
+- P1：
+  - PDF / 图片等浏览器原生预览文件双击未打开平台受控预览入口。
+  - 浏览器日志出现 `Unhandled error during execution of native event handler` 和 `cancel`。
+- 测试已确认：
+  - 文件夹双击进入目录正常。
+  - RVT 模型双击打开占位弹窗正常。
+  - 自动化脚本和主线回归通过。
+- 主 agent 判断：
+  - 问题集中在 `AssetProjectFileBrowser.vue` 的双击预览 / access ticket 打开路径。
+  - 不需要扩展后端，不需要新增能力。
+  - 修复范围应限制在前端文件管理器和 M2H 专项脚本。
+- 已更新：
+  - `handoff/dev-agent/current-prompt.md`
+- 下一步：
+  - 开发 agent 修复 P1。
+  - 修复后测试 agent 做极短复验：PDF 双击、右键预览、RVT 占位、文件夹双击、M2H 脚本和 `git diff --check`。
+
+## 2026-05-23 M2H P1 修复完成，进入极短复验
+
+- 开发 agent 已完成 `M2H P1：PDF / 图片双击受控预览入口修复`。
+- 报告写入 `handoff/dev-agent/latest-report.md`。
+- 本轮修复集中在：
+  - `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
+  - `scripts/dev/check-m2h-windows-file-manager.sh`
+  - `handoff/dev-agent/latest-report.md`
+- 修复要点：
+  - PDF / 图片双击进入平台受控 `file-access` 预览地址。
+  - 右键 `打开 / 预览` 与双击共用受控预览路径。
+  - 异步点击事件统一通过保护函数执行。
+  - 用户取消类 `cancel` 被识别并安静处理。
+  - 新窗口被浏览器拦截时提供 fallback 弹窗和手动打开入口。
+- 主 agent 初验：
+  - `curl -fsS http://127.0.0.1:8080/actuator/health`：通过。
+  - `bash scripts/dev/check-m2h-windows-file-manager.sh`：`PASS=30 FAIL=0`。
+  - `git diff --check`：通过。
+- 边界确认：
+  - 未改后端、数据库、`docs/**`。
+  - 未新增 Hermes / BIM / parser / indexing / 正文读取。
+  - 未执行真实业务目录写操作。
+- 已将 `handoff/test-agent/current-prompt.md` 更新为 `M2H P1 PDF / 图片受控预览极短复验`。
+
+## 2026-05-23 M2H 正式收口
+
+- 测试 agent 已完成 M2H P1 极短复验，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：通过。
+- 当前无 P0 / P1。
+- P2：
+  - 既有 Vite chunk warning。
+  - `scripts/dev/check-m2h-windows-file-manager.sh` 收口提交时需纳入 Git。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪文件继续排除。
+- 已确认：
+  - PDF 双击打开受控 `file-access` 入口。
+  - 右键 `打开 / 预览` 打开同类受控入口。
+  - `cancel` / native event handler 未处理错误已关闭。
+  - 文件夹双击和模型预览占位未回归。
+  - 未执行真实业务目录写操作。
+  - 未泄露真实 NAS 路径。
+  - 未新增 Hermes、真实 BIM、parser、indexing 或正文读取能力。
+- 主 agent 裁决：`M2H：Windows 风格文件管理器交互升级` 正式收口。
+- 当前 active 批次：`待用户确认`。
+- 收口提交建议：
+  - 纳入 `AssetProjectFileBrowser.vue`、`scripts/dev/check-m2h-windows-file-manager.sh` 和相关 handoff 文件。
+  - 排除 `.claude/**`、`CLAUDE.md`、`tmp/**`。
+
+## 2026-05-23 M2H 返工：文件管理器目录直达子项口径
+
+- 用户在 105 项目文件管理器中发现真实使用缺陷：
+  - 左侧目录不完整，只显示 `01`、`03`、`05`。
+  - 根目录右侧混入了深层文件。
+  - 其他目录也应只显示当前目录的直接子项。
+- 主 agent 初步代码判断：
+  - `AssetProjectFileBrowser.vue` 根目录 `activeDir` 为空时没有向 `fetchCatalogFiles` 传目录过滤，所以根目录可能显示整个项目文件。
+  - `CatalogApplicationService.appendDirectoryFilter(...)` 当前使用 `LIKE 当前目录/%` 这类递归匹配，适合“目录及子目录”检索，不适合资源管理器式“当前目录直接子项”。
+  - 目录树需要检查 `catalog/directories` 与 `buildDirectoryTree(...)` 是否遗漏空目录、目录记录或祖先节点。
+- 决策：
+  - 作为 M2H 返工 bugfix 处理。
+  - 开发 agent 负责修复，主 agent 不直接改业务代码。
+  - 允许开发 agent 增加 `directOnly` / `directoryScope=DIRECT` 等显式参数，以保留旧递归语义兼容。
+  - 禁止前端全量拉取后假过滤。
+  - 禁止恢复页面打开时同步递归扫描 NAS。
+- 已更新：
+  - `handoff/dev-agent/current-prompt.md`
+
+## 2026-05-24 M2H 目录直达子项返工完成，进入极短验收
+
+- 开发 agent 已完成 M2H 目录直达子项返工，报告写入 `handoff/dev-agent/latest-report.md`。
+- 本轮改动范围：
+  - `CatalogController.java`
+  - `CatalogApplicationService.java`
+  - `dataSteward.ts`
+  - `AssetProjectFileBrowser.vue`
+  - `directoryTree.ts`
+  - `scripts/dev/check-m2h-windows-file-manager.sh`
+  - `handoff/dev-agent/latest-report.md`
+- 核心修复：
+  - `/api/data-steward/catalog/files` 新增 `directOnly`。
+  - 默认不传 `directOnly` 时保持旧递归目录检索。
+  - 文件管理器传 `directOnly=true`，只取当前目录直接文件。
+  - 根目录 direct-only 只返回映射根或空父目录下的直接文件。
+  - 子目录 direct-only 只返回父目录等于当前目录的文件。
+  - `directoryTree.ts` 不再公共前缀压缩，避免真实目录层级被隐藏。
+- 主 agent 初验：
+  - 健康检查通过。
+  - M2H 专项脚本通过，`PASS=51 FAIL=0`。
+  - `git diff --check` 通过。
+- 边界确认：
+  - 未修改 `docs/**`。
+  - 未新增数据库迁移。
+  - 未执行真实业务 NAS 破坏性写操作。
+  - 未新增 Hermes / 真实 BIM / parser / indexing / 正文读取。
+- 已更新：
+  - `handoff/test-agent/current-prompt.md`
+- 下一步：
+  - 测试 agent 做极短验收，重点看 105 / 503 根目录和子目录是否只显示直接子项，左侧目录是否完整。
+
+## 2026-05-24 M2H 返工正式收口
+
+- 测试 agent 已完成 M2H 目录直达子项返工极短验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：通过。
+- 当前无 P0 / P1。
+- P2：
+  - 既有 Vite chunk warning。
+  - `scripts/dev/check-m2h-windows-file-manager.sh` 仍是未跟踪交付脚本，提交时必须纳入 Git。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 继续排除。
+- 已确认：
+  - `503 / 105 启航华居项目` 根目录右侧为 `4 个文件夹 / 1 个文件`，未再显示全项目深层文件。
+  - `01_文件收发` 右侧仅显示直接子文件夹 `01_图纸`。
+  - `01_文件收发/01_图纸/01_收` 右侧只显示当前目录直接子文件夹。
+  - `03_过程文件/02_BIM模型/04_机电/地下三层` 右侧显示当前目录直接 RVT 模型文件，未混入其他目录文件。
+  - 左侧目录树完整展示真实层级。
+  - PDF 受控预览、模型预览占位、文件夹双击进入目录均未回归。
+  - `directOnly=true` 新语义与旧递归兼容均通过脚本验证。
+  - 未执行真实业务 NAS 写操作，未暴露真实 NAS 路径，未新增 Hermes / 真实 BIM / parser / indexing / 正文读取。
+- 主 agent 裁决：M2H 返工正式收口。
+- 收口提交建议：
+  - 纳入本批后端 catalog files direct-only 改动、前端文件管理器改动、目录树工具改动、M2H 专项脚本和 handoff 文件。
+  - 排除 `.claude/**`、`CLAUDE.md`、`tmp/**`。

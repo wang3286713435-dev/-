@@ -1094,6 +1094,7 @@ export interface CatalogFilesQuery {
   projectId?: number;
   keyword?: string;
   directoryPath?: string;
+  directOnly?: boolean;
   fileExt?: string;
   fileKind?: string;
   disciplineCode?: string;

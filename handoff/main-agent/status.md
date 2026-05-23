@@ -1,5 +1,175 @@
 # 主 Agent 项目状态
 
+## 2026-05-23 M2H 开发完成，进入测试验收
+
+- 开发 agent 已完成 `M2H：Windows 风格文件管理器交互升级`，报告写入 `handoff/dev-agent/latest-report.md`。
+- 本批定位：
+  - 文件管理器核心交互升级。
+  - 让文件 / 文件夹操作更接近 Windows 文件资源管理器。
+  - 不新增后端能力，不扩大 NAS 写边界，不接入真实 BIM 引擎。
+- 已实现内容：
+  - 文件夹 + 文件统一列表，文件夹排在文件前。
+  - 左键单选、Ctrl / Command 多选、Shift 连选、空白处取消选择。
+  - 右键上下文菜单，按文件 / 文件夹 / 多选动态展示操作。
+  - 双击文件夹进入目录。
+  - 双击 PDF / 图片走受控预览票据。
+  - Office / CAD 走现有预览状态。
+  - RVT / IFC / NWD / NWC / GLB / GLTF 等模型文件打开“模型预览占位”，不伪装成真实渲染。
+  - 多选批量移动、批量移入回收站、批量下载入口清单。
+  - 批量下载只逐个创建 DOWNLOAD ticket，不生成 ZIP，不复制 NAS 文件。
+- 主 agent 初审通过：
+  - 前端构建通过，仅既有 Vite chunk warning。
+  - 健康检查通过。
+  - M2H 专项脚本通过，`PASS=23 FAIL=0`。
+  - M2G 回归通过，`PASS=26 FAIL=0`。
+  - M2B 回归通过，`PASS=18 FAIL=0`。
+  - 文件访问安全回归通过，`PASS=18 FAIL=0`。
+  - `git diff --check` 通过。
+- 当前确认：
+  - 未修改 `backend/**`、`docs/**`、数据库迁移。
+  - 未新增 Hermes / BIM / parser / indexing / 文件正文读取能力。
+  - 未开放永久删除。
+  - 未执行真实业务目录写操作。
+  - 未发现 raw NAS path / `storage_uri` 泄露。
+- 当前裁决：
+  - M2H 可以进入测试 agent 轻量验收。
+  - M2H 尚未收口，等待测试报告。
+  - 非交付未跟踪项 `.claude/**`、`CLAUDE.md`、`tmp/**` 继续排除。
+
+## 2026-05-23 M2H 测试不通过，进入 P1 修复
+
+- 测试 agent 已完成 `M2H：Windows 风格文件管理器交互升级` 轻量验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：不通过。
+- 当前 P0：无。
+- 当前 P1：
+  - `P1-1 PDF 双击受控预览未通过`。
+  - 在 `503` 文件管理页搜索 `pdf` 后双击 PDF 文件，未打开受控预览入口，并出现前端事件错误 `cancel`。
+  - 模型文件双击占位正常，文件夹双击进入目录正常。
+- 当前 P2：
+  - 既有 Vite chunk warning。
+  - `scripts/dev/check-m2h-windows-file-manager.sh` 仍是未跟踪文件，收口前需纳入 Git。
+- 已确认：
+  - M2H / M2G / M2B / 文件访问安全自动化脚本均通过。
+  - 未发现 P0、安全红线或后端越界。
+- 主 agent 裁决：
+  - 暂不收口 M2H。
+  - 已将 `handoff/dev-agent/current-prompt.md` 更新为 `M2H P1 修复 PDF / 图片双击受控预览入口`。
+  - 修复后只做极短复验。
+
+## 2026-05-23 M2H P1 修复完成，进入极短复验
+
+- 开发 agent 已完成 `M2H P1：PDF / 图片双击受控预览入口修复`，报告写入 `handoff/dev-agent/latest-report.md`。
+- 修复内容：
+  - 双击 PDF / 图片等 `BROWSER_NATIVE` 文件走平台受控 `PREVIEW` access ticket。
+  - 右键 `打开 / 预览` 与双击共用同一路径。
+  - 原生事件异步路径统一包住，用户取消类 `cancel` 不再冒成未处理错误。
+  - 浏览器拦截新窗口时展示友好 fallback，可手动打开受控入口。
+- 主 agent 初验：
+  - 健康检查通过。
+  - M2H 专项脚本通过，`PASS=30 FAIL=0`。
+  - `git diff --check` 通过。
+- 当前确认：
+  - 未修改 `backend/**`、`docs/**`、数据库迁移。
+  - 未新增 Hermes / BIM / parser / indexing / 文件正文读取能力。
+  - 未执行真实业务目录写操作。
+- 当前裁决：
+  - 进入测试 agent 极短复验。
+  - M2H 尚未正式收口，等待测试报告。
+  - `scripts/dev/check-m2h-windows-file-manager.sh` 属于本批交付物，收口提交时需纳入 Git。
+
+## 2026-05-23 M2H 正式收口
+
+- 测试 agent 已完成 `M2H P1 PDF / 图片受控预览极短复验`，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- 当前 P2：
+  - 既有 Vite chunk warning。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪文件继续排除。
+  - `scripts/dev/check-m2h-windows-file-manager.sh` 是 M2H 交付脚本，收口提交时必须纳入 Git。
+- 已确认：
+  - PDF 双击可创建受控预览票据，并通过 `/api/data-steward/assets/file-access/...` 打开。
+  - 右键 `打开 / 预览` 与双击共用受控预览路径。
+  - 未再出现未处理的 `cancel` 或 native event handler 错误。
+  - 文件夹双击进入目录不回归。
+  - RVT / IFC 等模型文件仍打开“模型预览占位”，未伪装成真实 3D。
+  - M2H 专项脚本通过，`PASS=30 FAIL=0`。
+  - M2G 回归通过，`PASS=26 FAIL=0`。
+  - 文件访问安全回归通过，`PASS=18 FAIL=0`。
+  - 前端构建、健康检查和 `git diff --check` 通过。
+  - 未执行真实业务目录写操作。
+  - 未泄露真实 NAS 路径或敏感字段。
+  - 未新增 Hermes / 真实 BIM / parser / indexing / 文件正文读取能力。
+- 主 agent 裁决：`M2H：Windows 风格文件管理器交互升级` 正式收口。
+- 当前 active 批次：`待用户确认`。
+- 下一步建议：
+  - 先选择性提交并推送 M2H。
+  - 后续可进入 `M2I：多真实项目复制试点`，验证文件管理器和交付闭环在更多真实项目上是否自然可用。
+
+## 2026-05-23 M2H 返工：文件管理器目录直达子项口径
+
+- 用户在 105 项目真实使用文件管理器时发现：
+  - 左侧文件夹显示不全，只显示了 `01`、`03`、`05` 等部分文件夹。
+  - 根目录右侧显示了不属于根目录的深层文件。
+  - 任意目录右侧都应该只显示该目录的直接子文件夹和直接子文件。
+- 主 agent 初步定位：
+  - 当前根目录下 `loadFiles()` 没有传目录过滤，容易拿到整个项目文件。
+  - 后端 `catalog/files` 的目录过滤更接近“当前目录及其子目录”，不适合文件管理器右侧主列表。
+  - 左侧目录不全需要同时检查 `catalog/directories`、`data_nas_directory_records`、已登记文件父目录和 `buildDirectoryTree(...)`。
+- 裁决：
+  - M2H 需要返工修复，不应在此问题解决前提交 / 推送收口。
+  - 已更新 `handoff/dev-agent/current-prompt.md`，要求开发 agent 修复目录直达子项语义。
+  - 本轮允许小范围后端 catalog files 接口改动，但必须保持旧递归语义兼容，不得改 `docs/**`、不得新增 Hermes / BIM / parser / indexing。
+
+## 2026-05-24 M2H 目录直达子项返工完成，进入极短验收
+
+- 开发 agent 已完成 M2H 目录直达子项返工，报告写入 `handoff/dev-agent/latest-report.md`。
+- 修复内容：
+  - `catalog/files` 新增 `directOnly` 参数，默认 `false` 保持旧递归兼容。
+  - 文件管理器调用 `directOnly=true`，根目录和子目录只显示直接文件。
+  - 目录树取消公共前缀压缩，保留真实目录层级。
+  - M2H 专项脚本增强 direct-only 与旧递归兼容断言。
+- 主 agent 初验：
+  - 健康检查通过。
+  - `bash scripts/dev/check-m2h-windows-file-manager.sh`：`PASS=51 FAIL=0`。
+  - `git diff --check`：通过。
+- 当前确认：
+  - 未修改 `docs/**`。
+  - 未新增数据库迁移。
+  - 未新增 Hermes / 真实 BIM / parser / indexing / 正文读取能力。
+  - 未执行真实业务 NAS 破坏性写操作。
+- 当前裁决：
+  - 进入测试 agent 极短验收。
+  - M2H 返工尚未正式收口，等待测试报告。
+
+## 2026-05-24 M2H 返工正式收口
+
+- 测试 agent 已完成 `M2H 目录直达子项返工极短验收`，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- 当前 P2：
+  - 既有 Vite chunk warning。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪文件继续排除。
+  - `scripts/dev/check-m2h-windows-file-manager.sh` 是 M2H 交付脚本，收口提交时必须纳入 Git。
+- 已确认：
+  - 105 / 503 根目录右侧只显示直接子文件夹和直接文件，不再铺满深层文件。
+  - 进入 `01_文件收发` 等目录后，右侧只显示当前目录直接子项。
+  - 左侧目录树完整，能看到真实下级目录，不再只剩 `01`、`03`、`05`。
+  - `directOnly=true` 根目录和子目录直达子项语义通过脚本验证。
+  - 默认不传 `directOnly` 时旧递归目录行为保留。
+  - PDF 受控预览、RVT 模型占位、文件夹双击进入目录未回归。
+  - 后端构建、前端构建、健康检查、M2H 专项、M2G、M2B、文件访问安全回归均通过。
+  - 未发现真实 NAS 路径、SQL、raw row、token、secret 泄露。
+  - 未执行真实业务 NAS 写操作。
+  - 未新增 Hermes / 真实 BIM / parser / indexing / 正文读取能力。
+  - 未修改 `docs/**`，未新增数据库迁移。
+- 主 agent 裁决：`M2H：Windows 风格文件管理器交互升级 + 目录直达子项返工` 正式收口。
+- 当前 active 批次：`待用户确认`。
+- 下一步建议：
+  - 选择性提交并推送 M2H，必须纳入 `scripts/dev/check-m2h-windows-file-manager.sh`。
+  - 后续可进入 `M2I：多真实项目复制试点`，验证文件管理器、工程主数据和交付闭环在更多真实项目上是否自然可用。
+
 ## 2026-05-23 M2G 正式收口
 
 - 测试 agent 已完成 `M2G：真实 NAS 文件管理器灰度完善` 轻量验收，报告写入 `handoff/test-agent/latest-report.md`。
