@@ -13,6 +13,7 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.DisciplineResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileAssetMetadataUpdateRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FilePreviewResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileAssetResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileStorageStatusResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ImportResultResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.NasProjectDiscoveryRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.NasProjectDiscoveryResponse;
@@ -34,7 +35,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -342,6 +342,11 @@ public class AssetController {
         return ApiResponse.success(assetApplicationService.getFilePreview(currentUserId(), fileId));
     }
 
+    @GetMapping("/files/{fileId}/storage-status")
+    public ApiResponse<FileStorageStatusResponse> getFileStorageStatus(@PathVariable Long fileId) {
+        return ApiResponse.success(assetApplicationService.getFileStorageStatus(currentUserId(), fileId));
+    }
+
     @PostMapping("/files/{fileId}/access-tickets")
     public ApiResponse<AccessTicketResponse> createFileAccessTicket(
         @PathVariable Long fileId,
@@ -353,7 +358,6 @@ public class AssetController {
     @GetMapping("/file-access/{ticket}")
     public ResponseEntity<Resource> openFileAccess(@PathVariable String ticket) {
         FileAccessResource access = assetApplicationService.openFileAccessTicket(ticket);
-        FileSystemResource resource = new FileSystemResource(access.path());
         ContentDisposition disposition = ContentDisposition
             .builder(access.dispositionType())
             .filename(access.fileName(), StandardCharsets.UTF_8)
@@ -362,7 +366,7 @@ public class AssetController {
             .contentType(MediaType.parseMediaType(access.contentType()))
             .contentLength(access.contentLength())
             .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
-            .body(resource);
+            .body(access.resource());
     }
 
     @PatchMapping("/files/{fileId}/metadata")

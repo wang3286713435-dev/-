@@ -1,30 +1,22 @@
-# 测试 Agent 当前任务：M2H 目录直达子项返工极短验收
+# 测试 Agent 当前任务：M3A 对象存储与 StorageService 基线验收
 
 你是数字化交付平台测试 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
-## 0. 当前背景
+本轮测试批次：
 
-用户在 105 项目文件管理器中发现真实使用问题：
+`M3A：对象存储与 StorageService 基线`
 
-- 左侧文件夹显示不全，只看到 `01`、`03`、`05` 等部分文件夹。
-- 根目录右侧混入了不属于根目录的深层文件。
-- 文件管理器应像 Windows 资源管理器一样，右侧只显示当前目录的直接子文件夹和直接文件。
+本轮只验收存储底座，不验收全量 NAS 迁移、语义解析、Hermes 正文问答或真实 BIM 引擎。
 
-开发 agent 已完成 M2H 目录直达子项返工，报告写入：
+## 0. 必须先阅读
 
 - `handoff/dev-agent/latest-report.md`
-
-本轮只做极短验收，不做全站巡检。
-
-## 1. 必须先阅读
-
-- `handoff/dev-agent/latest-report.md`
+- `handoff/main-agent/m3a-storage-service-foundation-plan.md`
 - `handoff/main-agent/status.md`
-- `handoff/main-agent/development-log.md`
 
-## 2. 必跑命令
+## 1. 必跑命令
 
 ```bash
 cd /Users/vc/Documents/数字化交付平台/backend
@@ -33,55 +25,65 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-m3a-storage-service-foundation.sh
+bash scripts/dev/check-m2j-105-ownership-review.sh
+bash scripts/dev/check-m2i-105-file-ownership-governance.sh
 bash scripts/dev/check-m2h-windows-file-manager.sh
+bash scripts/dev/check-m2f-real-project-delivery-loop.sh
+bash scripts/dev/check-m2b-nas-write-trial.sh
+bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
 
-建议补跑：
-
-```bash
-bash scripts/dev/check-m2g-nas-file-manager-polish.sh
-bash scripts/dev/check-m2b-nas-write-trial.sh
-bash scripts/dev/check-phase2-batch4-file-access.sh
-```
-
-## 3. 接口极短验收
-
-必须抽查 `catalog/files` 的新旧语义：
-
-1. `directOnly=true` 根目录：
-   - 只返回项目根目录直接文件。
-   - 不返回 `01/...`、`03/...`、`05/...` 等深层文件。
-2. `directoryPath=某子目录&directOnly=true`：
-   - 只返回该目录直接文件。
-   - 不返回孙目录或更深层文件。
-3. 默认 `directOnly=false` 或不传：
-   - 旧递归语义仍保留，不能破坏其他目录检索页面。
-
-可以优先信任 `scripts/dev/check-m2h-windows-file-manager.sh` 的隔离数据断言，但报告里需要写清楚脚本结果。
-
-## 4. 浏览器极短验收
-
-打开真实项目文件管理页，例如：
-
-- `http://127.0.0.1:5173/data-steward/assets/503?tab=files`
-
-或用户当前关注的 105 项目对应项目页。
+## 2. M3A 专项验收
 
 必须验证：
 
-1. 项目根目录右侧只显示根目录直接子文件夹和直接文件。
-2. 根目录右侧不再铺满整个项目的深层文件。
-3. 进入 `01_文件收发` 或任一真实子目录后，右侧只显示该目录直接子项。
-4. 左侧目录树明显完整，不应只剩 `01`、`03`、`05` 等部分顶层目录。
-5. 双击文件夹仍进入目录。
-6. PDF / 图片受控预览不回归。
-7. RVT / IFC / NWD / NWC / GLB / GLTF 等模型文件仍打开“模型预览占位”，不得伪装成真实 3D。
-8. 页面不出现横向撑爆、白屏或卡死。
+1. `GET /api/data-steward/storage/providers/health`
+   - 返回统一响应。
+   - 包含 NAS / MinIO 或 S3-compatible 的配置状态。
+   - 未配置对象存储时不 500。
+   - 不返回 endpoint 密钥、access key、secret key、bucket key、真实路径。
 
-不要在真实业务目录执行上传、重命名、移动、移入回收站等写操作。
+2. `GET /api/data-steward/assets/files/{fileId}/storage-status`
+   - 返回统一响应。
+   - 能表达 `NAS_ONLY` / `OBJECT_STORED` / `MIGRATION_PENDING` / `MIGRATION_FAILED` 等状态之一。
+   - 不返回真实 NAS 路径、bucket、object key、storage_uri。
 
-## 5. 边界检查
+3. `file-access` 回归
+   - 原有 NAS 文件预览 / 下载仍可用。
+   - 权限校验、生命周期校验、审计链路不回归。
+   - 响应契约不破坏前端。
+
+4. 对象存储受控读取
+   - 如果开发 agent 提供了 minio/s3 测试对象，需验证可通过后端受控读取。
+   - 若本地 MinIO 不可用，必须确认接口返回业务化不可用原因，不 500。
+
+## 3. 禁出字段扫描
+
+对 M3A 新接口和 `file-access` 相关响应扫描，禁止出现：
+
+- `/Volumes`
+- `smb://`
+- `nas://`
+- `storage_uri`
+- `storageUri`
+- `storage_path`
+- `storagePath`
+- `bucket`
+- `object_key`
+- `objectKey`
+- `raw row`
+- `SQL`
+- `token`
+- `secret`
+- `password`
+- `access_key`
+- `secret_key`
+
+如果出现在内部日志不直接返回前端，可记录但不直接判失败；如果出现在 API 响应中，按 P0/P1 判定。
+
+## 4. 越界检查
 
 执行：
 
@@ -90,44 +92,45 @@ git diff --name-only
 git status --short
 ```
 
-本轮允许的交付改动范围：
+重点检查是否出现以下越界：
 
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/controller/CatalogController.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/CatalogApplicationService.java`
-- `frontend/src/modules/data-steward/api/dataSteward.ts`
-- `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
-- `frontend/src/modules/data-steward/utils/directoryTree.ts`
-- `scripts/dev/check-m2h-windows-file-manager.sh`
-- `handoff/**`
+- 全量 NAS 迁移。
+- 真实 NAS 文件移动、删除、重命名。
+- PDF / Office / DWG / RVT / IFC 正文读取。
+- documents / chunks / OpenSearch / Qdrant / Hermes memory 写入。
+- Hermes 正文问答能力。
+- 真实 BIM 引擎接入。
+- `docs/**` 未授权修改。
 
-如果发现 `docs/**`、数据库迁移、Hermes、真实 BIM、parser、indexing 或文件正文读取相关改动，按影响记 P1 或 P0。
+发现上述越界，按影响判 P0/P1。
 
-`.claude/**`、`CLAUDE.md`、`tmp/**` 为既有非交付未跟踪项，不直接判失败，但报告中提醒收口时排除。
+`.claude/**`、`CLAUDE.md`、`tmp/**` 如仍为既有非交付未跟踪项，不直接判失败，但报告中提醒收口时排除。
 
-## 6. 判定标准
+## 5. 判定标准
 
 P0：
 
-- 真实 NAS 路径泄露。
-- 权限绕过。
-- 测试在真实业务目录执行写操作。
-- 新增真实 BIM 渲染、Hermes、parser、indexing、正文读取能力。
+- API 响应泄露真实 NAS 路径、bucket/object key、token、secret、raw row 或 SQL。
+- `file-access` 权限绕过。
+- 测试或实现移动、删除、重命名真实 NAS 文件。
+- Hermes 直接访问 MySQL / NAS / MinIO / 向量库 / 搜索引擎。
+- 新增正文解析、索引写入或真实 BIM 解析能力。
 
 P1：
 
-- 根目录右侧仍显示整个项目深层文件。
-- 子目录右侧仍显示孙目录或更深层文件。
-- 左侧目录树仍明显不完整。
-- `directOnly=true` 破坏旧递归接口兼容。
-- M2H 文件夹双击、PDF 预览、模型占位任一主交互回归。
-- 后端构建、前端构建、M2H 脚本或 `git diff --check` 失败。
+- 后端构建、前端构建、健康检查、M3A 专项脚本、核心回归脚本失败。
+- Provider health 接口不可用或未纳入 OpenAPI。
+- File storage status 接口不可用或返回底层路径。
+- NAS 原有预览 / 下载回归。
+- `minio://` / `s3://` 仍只有生硬 `STORAGE_PROVIDER_UNSUPPORTED`，没有受控业务化处理路径。
 
 P2：
 
 - 既有 Vite chunk warning。
-- 非阻塞文案、间距或交互细节问题。
+- 非阻塞文案、状态命名或交互粗糙。
+- 非交付未跟踪文件提醒。
 
-## 7. 报告要求
+## 6. 报告要求
 
 完成后写入：
 
@@ -135,11 +138,14 @@ P2：
 
 报告至少包含：
 
-- 极短验收结论。
+- 总结论：通过 / 不通过。
 - P0 / P1 / P2。
 - 必跑命令结果。
-- M2H 脚本结果。
-- `directOnly=true` 与旧递归兼容结果。
-- 105 / 503 文件管理页浏览器短验结果。
-- 是否发现真实路径或敏感字段泄露。
-- 是否建议主 agent 收口 M2H 返工。
+- M3A 专项脚本结果。
+- Provider health 接口抽查。
+- File storage status 接口抽查。
+- NAS file-access 回归结果。
+- 对象存储测试对象受控读取结果或不可用原因。
+- 禁出字段扫描结果。
+- 是否发现越界。
+- 是否建议主 agent 收口 M3A。

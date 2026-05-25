@@ -13,6 +13,7 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.DisciplineResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileAssetMetadataUpdateRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FilePreviewResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileAssetResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileStorageStatusResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ImportResultResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ImportRowError;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.NasProjectDiscoveryRequest;
@@ -37,6 +38,7 @@ import com.zhuoyu.delivery.datasteward.asset.repository.BimAssetRepository;
 import com.zhuoyu.delivery.datasteward.asset.repository.FileAccessTicketRepository;
 import com.zhuoyu.delivery.datasteward.asset.repository.NonstandardDirectoryRepository;
 import com.zhuoyu.delivery.datasteward.asset.repository.StorageRootRepository;
+import com.zhuoyu.delivery.datasteward.storage.StorageService;
 import com.zhuoyu.delivery.shared.api.PageResponse;
 import com.zhuoyu.delivery.shared.exception.BusinessException;
 import com.zhuoyu.delivery.shared.preview.FilePreviewPolicy;
@@ -58,6 +60,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -105,6 +108,7 @@ public class AssetApplicationService {
     private final SecurityPrincipalAccessor securityPrincipalAccessor;
     private final ProjectContextApplicationService projectContextApplicationService;
     private final EventApplicationService eventApplicationService;
+    private final StorageService storageService;
 
     public AssetApplicationService(
         BimAssetRepository bimAssetRepository,
@@ -122,7 +126,8 @@ public class AssetApplicationService {
         AuditLogApplicationService auditLogApplicationService,
         SecurityPrincipalAccessor securityPrincipalAccessor,
         ProjectContextApplicationService projectContextApplicationService,
-        EventApplicationService eventApplicationService
+        EventApplicationService eventApplicationService,
+        StorageService storageService
     ) {
         this.bimAssetRepository = bimAssetRepository;
         this.pathMappingRepository = pathMappingRepository;
@@ -140,6 +145,7 @@ public class AssetApplicationService {
         this.securityPrincipalAccessor = securityPrincipalAccessor;
         this.projectContextApplicationService = projectContextApplicationService;
         this.eventApplicationService = eventApplicationService;
+        this.storageService = storageService;
     }
 
     // ===== disciplines =====
@@ -737,7 +743,7 @@ public class AssetApplicationService {
         }
 
         try {
-            resolveReadablePath(file);
+            storageService.ensureReadable(file);
         } catch (BusinessException exception) {
             recordFileAccessAudit(file, "asset.file.access.failed", userId, exception.getCode());
             throw exception;
@@ -787,9 +793,9 @@ public class AssetApplicationService {
             throw new BusinessException("ASSET_FILE_PREVIEW_UNSUPPORTED", "当前文件格式暂不支持直接预览", HttpStatus.PRECONDITION_FAILED);
         }
 
-        Path path;
+        StorageService.StoredResource storedResource;
         try {
-            path = resolveReadablePath(file);
+            storedResource = storageService.openReadable(file);
         } catch (BusinessException exception) {
             recordFileAccessAudit(file, "asset.file.access.failed", row.userId(), exception.getCode());
             throw exception;
@@ -798,12 +804,17 @@ public class AssetApplicationService {
         String actionCode = "PREVIEW".equalsIgnoreCase(row.action()) ? "asset.file.preview.open" : "asset.file.download.open";
         recordFileAccessAudit(file, actionCode, row.userId(), "ticket=" + row.id());
         return new FileAccessResource(
-            path,
-            detectContentType(path, file),
+            storedResource.resource(),
+            storedResource.contentType(),
             "PREVIEW".equalsIgnoreCase(row.action()) ? "inline" : "attachment",
             file.fileName(),
-            readableSize(path)
+            storedResource.contentLength()
         );
+    }
+
+    public FileStorageStatusResponse getFileStorageStatus(Long userId, Long fileId) {
+        FileAssetResponse file = getFileById(userId, fileId);
+        return storageService.fileStorageStatus(file);
     }
 
     @Transactional
@@ -1301,7 +1312,7 @@ public class AssetApplicationService {
     }
 
     public record FileAccessResource(
-        Path path,
+        Resource resource,
         String contentType,
         String dispositionType,
         String fileName,

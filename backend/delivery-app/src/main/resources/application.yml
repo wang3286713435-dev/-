@@ -51,3 +51,16 @@ delivery:
     catalog-only-default: ${HERMES_AGENT_GATEWAY_CATALOG_ONLY_DEFAULT:true}
     contract-version: ${HERMES_AGENT_GATEWAY_CONTRACT_VERSION:delivery_platform.asset_views.v1.1}
     service-token: ${HERMES_AGENT_GATEWAY_SERVICE_TOKEN:}
+  storage:
+    minio:
+      enabled: ${DELIVERY_MINIO_ENABLED:true}
+      endpoint: ${DELIVERY_MINIO_ENDPOINT:http://127.0.0.1:19000}
+      access-key: ${DELIVERY_MINIO_ACCESS_KEY:minioadmin}
+      secret-key: ${DELIVERY_MINIO_SECRET_KEY:minioadmin123}
+      default-bucket: ${DELIVERY_MINIO_DEFAULT_BUCKET:delivery-m3a-smoke}
+    s3-compatible:
+      enabled: ${DELIVERY_S3_COMPATIBLE_ENABLED:false}
+      endpoint: ${DELIVERY_S3_COMPATIBLE_ENDPOINT:}
+      access-key: ${DELIVERY_S3_COMPATIBLE_ACCESS_KEY:}
+      secret-key: ${DELIVERY_S3_COMPATIBLE_SECRET_KEY:}
+      default-bucket: ${DELIVERY_S3_COMPATIBLE_DEFAULT_BUCKET:}

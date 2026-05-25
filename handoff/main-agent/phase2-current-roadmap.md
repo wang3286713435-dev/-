@@ -1,10 +1,10 @@
 # 二期当前路线交接
 
-更新时间：2026-05-23
+更新时间：2026-05-25
 
 ## 当前主线
 
-当前分支：`codex/m2h-windows-file-manager`
+当前分支：以实际开发 agent 所在分支为准，建议新批次使用 `codex/m3a-storage-service-foundation`
 
 当前 active 批次：
 
@@ -16,13 +16,50 @@
 
 说明：
 
-- UX1 / UX2 / UX3 已验收、推送并合并回主线。
-- M1C / M1D / M1E / M1F / M2A / M2B 回归基线保持有效。
+- M1 / M2 / UX 系列主线能力已形成有效基线。
+- M2H / M2I / M2J 已围绕文件管理器和 105 文件归属治理完成收口。
 - Hermes 继续冻结，不作为当前主线继续扩展。
 - 真实 BIM 引擎未确定，8B / 8C 不启动。
 - 9A 客户交付准备不启动。
+- M3A 已收口；当前等待用户确认是否进入 M3B。
 
 ## 当前最新裁决
+
+`M3A：对象存储与 StorageService 基线` 已正式收口。
+
+M3A 已完成：
+
+- 新增对象存储元数据模型。
+- 新增统一 StorageService。
+- 现有 `file-access` 内部改走 StorageService，保持外部契约兼容。
+- 新增 provider health 和 file storage status API。
+- 保持 NAS 文件原有访问不回归。
+- 不暴露真实 NAS 路径、bucket、object key、storage URI。
+
+M3A 明确未做：
+
+- 全量 NAS 迁移。
+- 语义解析。
+- Hermes 正文问答。
+- 真实 BIM 轻量化。
+- 真实 NAS 文件移动、删除、重命名。
+
+M3A 收口依据：
+
+- 计划：`handoff/main-agent/m3a-storage-service-foundation-plan.md`
+- 收口报告：`handoff/main-agent/m3a-storage-service-foundation-closure.md`
+- 开发报告：`handoff/dev-agent/latest-report.md`
+- 测试报告：`handoff/test-agent/latest-report.md`
+
+下一阶段顺序：
+
+1. `M3B：105 小样本对象存储镜像迁移`
+2. `M3C：迁移任务中心与批量策略`
+3. `M3D：预览产物与交付包归档对象化`
+4. `M4：语义证据层`
+5. `M5：Hermes 受控证据问答`
+
+以下为历史收口记录：
 
 `M2G：真实 NAS 文件管理器灰度完善` 已通过测试 agent 轻量验收并由主 agent 判定正式收口。
 

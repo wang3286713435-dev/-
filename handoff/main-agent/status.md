@@ -1,5 +1,59 @@
 # 主 Agent 项目状态
 
+## 2026-05-25 M3A 启动：对象存储与 StorageService 基线
+
+- 用户确认执行 `M3 执行计划：对象存储底座先行，语义与 Hermes 后置`。
+- 主 agent 裁决：当前 active 批次切换为 `M3A：对象存储与 StorageService 基线`。
+- M3A 定位：
+  - 只建立对象存储元数据模型和统一 `StorageService` 适配层。
+  - 现有 NAS 文件仍是源头和主链路。
+  - MySQL 继续作为业务台账、权限、交付、审计中心。
+  - MinIO / S3-compatible 只做基础接入和受控读取能力，不做全量迁移。
+- M3A 必做：
+  - 追加 Flyway 迁移，新增对象存储相关表。
+  - 新增 StorageService。
+  - 现有 `file-access` 预览 / 下载内部改走 StorageService，但外部契约保持兼容。
+  - 新增 provider health 和 file storage status 只读接口。
+  - 新增 `scripts/dev/check-m3a-storage-service-foundation.sh`。
+- M3A 禁止：
+  - 不做全量 NAS 迁移。
+  - 不移动、删除、重命名真实 NAS 文件。
+  - 不读取 PDF / Office / DWG / RVT / IFC 正文。
+  - 不写 documents / chunks / OpenSearch / Qdrant / Hermes memory。
+  - 不新增 Hermes 正文问答。
+  - 不启动真实 BIM 轻量化。
+  - 不暴露真实 NAS 路径、bucket、object key、storage URI、SQL、raw row、token、secret。
+- 已写入：
+  - M3A 计划：`handoff/main-agent/m3a-storage-service-foundation-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+- 当前裁决：
+  - M3A 已于 2026-05-25 收口。
+  - M3B / M3C / M3D / M4 / M5 均未进入。
+
+## 2026-05-25 M3A 正式收口
+
+- 测试 agent 已完成 M3A 完整验收和 P1 极短复验，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- P2：
+  - 既有 Vite chunk size warning。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪项继续排除。
+- 已确认：
+  - 后端构建、前端构建、健康检查通过。
+  - `scripts/dev/check-m3a-storage-service-foundation.sh` 通过，`PASS=8 FAIL=0`。
+  - M2J / M2I / M2H / M2F / M2B / file-access 回归通过。
+  - provider health、storage-status、MinIO 受控读取和 NAS 既有预览 / 下载链路可用。
+  - 禁出字段扫描通过，未发现真实 NAS 路径、bucket、object key、storage URI、SQL、raw row、token、secret 泄露。
+  - M3A 核心新增文件已纳入 Git 暂存。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 未被纳入暂存。
+- 主 agent 裁决：`M3A：对象存储与 StorageService 基线` 正式收口。
+- 当前 active 批次：`待用户确认`。
+- 下一步建议：
+  - 先提交 / 推送 M3A。
+  - 后续如继续 M3 路线，进入 `M3B：105 小样本对象存储镜像迁移`。
+
 ## 2026-05-23 M2H 开发完成，进入测试验收
 
 - 开发 agent 已完成 `M2H：Windows 风格文件管理器交互升级`，报告写入 `handoff/dev-agent/latest-report.md`。

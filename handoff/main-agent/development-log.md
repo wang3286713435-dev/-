@@ -1,5 +1,57 @@
 # 主 Agent 开发监控日志
 
+## 2026-05-25：M3A 启动
+
+- 用户确认执行对象存储路线规划。
+- 主 agent 裁决：启动 `M3A：对象存储与 StorageService 基线`。
+- 当前路线：
+  - M3A 先做存储模型和 StorageService。
+  - M3B 再做 105 小样本对象存储镜像迁移。
+  - M3C 再做迁移任务中心与批量策略。
+  - M3D 再做预览产物与交付包归档对象化。
+  - M4 才进入语义证据层。
+  - M5 才进入 Hermes 受控证据问答。
+- M3A 不做：
+  - 全量 NAS 迁移。
+  - 文件正文读取。
+  - Hermes 正文问答。
+  - 真实 BIM 轻量化。
+  - 向量库 / 搜索库 / Hermes memory 写入。
+  - 真实 NAS 文件移动、删除、重命名。
+- 已更新：
+  - `handoff/main-agent/m3a-storage-service-foundation-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+  - `handoff/main-agent/status.md`
+  - `handoff/main-agent/phase2-current-roadmap.md`
+- 当前裁决：
+  - 交给开发 agent 按 M3A prompt 开发。
+  - 开发完成后测试 agent 按 M3A prompt 验收。
+  - M3A 通过前，不进入 M3B、语义解析或 Hermes 正文问答。
+
+## 2026-05-25：M3A 收口裁决
+
+- 测试 agent 完成 M3A 完整验收：
+  - 功能验收通过。
+  - 后端构建、前端构建、健康检查通过。
+  - M3A 专项脚本通过。
+  - M2J / M2I / M2H / M2F / M2B / file-access 回归通过。
+  - provider health、storage-status、MinIO 受控读取和 NAS 既有预览 / 下载链路均未回归。
+- 首轮唯一 P1：
+  - M3A 核心交付文件未纳入 Git 跟踪。
+- P1 极短复验：
+  - 6 个 M3A 核心新增文件已暂存为 `A`。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 未被纳入。
+  - `git diff --check` 通过。
+  - M3A 专项脚本继续通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- 主 agent 裁决：
+  - `M3A：对象存储与 StorageService 基线` 正式收口。
+  - 当前 active 批次切换为 `待用户确认`。
+  - 不自动进入 M3B。
+  - 下一步建议为先提交 / 推送 M3A，再由用户确认是否进入 `M3B：105 小样本对象存储镜像迁移`。
+
 ## 2026-05-22：M2E 测试不通过，转入 P1 修复
 
 - 测试 agent 完成 M2E 验收，报告写入 `handoff/test-agent/latest-report.md`。

@@ -1329,4 +1329,30 @@ public final class AssetDtos {
         String message
     ) {
     }
+
+    // ===== M3A: storage service foundation =====
+
+    public record StorageProviderHealthResponse(
+        String providerCode,
+        String displayName,
+        Boolean configured,
+        Boolean available,
+        Boolean readonly,
+        Boolean writable,
+        String unavailableReason
+    ) {
+    }
+
+    public record FileStorageStatusResponse(
+        Long fileId,
+        Long projectId,
+        String storageState,
+        String activeProvider,
+        Boolean objectStored,
+        Boolean checksumAvailable,
+        Instant lastVerifiedAt,
+        String migrationStatus,
+        String message
+    ) {
+    }
 }
