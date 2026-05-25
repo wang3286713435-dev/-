@@ -176,7 +176,7 @@ public class CatalogApplicationService {
     public PageResponse<CatalogFileResponse> listCatalogFiles(
         Long userId, Long projectId, String keyword, String directoryPath, String fileExt,
         String fileKind, String disciplineCode, String version, String qualityIssue,
-        boolean directOnly, int page, int pageSize
+        String ownershipStatus, boolean directOnly, int page, int pageSize
     ) {
         int offset = Math.max(0, (page - 1) * pageSize);
         int limit = Math.max(1, Math.min(pageSize, 200));
@@ -186,10 +186,14 @@ public class CatalogApplicationService {
                    f.original_name, f.file_kind, f.discipline AS discipline_code,
                    f.version_no, f.size_bytes, f.checksum, f.storage_provider,
                    f.storage_uri, f.logical_path, f.process_status, f.confidence_level,
-                   f.last_verified_at, f.updated_at, f.source_type, f.review_status
+                   f.last_verified_at, f.updated_at, f.source_type, f.review_status,
+                   own.status AS ownership_status, own.ownership_type, own.node_key AS ownership_node_key,
+                   own.node_label AS ownership_node_label, own.node_path AS ownership_node_path,
+                   own.confidence AS ownership_confidence, own.source AS ownership_source
             FROM core_user_project_roles upr
             JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
             JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0
+            LEFT JOIN data_file_ownership_assignments own ON own.file_id = f.id AND own.deleted = 0
             WHERE upr.user_id = :userId AND upr.deleted = 0
             """);
         MapSqlParameterSource params = new MapSqlParameterSource("userId", userId);
@@ -226,6 +230,7 @@ public class CatalogApplicationService {
             params.addValue("version", version.trim());
         }
         appendCatalogQualityFilter(sb, qualityIssue);
+        appendOwnershipFilter(sb, params, ownershipStatus);
 
         // count total
         String countSql = "SELECT COUNT(1) FROM (" + sb + ") _cnt";
@@ -454,10 +459,18 @@ public class CatalogApplicationService {
                 qualityFlags,
                 toInstant(rs, "last_verified_at"),
                 toInstant(rs, "updated_at"),
-                true, "FORMAL_ASSET_IN_SCOPE",
-                List.of("fileName", "fileExt", "fileKind", "disciplineCode", "disciplineName",
-                    "version", "sizeBytes", "checksum", "status", "confidenceLevel",
-                    "storageProvider", "logicalPath", "qualityFlags", "lastVerifiedAt", "updatedAt")
+                    true, "FORMAL_ASSET_IN_SCOPE",
+                    List.of("fileName", "fileExt", "fileKind", "disciplineCode", "disciplineName",
+                        "version", "sizeBytes", "checksum", "status", "confidenceLevel",
+                    "storageProvider", "logicalPath", "qualityFlags", "lastVerifiedAt", "updatedAt",
+                    "ownershipStatus", "ownershipType", "ownershipNodeLabel", "ownershipNodePath"),
+                    ownershipStatus(rs),
+                    rs.getString("ownership_type"),
+                    rs.getString("ownership_node_key"),
+                    rs.getString("ownership_node_label"),
+                    rs.getString("ownership_node_path"),
+                    rs.getString("ownership_confidence"),
+                    rs.getString("ownership_source")
             );
         };
     }
@@ -470,10 +483,14 @@ public class CatalogApplicationService {
                    f.original_name, f.file_kind, f.discipline AS discipline_code,
                    f.version_no, f.size_bytes, f.checksum, f.storage_provider,
                    f.storage_uri, f.logical_path, f.process_status, f.confidence_level,
-                   f.last_verified_at, f.updated_at, f.source_type, f.review_status
+                   f.last_verified_at, f.updated_at, f.source_type, f.review_status,
+                   own.status AS ownership_status, own.ownership_type, own.node_key AS ownership_node_key,
+                   own.node_label AS ownership_node_label, own.node_path AS ownership_node_path,
+                   own.confidence AS ownership_confidence, own.source AS ownership_source
             FROM core_user_project_roles upr
             JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
             JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0 AND f.id = :fileId
+            LEFT JOIN data_file_ownership_assignments own ON own.file_id = f.id AND own.deleted = 0
             WHERE upr.user_id = :userId AND upr.deleted = 0
             """, new MapSqlParameterSource()
             .addValue("userId", userId)
@@ -515,7 +532,14 @@ public class CatalogApplicationService {
                     toInstant(rs, "last_verified_at"),
                     toInstant(rs, "updated_at"),
                     true, "FORMAL_ASSET_IN_SCOPE",
-                    catalogContractFields(pathVisibility.visible())
+                    catalogContractFields(pathVisibility.visible()),
+                    ownershipStatus(rs),
+                    rs.getString("ownership_type"),
+                    rs.getString("ownership_node_key"),
+                    rs.getString("ownership_node_label"),
+                    rs.getString("ownership_node_path"),
+                    rs.getString("ownership_confidence"),
+                    rs.getString("ownership_source")
                 );
             });
         return rows.stream().findFirst().orElse(null);
@@ -1046,6 +1070,10 @@ public class CatalogApplicationService {
         if (storagePathVisible) {
             fields.add("storagePath");
         }
+        fields.add("ownershipStatus");
+        fields.add("ownershipType");
+        fields.add("ownershipNodeLabel");
+        fields.add("ownershipNodePath");
         return fields;
     }
 
@@ -1106,6 +1134,11 @@ public class CatalogApplicationService {
         if ("PROCESSED".equalsIgnoreCase(processStatus)) return "ACTIVE";
         if ("FAILED".equalsIgnoreCase(processStatus)) return "FAILED";
         return processStatus == null ? "UNKNOWN" : processStatus.toUpperCase();
+    }
+
+    private String ownershipStatus(ResultSet rs) throws SQLException {
+        String status = rs.getString("ownership_status");
+        return status == null || status.isBlank() ? "UNASSIGNED" : status;
     }
 
     private String directoryPathExpression(String column) {
@@ -1202,6 +1235,19 @@ public class CatalogApplicationService {
             case "ZERO_SIZE_FILE" -> sb.append(" AND COALESCE(f.size_bytes, 0) <= 0");
             default -> { /* unknown filter ignored */ }
         }
+    }
+
+    private void appendOwnershipFilter(StringBuilder sb, MapSqlParameterSource params, String ownershipStatus) {
+        String status = ownershipStatus == null || ownershipStatus.isBlank() ? null : ownershipStatus.trim().toUpperCase(Locale.ROOT);
+        if (status == null || "ALL".equals(status)) {
+            return;
+        }
+        if ("UNASSIGNED".equals(status)) {
+            sb.append(" AND own.id IS NULL");
+            return;
+        }
+        sb.append(" AND own.status = :ownershipStatus");
+        params.addValue("ownershipStatus", status);
     }
 
     private static String extensionOf(String name) {

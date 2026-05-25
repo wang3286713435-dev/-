@@ -18,6 +18,7 @@
       <div class="asset-command-center__actions">
         <el-button type="primary" @click="openAssetTab('files')">文件管理</el-button>
         <el-button :icon="View" @click="openAssetTab('dashboard')">项目可视化</el-button>
+        <el-button @click="openAssetTab('ownership')">工程树</el-button>
         <el-button @click="goDeliveryStatus">交付状态</el-button>
         <el-button @click="toggleProjectDetails">项目详情</el-button>
         <el-button :icon="Refresh" @click="loadPage">刷新</el-button>
@@ -288,6 +289,16 @@
         </section>
       </el-tab-pane>
 
+      <el-tab-pane label="工程树可视化" name="ownership">
+        <FileOwnershipTreePanel
+          v-if="Number.isFinite(projectId)"
+          :project-id="projectId"
+          :active="activeTab === 'ownership'"
+          @updated="handleOwnershipUpdated"
+        />
+        <el-empty v-else description="请先选择项目" :image-size="56" />
+      </el-tab-pane>
+
       <el-tab-pane label="文件管理" name="files">
         <AssetProjectFileBrowser
           v-if="Number.isFinite(projectId)"
@@ -303,6 +314,7 @@
           @open-metadata="openMetadataById"
           @create-checksum="createChecksumById"
           @create-batch-checksum="createBatchChecksumForProject"
+          @ask-hermes-ownership="openHermesForFile"
         />
         <el-empty v-else description="请先选择项目" :image-size="56" />
 
@@ -785,6 +797,7 @@ import {
 } from '@/modules/data-steward/api/dataSteward';
 import AssetProjectFileBrowser from '@/modules/data-steward/components/AssetProjectFileBrowser.vue';
 import DataStewardPanel from '@/modules/data-steward/components/DataStewardPanel.vue';
+import FileOwnershipTreePanel from '@/modules/data-steward/components/FileOwnershipTreePanel.vue';
 import HermesWorkspaceDrawer from '@/modules/data-steward/components/HermesWorkspaceDrawer.vue';
 import ParticleField from '@/modules/core/components/ParticleField.vue';
 import { useSpotlight } from '@/modules/core/composables/useSpotlight';
@@ -864,7 +877,7 @@ const metadataFileKindOptions = [
   { label: '归档包', value: 'ARCHIVE' },
   { label: '其他', value: 'OTHER' }
 ];
-const assetTabs = new Set(['dashboard', 'files', 'scans', 'mappings']);
+const assetTabs = new Set(['dashboard', 'ownership', 'files', 'scans', 'mappings']);
 type WorkspacePhase = 'ASSET' | 'MASTER_DATA' | 'WORK_CENTER';
 type ModuleCard = {
   label: string;
@@ -890,6 +903,7 @@ const workstreamCards: Array<{
 const moduleCards: ModuleCard[] = [
   { label: '项目可视化', group: '项目资产', description: '资产驾驶舱、容量、风险和数据分布', phase: 'ASSET', tab: 'dashboard' },
   { label: '文件管理', group: '项目资产', description: '目录树、文件表、预览和治理', phase: 'ASSET', tab: 'files' },
+  { label: '工程树可视化', group: '工程主数据', description: '查看每个文件归属到哪个工程节点', phase: 'MASTER_DATA', tab: 'ownership' },
   { label: '模型集成', group: '项目资产', description: '登记模型集成与发布状态', phase: 'ASSET', name: 'project-data-steward-models' },
   { label: '管理对象', group: '项目资产', description: '对象与模型集成登记', phase: 'ASSET', name: 'project-data-steward-objects' },
   { label: '文件服务', group: '项目资产', description: '预览、下载权限与禁用写操作', phase: 'ASSET', name: 'project-data-steward-file-service' },
@@ -908,6 +922,7 @@ const moduleCards: ModuleCard[] = [
 const primaryWorkspaceKeys = new Set([
   'dashboard',
   'files',
+  'ownership',
   'project-work-dashboard'
 ]);
 
@@ -1490,6 +1505,11 @@ function toggleProjectDetails() {
 function openHermesForFile(fileId: number) {
   hermesAssetId.value = fileId;
   hermesDrawerVisible.value = true;
+}
+
+function handleOwnershipUpdated() {
+  refreshFileBrowser();
+  void loadPage();
 }
 
 function pathMappingHint(row: AssetPathMapping) {

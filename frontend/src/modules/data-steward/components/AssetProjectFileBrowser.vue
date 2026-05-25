@@ -145,6 +145,9 @@
         <el-select v-model="filters.qualityIssue" @change="reloadFiles">
           <el-option v-for="item in qualityIssueOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
+        <el-select v-model="filters.ownershipStatus" @change="reloadFiles">
+          <el-option v-for="item in ownershipStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
         <el-button @click="resetAdvancedFilters">重置</el-button>
       </div>
 
@@ -254,6 +257,19 @@
               <el-tag v-if="row.kind === 'FILE'" type="info">
                 {{ row.file.disciplineName || disciplineLabel(row.file.disciplineCode) || '-' }}
               </el-tag>
+              <span v-else class="file-browser__muted">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="归属节点" min-width="190" show-overflow-tooltip>
+            <template #default="{ row }">
+              <template v-if="row.kind === 'FILE'">
+                <div class="file-browser__ownership-cell">
+                  <el-tag :type="ownershipStatusTag(row.file.ownershipStatus)" size="small">
+                    {{ ownershipStatusLabel(row.file.ownershipStatus) }}
+                  </el-tag>
+                  <span>{{ row.file.ownershipNodeLabel || '未归属' }}</span>
+                </div>
+              </template>
               <span v-else class="file-browser__muted">-</span>
             </template>
           </el-table-column>
@@ -521,6 +537,7 @@ const emit = defineEmits<{
   'open-metadata': [fileId: number];
   'create-checksum': [fileId: number];
   'create-batch-checksum': [];
+  'ask-hermes-ownership': [fileId: number];
 }>();
 
 const TREE_WIDTH_KEY = 'delivery.dataSteward.fileBrowser.treeWidth';
@@ -539,6 +556,7 @@ const QUERY_KEYS = [
   'discipline',
   'fileExt',
   'qualityIssue',
+  'ownershipStatus',
   'filePage',
   'filePageSize',
   'lastFileId'
@@ -606,7 +624,8 @@ const filters = reactive({
   fileKind: 'ALL',
   disciplineCode: '',
   fileExt: '',
-  qualityIssue: props.initialQualityIssue || 'ALL'
+  qualityIssue: props.initialQualityIssue || 'ALL',
+  ownershipStatus: 'ALL'
 });
 
 const pagination = reactive({
@@ -635,6 +654,14 @@ const qualityIssueOptions = [
   { label: '零大小', value: 'ZERO_SIZE_FILE' }
 ];
 
+const ownershipStatusOptions = [
+  { label: '全部归属', value: 'ALL' },
+  { label: '未归属', value: 'UNASSIGNED' },
+  { label: '建议中', value: 'SUGGESTED' },
+  { label: '已确认', value: 'CONFIRMED' },
+  { label: '已驳回', value: 'REJECTED' }
+];
+
 type FileBrowserState = {
   activeDir?: string;
   keyword?: string;
@@ -642,6 +669,7 @@ type FileBrowserState = {
   disciplineCode?: string;
   fileExt?: string;
   qualityIssue?: string;
+  ownershipStatus?: string;
   page?: number;
   pageSize?: number;
   expandedDirs?: string[];
@@ -677,6 +705,7 @@ type ContextMenuCommand =
   | 'preview'
   | 'detail'
   | 'metadata'
+  | 'hermes-ownership'
   | 'checksum'
   | 'rename'
   | 'move'
@@ -812,6 +841,7 @@ const continuitySummary = computed(() => {
     filters.disciplineCode ? `专业：${disciplineLabel(filters.disciplineCode)}` : '',
     filters.fileExt.trim() ? `扩展名：${normalizeExt(filters.fileExt)}` : '',
     filters.qualityIssue !== 'ALL' ? `质量：${qualityIssueLabel(filters.qualityIssue)}` : '',
+    filters.ownershipStatus !== 'ALL' ? `归属：${ownershipStatusLabel(filters.ownershipStatus)}` : '',
     `第 ${pagination.page} 页`,
     lastFileId.value ? `最近文件：${lastFileName.value || `平台文件ID ${lastFileId.value}`}` : ''
   ].filter(Boolean);
@@ -951,6 +981,7 @@ watch(
     filters.disciplineCode,
     filters.fileExt,
     filters.qualityIssue,
+    filters.ownershipStatus,
     pagination.page,
     pagination.pageSize,
     expandedDirs.value.join('|'),
@@ -1001,6 +1032,7 @@ function initializeBrowserState() {
   filters.disciplineCode = state.disciplineCode ?? '';
   filters.fileExt = state.fileExt ?? '';
   filters.qualityIssue = state.qualityIssue ?? fallbackQualityIssue;
+  filters.ownershipStatus = normalizeOwnershipStatus(state.ownershipStatus);
   pagination.page = positiveNumber(state.page, 1);
   pagination.pageSize = normalizePageSize(state.pageSize);
   expandedDirs.value = Array.isArray(state.expandedDirs) ? state.expandedDirs.filter(Boolean) : [];
@@ -1023,6 +1055,7 @@ function readQueryState(): FileBrowserState | null {
     disciplineCode: queryString(route.query.discipline) ?? '',
     fileExt: queryString(route.query.fileExt) ?? '',
     qualityIssue: queryString(route.query.qualityIssue) ?? props.initialQualityIssue ?? 'ALL',
+    ownershipStatus: queryString(route.query.ownershipStatus) ?? 'ALL',
     page: positiveNumber(queryString(route.query.filePage), 1),
     pageSize: normalizePageSize(positiveNumber(queryString(route.query.filePageSize), DEFAULT_PAGE_SIZE)),
     lastFileId: positiveNumber(queryString(route.query.lastFileId), 0) || null
@@ -1055,8 +1088,9 @@ function currentBrowserState(): FileBrowserState {
     keyword: filters.keyword.trim(),
     fileKind: filters.fileKind,
     disciplineCode: filters.disciplineCode,
-    fileExt: filters.fileExt.trim(),
-    qualityIssue: filters.qualityIssue,
+      fileExt: filters.fileExt.trim(),
+      qualityIssue: filters.qualityIssue,
+      ownershipStatus: filters.ownershipStatus,
     page: pagination.page,
     pageSize: pagination.pageSize,
     expandedDirs: expandedDirs.value,
@@ -1080,6 +1114,7 @@ function syncBrowserStateToRoute(state: FileBrowserState) {
   assignQuery(nextQuery, 'discipline', state.disciplineCode);
   assignQuery(nextQuery, 'fileExt', state.fileExt);
   assignQuery(nextQuery, 'qualityIssue', state.qualityIssue === 'ALL' ? '' : state.qualityIssue);
+  assignQuery(nextQuery, 'ownershipStatus', state.ownershipStatus === 'ALL' ? '' : state.ownershipStatus);
   assignQuery(nextQuery, 'filePage', state.page && state.page > 1 ? String(state.page) : '');
   assignQuery(nextQuery, 'filePageSize', state.pageSize && state.pageSize !== DEFAULT_PAGE_SIZE ? String(state.pageSize) : '');
   assignQuery(nextQuery, 'lastFileId', state.lastFileId ? String(state.lastFileId) : '');
@@ -1095,6 +1130,7 @@ function resetViewState() {
   filters.disciplineCode = '';
   filters.fileExt = '';
   filters.qualityIssue = 'ALL';
+  filters.ownershipStatus = 'ALL';
   pagination.page = 1;
   pagination.pageSize = DEFAULT_PAGE_SIZE;
   pagination.total = 0;
@@ -1353,6 +1389,7 @@ async function loadFiles() {
       disciplineCode: filters.disciplineCode || undefined,
       fileExt: normalizeExt(filters.fileExt),
       qualityIssue: filters.qualityIssue === 'ALL' ? undefined : filters.qualityIssue,
+      ownershipStatus: filters.ownershipStatus === 'ALL' ? undefined : filters.ownershipStatus,
       page: pagination.page,
       pageSize: pagination.pageSize
     });
@@ -1506,6 +1543,7 @@ function buildContextMenuItems(entries: BrowserEntry[]): ContextMenuItem[] {
     },
     { command: 'detail', label: '详情' },
     { command: 'metadata', label: '治理' },
+    { command: 'hermes-ownership', label: '询问 Hermes 归属建议' },
     { command: 'checksum', label: '补 checksum' },
     {
       command: 'rename',
@@ -1566,6 +1604,9 @@ async function runContextMenuCommand(item: ContextMenuItem) {
   } else if (item.command === 'metadata' && entry.kind === 'FILE') {
     rememberFile(entry.file);
     emit('open-metadata', entry.file.fileId);
+  } else if (item.command === 'hermes-ownership' && entry.kind === 'FILE') {
+    rememberFile(entry.file);
+    emit('ask-hermes-ownership', entry.file.fileId);
   } else if (item.command === 'checksum' && entry.kind === 'FILE') {
     rememberFile(entry.file);
     emit('create-checksum', entry.file.fileId);
@@ -2226,6 +2267,7 @@ function resetAdvancedFilters() {
   filters.disciplineCode = '';
   filters.fileExt = '';
   filters.qualityIssue = 'ALL';
+  filters.ownershipStatus = 'ALL';
   reloadFiles();
 }
 
@@ -2417,11 +2459,16 @@ function hasAdvancedFilters() {
   return filters.fileKind !== 'ALL'
     || Boolean(filters.disciplineCode)
     || Boolean(filters.fileExt.trim())
-    || filters.qualityIssue !== 'ALL';
+    || filters.qualityIssue !== 'ALL'
+    || filters.ownershipStatus !== 'ALL';
 }
 
 function normalizeFileKind(value: string | undefined) {
   return fileKindOptions.some((item) => item.value === value) ? String(value) : 'ALL';
+}
+
+function normalizeOwnershipStatus(value: string | undefined) {
+  return ownershipStatusOptions.some((item) => item.value === value) ? String(value) : 'ALL';
 }
 
 function normalizePageSize(value: number | string | undefined) {
@@ -2457,6 +2504,23 @@ function disciplineLabel(code: string | null | undefined) {
 
 function qualityIssueLabel(value: string) {
   return qualityIssueOptions.find((item) => item.value === value)?.label ?? value;
+}
+
+function ownershipStatusLabel(value?: string | null) {
+  const map: Record<string, string> = {
+    UNASSIGNED: '未归属',
+    SUGGESTED: '建议中',
+    CONFIRMED: '已确认',
+    REJECTED: '已驳回'
+  };
+  return map[value || 'UNASSIGNED'] || '未归属';
+}
+
+function ownershipStatusTag(value?: string | null) {
+  if (value === 'CONFIRMED') return 'success';
+  if (value === 'SUGGESTED') return 'warning';
+  if (value === 'REJECTED') return 'danger';
+  return 'info';
 }
 
 function formatBytes(value: number | null | undefined) {
@@ -3076,6 +3140,21 @@ function formatDate(value: string | null | undefined) {
   margin-top: 3px;
   color: var(--zy-muted);
   font-size: var(--zy-fs-xs);
+}
+
+.file-browser__ownership-cell {
+  display: flex;
+  min-width: 0;
+  gap: 8px;
+  align-items: center;
+}
+
+.file-browser__ownership-cell span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--zy-text-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-browser__drawer-alert {

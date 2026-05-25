@@ -865,6 +865,13 @@ export interface CatalogFile {
   agentReadable: boolean;
   agentReadReason: string;
   agentContractView: string[];
+  ownershipStatus?: string;
+  ownershipType?: string | null;
+  ownershipNodeKey?: string | null;
+  ownershipNodeLabel?: string | null;
+  ownershipNodePath?: string | null;
+  ownershipConfidence?: string | null;
+  ownershipSource?: string | null;
 }
 
 export interface CatalogFileDetail extends CatalogFile {
@@ -1100,8 +1107,127 @@ export interface CatalogFilesQuery {
   disciplineCode?: string;
   version?: string;
   qualityIssue?: string;
+  ownershipStatus?: string;
   page?: number;
   pageSize?: number;
+}
+
+export interface FileOwnershipTypeSummary {
+  ownershipType: string;
+  label: string;
+  fileCount: number;
+}
+
+export interface FileOwnershipStatusSummary {
+  status: string;
+  label: string;
+  fileCount: number;
+}
+
+export interface FileOwnershipCoverage {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  totalFiles: number;
+  assignedFiles: number;
+  confirmedFiles: number;
+  suggestedFiles: number;
+  rejectedFiles: number;
+  unassignedFiles: number;
+  assignmentCoverageRate: number;
+  byOwnershipType: FileOwnershipTypeSummary[];
+  byStatus: FileOwnershipStatusSummary[];
+}
+
+export interface FileOwnershipTreeNode {
+  nodeKey: string;
+  nodeLabel: string;
+  nodePath: string;
+  ownershipType: string;
+  status: string;
+  source: string;
+  sectionNodeId: number | null;
+  fileCount: number;
+  confirmedFileCount: number;
+  suggestedFileCount: number;
+  unassignedFileCount: number;
+  deliveryRequiredCount: number;
+  deliveryBoundCount: number;
+  deliveryMissingCount: number;
+  children: FileOwnershipTreeNode[];
+}
+
+export interface FileOwnershipTree {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  totalFiles: number;
+  assignedFiles: number;
+  unassignedFiles: number;
+  nodes: FileOwnershipTreeNode[];
+}
+
+export interface FileOwnershipFileRow {
+  fileId: number;
+  fileName: string;
+  fileKind: string;
+  fileExt: string;
+  disciplineCode: string | null;
+  version: string | null;
+  displayPath: string;
+  ownershipStatus: string;
+  ownershipType: string;
+  ownershipNodeKey: string;
+  ownershipNodeLabel: string;
+  ownershipNodePath: string;
+  ownershipConfidence: string;
+  ownershipSource: string;
+  reason: string;
+  evidenceSummary: string;
+}
+
+export interface FileOwnershipRecommendation {
+  recommendationId: string;
+  fileId: number;
+  fileName: string;
+  fileKind: string;
+  fileExt: string;
+  disciplineCode: string | null;
+  version: string | null;
+  displayPath: string;
+  suggestedNodeKey: string;
+  suggestedNodeLabel: string;
+  suggestedNodePath: string;
+  ownershipType: string;
+  confidence: string;
+  source: string;
+  reason: string;
+  evidenceSummary: string;
+  metadataGovernanceRequired: boolean;
+  risks: string[];
+}
+
+export interface FileOwnershipRecommendationResponse {
+  projectId: number;
+  totalCount: number;
+  rows: FileOwnershipRecommendation[];
+}
+
+export interface FileOwnershipApplyResult {
+  projectId: number;
+  requestedCount: number;
+  createdCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  rows: Array<{
+    fileId: number;
+    fileName: string;
+    status: string;
+    message: string;
+    nodeKey: string;
+    nodeLabel: string;
+  }>;
 }
 
 export interface NasOperationResponse {
@@ -1214,6 +1340,76 @@ export async function fetchCatalogFiles(params: CatalogFilesQuery = {}) {
     total: resp.data.data?.total ?? 0,
     rows: resp.data.data?.items ?? []
   };
+}
+
+export async function fetchFileOwnershipCoverage(projectId: number) {
+  const { data } = await http.get<ApiResponse<FileOwnershipCoverage>>(
+    `/api/data-steward/projects/${projectId}/file-ownership/coverage`
+  );
+  return data.data;
+}
+
+export async function fetchFileOwnershipTree(projectId: number) {
+  const { data } = await http.get<ApiResponse<FileOwnershipTree>>(
+    `/api/data-steward/projects/${projectId}/file-ownership/tree`
+  );
+  return data.data;
+}
+
+export async function fetchFileOwnershipNodeFiles(
+  projectId: number,
+  params: { nodePath?: string; status?: string; page?: number; pageSize?: number } = {}
+) {
+  const { data } = await http.get<ApiResponse<{ pageNo: number; pageSize: number; total: number; items: FileOwnershipFileRow[] }>>(
+    `/api/data-steward/projects/${projectId}/file-ownership/files`,
+    { params }
+  );
+  return {
+    page: data.data?.pageNo ?? params.page ?? 1,
+    pageSize: data.data?.pageSize ?? params.pageSize ?? 20,
+    total: data.data?.total ?? 0,
+    rows: data.data?.items ?? []
+  };
+}
+
+export async function fetchUnassignedFileOwnership(projectId: number, page = 1, pageSize = 20) {
+  const { data } = await http.get<ApiResponse<{ pageNo: number; pageSize: number; total: number; items: FileOwnershipRecommendation[] }>>(
+    `/api/data-steward/projects/${projectId}/file-ownership/unassigned`,
+    { params: { page, pageSize } }
+  );
+  return {
+    page: data.data?.pageNo ?? page,
+    pageSize: data.data?.pageSize ?? pageSize,
+    total: data.data?.total ?? 0,
+    rows: data.data?.items ?? []
+  };
+}
+
+export async function recommendFileOwnership(
+  projectId: number,
+  payload: { limit?: number; includeAssigned?: boolean; fileIds?: number[]; source?: string } = {}
+) {
+  const { data } = await http.post<ApiResponse<FileOwnershipRecommendationResponse>>(
+    `/api/data-steward/projects/${projectId}/file-ownership/recommendations`,
+    payload
+  );
+  return data.data;
+}
+
+export async function applyFileOwnershipRecommendations(
+  projectId: number,
+  payload: {
+    confirmed: boolean;
+    applyAllUnassigned?: boolean;
+    recommendations?: FileOwnershipRecommendation[];
+    source?: string;
+  }
+) {
+  const { data } = await http.post<ApiResponse<FileOwnershipApplyResult>>(
+    `/api/data-steward/projects/${projectId}/file-ownership/recommendations:apply`,
+    payload
+  );
+  return data.data;
 }
 
 export async function fetchNasWriteTrialStatus(projectId: number, directoryPath?: string) {

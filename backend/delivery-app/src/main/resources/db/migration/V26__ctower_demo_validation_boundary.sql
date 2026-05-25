@@ -1,0 +1,3 @@
+-- V26 was reserved by the digital-twin / C tower validation line.
+-- Keep this migration as a no-op boundary so local and merged histories do not
+-- reuse version 26 for unrelated platform features.

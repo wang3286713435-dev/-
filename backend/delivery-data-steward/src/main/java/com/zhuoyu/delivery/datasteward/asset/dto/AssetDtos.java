@@ -915,7 +915,14 @@ public final class AssetDtos {
         java.time.Instant updatedAt,
         Boolean agentReadable,
         String agentReadReason,
-        List<String> agentContractView
+        List<String> agentContractView,
+        String ownershipStatus,
+        String ownershipType,
+        String ownershipNodeKey,
+        String ownershipNodeLabel,
+        String ownershipNodePath,
+        String ownershipConfidence,
+        String ownershipSource
     ) {
     }
 
@@ -944,7 +951,14 @@ public final class AssetDtos {
         java.time.Instant updatedAt,
         Boolean agentReadable,
         String agentReadReason,
-        List<String> agentContractView
+        List<String> agentContractView,
+        String ownershipStatus,
+        String ownershipType,
+        String ownershipNodeKey,
+        String ownershipNodeLabel,
+        String ownershipNodePath,
+        String ownershipConfidence,
+        String ownershipSource
     ) {
     }
 
@@ -1092,6 +1106,173 @@ public final class AssetDtos {
         @NotNull(message = "文件ID列表不能为空")
         List<Long> fileIds,
         String actorType
+    ) {
+    }
+
+    // ===== M2I: file ownership governance =====
+
+    public record FileOwnershipCoverageResponse(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        Integer totalFiles,
+        Integer assignedFiles,
+        Integer confirmedFiles,
+        Integer suggestedFiles,
+        Integer rejectedFiles,
+        Integer unassignedFiles,
+        BigDecimal assignmentCoverageRate,
+        List<FileOwnershipTypeSummary> byOwnershipType,
+        List<FileOwnershipStatusSummary> byStatus
+    ) {
+    }
+
+    public record FileOwnershipTypeSummary(
+        String ownershipType,
+        String label,
+        Integer fileCount
+    ) {
+    }
+
+    public record FileOwnershipStatusSummary(
+        String status,
+        String label,
+        Integer fileCount
+    ) {
+    }
+
+    public record FileOwnershipTreeResponse(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        Integer totalFiles,
+        Integer assignedFiles,
+        Integer unassignedFiles,
+        List<FileOwnershipTreeNode> nodes
+    ) {
+    }
+
+    public record FileOwnershipFileRow(
+        Long fileId,
+        String fileName,
+        String fileKind,
+        String fileExt,
+        String disciplineCode,
+        String version,
+        String displayPath,
+        String ownershipStatus,
+        String ownershipType,
+        String ownershipNodeKey,
+        String ownershipNodeLabel,
+        String ownershipNodePath,
+        String ownershipConfidence,
+        String ownershipSource,
+        String reason,
+        String evidenceSummary
+    ) {
+    }
+
+    public record FileOwnershipTreeNode(
+        String nodeKey,
+        String nodeLabel,
+        String nodePath,
+        String ownershipType,
+        String status,
+        String source,
+        Long sectionNodeId,
+        Integer fileCount,
+        Integer confirmedFileCount,
+        Integer suggestedFileCount,
+        Integer unassignedFileCount,
+        Integer deliveryRequiredCount,
+        Integer deliveryBoundCount,
+        Integer deliveryMissingCount,
+        List<FileOwnershipTreeNode> children
+    ) {
+    }
+
+    public record FileOwnershipRecommendationRequest(
+        Integer limit,
+        Boolean includeAssigned,
+        List<Long> fileIds,
+        String source
+    ) {
+    }
+
+    public record FileOwnershipRecommendationResponse(
+        Long projectId,
+        Integer totalCount,
+        List<FileOwnershipRecommendationRow> rows
+    ) {
+    }
+
+    public record FileOwnershipRecommendationRow(
+        String recommendationId,
+        Long fileId,
+        String fileName,
+        String fileKind,
+        String fileExt,
+        String disciplineCode,
+        String version,
+        String displayPath,
+        String suggestedNodeKey,
+        String suggestedNodeLabel,
+        String suggestedNodePath,
+        String ownershipType,
+        String confidence,
+        String source,
+        String reason,
+        String evidenceSummary,
+        Boolean metadataGovernanceRequired,
+        List<String> risks
+    ) {
+    }
+
+    public record FileOwnershipApplyRequest(
+        Boolean confirmed,
+        Boolean applyAllUnassigned,
+        List<FileOwnershipRecommendationRow> recommendations,
+        List<FileOwnershipAssignmentInput> items,
+        String source
+    ) {
+    }
+
+    public record FileOwnershipAssignmentInput(
+        @NotNull(message = "文件ID不能为空")
+        Long fileId,
+        Long sectionNodeId,
+        @NotBlank(message = "节点编码不能为空")
+        String nodeKey,
+        @NotBlank(message = "节点名称不能为空")
+        String nodeLabel,
+        @NotBlank(message = "节点路径不能为空")
+        String nodePath,
+        String ownershipType,
+        String confidence,
+        String source,
+        String reason,
+        String evidenceSummary
+    ) {
+    }
+
+    public record FileOwnershipApplyResponse(
+        Long projectId,
+        Integer requestedCount,
+        Integer createdCount,
+        Integer updatedCount,
+        Integer skippedCount,
+        Integer failedCount,
+        List<FileOwnershipApplyRowResult> rows
+    ) {
+    }
+
+    public record FileOwnershipApplyRowResult(
+        Long fileId,
+        String fileName,
+        String status,
+        String message,
+        String nodeKey,
+        String nodeLabel
     ) {
     }
 
