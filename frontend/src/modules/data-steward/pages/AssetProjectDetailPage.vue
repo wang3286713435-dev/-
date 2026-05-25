@@ -294,6 +294,7 @@
           v-if="Number.isFinite(projectId)"
           :project-id="projectId"
           :active="activeTab === 'ownership'"
+          :focus-node-path="ownershipFocusNodePath"
           @updated="handleOwnershipUpdated"
         />
         <el-empty v-else description="请先选择项目" :image-size="56" />
@@ -315,6 +316,7 @@
           @create-checksum="createChecksumById"
           @create-batch-checksum="createBatchChecksumForProject"
           @ask-hermes-ownership="openHermesForFile"
+          @open-ownership-node="openOwnershipNodeFromFile"
         />
         <el-empty v-else description="请先选择项目" :image-size="56" />
 
@@ -854,6 +856,7 @@ const checksumJobFileMap = ref<Record<number, FileAsset>>({});
 const selectedChecksumJob = ref<AssetJob | null>(null);
 const selectedChecksumJobFile = ref<FileAsset | null>(null);
 const fileBrowserRefreshKey = ref(0);
+const ownershipFocusNodePath = ref('');
 let pageLoadRequestId = 0;
 let previewRequestId = 0;
 let checksumJobRequestId = 0;
@@ -1042,12 +1045,13 @@ const documentFileCount = computed(() => {
 });
 
 watch(
-  () => [route.params.projectId, route.query.qualityIssue, route.query.tab],
+  () => [route.params.projectId, route.query.qualityIssue, route.query.tab, route.query.ownershipNode],
   () => {
     const nextTab = queryString(route.query.tab);
     if (nextTab && assetTabs.has(nextTab)) {
       activeTab.value = nextTab;
     }
+    ownershipFocusNodePath.value = queryString(route.query.ownershipNode) ?? '';
     if (catalogInitialQualityIssue.value && catalogInitialQualityIssue.value !== 'ALL') {
       activeTab.value = 'files';
     }
@@ -1480,6 +1484,17 @@ function openAssetTab(tab: string) {
     name: 'data-steward-asset-detail',
     params: { projectId: projectId.value },
     query: { ...route.query, tab }
+  });
+}
+
+function openOwnershipNodeFromFile(nodePath: string) {
+  ownershipFocusNodePath.value = nodePath;
+  activeTab.value = 'ownership';
+  const { qualityIssue: _qualityIssue, ...nextQuery } = route.query;
+  void router.replace({
+    name: 'data-steward-asset-detail',
+    params: { projectId: projectId.value },
+    query: { ...nextQuery, tab: 'ownership', ownershipNode: nodePath }
   });
 }
 

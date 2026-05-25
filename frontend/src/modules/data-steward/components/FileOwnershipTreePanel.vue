@@ -2,9 +2,9 @@
   <section class="ownership-panel">
     <header class="ownership-panel__header">
       <div>
-        <span class="zy-code-chip">M2I</span>
-        <h2>资产推导工程树</h2>
-        <p>先让 105 的每个文件都有清楚归属，再由人工判断哪些进入正式交付挂接。</p>
+        <span class="zy-code-chip">M2J</span>
+        <h2>工程树人工复核</h2>
+        <p>在资产推导结果上批量复核、调整归属节点和资料类型；不会移动或修改 NAS 文件。</p>
       </div>
       <div class="ownership-panel__actions">
         <el-button :loading="loading" @click="loadAll">刷新</el-button>
@@ -57,6 +57,7 @@
           :data="treeNodes"
           node-key="nodePath"
           :props="{ label: 'nodeLabel', children: 'children' }"
+          ref="ownershipTreeRef"
           default-expand-all
           highlight-current
           @node-click="selectNode"
@@ -102,12 +103,39 @@
             </div>
             <el-tag type="info" effect="plain">{{ nodeFileTotal }} 个文件</el-tag>
           </header>
+          <div class="ownership-node-toolbar">
+            <el-select v-model="nodeFilters.status" placeholder="归属状态" @change="reloadNodeFiles">
+              <el-option v-for="item in statusFilterOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+            <el-select v-model="nodeFilters.ownershipType" placeholder="资料类型" @change="reloadNodeFiles">
+              <el-option v-for="item in ownershipTypeFilterOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+            <el-checkbox v-model="nodeFilters.reviewOnly" @change="reloadNodeFiles">仅看待复核</el-checkbox>
+            <span class="ownership-node-toolbar__selection">
+              已选 {{ selectedNodeFiles.length }} 个文件
+            </span>
+            <el-button size="small" :disabled="!selectedNodeFiles.length" :loading="batchLoading" @click="confirmBatchReview('CONFIRM')">
+              批量确认
+            </el-button>
+            <el-button size="small" :disabled="!selectedNodeFiles.length" :loading="batchLoading" @click="confirmBatchReview('REJECT')">
+              批量驳回
+            </el-button>
+            <el-button size="small" :disabled="!selectedNodeFiles.length" :loading="batchLoading" @click="openTypeDialog">
+              批量改归属类型
+            </el-button>
+            <el-button size="small" :disabled="!selectedNodeFiles.length" :loading="batchLoading" @click="openMoveDialog">
+              批量移到其他节点
+            </el-button>
+          </div>
           <el-table
             v-loading="nodeFilesLoading"
             :data="nodeFiles"
             class="master-table"
             empty-text="当前节点暂无已归属文件"
+            row-key="fileId"
+            @selection-change="handleNodeFileSelection"
           >
+            <el-table-column type="selection" width="44" />
             <el-table-column label="文件" min-width="220" show-overflow-tooltip>
               <template #default="{ row }">
                 <div class="ownership-file-cell">
@@ -118,6 +146,11 @@
             </el-table-column>
             <el-table-column label="归属节点" min-width="180" show-overflow-tooltip>
               <template #default="{ row }">{{ row.ownershipNodePath }}</template>
+            </el-table-column>
+            <el-table-column label="资料类型" width="140">
+              <template #default="{ row }">
+                <el-tag effect="plain">{{ ownershipTypeLabel(row.ownershipType) }}</el-tag>
+              </template>
             </el-table-column>
             <el-table-column label="归属状态" width="110">
               <template #default="{ row }">
@@ -193,11 +226,60 @@
         </section>
       </main>
     </section>
+
+    <el-dialog v-model="typeDialogVisible" title="批量修改归属类型" width="420px">
+      <el-form label-position="top">
+        <el-form-item label="目标资料类型">
+          <el-select v-model="batchTypeForm.ownershipType" placeholder="请选择目标类型">
+            <el-option
+              v-for="item in ownershipTypeActionOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="复核说明">
+          <el-input v-model="batchTypeForm.reason" type="textarea" :rows="3" placeholder="可填写人工判断依据" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="typeDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="batchLoading" @click="submitTypeUpdate">确认修改</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="moveDialogVisible" title="批量移动工程节点" width="520px">
+      <el-form label-position="top">
+        <el-form-item label="目标工程节点">
+          <el-select
+            v-model="batchMoveForm.nodePath"
+            filterable
+            placeholder="请选择目标节点"
+            @change="handleMoveTargetChange"
+          >
+            <el-option
+              v-for="item in nodeOptions"
+              :key="item.nodePath"
+              :label="item.nodePath"
+              :value="item.nodePath"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="复核说明">
+          <el-input v-model="batchMoveForm.reason" type="textarea" :rows="3" placeholder="可填写人工移动原因" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="moveDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="batchLoading" @click="submitNodeMove">确认移动</el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
 import {
@@ -206,8 +288,10 @@ import {
   fetchFileOwnershipNodeFiles,
   fetchFileOwnershipTree,
   recommendFileOwnership,
+  reviewFileOwnershipAssignments,
   type FileOwnershipCoverage,
   type FileOwnershipFileRow,
+  type FileOwnershipReviewAction,
   type FileOwnershipRecommendation,
   type FileOwnershipTree,
   type FileOwnershipTreeNode
@@ -216,6 +300,7 @@ import {
 const props = defineProps<{
   projectId: number;
   active?: boolean;
+  focusNodePath?: string;
 }>();
 
 const emit = defineEmits<{
@@ -231,15 +316,55 @@ const recommendations = ref<FileOwnershipRecommendation[]>([]);
 const selectedNode = ref<FileOwnershipTreeNode | null>(null);
 const nodeFiles = ref<FileOwnershipFileRow[]>([]);
 const nodeFilesLoading = ref(false);
+const batchLoading = ref(false);
 const nodeFilePage = ref(1);
 const nodeFilePageSize = ref(20);
 const nodeFileTotal = ref(0);
+const selectedNodeFiles = ref<FileOwnershipFileRow[]>([]);
+const ownershipTreeRef = ref<{ setCurrentKey: (key: string) => void } | null>(null);
+const typeDialogVisible = ref(false);
+const moveDialogVisible = ref(false);
+const nodeFilters = reactive({
+  status: 'ALL',
+  ownershipType: 'ALL',
+  reviewOnly: false
+});
+const batchTypeForm = reactive({
+  ownershipType: 'PROCESS',
+  reason: ''
+});
+const batchMoveForm = reactive({
+  nodePath: '',
+  nodeKey: '',
+  nodeLabel: '',
+  reason: ''
+});
 
 const treeNodes = computed(() => tree.value?.nodes ?? []);
+const nodeOptions = computed(() => flattenNodes(treeNodes.value).filter((node) => node.nodePath));
 const recommendationRows = computed(() => {
   if (!selectedNode.value) return recommendations.value;
   return recommendations.value.filter((row) => row.suggestedNodePath.startsWith(selectedNode.value?.nodePath || ''));
 });
+const statusFilterOptions = [
+  { label: '全部状态', value: 'ALL' },
+  { label: '已确认', value: 'CONFIRMED' },
+  { label: '建议中', value: 'SUGGESTED' },
+  { label: '已驳回', value: 'REJECTED' }
+];
+const ownershipTypeActionOptions = [
+  { label: '正式交付资料', value: 'DELIVERY' },
+  { label: '过程资料', value: 'PROCESS' },
+  { label: '模型资料', value: 'MODEL' },
+  { label: '图纸收发', value: 'DRAWING_EXCHANGE' },
+  { label: '参考归档', value: 'REFERENCE' },
+  { label: '待判定', value: 'PENDING_REVIEW' }
+];
+const ownershipTypeFilterOptions = [
+  { label: '全部类型', value: 'ALL' },
+  ...ownershipTypeActionOptions,
+  { label: '归档资料', value: 'ARCHIVE' }
+];
 
 onMounted(() => {
   if (props.active) void loadAll();
@@ -253,6 +378,12 @@ watch(() => props.projectId, () => {
   if (props.active) void loadAll();
 });
 
+watch(() => props.focusNodePath, (nodePath) => {
+  if (props.active && nodePath) {
+    void focusNode(nodePath);
+  }
+});
+
 async function loadAll() {
   loading.value = true;
   try {
@@ -264,7 +395,8 @@ async function loadAll() {
     coverage.value = nextCoverage;
     tree.value = nextTree;
     recommendations.value = nextRecommendations.rows;
-    selectedNode.value = nextTree.nodes[0] ?? null;
+    selectedNode.value = findNodeByPath(nextTree.nodes, props.focusNodePath || selectedNode.value?.nodePath || '') ?? nextTree.nodes[0] ?? null;
+    if (selectedNode.value) await setTreeCurrentNode(selectedNode.value.nodePath);
     nodeFilePage.value = 1;
     await loadNodeFiles();
   } finally {
@@ -282,10 +414,14 @@ async function loadNodeFiles() {
   try {
     const result = await fetchFileOwnershipNodeFiles(props.projectId, {
       nodePath: selectedNode.value.nodePath,
+      status: nodeFilters.status === 'ALL' ? undefined : nodeFilters.status,
+      ownershipType: nodeFilters.ownershipType === 'ALL' ? undefined : nodeFilters.ownershipType,
+      reviewOnly: nodeFilters.reviewOnly,
       page: nodeFilePage.value,
       pageSize: nodeFilePageSize.value
     });
     nodeFiles.value = result.rows;
+    selectedNodeFiles.value = [];
     nodeFilePage.value = result.page;
     nodeFilePageSize.value = result.pageSize;
     nodeFileTotal.value = result.total;
@@ -330,6 +466,137 @@ function selectNode(node: FileOwnershipTreeNode) {
   selectedNode.value = node;
   nodeFilePage.value = 1;
   void loadNodeFiles();
+}
+
+function reloadNodeFiles() {
+  nodeFilePage.value = 1;
+  void loadNodeFiles();
+}
+
+function handleNodeFileSelection(rows: FileOwnershipFileRow[]) {
+  selectedNodeFiles.value = rows;
+}
+
+async function focusNode(nodePath: string) {
+  const node = findNodeByPath(treeNodes.value, nodePath);
+  if (!node) return;
+  selectedNode.value = node;
+  await setTreeCurrentNode(node.nodePath);
+  nodeFilePage.value = 1;
+  await loadNodeFiles();
+}
+
+async function setTreeCurrentNode(nodePath: string) {
+  await nextTick();
+  ownershipTreeRef.value?.setCurrentKey(nodePath);
+}
+
+function findNodeByPath(nodes: FileOwnershipTreeNode[], nodePath: string): FileOwnershipTreeNode | null {
+  if (!nodePath) return null;
+  for (const node of nodes) {
+    if (node.nodePath === nodePath) return node;
+    const found = findNodeByPath(node.children ?? [], nodePath);
+    if (found) return found;
+  }
+  return null;
+}
+
+function flattenNodes(nodes: FileOwnershipTreeNode[]): FileOwnershipTreeNode[] {
+  return nodes.flatMap((node) => [node, ...flattenNodes(node.children ?? [])]);
+}
+
+async function confirmBatchReview(action: FileOwnershipReviewAction) {
+  const count = selectedNodeFiles.value.length;
+  if (!count) return;
+  const label = action === 'CONFIRM' ? '确认' : '驳回';
+  await ElMessageBox.confirm(
+    `将对已选 ${count} 个文件执行“批量${label}归属”。该操作只更新平台归属元数据，不会移动、删除、重命名或读取 NAS 文件。`,
+    `批量${label}归属`,
+    { type: action === 'REJECT' ? 'warning' : 'info', confirmButtonText: `确认${label}`, cancelButtonText: '取消' }
+  );
+  await submitBatchReview(action, {
+    reason: action === 'CONFIRM' ? '人工批量确认归属。' : '人工批量驳回归属，等待重新判断。'
+  });
+}
+
+function openTypeDialog() {
+  if (!selectedNodeFiles.value.length) return;
+  batchTypeForm.ownershipType = selectedNodeFiles.value[0]?.ownershipType || 'PROCESS';
+  batchTypeForm.reason = '';
+  typeDialogVisible.value = true;
+}
+
+function openMoveDialog() {
+  if (!selectedNodeFiles.value.length) return;
+  const fallbackNode = selectedNode.value ?? nodeOptions.value[0];
+  batchMoveForm.nodePath = fallbackNode?.nodePath || '';
+  batchMoveForm.nodeKey = fallbackNode?.nodeKey || '';
+  batchMoveForm.nodeLabel = fallbackNode?.nodeLabel || '';
+  batchMoveForm.reason = '';
+  moveDialogVisible.value = true;
+}
+
+function handleMoveTargetChange(nodePath: string) {
+  const node = findNodeByPath(treeNodes.value, nodePath);
+  batchMoveForm.nodeKey = node?.nodeKey || nodePath;
+  batchMoveForm.nodeLabel = node?.nodeLabel || nodePath.split('/').filter(Boolean).pop() || '待判定';
+}
+
+async function submitTypeUpdate() {
+  if (!selectedNodeFiles.value.length) return;
+  const label = ownershipTypeLabel(batchTypeForm.ownershipType);
+  await ElMessageBox.confirm(
+    `将把已选 ${selectedNodeFiles.value.length} 个文件的归属类型改为“${label}”。不会改变正式交付挂接，也不会操作 NAS 文件。`,
+    '确认修改归属类型',
+    { type: 'warning', confirmButtonText: '确认修改', cancelButtonText: '取消' }
+  );
+  await submitBatchReview('UPDATE_TYPE', {
+    ownershipType: batchTypeForm.ownershipType,
+    reason: batchTypeForm.reason || `人工批量修改归属类型为“${label}”。`
+  });
+  typeDialogVisible.value = false;
+}
+
+async function submitNodeMove() {
+  if (!selectedNodeFiles.value.length || !batchMoveForm.nodePath) return;
+  await ElMessageBox.confirm(
+    `将把已选 ${selectedNodeFiles.value.length} 个文件移动到工程节点“${batchMoveForm.nodePath}”。只更新平台归属记录，不移动 NAS 文件。`,
+    '确认移动工程节点',
+    { type: 'warning', confirmButtonText: '确认移动', cancelButtonText: '取消' }
+  );
+  await submitBatchReview('MOVE_NODE', {
+    nodePath: batchMoveForm.nodePath,
+    nodeKey: batchMoveForm.nodeKey,
+    nodeLabel: batchMoveForm.nodeLabel,
+    reason: batchMoveForm.reason || `人工批量移动到工程节点“${batchMoveForm.nodePath}”。`
+  });
+  moveDialogVisible.value = false;
+}
+
+async function submitBatchReview(
+  action: FileOwnershipReviewAction,
+  extra: { ownershipType?: string; nodePath?: string; nodeKey?: string; nodeLabel?: string; reason?: string } = {}
+) {
+  batchLoading.value = true;
+  try {
+    const result = await reviewFileOwnershipAssignments(props.projectId, {
+      confirmed: true,
+      fileIds: selectedNodeFiles.value.map((row) => row.fileId),
+      action,
+      ...extra
+    });
+    ElMessage.success(`归属复核完成：更新 ${result.updatedCount}，跳过 ${result.skippedCount}，失败 ${result.failedCount}`);
+    emit('updated');
+    const selectedPath = selectedNode.value?.nodePath || '';
+    await Promise.all([
+      fetchFileOwnershipCoverage(props.projectId).then((next) => { coverage.value = next; }),
+      fetchFileOwnershipTree(props.projectId).then((next) => { tree.value = next; })
+    ]);
+    selectedNode.value = findNodeByPath(treeNodes.value, selectedPath) ?? selectedNode.value;
+    await loadNodeFiles();
+  } finally {
+    batchLoading.value = false;
+  }
 }
 
 function ownershipTypeLabel(type?: string | null) {
@@ -523,6 +790,23 @@ function formatCount(value?: number | null) {
   min-width: 0;
   border-radius: 18px;
   padding: 16px;
+}
+
+.ownership-node-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.ownership-node-toolbar .el-select {
+  width: 150px;
+}
+
+.ownership-node-toolbar__selection {
+  color: #667085;
+  font-size: 13px;
 }
 
 .ownership-node-files__pagination {

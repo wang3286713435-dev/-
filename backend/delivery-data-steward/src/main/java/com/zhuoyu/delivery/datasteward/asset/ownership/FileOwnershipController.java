@@ -3,6 +3,7 @@ package com.zhuoyu.delivery.datasteward.asset.ownership;
 import com.zhuoyu.delivery.core.auth.application.SecurityPrincipalAccessor;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipApplyRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipApplyResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipBatchReviewRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipCoverageResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipFileRow;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipRecommendationRequest;
@@ -51,10 +52,13 @@ public class FileOwnershipController {
         @PathVariable Long projectId,
         @RequestParam(required = false) String nodePath,
         @RequestParam(required = false) String status,
+        @RequestParam(required = false) String ownershipType,
+        @RequestParam(defaultValue = "false") boolean reviewOnly,
         @RequestParam(defaultValue = "1") int page,
         @RequestParam(defaultValue = "20") int pageSize
     ) {
-        return ApiResponse.success(fileOwnershipApplicationService.files(currentUserId(), projectId, nodePath, status, page, pageSize));
+        return ApiResponse.success(fileOwnershipApplicationService.files(
+            currentUserId(), projectId, nodePath, status, ownershipType, reviewOnly, page, pageSize));
     }
 
     @GetMapping("/unassigned")
@@ -88,6 +92,14 @@ public class FileOwnershipController {
         @Valid @RequestBody FileOwnershipApplyRequest request
     ) {
         return ApiResponse.success(fileOwnershipApplicationService.apply(currentUserId(), projectId, request));
+    }
+
+    @PutMapping("/assignments:review")
+    public ApiResponse<FileOwnershipApplyResponse> reviewAssignments(
+        @PathVariable Long projectId,
+        @Valid @RequestBody FileOwnershipBatchReviewRequest request
+    ) {
+        return ApiResponse.success(fileOwnershipApplicationService.reviewBatch(currentUserId(), projectId, request));
     }
 
     private Long currentUserId() {

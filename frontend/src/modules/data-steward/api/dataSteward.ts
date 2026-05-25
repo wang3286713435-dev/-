@@ -1252,6 +1252,19 @@ export interface FileOwnershipApplyResult {
   }>;
 }
 
+export type FileOwnershipReviewAction = 'CONFIRM' | 'REJECT' | 'UPDATE_TYPE' | 'MOVE_NODE' | 'UPDATE_NODE_AND_TYPE';
+
+export interface FileOwnershipBatchReviewPayload {
+  confirmed: boolean;
+  fileIds: number[];
+  action: FileOwnershipReviewAction;
+  ownershipType?: string;
+  nodeKey?: string;
+  nodeLabel?: string;
+  nodePath?: string;
+  reason?: string;
+}
+
 export interface NasOperationResponse {
   operationId: number;
   projectId: number;
@@ -1406,7 +1419,7 @@ export async function fetchFileOwnershipTree(projectId: number) {
 
 export async function fetchFileOwnershipNodeFiles(
   projectId: number,
-  params: { nodePath?: string; status?: string; page?: number; pageSize?: number } = {}
+  params: { nodePath?: string; status?: string; ownershipType?: string; reviewOnly?: boolean; page?: number; pageSize?: number } = {}
 ) {
   const { data } = await http.get<ApiResponse<{ pageNo: number; pageSize: number; total: number; items: FileOwnershipFileRow[] }>>(
     `/api/data-steward/projects/${projectId}/file-ownership/files`,
@@ -1418,6 +1431,14 @@ export async function fetchFileOwnershipNodeFiles(
     total: data.data?.total ?? 0,
     rows: data.data?.items ?? []
   };
+}
+
+export async function reviewFileOwnershipAssignments(projectId: number, payload: FileOwnershipBatchReviewPayload) {
+  const { data } = await http.put<ApiResponse<FileOwnershipApplyResult>>(
+    `/api/data-steward/projects/${projectId}/file-ownership/assignments:review`,
+    payload
+  );
+  return data.data;
 }
 
 export async function fetchUnassignedFileOwnership(projectId: number, page = 1, pageSize = 20) {

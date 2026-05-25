@@ -5,6 +5,7 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipApplyReq
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipApplyResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipApplyRowResult;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipAssignmentInput;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipBatchReviewRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipCoverageResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipFileRow;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipRecommendationRequest;
@@ -38,6 +39,8 @@ import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,6 +51,7 @@ public class FileOwnershipApplicationService {
     private static final int MAX_RECOMMENDATION_LIMIT = 500;
     private static final Pattern UNSAFE_NODE_KEY = Pattern.compile("[^A-Za-z0-9_:-]+");
     private static final Set<String> WRITE_ROLES = Set.of("DELIVERY_ENGINEER", "PROJECT_ADMIN");
+    private static final Logger LOGGER = LoggerFactory.getLogger(FileOwnershipApplicationService.class);
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final AssetPathMappingRepository pathMappingRepository;
@@ -172,6 +176,8 @@ public class FileOwnershipApplicationService {
         Long projectId,
         String nodePath,
         String status,
+        String ownershipType,
+        boolean reviewOnly,
         int page,
         int pageSize
     ) {
@@ -181,6 +187,7 @@ public class FileOwnershipApplicationService {
         int offset = (safePage - 1) * safeSize;
         String safeNodePath = nodePath == null || nodePath.isBlank() ? "" : sanitizeNodePath(nodePath, project.name());
         String safeStatus = normalizeReadStatus(status);
+        String safeOwnershipType = normalizeReadOwnershipType(ownershipType);
 
         MapSqlParameterSource params = new MapSqlParameterSource()
             .addValue("projectId", projectId)
@@ -193,13 +200,24 @@ public class FileOwnershipApplicationService {
             WHERE own.project_id = :projectId AND own.deleted = 0
             """);
         if (!safeNodePath.isBlank() && !safeNodePath.equals(project.name())) {
-            where.append(" AND (own.node_path = :nodePath OR own.node_path LIKE :nodePathPrefix)");
+            where.append(" AND (own.node_path = :nodePath OR own.node_path LIKE :nodePathPrefix) ");
             params.addValue("nodePath", safeNodePath);
             params.addValue("nodePathPrefix", safeNodePath + "/%");
         }
         if (safeStatus != null) {
-            where.append(" AND own.status = :status");
+            where.append(" AND own.status = :status ");
             params.addValue("status", safeStatus);
+        }
+        if (safeOwnershipType != null) {
+            where.append(" AND own.ownership_type = :ownershipType ");
+            params.addValue("ownershipType", safeOwnershipType);
+        }
+        if (reviewOnly) {
+            where.append("""
+                AND (own.status <> 'CONFIRMED'
+                     OR own.ownership_type = 'PENDING_REVIEW'
+                     OR own.confidence = 'LOW')
+                """);
         }
 
         Long total = jdbcTemplate.queryForObject("SELECT COUNT(1) " + where, params, Long.class);
@@ -231,6 +249,83 @@ public class FileOwnershipApplicationService {
             sanitizeDisplayText(rs.getString("evidence_summary"), "目录级元数据，未读取文件正文")
         ));
         return new PageResponse<>(rows, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Transactional
+    public FileOwnershipApplyResponse reviewBatch(Long userId, Long projectId, FileOwnershipBatchReviewRequest request) {
+        ProjectInfo project = requireProjectWriteAccess(userId, projectId);
+        if (request == null || !Boolean.TRUE.equals(request.confirmed())) {
+            throw new BusinessException("FILE_OWNERSHIP_CONFIRM_REQUIRED",
+                "必须由用户确认后，平台才能写入文件归属复核结果", HttpStatus.BAD_REQUEST);
+        }
+        List<Long> fileIds = request.fileIds() == null ? List.of() : request.fileIds().stream()
+            .filter(Objects::nonNull)
+            .distinct()
+            .limit(MAX_RECOMMENDATION_LIMIT)
+            .toList();
+        if (fileIds.isEmpty()) {
+            throw new BusinessException("FILE_OWNERSHIP_ITEMS_REQUIRED",
+                "请至少选择一个文件", HttpStatus.BAD_REQUEST);
+        }
+        String action = normalizeReviewAction(request.action());
+        String ownershipType = normalizeOwnershipType(request.ownershipType());
+        String nodePath = sanitizeNodePath(request.nodePath(), project.name());
+        String nodeLabel = sanitizeDisplayText(safeText(request.nodeLabel(), nodePathLeaf(nodePath)), "待判定");
+        String nodeKey = stableKey(safeText(request.nodeKey(), nodePath));
+        String reason = sanitizeDisplayText(request.reason(), reviewReason(action, ownershipType, nodePath));
+        String evidenceSummary = "人工复核操作；仅更新目录级归属元数据，未读取文件正文，未移动或修改 NAS 文件。";
+
+        if (requiresOwnershipType(action) && (request.ownershipType() == null || request.ownershipType().isBlank())) {
+            throw new BusinessException("FILE_OWNERSHIP_TYPE_REQUIRED",
+                "批量修改归属类型时必须选择目标类型", HttpStatus.BAD_REQUEST);
+        }
+        if (requiresNode(action) && (request.nodePath() == null || request.nodePath().isBlank())) {
+            throw new BusinessException("FILE_OWNERSHIP_NODE_REQUIRED",
+                "批量移动工程节点时必须选择目标节点", HttpStatus.BAD_REQUEST);
+        }
+
+        Map<Long, CurrentAssignment> assignments = currentAssignments(projectId, fileIds);
+        int updated = 0;
+        int skipped = 0;
+        int failed = 0;
+        List<FileOwnershipApplyRowResult> results = new ArrayList<>();
+        for (Long fileId : fileIds) {
+            CurrentAssignment current = assignments.get(fileId);
+            if (current == null) {
+                skipped += 1;
+                results.add(new FileOwnershipApplyRowResult(fileId, "", "SKIPPED",
+                    "该文件不属于当前项目或尚未进入归属体系", null, null));
+                continue;
+            }
+            try {
+                int affected = updateAssignmentForReview(projectId, fileId, userId, action, ownershipType,
+                    nodeKey, nodeLabel, nodePath, reason, evidenceSummary);
+                if (affected > 0) {
+                    updated += 1;
+                    results.add(new FileOwnershipApplyRowResult(fileId, current.fileName(), "UPDATED",
+                        reviewSuccessMessage(action, ownershipType, nodeLabel), nodeKeyForResult(action, current, nodeKey),
+                        nodeLabelForResult(action, current, nodeLabel)));
+                } else {
+                    skipped += 1;
+                    results.add(new FileOwnershipApplyRowResult(fileId, current.fileName(), "SKIPPED",
+                        "归属记录已变化，请刷新后重试", current.nodeKey(), current.nodeLabel()));
+                }
+            } catch (RuntimeException ex) {
+                LOGGER.warn("File ownership review failed, projectId={}, fileId={}, action={}", projectId, fileId, action, ex);
+                failed += 1;
+                results.add(new FileOwnershipApplyRowResult(fileId, current.fileName(), "FAILED",
+                    "归属复核写入失败，请刷新后重试", current.nodeKey(), current.nodeLabel()));
+            }
+        }
+        auditLogApplicationService.record(projectId, MODULE_CODE, "data.file-ownership.review-batch", "PROJECT",
+            String.valueOf(projectId), userId, Map.of(
+                "action", action,
+                "requested", fileIds.size(),
+                "updated", updated,
+                "skipped", skipped,
+                "failed", failed
+            ));
+        return new FileOwnershipApplyResponse(projectId, fileIds.size(), 0, updated, skipped, failed, results);
     }
 
     public PageResponse<FileOwnershipRecommendationRow> unassigned(Long userId, Long projectId, int page, int pageSize) {
@@ -494,6 +589,139 @@ public class FileOwnershipApplicationService {
             .addValue("reason", row.reason())
             .addValue("evidenceSummary", row.evidenceSummary())
             .addValue("userId", userId));
+    }
+
+    private Map<Long, CurrentAssignment> currentAssignments(Long projectId, List<Long> fileIds) {
+        if (fileIds == null || fileIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, CurrentAssignment> rows = new HashMap<>();
+        jdbcTemplate.query("""
+            SELECT own.file_id, f.original_name, own.node_key, own.node_label, own.node_path,
+                   own.ownership_type, own.status
+            FROM data_file_ownership_assignments own
+            JOIN data_file_resources f ON f.id = own.file_id AND f.deleted = 0
+            WHERE own.project_id = :projectId
+              AND own.file_id IN (:fileIds)
+              AND own.deleted = 0
+            """, new MapSqlParameterSource()
+            .addValue("projectId", projectId)
+            .addValue("fileIds", fileIds), rs -> {
+                rows.put(rs.getLong("file_id"), new CurrentAssignment(
+                    rs.getLong("file_id"),
+                    sanitizeDisplayText(rs.getString("original_name"), "未命名文件"),
+                    rs.getString("node_key"),
+                    sanitizeDisplayText(rs.getString("node_label"), "待判定"),
+                    rs.getString("node_path"),
+                    rs.getString("ownership_type"),
+                    rs.getString("status")
+                ));
+            });
+        return rows;
+    }
+
+    private int updateAssignmentForReview(
+        Long projectId,
+        Long fileId,
+        Long userId,
+        String action,
+        String ownershipType,
+        String nodeKey,
+        String nodeLabel,
+        String nodePath,
+        String reason,
+        String evidenceSummary
+    ) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+            .addValue("projectId", projectId)
+            .addValue("fileId", fileId)
+            .addValue("userId", userId)
+            .addValue("ownershipType", ownershipType)
+            .addValue("nodeKey", nodeKey)
+            .addValue("nodeLabel", nodeLabel)
+            .addValue("nodePath", nodePath)
+            .addValue("reason", reason)
+            .addValue("evidenceSummary", evidenceSummary);
+        String setClause = switch (action) {
+            case "CONFIRM" -> """
+                status = 'CONFIRMED',
+                source = 'MANUAL',
+                reason = :reason,
+                evidence_summary = :evidenceSummary,
+                confirmed_by = :userId,
+                confirmed_at = CURRENT_TIMESTAMP,
+                rejected_by = NULL,
+                rejected_at = NULL,
+                updated_by = :userId,
+                updated_at = CURRENT_TIMESTAMP
+                """;
+            case "REJECT" -> """
+                status = 'REJECTED',
+                source = 'MANUAL',
+                reason = :reason,
+                evidence_summary = :evidenceSummary,
+                confirmed_by = NULL,
+                confirmed_at = NULL,
+                rejected_by = :userId,
+                rejected_at = CURRENT_TIMESTAMP,
+                updated_by = :userId,
+                updated_at = CURRENT_TIMESTAMP
+                """;
+            case "UPDATE_TYPE" -> """
+                ownership_type = :ownershipType,
+                status = 'CONFIRMED',
+                source = 'MANUAL',
+                reason = :reason,
+                evidence_summary = :evidenceSummary,
+                confirmed_by = :userId,
+                confirmed_at = CURRENT_TIMESTAMP,
+                rejected_by = NULL,
+                rejected_at = NULL,
+                updated_by = :userId,
+                updated_at = CURRENT_TIMESTAMP
+                """;
+            case "MOVE_NODE" -> """
+                node_key = :nodeKey,
+                node_label = :nodeLabel,
+                node_path = :nodePath,
+                status = 'CONFIRMED',
+                source = 'MANUAL',
+                reason = :reason,
+                evidence_summary = :evidenceSummary,
+                confirmed_by = :userId,
+                confirmed_at = CURRENT_TIMESTAMP,
+                rejected_by = NULL,
+                rejected_at = NULL,
+                updated_by = :userId,
+                updated_at = CURRENT_TIMESTAMP
+                """;
+            case "UPDATE_NODE_AND_TYPE" -> """
+                node_key = :nodeKey,
+                node_label = :nodeLabel,
+                node_path = :nodePath,
+                ownership_type = :ownershipType,
+                status = 'CONFIRMED',
+                source = 'MANUAL',
+                reason = :reason,
+                evidence_summary = :evidenceSummary,
+                confirmed_by = :userId,
+                confirmed_at = CURRENT_TIMESTAMP,
+                rejected_by = NULL,
+                rejected_at = NULL,
+                updated_by = :userId,
+                updated_at = CURRENT_TIMESTAMP
+                """;
+            default -> throw new BusinessException("FILE_OWNERSHIP_ACTION_UNSUPPORTED",
+                "不支持的归属复核动作", HttpStatus.BAD_REQUEST);
+        };
+        return jdbcTemplate.update("""
+            UPDATE data_file_ownership_assignments
+            SET
+            """ + setClause + """
+            WHERE project_id = :projectId
+              AND file_id = :fileId
+              AND deleted = 0
+            """, params);
     }
 
     private boolean assignmentExists(Long fileId) {
@@ -788,6 +1016,17 @@ public class FileOwnershipApplicationService {
         return "RULE";
     }
 
+    private String normalizeReadOwnershipType(String type) {
+        String normalized = type == null || type.isBlank() ? null : type.trim().toUpperCase(Locale.ROOT);
+        if (normalized == null || "ALL".equals(normalized)) {
+            return null;
+        }
+        if (List.of("DELIVERY", "PROCESS", "MODEL", "DRAWING_EXCHANGE", "REFERENCE", "ARCHIVE", "PENDING_REVIEW").contains(normalized)) {
+            return normalized;
+        }
+        return null;
+    }
+
     private String normalizeReadStatus(String status) {
         String normalized = status == null || status.isBlank() ? null : status.trim().toUpperCase(Locale.ROOT);
         if (normalized == null || "ALL".equals(normalized)) {
@@ -797,6 +1036,53 @@ public class FileOwnershipApplicationService {
             return normalized;
         }
         return null;
+    }
+
+    private String normalizeReviewAction(String action) {
+        String normalized = safeText(action, "").toUpperCase(Locale.ROOT);
+        if (List.of("CONFIRM", "REJECT", "UPDATE_TYPE", "MOVE_NODE", "UPDATE_NODE_AND_TYPE").contains(normalized)) {
+            return normalized;
+        }
+        throw new BusinessException("FILE_OWNERSHIP_ACTION_UNSUPPORTED",
+            "不支持的归属复核动作", HttpStatus.BAD_REQUEST);
+    }
+
+    private boolean requiresOwnershipType(String action) {
+        return "UPDATE_TYPE".equals(action) || "UPDATE_NODE_AND_TYPE".equals(action);
+    }
+
+    private boolean requiresNode(String action) {
+        return "MOVE_NODE".equals(action) || "UPDATE_NODE_AND_TYPE".equals(action);
+    }
+
+    private String reviewReason(String action, String ownershipType, String nodePath) {
+        return switch (action) {
+            case "CONFIRM" -> "人工复核确认当前归属。";
+            case "REJECT" -> "人工复核驳回当前归属，需重新判断。";
+            case "UPDATE_TYPE" -> "人工复核调整归属类型为“" + ownershipTypeLabel(ownershipType) + "”。";
+            case "MOVE_NODE" -> "人工复核移动到工程节点“" + nodePath + "”。";
+            case "UPDATE_NODE_AND_TYPE" -> "人工复核调整到工程节点“" + nodePath + "”，归属类型为“" + ownershipTypeLabel(ownershipType) + "”。";
+            default -> "人工复核文件归属。";
+        };
+    }
+
+    private String reviewSuccessMessage(String action, String ownershipType, String nodeLabel) {
+        return switch (action) {
+            case "CONFIRM" -> "已人工确认当前归属";
+            case "REJECT" -> "已人工驳回当前归属";
+            case "UPDATE_TYPE" -> "已调整为“" + ownershipTypeLabel(ownershipType) + "”";
+            case "MOVE_NODE" -> "已移动到“" + nodeLabel + "”";
+            case "UPDATE_NODE_AND_TYPE" -> "已移动到“" + nodeLabel + "”并调整为“" + ownershipTypeLabel(ownershipType) + "”";
+            default -> "已更新归属复核结果";
+        };
+    }
+
+    private String nodeKeyForResult(String action, CurrentAssignment current, String nextNodeKey) {
+        return requiresNode(action) ? nextNodeKey : current.nodeKey();
+    }
+
+    private String nodeLabelForResult(String action, CurrentAssignment current, String nextNodeLabel) {
+        return requiresNode(action) ? nextNodeLabel : current.nodeLabel();
     }
 
     private String safeLogicalPath(
@@ -876,6 +1162,14 @@ public class FileOwnershipApplicationService {
         int slash = path.lastIndexOf('/');
         if (slash <= 0) return path;
         return path.substring(0, slash);
+    }
+
+    private String nodePathLeaf(String path) {
+        if (path == null || path.isBlank()) return "待判定";
+        String normalized = trimLeadingSlash(path);
+        int slash = normalized.lastIndexOf('/');
+        if (slash < 0 || slash == normalized.length() - 1) return safeText(normalized, "待判定");
+        return safeText(normalized.substring(slash + 1), "待判定");
     }
 
     private String safeText(String value, String fallback) {
@@ -999,6 +1293,17 @@ public class FileOwnershipApplicationService {
         int fileCount,
         int confirmedCount,
         int suggestedCount
+    ) {
+    }
+
+    private record CurrentAssignment(
+        Long fileId,
+        String fileName,
+        String nodeKey,
+        String nodeLabel,
+        String nodePath,
+        String ownershipType,
+        String status
     ) {
     }
 

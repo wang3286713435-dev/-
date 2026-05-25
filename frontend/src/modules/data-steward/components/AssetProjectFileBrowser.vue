@@ -270,7 +270,16 @@
                   <el-tag v-else :type="ownershipStatusTag(row.file.ownershipStatus)" size="small">
                     {{ ownershipStatusLabel(row.file.ownershipStatus) }}
                   </el-tag>
-                  <span>{{ isRegisteredFile(row.file) ? (row.file.ownershipNodeLabel || '未归属') : '需扫描入库后治理' }}</span>
+                  <el-button
+                    v-if="isRegisteredFile(row.file) && row.file.ownershipNodePath"
+                    link
+                    type="primary"
+                    class="file-browser__ownership-link"
+                    @click.stop="openOwnershipNode(row.file)"
+                  >
+                    {{ row.file.ownershipNodeLabel || row.file.ownershipNodePath }}
+                  </el-button>
+                  <span v-else>{{ isRegisteredFile(row.file) ? (row.file.ownershipNodeLabel || '未归属') : '需扫描入库后治理' }}</span>
                 </div>
               </template>
               <span v-else class="file-browser__muted">-</span>
@@ -543,6 +552,7 @@ const emit = defineEmits<{
   'create-checksum': [fileId: number];
   'create-batch-checksum': [];
   'ask-hermes-ownership': [fileId: number];
+  'open-ownership-node': [nodePath: string];
 }>();
 
 const TREE_WIDTH_KEY = 'delivery.dataSteward.fileBrowser.treeWidth';
@@ -2658,6 +2668,11 @@ function ownershipStatusTag(value?: string | null) {
   return 'info';
 }
 
+function openOwnershipNode(file: CatalogFile) {
+  if (!isRegisteredFile(file) || !file.ownershipNodePath) return;
+  emit('open-ownership-node', file.ownershipNodePath);
+}
+
 function formatBytes(value: number | null | undefined) {
   const size = Number(value ?? 0);
   if (size <= 0) return '0 B';
@@ -3288,6 +3303,15 @@ function formatDate(value: string | null | undefined) {
   min-width: 0;
   overflow: hidden;
   color: var(--zy-text-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-browser__ownership-link {
+  min-width: 0;
+  max-width: 130px;
+  justify-content: flex-start;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

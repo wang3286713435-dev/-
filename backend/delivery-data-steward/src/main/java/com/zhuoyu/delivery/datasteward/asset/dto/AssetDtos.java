@@ -1254,6 +1254,21 @@ public final class AssetDtos {
     ) {
     }
 
+    public record FileOwnershipBatchReviewRequest(
+        @NotNull(message = "确认标记不能为空")
+        Boolean confirmed,
+        @NotNull(message = "文件ID列表不能为空")
+        List<Long> fileIds,
+        @NotBlank(message = "复核动作不能为空")
+        String action,
+        String ownershipType,
+        String nodeKey,
+        String nodeLabel,
+        String nodePath,
+        String reason
+    ) {
+    }
+
     public record FileOwnershipAssignmentInput(
         @NotNull(message = "文件ID不能为空")
         Long fileId,
