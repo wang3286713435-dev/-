@@ -19,7 +19,7 @@
         :class="{ 'is-active': activePath === node.fullPath }"
         type="button"
         :title="node.relativePath"
-        @click="$emit('select', node.fullPath)"
+        @click="handleNodeClick"
         @dblclick.stop="enterDirectory"
       >
         <el-icon class="directory-tree-node__folder">
@@ -72,12 +72,18 @@ const emit = defineEmits<{
   'toggle-expand': [path: string, expanded: boolean];
 }>();
 
-const hasChildren = computed(() => props.node.children.length > 0);
+const hasChildren = computed(() => props.node.children.length > 0 || props.node.hasChildren);
 const expanded = computed(() =>
-  props.depth === 0
-  || props.expandedPaths.includes(props.node.fullPath)
+  props.expandedPaths.includes(props.node.fullPath)
   || isActiveAncestor(props.node.fullPath, props.activePath)
 );
+
+function handleNodeClick() {
+  if (hasChildren.value) {
+    emit('toggle-expand', props.node.fullPath, !expanded.value);
+  }
+  emit('select', props.node.fullPath);
+}
 
 function enterDirectory() {
   if (hasChildren.value) {
@@ -94,7 +100,7 @@ function isActiveAncestor(nodePath: string, activePath: string) {
   if (!nodePath || !activePath) return false;
   const normalizedNode = nodePath.replace(/\/+$/, '');
   const normalizedActive = activePath.replace(/\/+$/, '');
-  return normalizedActive === normalizedNode || normalizedActive.startsWith(`${normalizedNode}/`);
+  return normalizedActive.startsWith(`${normalizedNode}/`);
 }
 </script>
 

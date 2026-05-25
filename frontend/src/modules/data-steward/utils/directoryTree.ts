@@ -7,6 +7,7 @@ export interface DirectoryTreeNode {
   relativePath: string;
   fileCount: number;
   totalSizeBytes: number;
+  hasChildren: boolean;
   children: DirectoryTreeNode[];
 }
 
@@ -78,11 +79,15 @@ export function buildDirectoryTree(directories: CatalogDirectory[]): DirectoryTr
         currentMap.set(segment, nextNode);
         if (parentNode) {
           parentNode.children.push(nextNode);
+          parentNode.hasChildren = true;
         }
       }
 
       nextNode.fileCount += item.directory.fileCount;
       nextNode.totalSizeBytes += item.directory.totalSizeBytes;
+      if (index < safeSegments.length - 1 || item.directory.hasChildren) {
+        nextNode.hasChildren = true;
+      }
       labelByPath.set(fullPath, relativePath);
 
       parentNode = nextNode;
@@ -135,6 +140,7 @@ function createNode(name: string, fullPath: string, relativePath: string): Mutab
     relativePath,
     fileCount: 0,
     totalSizeBytes: 0,
+    hasChildren: false,
     children: [],
     childMap: new Map()
   };
@@ -157,6 +163,7 @@ function stripChildMap(node: MutableDirectoryTreeNode): DirectoryTreeNode {
     relativePath: node.relativePath,
     fileCount: node.fileCount,
     totalSizeBytes: node.totalSizeBytes,
+    hasChildren: node.hasChildren || node.children.length > 0,
     children: node.children.map((child) => stripChildMap(child as MutableDirectoryTreeNode))
   };
 }

@@ -2,6 +2,7 @@ package com.zhuoyu.delivery.datasteward.asset.application;
 
 import com.zhuoyu.delivery.core.audit.application.AuditLogApplicationService;
 import com.zhuoyu.delivery.core.auth.application.SecurityPrincipalAccessor;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogDirectoryChildrenResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.AuditContextResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogDirectoryResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogEventSummary;
@@ -49,6 +50,7 @@ public class CatalogApplicationService {
 
     private static final int MAX_PHYSICAL_DIRECTORY_COUNT = 2_000;
     private static final int MAX_PHYSICAL_DIRECTORY_DEPTH = 4;
+    private static final int MAX_DIRECT_CHILD_COUNT = 5_000;
 
     private final BimAssetRepository bimAssetRepository;
     private final AssetPathMappingRepository pathMappingRepository;
@@ -147,7 +149,10 @@ public class CatalogApplicationService {
                 pId,
                 projectCode,
                 rs.getInt("file_count"),
-                rs.getLong("total_size_bytes")
+                rs.getLong("total_size_bytes"),
+                directoryName(safePath),
+                false,
+                false
             );
         });
         Map<String, DirectoryAccumulator> byPath = new LinkedHashMap<>();
@@ -169,6 +174,65 @@ public class CatalogApplicationService {
             .sorted(Comparator.comparing(DirectoryAccumulator::directoryPath))
             .map(DirectoryAccumulator::toResponse)
             .toList();
+    }
+
+    public CatalogDirectoryChildrenResponse listCatalogDirectoryChildren(
+        Long userId,
+        Long projectId,
+        String directoryPath,
+        String keyword,
+        String fileExt,
+        String fileKind,
+        String disciplineCode,
+        String version,
+        String qualityIssue,
+        String ownershipStatus,
+        int page,
+        int pageSize
+    ) {
+        ProjectInfo project = findAccessibleProject(userId, projectId);
+        if (project == null) {
+            return new CatalogDirectoryChildrenResponse(
+                projectId, null, normalizeCatalogDirectoryPath(directoryPath), List.of(),
+                new PageResponse<>(List.of(), Math.max(1, page), Math.max(1, Math.min(pageSize, 200)), 0)
+            );
+        }
+
+        String safeDirectoryPath = normalizeBrowserDirectoryPath(directoryPath);
+        Map<String, DirectoryAccumulator> directoriesByPath = new LinkedHashMap<>();
+        List<PhysicalFileItem> physicalFiles = new ArrayList<>();
+        mergePhysicalDirectChildren(project, safeDirectoryPath, directoriesByPath, physicalFiles);
+
+        List<CatalogFileResponse> registeredFiles = queryDirectCatalogFiles(
+            userId, projectId, safeDirectoryPath, keyword, fileExt, fileKind,
+            disciplineCode, version, qualityIssue, ownershipStatus);
+        List<CatalogFileResponse> combinedFiles = mergeDirectFiles(
+            project, safeDirectoryPath, physicalFiles, registeredFiles,
+            keyword, fileExt, fileKind, disciplineCode, version, qualityIssue, ownershipStatus);
+
+        int safePage = Math.max(1, page);
+        int safeSize = Math.max(1, Math.min(pageSize, 200));
+        int from = Math.min((safePage - 1) * safeSize, combinedFiles.size());
+        int to = Math.min(from + safeSize, combinedFiles.size());
+        PageResponse<CatalogFileResponse> filesPage = new PageResponse<>(
+            combinedFiles.subList(from, to),
+            safePage,
+            safeSize,
+            combinedFiles.size()
+        );
+
+        List<CatalogDirectoryResponse> directories = directoriesByPath.values().stream()
+            .sorted(Comparator.comparing(DirectoryAccumulator::directoryPath, String.CASE_INSENSITIVE_ORDER))
+            .map(DirectoryAccumulator::toResponse)
+            .toList();
+
+        return new CatalogDirectoryChildrenResponse(
+            projectId,
+            project.projectCode(),
+            safeDirectoryPath,
+            directories,
+            filesPage
+        );
     }
 
     // ===== catalog files =====
@@ -470,7 +534,9 @@ public class CatalogApplicationService {
                     rs.getString("ownership_node_label"),
                     rs.getString("ownership_node_path"),
                     rs.getString("ownership_confidence"),
-                    rs.getString("ownership_source")
+                    rs.getString("ownership_source"),
+                    true,
+                    "REGISTERED"
             );
         };
     }
@@ -539,7 +605,9 @@ public class CatalogApplicationService {
                     rs.getString("ownership_node_label"),
                     rs.getString("ownership_node_path"),
                     rs.getString("ownership_confidence"),
-                    rs.getString("ownership_source")
+                    rs.getString("ownership_source"),
+                    true,
+                    "REGISTERED"
                 );
             });
         return rows.stream().findFirst().orElse(null);
@@ -675,6 +743,338 @@ public class CatalogApplicationService {
     }
 
     // ===== helpers =====
+
+    private ProjectInfo findAccessibleProject(Long userId, Long projectId) {
+        if (projectId == null) {
+            return null;
+        }
+        List<ProjectInfo> rows = jdbcTemplate.query("""
+            SELECT p.id, p.code, p.name
+            FROM core_user_project_roles upr
+            JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
+            WHERE upr.user_id = :userId
+              AND upr.project_id = :projectId
+              AND upr.deleted = 0
+            LIMIT 1
+            """, new MapSqlParameterSource()
+            .addValue("userId", userId)
+            .addValue("projectId", projectId), (rs, rowNum) -> new ProjectInfo(
+            rs.getLong("id"),
+            rs.getString("code"),
+            rs.getString("name")
+        ));
+        return rows.stream().findFirst().orElse(null);
+    }
+
+    private void mergePhysicalDirectChildren(
+        ProjectInfo project,
+        String safeDirectoryPath,
+        Map<String, DirectoryAccumulator> directoriesByPath,
+        List<PhysicalFileItem> physicalFiles
+    ) {
+        for (PathMappingResponse mapping : pathMappingRepository.list(project.projectId(), true)) {
+            File currentDirectory = resolvePhysicalDirectory(mapping.nasPath(), safeDirectoryPath);
+            if (currentDirectory == null) {
+                continue;
+            }
+            File[] children = currentDirectory.listFiles();
+            if (children == null || children.length == 0) {
+                continue;
+            }
+            Arrays.sort(children, Comparator.comparing(File::getName, String.CASE_INSENSITIVE_ORDER));
+            int visited = 0;
+            for (File child : children) {
+                if (visited >= MAX_DIRECT_CHILD_COUNT) {
+                    break;
+                }
+                if (isIgnoredPhysicalChild(child)) {
+                    continue;
+                }
+                visited += 1;
+                String childRelativePath = joinDirectoryPath(safeDirectoryPath, child.getName());
+                try {
+                    if (java.nio.file.Files.isSymbolicLink(child.toPath())) {
+                        continue;
+                    }
+                    if (child.isDirectory()) {
+                        putDirectory(
+                            directoriesByPath,
+                            childRelativePath,
+                            project.projectId(),
+                            project.projectCode(),
+                            0,
+                            0L,
+                            hasVisibleDirectChildren(child),
+                            true
+                        );
+                    } else if (child.isFile()) {
+                        physicalFiles.add(new PhysicalFileItem(
+                            child.getName(),
+                            childRelativePath,
+                            Math.max(0L, child.length()),
+                            child.lastModified()
+                        ));
+                    }
+                } catch (SecurityException ignored) {
+                    // Listing failure for a child should not break the whole directory view.
+                }
+            }
+        }
+    }
+
+    private File resolvePhysicalDirectory(String rawRootPath, String safeDirectoryPath) {
+        String rootPath = normalizeProviderPath(rawRootPath);
+        if (rootPath.isBlank()) {
+            return null;
+        }
+        File root = new File(rootPath).getAbsoluteFile();
+        File current = safeDirectoryPath == null || safeDirectoryPath.isBlank()
+            ? root
+            : new File(root, safeDirectoryPath).getAbsoluteFile();
+        try {
+            String canonicalRoot = root.getCanonicalPath();
+            String canonicalCurrent = current.getCanonicalPath();
+            if (!canonicalCurrent.equals(canonicalRoot) && !canonicalCurrent.startsWith(canonicalRoot + File.separator)) {
+                return null;
+            }
+        } catch (Exception ex) {
+            return null;
+        }
+        return current.isDirectory() ? current : null;
+    }
+
+    private boolean isIgnoredPhysicalChild(File child) {
+        String name = child.getName();
+        return name == null || name.isBlank() || ".DS_Store".equals(name);
+    }
+
+    private boolean hasVisibleDirectChildren(File directory) {
+        File[] children = directory.listFiles(child -> !isIgnoredPhysicalChild(child));
+        return children != null && children.length > 0;
+    }
+
+    private List<CatalogFileResponse> queryDirectCatalogFiles(
+        Long userId,
+        Long projectId,
+        String safeDirectoryPath,
+        String keyword,
+        String fileExt,
+        String fileKind,
+        String disciplineCode,
+        String version,
+        String qualityIssue,
+        String ownershipStatus
+    ) {
+        StringBuilder sb = new StringBuilder("""
+            SELECT f.id AS file_id, f.project_id, p.code AS project_code, p.name AS project_name,
+                   f.original_name, f.file_kind, f.discipline AS discipline_code,
+                   f.version_no, f.size_bytes, f.checksum, f.storage_provider,
+                   f.storage_uri, f.logical_path, f.process_status, f.confidence_level,
+                   f.last_verified_at, f.updated_at, f.source_type, f.review_status,
+                   own.status AS ownership_status, own.ownership_type, own.node_key AS ownership_node_key,
+                   own.node_label AS ownership_node_label, own.node_path AS ownership_node_path,
+                   own.confidence AS ownership_confidence, own.source AS ownership_source
+            FROM core_user_project_roles upr
+            JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
+            JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0
+            LEFT JOIN data_file_ownership_assignments own ON own.file_id = f.id AND own.deleted = 0
+            WHERE upr.user_id = :userId AND upr.deleted = 0
+              AND f.project_id = :projectId
+            """);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+            .addValue("userId", userId)
+            .addValue("projectId", projectId);
+        appendDirectDirectoryFilter(sb, params, projectId, safeDirectoryPath);
+        if (keyword != null && !keyword.isBlank()) {
+            sb.append(" AND (p.code LIKE :likeKw OR p.name LIKE :likeKw OR f.original_name LIKE :likeKw OR f.storage_uri LIKE :likeKw)");
+            params.addValue("likeKw", "%" + keyword.trim() + "%");
+        }
+        if (fileExt != null && !fileExt.isBlank()) {
+            String ext = fileExt.startsWith(".") ? fileExt.substring(1) : fileExt;
+            sb.append(" AND LOWER(SUBSTRING_INDEX(f.original_name, '.', -1)) = :fileExt");
+            params.addValue("fileExt", ext.toLowerCase(Locale.ROOT));
+        }
+        if (fileKind != null && !fileKind.isBlank()) {
+            sb.append(" AND f.file_kind = :fileKind");
+            params.addValue("fileKind", fileKind.toUpperCase(Locale.ROOT));
+        }
+        if (disciplineCode != null && !disciplineCode.isBlank()) {
+            sb.append(" AND f.discipline = :disciplineCode");
+            params.addValue("disciplineCode", disciplineCode);
+        }
+        if (version != null && !version.isBlank()) {
+            sb.append(" AND LOWER(f.version_no) = LOWER(:version)");
+            params.addValue("version", version.trim());
+        }
+        appendCatalogQualityFilter(sb, qualityIssue);
+        appendOwnershipFilter(sb, params, ownershipStatus);
+        sb.append(" ORDER BY f.original_name ASC, f.id ASC LIMIT :limit");
+        params.addValue("limit", MAX_DIRECT_CHILD_COUNT);
+        return jdbcTemplate.query(sb.toString(), params, catalogFileRowMapper(userId));
+    }
+
+    private List<CatalogFileResponse> mergeDirectFiles(
+        ProjectInfo project,
+        String safeDirectoryPath,
+        List<PhysicalFileItem> physicalFiles,
+        List<CatalogFileResponse> registeredFiles,
+        String keyword,
+        String fileExt,
+        String fileKind,
+        String disciplineCode,
+        String version,
+        String qualityIssue,
+        String ownershipStatus
+    ) {
+        Map<String, CatalogFileResponse> registeredByName = new LinkedHashMap<>();
+        for (CatalogFileResponse file : registeredFiles) {
+            registeredByName.put(file.fileName().toLowerCase(Locale.ROOT), file);
+        }
+
+        Set<Long> usedRegisteredIds = new HashSet<>();
+        List<CatalogFileResponse> rows = new ArrayList<>();
+        for (PhysicalFileItem physical : physicalFiles) {
+            CatalogFileResponse registered = registeredByName.get(physical.fileName().toLowerCase(Locale.ROOT));
+            if (registered != null && registered.fileId() != null) {
+                rows.add(registered);
+                usedRegisteredIds.add(registered.fileId());
+                continue;
+            }
+            CatalogFileResponse unregistered = unregisteredFileResponse(project, safeDirectoryPath, physical);
+            if (unregisteredFileMatches(unregistered, keyword, fileExt, fileKind, disciplineCode, version, qualityIssue, ownershipStatus)) {
+                rows.add(unregistered);
+            }
+        }
+        for (CatalogFileResponse registered : registeredFiles) {
+            if (registered.fileId() == null || !usedRegisteredIds.contains(registered.fileId())) {
+                rows.add(registered);
+            }
+        }
+        rows.sort(Comparator
+            .comparing((CatalogFileResponse file) -> Boolean.TRUE.equals(file.registered()) ? 0 : 1)
+            .thenComparing(CatalogFileResponse::fileName, String.CASE_INSENSITIVE_ORDER));
+        return rows;
+    }
+
+    private CatalogFileResponse unregisteredFileResponse(
+        ProjectInfo project,
+        String safeDirectoryPath,
+        PhysicalFileItem physical
+    ) {
+        String ext = extensionOf(physical.fileName());
+        String logicalPath = joinDirectoryPath(safeDirectoryPath, physical.fileName());
+        return new CatalogFileResponse(
+            null,
+            project.projectId(),
+            project.projectCode(),
+            project.projectName(),
+            physical.fileName(),
+            ext,
+            inferFileKind(ext),
+            null,
+            null,
+            "-",
+            physical.sizeBytes(),
+            null,
+            "UNREGISTERED",
+            "LOW",
+            "NAS",
+            logicalPath,
+            false,
+            "UNREGISTERED_FILE_NEEDS_CATALOG_SCAN",
+            List.of("UNREGISTERED"),
+            null,
+            physical.lastModifiedAt() <= 0 ? null : Instant.ofEpochMilli(physical.lastModifiedAt()),
+            false,
+            "UNREGISTERED_FILE_NEEDS_CATALOG_SCAN",
+            List.of("fileName", "fileExt", "fileKind", "sizeBytes", "logicalPath", "registrationStatus"),
+            "UNREGISTERED",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            false,
+            "UNREGISTERED"
+        );
+    }
+
+    private boolean unregisteredFileMatches(
+        CatalogFileResponse file,
+        String keyword,
+        String fileExt,
+        String fileKind,
+        String disciplineCode,
+        String version,
+        String qualityIssue,
+        String ownershipStatus
+    ) {
+        if (keyword != null && !keyword.isBlank()) {
+            String lowerKeyword = keyword.trim().toLowerCase(Locale.ROOT);
+            String name = file.fileName() == null ? "" : file.fileName().toLowerCase(Locale.ROOT);
+            String path = file.logicalPath() == null ? "" : file.logicalPath().toLowerCase(Locale.ROOT);
+            if (!name.contains(lowerKeyword) && !path.contains(lowerKeyword)) {
+                return false;
+            }
+        }
+        if (fileExt != null && !fileExt.isBlank()) {
+            String ext = fileExt.startsWith(".") ? fileExt.substring(1) : fileExt;
+            if (!ext.equalsIgnoreCase(file.fileExt())) {
+                return false;
+            }
+        }
+        if (fileKind != null && !fileKind.isBlank() && !"ALL".equalsIgnoreCase(fileKind)) {
+            if (!fileKind.equalsIgnoreCase(file.fileKind())) {
+                return false;
+            }
+        }
+        if (disciplineCode != null && !disciplineCode.isBlank()) {
+            return false;
+        }
+        if (version != null && !version.isBlank()) {
+            return false;
+        }
+        if (qualityIssue != null && !qualityIssue.isBlank() && !"ALL".equalsIgnoreCase(qualityIssue)) {
+            return false;
+        }
+        return ownershipStatus == null
+            || ownershipStatus.isBlank()
+            || "ALL".equalsIgnoreCase(ownershipStatus)
+            || "UNREGISTERED".equalsIgnoreCase(ownershipStatus);
+    }
+
+    private String inferFileKind(String ext) {
+        String normalized = ext == null ? "" : ext.toLowerCase(Locale.ROOT);
+        if (Set.of("rvt", "ifc", "nwd", "nwc", "glb", "gltf").contains(normalized)) {
+            return "MODEL";
+        }
+        if (Set.of("dwg", "dxf").contains(normalized)) {
+            return "DRAWING";
+        }
+        if (Set.of("xls", "xlsx", "csv").contains(normalized)) {
+            return "SPREADSHEET";
+        }
+        if (Set.of("ppt", "pptx").contains(normalized)) {
+            return "PRESENTATION";
+        }
+        if (Set.of("zip", "rar", "7z").contains(normalized)) {
+            return "ARCHIVE";
+        }
+        return "DOCUMENT";
+    }
+
+    private String joinDirectoryPath(String parent, String child) {
+        String safeParent = normalizeCatalogDirectoryPath(parent);
+        String safeChild = normalizeCatalogDirectoryPath(child);
+        if (safeParent.isBlank()) {
+            return safeChild;
+        }
+        if (safeChild.isBlank()) {
+            return safeParent;
+        }
+        return safeParent + "/" + safeChild;
+    }
 
     private Long parseProjectId(String projectScope) {
         if (projectScope == null) return null;
@@ -892,9 +1292,22 @@ public class CatalogApplicationService {
         Integer fileCount,
         Long totalSizeBytes
     ) {
+        putDirectory(byPath, directoryPath, projectId, projectCode, fileCount, totalSizeBytes, false, false);
+    }
+
+    private void putDirectory(
+        Map<String, DirectoryAccumulator> byPath,
+        String directoryPath,
+        Long projectId,
+        String projectCode,
+        Integer fileCount,
+        Long totalSizeBytes,
+        boolean hasChildren,
+        boolean physicalDirectory
+    ) {
         DirectoryAccumulator accumulator = byPath.computeIfAbsent(directoryPath,
             path -> new DirectoryAccumulator(path, projectId, projectCode));
-        accumulator.add(fileCount, totalSizeBytes);
+        accumulator.add(fileCount, totalSizeBytes, hasChildren, physicalDirectory);
     }
 
     private String normalizeCatalogDirectoryPath(String path) {
@@ -906,6 +1319,23 @@ public class CatalogApplicationService {
             normalized = normalized.substring(0, normalized.length() - 1);
         }
         return normalized;
+    }
+
+    private String normalizeBrowserDirectoryPath(String path) {
+        String normalized = trimLeadingSlash(normalizeCatalogDirectoryPath(path));
+        if (normalized.isBlank()) {
+            return "";
+        }
+        if (normalized.contains(":") || normalized.contains("//")) {
+            return "";
+        }
+        List<String> segments = Arrays.stream(normalized.split("/"))
+            .filter(segment -> !segment.isBlank())
+            .toList();
+        if (segments.stream().anyMatch(segment -> ".".equals(segment) || "..".equals(segment))) {
+            return "";
+        }
+        return String.join("/", segments);
     }
 
     private PathVisibility pathVisibility(Long userId, Long projectId, String storageUri) {
@@ -953,6 +1383,9 @@ public class CatalogApplicationService {
             return "";
         }
         String normalized = normalizeProviderPath(directoryPath);
+        if (isMappingRoot(projectId, normalized) || isProjectRootMarker(normalized, projectCode, projectName)) {
+            return "";
+        }
         String mappedRelativePath = relativePathByMapping(projectId, normalized);
         if (!mappedRelativePath.isBlank()) {
             return mappedRelativePath;
@@ -980,7 +1413,10 @@ public class CatalogApplicationService {
                     existing.projectId(),
                     existing.projectCode(),
                     existing.fileCount() + dir.fileCount(),
-                    existing.totalSizeBytes() + dir.totalSizeBytes()
+                    existing.totalSizeBytes() + dir.totalSizeBytes(),
+                    directoryName(path),
+                    Boolean.TRUE.equals(existing.hasChildren()) || Boolean.TRUE.equals(dir.hasChildren()),
+                    Boolean.TRUE.equals(existing.physicalDirectory()) || Boolean.TRUE.equals(dir.physicalDirectory())
                 ));
             } else {
                 byPath.put(path, dir);
@@ -1042,6 +1478,27 @@ public class CatalogApplicationService {
         return path.equals(root) || path.startsWith(root + "/");
     }
 
+    private boolean isMappingRoot(Long projectId, String normalizedPath) {
+        if (projectId == null || normalizedPath == null || normalizedPath.isBlank()) {
+            return false;
+        }
+        return pathMappingRepository.list(projectId, true).stream()
+            .map(PathMappingResponse::nasPath)
+            .filter(Objects::nonNull)
+            .map(this::normalizeProviderPath)
+            .anyMatch(root -> !root.isBlank() && normalizedPath.equals(root));
+    }
+
+    private boolean isProjectRootMarker(String normalizedPath, String projectCode, String projectName) {
+        String leaf = directoryName(normalizedPath);
+        if (leaf.isBlank()) {
+            return false;
+        }
+        boolean hasCode = projectCode != null && !projectCode.isBlank() && leaf.contains(projectCode);
+        boolean hasName = projectName != null && !projectName.isBlank() && leaf.contains(projectName);
+        return hasCode && hasName;
+    }
+
     private boolean looksLikePhysicalPath(String path) {
         return path.startsWith("/Volumes/")
             || path.startsWith("/Users/")
@@ -1060,6 +1517,18 @@ public class CatalogApplicationService {
             next = next.substring(1);
         }
         return next;
+    }
+
+    private static String directoryName(String path) {
+        if (path == null || path.isBlank()) {
+            return "";
+        }
+        String normalized = path.trim().replace('\\', '/');
+        while (normalized.endsWith("/") && normalized.length() > 1) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        int index = normalized.lastIndexOf('/');
+        return index >= 0 ? normalized.substring(index + 1) : normalized;
     }
 
     private List<String> catalogContractFields(boolean storagePathVisible) {
@@ -1083,12 +1552,20 @@ public class CatalogApplicationService {
     private record PhysicalDirectoryVisit(File directory, int depth) {
     }
 
+    private record ProjectInfo(Long projectId, String projectCode, String projectName) {
+    }
+
+    private record PhysicalFileItem(String fileName, String logicalPath, long sizeBytes, long lastModifiedAt) {
+    }
+
     private static final class DirectoryAccumulator {
         private final String directoryPath;
         private final Long projectId;
         private final String projectCode;
         private int fileCount;
         private long totalSizeBytes;
+        private boolean hasChildren;
+        private boolean physicalDirectory;
 
         private DirectoryAccumulator(String directoryPath, Long projectId, String projectCode) {
             this.directoryPath = directoryPath;
@@ -1100,13 +1577,16 @@ public class CatalogApplicationService {
             return directoryPath;
         }
 
-        private void add(Integer nextFileCount, Long nextTotalSizeBytes) {
+        private void add(Integer nextFileCount, Long nextTotalSizeBytes, boolean nextHasChildren, boolean nextPhysicalDirectory) {
             fileCount += nextFileCount == null ? 0 : nextFileCount;
             totalSizeBytes += nextTotalSizeBytes == null ? 0L : nextTotalSizeBytes;
+            hasChildren = hasChildren || nextHasChildren;
+            physicalDirectory = physicalDirectory || nextPhysicalDirectory;
         }
 
         private CatalogDirectoryResponse toResponse() {
-            return new CatalogDirectoryResponse(directoryPath, projectId, projectCode, fileCount, totalSizeBytes);
+            return new CatalogDirectoryResponse(directoryPath, projectId, projectCode, fileCount, totalSizeBytes,
+                directoryName(directoryPath), hasChildren, physicalDirectory);
         }
     }
 

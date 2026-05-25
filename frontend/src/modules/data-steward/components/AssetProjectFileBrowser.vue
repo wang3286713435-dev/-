@@ -185,7 +185,7 @@
         <div class="file-browser__selection-actions">
           <el-tooltip :content="batchDownloadActionTip" placement="top">
             <span>
-              <el-button size="small" :disabled="!selectedFileEntries.length" @click="handleBatchDownloadClick">
+              <el-button size="small" :disabled="!selectedRegisteredFileEntries.length" @click="handleBatchDownloadClick">
                 批量下载入口清单
               </el-button>
             </span>
@@ -264,10 +264,13 @@
             <template #default="{ row }">
               <template v-if="row.kind === 'FILE'">
                 <div class="file-browser__ownership-cell">
-                  <el-tag :type="ownershipStatusTag(row.file.ownershipStatus)" size="small">
+                  <el-tag v-if="!isRegisteredFile(row.file)" type="warning" size="small">
+                    未登记
+                  </el-tag>
+                  <el-tag v-else :type="ownershipStatusTag(row.file.ownershipStatus)" size="small">
                     {{ ownershipStatusLabel(row.file.ownershipStatus) }}
                   </el-tag>
-                  <span>{{ row.file.ownershipNodeLabel || '未归属' }}</span>
+                  <span>{{ isRegisteredFile(row.file) ? (row.file.ownershipNodeLabel || '未归属') : '需扫描入库后治理' }}</span>
                 </div>
               </template>
               <span v-else class="file-browser__muted">-</span>
@@ -276,9 +279,10 @@
           <el-table-column label="状态" width="160">
             <template #default="{ row }">
               <div v-if="row.kind === 'FILE'" class="file-browser__status-cell">
-                <el-tag v-if="!row.file.qualityFlags || row.file.qualityFlags.length === 0" type="success" size="small">正常</el-tag>
+                <el-tag v-if="!isRegisteredFile(row.file)" type="warning" size="small">未登记</el-tag>
+                <el-tag v-else-if="!row.file.qualityFlags || row.file.qualityFlags.length === 0" type="success" size="small">正常</el-tag>
                 <el-tag v-else type="warning" size="small">{{ row.file.qualityFlags.length }} 项待处理</el-tag>
-                <span>{{ row.file.confidenceLevel === 'HIGH' ? '高置信度' : '需复核' }}</span>
+                <span>{{ isRegisteredFile(row.file) ? (row.file.confidenceLevel === 'HIGH' ? '高置信度' : '需复核') : '需扫描入库后治理' }}</span>
               </div>
               <div v-else class="file-browser__status-cell">
                 <el-tag type="info" size="small">目录</el-tag>
@@ -292,6 +296,7 @@
                 <span>平台文件ID：{{ row.file.fileId }}</span>
                 <span>扩展名：{{ row.file.fileExt || '-' }}</span>
                 <span>置信度：{{ row.file.confidenceLevel ?? '-' }}</span>
+                <span v-if="!isRegisteredFile(row.file)">登记状态：未入库</span>
                 <span>更新时间：{{ formatDate(row.file.updatedAt) }}</span>
               </div>
               <div v-else class="file-browser__diagnostic-cell">
@@ -493,7 +498,7 @@ import {
   createFileAccessTicket,
   createNasDirectory,
   fetchCatalogDirectories,
-  fetchCatalogFiles,
+  fetchCatalogDirectoryChildren,
   fetchNasWriteTrialStatus,
   fetchNasOperations,
   fetchNasQuarantine,
@@ -514,7 +519,7 @@ import {
   type NasWriteTrialStatus
 } from '@/modules/data-steward/api/dataSteward';
 import DirectoryTreePanel from '@/modules/data-steward/components/DirectoryTreePanel.vue';
-import { buildDirectoryTree, type DirectoryTreeNode } from '@/modules/data-steward/utils/directoryTree';
+import { buildDirectoryTree } from '@/modules/data-steward/utils/directoryTree';
 import {
   previewActionHint,
   previewFromFileName,
@@ -569,6 +574,7 @@ const browserRef = ref<HTMLElement | null>(null);
 const tableRef = ref<{ doLayout?: () => void } | null>(null);
 const uploadInputRef = ref<HTMLInputElement | null>(null);
 const directories = ref<CatalogDirectory[]>([]);
+const directDirectories = ref<CatalogDirectory[]>([]);
 const files = ref<CatalogFile[]>([]);
 const nasOperations = ref<NasOperationRecord[]>([]);
 const nasQuarantine = ref<NasQuarantineRecord[]>([]);
@@ -685,7 +691,7 @@ type DirectoryBrowserEntry = {
   path: string;
   fileCount: number;
   sizeBytes: number;
-  directory: DirectoryTreeNode;
+  directory: CatalogDirectory;
 };
 
 type FileBrowserEntry = {
@@ -868,17 +874,12 @@ const directoryPrefixLength = computed(() => {
 
 const directoryTreeModel = computed(() => buildDirectoryTree(directories.value));
 
-const currentDirectoryNodes = computed(() => {
-  if (!activeDir.value) return directoryTreeModel.value.nodes;
-  return findDirectoryNode(directoryTreeModel.value.nodes, activeDir.value)?.children ?? [];
-});
-
 const directoryEntries = computed<DirectoryBrowserEntry[]>(() =>
-  currentDirectoryNodes.value.map((directory) => ({
+  directDirectories.value.map((directory) => ({
     kind: 'DIRECTORY',
-    key: `DIRECTORY:${directory.fullPath}`,
-    name: directory.name,
-    path: directory.fullPath,
+    key: `DIRECTORY:${directory.directoryPath}`,
+    name: directory.directoryName || pathLeaf(directory.directoryPath),
+    path: directory.directoryPath,
     fileCount: directory.fileCount,
     sizeBytes: directory.totalSizeBytes,
     directory
@@ -888,7 +889,7 @@ const directoryEntries = computed<DirectoryBrowserEntry[]>(() =>
 const fileEntries = computed<FileBrowserEntry[]>(() =>
   files.value.map((file) => ({
     kind: 'FILE',
-    key: `FILE:${file.fileId}`,
+    key: file.fileId ? `FILE:${file.fileId}` : `UNREGISTERED:${file.logicalPath || file.fileName}`,
     name: file.fileName,
     path: file.logicalPath || activeDir.value,
     fileCount: 0,
@@ -908,6 +909,9 @@ const selectedEntries = computed(() => {
 });
 
 const selectedFileEntries = computed(() => selectedEntries.value.filter((entry): entry is FileBrowserEntry => entry.kind === 'FILE'));
+const selectedRegisteredFileEntries = computed(() =>
+  selectedFileEntries.value.filter((entry) => isRegisteredFile(entry.file))
+);
 const selectedDirectoryEntries = computed(() =>
   selectedEntries.value.filter((entry): entry is DirectoryBrowserEntry => entry.kind === 'DIRECTORY')
 );
@@ -920,10 +924,13 @@ const selectionSummary = computed(() => {
 });
 
 const batchDownloadActionTip = computed(() => {
-  if (selectedFileEntries.value.length) {
+  if (selectedRegisteredFileEntries.value.length) {
     return selectedDirectoryEntries.value.length
       ? '将为已选文件创建下载入口，文件夹会跳过；本批不生成 ZIP。'
       : '将为已选文件逐个创建平台下载入口；本批不生成 ZIP。';
+  }
+  if (selectedFileEntries.value.some((entry) => !isRegisteredFile(entry.file))) {
+    return '未登记文件需先扫描入库，本次不会创建下载入口。';
   }
   if (selectedDirectoryEntries.value.length) return '文件夹打包下载待交付包能力支持，本次只处理已选文件。';
   return '请先选择要下载的文件。';
@@ -1022,11 +1029,12 @@ function initializeBrowserState() {
   applyingSavedState = true;
   stateReady = false;
   files.value = [];
+  directDirectories.value = [];
   pagination.total = 0;
 
   const state = readQueryState() ?? readStoredBrowserState() ?? {};
   const fallbackQualityIssue = props.initialQualityIssue || 'ALL';
-  activeDir.value = state.activeDir ?? '';
+  activeDir.value = normalizeProjectDirectoryPath(state.activeDir ?? '');
   filters.keyword = state.keyword ?? '';
   filters.fileKind = normalizeFileKind(state.fileKind);
   filters.disciplineCode = state.disciplineCode ?? '';
@@ -1142,15 +1150,6 @@ function resetViewState() {
   persistBrowserState(true);
   void loadFiles();
   ElMessage.success('文件管理视图已重置');
-}
-
-function findDirectoryNode(nodes: DirectoryTreeNode[], path: string): DirectoryTreeNode | null {
-  for (const node of nodes) {
-    if (node.fullPath === path) return node;
-    const found = findDirectoryNode(node.children, path);
-    if (found) return found;
-  }
-  return null;
 }
 
 function isEntrySelected(key: string) {
@@ -1360,7 +1359,7 @@ async function loadDirectories() {
   try {
     const nextDirectories = await fetchCatalogDirectories(props.projectId);
     if (requestId === directoryRequestId) {
-      directories.value = nextDirectories;
+      directories.value = mergeDirectories(directories.value, nextDirectories, activeDir.value);
       dirLoadFailed.value = false;
     }
   } catch (error) {
@@ -1380,10 +1379,9 @@ async function loadFiles() {
   const requestId = ++fileRequestId;
   fileLoading.value = true;
   try {
-    const result = await fetchCatalogFiles({
+    const result = await fetchCatalogDirectoryChildren({
       projectId: props.projectId,
       directoryPath: activeDir.value || undefined,
-      directOnly: true,
       keyword: filters.keyword.trim() || undefined,
       fileKind: filters.fileKind === 'ALL' ? undefined : filters.fileKind,
       disciplineCode: filters.disciplineCode || undefined,
@@ -1394,10 +1392,12 @@ async function loadFiles() {
       pageSize: pagination.pageSize
     });
     if (requestId === fileRequestId) {
-      files.value = result.rows;
-      pagination.page = result.page;
-      pagination.pageSize = result.pageSize;
-      pagination.total = result.total;
+      directDirectories.value = result.directories;
+      directories.value = mergeDirectories(directories.value, result.directories, activeDir.value);
+      files.value = result.files.rows;
+      pagination.page = result.files.page;
+      pagination.pageSize = result.files.pageSize;
+      pagination.total = result.files.total;
     }
   } catch (error) {
     if (requestId === fileRequestId) {
@@ -1407,6 +1407,21 @@ async function loadFiles() {
     if (requestId === fileRequestId) {
       fileLoading.value = false;
     }
+  }
+}
+
+async function loadDirectoryChildrenForTree(dirPath: string) {
+  if (!Number.isFinite(props.projectId)) return;
+  try {
+    const result = await fetchCatalogDirectoryChildren({
+      projectId: props.projectId,
+      directoryPath: dirPath || undefined,
+      page: 1,
+      pageSize: 1
+    });
+    directories.value = mergeDirectories(directories.value, result.directories, dirPath);
+  } catch {
+    // The right-hand list still loads independently; keep tree expansion lightweight.
   }
 }
 
@@ -1535,37 +1550,39 @@ function buildContextMenuItems(entries: BrowserEntry[]): ContextMenuItem[] {
 
   const preview = previewForFileEntry(entry);
   const isModel = preview.previewMode === 'BIM_LIGHTWEIGHT';
+  const unregisteredReason = isRegisteredFile(entry.file) ? '' : '未登记文件需先扫描入库后治理';
   return [
     {
       command: 'open',
       label: isModel ? '模型预览占位' : '打开 / 预览',
-      reason: isModel ? '模型预览引擎未接入' : undefined
+      disabled: Boolean(unregisteredReason),
+      reason: unregisteredReason || (isModel ? '模型预览引擎未接入' : undefined)
     },
-    { command: 'detail', label: '详情' },
-    { command: 'metadata', label: '治理' },
-    { command: 'hermes-ownership', label: '询问 Hermes 归属建议' },
-    { command: 'checksum', label: '补 checksum' },
+    { command: 'detail', label: '详情', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined },
+    { command: 'metadata', label: '治理', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined },
+    { command: 'hermes-ownership', label: '询问 Hermes 归属建议', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined },
+    { command: 'checksum', label: '补 checksum', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined },
     {
       command: 'rename',
       label: '重命名',
-      disabled: Boolean(writeReason),
-      reason: writeReason || undefined,
+      disabled: Boolean(writeReason || unregisteredReason),
+      reason: writeReason || unregisteredReason || undefined,
       divided: true
     },
     {
       command: 'move',
       label: '移动',
-      disabled: Boolean(writeReason),
-      reason: writeReason || undefined
+      disabled: Boolean(writeReason || unregisteredReason),
+      reason: writeReason || unregisteredReason || undefined
     },
     {
       command: 'quarantine',
       label: '移入回收站',
-      disabled: Boolean(adminReason),
-      reason: adminReason || undefined,
+      disabled: Boolean(adminReason || unregisteredReason),
+      reason: adminReason || unregisteredReason || undefined,
       danger: true
     },
-    { command: 'download', label: '下载', divided: true }
+    { command: 'download', label: '下载', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined, divided: true }
   ];
 }
 
@@ -1598,16 +1615,16 @@ async function runContextMenuCommand(item: ContextMenuItem) {
   const [entry] = entries;
   if (item.command === 'open' || item.command === 'preview') {
     await openEntry(entry);
-  } else if (item.command === 'detail' && entry.kind === 'FILE') {
+  } else if (item.command === 'detail' && entry.kind === 'FILE' && isRegisteredFile(entry.file) && entry.file.fileId != null) {
     rememberFile(entry.file);
     emit('open-detail', entry.file.fileId);
-  } else if (item.command === 'metadata' && entry.kind === 'FILE') {
+  } else if (item.command === 'metadata' && entry.kind === 'FILE' && isRegisteredFile(entry.file) && entry.file.fileId != null) {
     rememberFile(entry.file);
     emit('open-metadata', entry.file.fileId);
-  } else if (item.command === 'hermes-ownership' && entry.kind === 'FILE') {
+  } else if (item.command === 'hermes-ownership' && entry.kind === 'FILE' && isRegisteredFile(entry.file) && entry.file.fileId != null) {
     rememberFile(entry.file);
     emit('ask-hermes-ownership', entry.file.fileId);
-  } else if (item.command === 'checksum' && entry.kind === 'FILE') {
+  } else if (item.command === 'checksum' && entry.kind === 'FILE' && isRegisteredFile(entry.file) && entry.file.fileId != null) {
     rememberFile(entry.file);
     emit('create-checksum', entry.file.fileId);
   } else if (item.command === 'rename') {
@@ -1626,6 +1643,10 @@ async function openEntry(entry: BrowserEntry) {
 }
 
 async function openFileByPreviewStrategy(entry: FileBrowserEntry) {
+  if (!isRegisteredFile(entry.file)) {
+    ElMessage.warning('这是直接从真实 NAS 当前目录读取到的未登记文件，需扫描入库后才能预览、治理或归属。');
+    return;
+  }
   rememberFile(entry.file);
   const preview = previewForFileEntry(entry);
   if (preview.previewMode === 'BROWSER_NATIVE' && preview.previewAvailable) {
@@ -1645,6 +1666,10 @@ async function openFileByPreviewStrategy(entry: FileBrowserEntry) {
 }
 
 async function openControlledFileAccess(row: CatalogFile, action: 'PREVIEW' | 'DOWNLOAD') {
+  if (!isRegisteredFile(row) || row.fileId == null) {
+    ElMessage.warning('未登记文件需先扫描入库后才能创建受控访问入口。');
+    return;
+  }
   if (fileAccessOpening.value) return;
   let popup = tryOpenBlankPopup();
   fileAccessOpening.value = true;
@@ -1725,6 +1750,10 @@ function openModelPreviewPlaceholder(entry: BrowserEntry) {
 
 function previewForFileEntry(entry: FileBrowserEntry): PreviewStatusLike {
   return previewFromFileName(entry.file.fileName, entry.file.fileKind);
+}
+
+function isRegisteredFile(file: CatalogFile) {
+  return file.registered !== false && Number.isFinite(Number(file.fileId));
 }
 
 async function renameEntry(entry: BrowserEntry) {
@@ -1870,6 +1899,10 @@ async function quarantineActiveDirectory() {
 }
 
 async function renameFileAction(row: CatalogFile) {
+  if (!isRegisteredFile(row) || row.fileId == null) {
+    ElMessage.warning('未登记文件需先扫描入库后才能重命名。');
+    return;
+  }
   const { value } = await ElMessageBox.prompt('请输入新的文件名', '重命名文件', {
     inputValue: row.fileName,
     confirmButtonText: '确认重命名',
@@ -1882,12 +1915,20 @@ async function renameFileAction(row: CatalogFile) {
 }
 
 async function moveFileAction(row: CatalogFile) {
+  if (!isRegisteredFile(row) || row.fileId == null) {
+    ElMessage.warning('未登记文件需先扫描入库后才能移动。');
+    return;
+  }
   const targetDirectory = await promptTargetDirectory('移动文件');
   await confirmNasOperation('移动文件', `${row.fileName} -> ${targetDirectory || '项目根目录'}`);
   await runNasOperation(() => moveNasFile(props.projectId, row.fileId, targetDirectory));
 }
 
 async function quarantineFileAction(row: CatalogFile) {
+  if (!isRegisteredFile(row) || row.fileId == null) {
+    ElMessage.warning('未登记文件需先扫描入库后才能移入回收站。');
+    return;
+  }
   const { value } = await ElMessageBox.prompt('可填写删除原因', '删除文件到回收站', {
     confirmButtonText: '确认移入回收站',
     cancelButtonText: '取消',
@@ -1903,20 +1944,22 @@ async function createBatchDownloadTickets() {
     return;
   }
   batchDownloadRows.value = selectedEntries.value
-    .filter((entry) => entry.kind === 'DIRECTORY')
+    .filter((entry) => entry.kind === 'DIRECTORY' || (entry.kind === 'FILE' && !isRegisteredFile(entry.file)))
     .map((entry) => ({
       key: entry.key,
       name: entry.name,
       status: 'SKIPPED' as BatchStatus,
-      message: '文件夹打包下载待交付包能力支持，本次只处理已选文件。'
+      message: entry.kind === 'DIRECTORY'
+        ? '文件夹打包下载待交付包能力支持，本次只处理已选文件。'
+        : '未登记文件需先扫描入库后才能创建下载入口。'
     }));
   batchDownloadDialogVisible.value = true;
-  if (!selectedFileEntries.value.length) {
+  if (!selectedRegisteredFileEntries.value.length) {
     return;
   }
 
   batchDownloadLoading.value = true;
-  for (const entry of selectedFileEntries.value) {
+  for (const entry of selectedRegisteredFileEntries.value) {
     const row: BatchDownloadRow = {
       key: entry.key,
       name: entry.file.fileName,
@@ -1925,7 +1968,7 @@ async function createBatchDownloadTickets() {
     };
     batchDownloadRows.value = [...batchDownloadRows.value, row];
     try {
-      const ticket = await createFileAccessTicket(entry.file.fileId, 'DOWNLOAD');
+      const ticket = await createFileAccessTicket(entry.file.fileId!, 'DOWNLOAD');
       Object.assign(row, ticketToDownloadRow(entry, ticket));
     } catch (error) {
       row.status = 'FAILED';
@@ -1977,6 +2020,9 @@ async function moveSelectedEntries() {
       const result = await moveNasDirectory(props.projectId, { sourcePath: entry.path, targetDirectory });
       return { status: 'SUCCESS', message: result.message };
     }
+    if (!isRegisteredFile(entry.file) || entry.file.fileId == null) {
+      return { status: 'SKIPPED', message: '未登记文件需先扫描入库后才能移动。' };
+    }
     const result = await moveNasFile(props.projectId, entry.file.fileId, targetDirectory);
     return { status: 'SUCCESS', message: result.message };
   });
@@ -2003,6 +2049,9 @@ async function quarantineSelectedEntries() {
     if (entry.kind === 'DIRECTORY') {
       const result = await quarantineNasDirectory(props.projectId, { sourcePath: entry.path, reason: value });
       return { status: 'SUCCESS', message: result.message };
+    }
+    if (!isRegisteredFile(entry.file) || entry.file.fileId == null) {
+      return { status: 'SKIPPED', message: '未登记文件需先扫描入库后才能移入回收站。' };
     }
     const result = await quarantineNasFile(props.projectId, entry.file.fileId, value);
     return { status: 'SUCCESS', message: result.message };
@@ -2149,6 +2198,54 @@ function directoryExists(path: string) {
   return directories.value.some((item) => normalizeDirectoryPath(item.directoryPath) === path);
 }
 
+function mergeDirectories(existing: CatalogDirectory[], incoming: CatalogDirectory[], parentPath = '') {
+  return dedupeDirectories([
+    ...existing,
+    ...ancestorDirectories(parentPath),
+    ...incoming
+  ]);
+}
+
+function dedupeDirectories(items: CatalogDirectory[]) {
+  const byPath = new Map<string, CatalogDirectory>();
+  for (const item of items) {
+      const path = normalizeProjectDirectoryPath(item.directoryPath || '');
+    if (!path) continue;
+    const previous = byPath.get(path);
+    byPath.set(path, {
+      ...previous,
+      ...item,
+      directoryPath: path,
+      directoryName: item.directoryName || previous?.directoryName || pathLeaf(path),
+      fileCount: Math.max(previous?.fileCount ?? 0, item.fileCount ?? 0),
+      totalSizeBytes: Math.max(previous?.totalSizeBytes ?? 0, item.totalSizeBytes ?? 0),
+      hasChildren: Boolean(previous?.hasChildren || item.hasChildren),
+      physicalDirectory: Boolean(previous?.physicalDirectory || item.physicalDirectory)
+    });
+  }
+  return Array.from(byPath.values()).sort((left, right) =>
+    left.directoryPath.localeCompare(right.directoryPath, 'zh-CN')
+  );
+}
+
+function ancestorDirectories(path: string): CatalogDirectory[] {
+  const parts = splitPath(path);
+  if (parts.length <= 1) return [];
+  return parts.slice(0, -1).map((_, index) => {
+    const directoryPath = parts.slice(0, index + 1).join('/');
+    return {
+      directoryPath,
+      projectId: props.projectId,
+      projectCode: routeProject.value?.code ?? '',
+      fileCount: 0,
+      totalSizeBytes: 0,
+      directoryName: pathLeaf(directoryPath),
+      hasChildren: true,
+      physicalDirectory: true
+    };
+  });
+}
+
 function sameOrChild(path: string, root: string) {
   return path === root || path.startsWith(`${root}/`);
 }
@@ -2168,8 +2265,9 @@ function selectDir(dirPath: string) {
   closeContextMenu();
   selectedEntryKeys.value = new Set();
   lastSelectionAnchorKey.value = null;
-  activeDir.value = dirPath;
-  rememberExpandedAncestors(dirPath);
+  const nextDir = normalizeProjectDirectoryPath(dirPath);
+  activeDir.value = nextDir;
+  rememberExpandedAncestors(nextDir);
   pagination.page = 1;
   void loadFiles();
 }
@@ -2275,6 +2373,7 @@ function toggleExpandedDir(path: string, expanded: boolean) {
   const next = new Set(expandedDirs.value);
   if (expanded) {
     next.add(path);
+    void loadDirectoryChildrenForTree(path);
   } else {
     next.delete(path);
   }
@@ -2284,14 +2383,21 @@ function toggleExpandedDir(path: string, expanded: boolean) {
 function rememberExpandedAncestors(path: string) {
   if (!path) return;
   const parts = splitPath(path);
+  if (parts.length <= 1) return;
   const hasLeadingSlash = path.startsWith('/');
   const ancestors = parts
+    .slice(0, -1)
     .map((_, index) => joinPath(parts.slice(0, index + 1), hasLeadingSlash))
     .filter(Boolean);
   expandedDirs.value = Array.from(new Set([...expandedDirs.value, ...ancestors]));
 }
 
 function rememberFile(row: CatalogFile) {
+  if (!isRegisteredFile(row) || row.fileId == null) {
+    lastFileId.value = null;
+    lastFileName.value = row.fileName;
+    return;
+  }
   lastFileId.value = row.fileId;
   lastFileName.value = row.fileName;
 }
@@ -2315,12 +2421,16 @@ function handleRowCommand(command: string | number | object, row: CatalogFile) {
   const action = String(command);
   rememberFile(row);
   if (action === 'preview') {
+    if (row.fileId == null) return;
     emit('open-preview', row.fileId);
   } else if (action === 'detail') {
+    if (row.fileId == null) return;
     emit('open-detail', row.fileId);
   } else if (action === 'metadata') {
+    if (row.fileId == null) return;
     emit('open-metadata', row.fileId);
   } else if (action === 'checksum') {
+    if (row.fileId == null) return;
     emit('create-checksum', row.fileId);
   } else if (action === 'rename-file') {
     runAsyncAction(() => renameFileAction(row), '重命名文件失败');
@@ -2339,6 +2449,31 @@ function normalizeExt(value: string) {
 
 function normalizeDirectoryPath(path: string) {
   return path.trim().replace(/\/+$/, '');
+}
+
+function normalizeProjectDirectoryPath(path: string) {
+  const normalized = normalizeDirectoryPath(path);
+  const parts = splitPath(normalized);
+  if (!parts.length) return '';
+  if (isProjectRootWrapperSegment(parts[0])) {
+    return parts.slice(1).join('/');
+  }
+  return normalized;
+}
+
+function isProjectRootWrapperSegment(segment: string) {
+  const code = routeProject.value?.code ?? '';
+  const name = routeProject.value?.name ?? props.rootLabel;
+  const candidates = [
+    props.rootLabel,
+    name,
+    code && name ? `${code}-${name}` : '',
+    code && name ? `${code}_${name}` : '',
+    code && name ? `${code} ${name}` : ''
+  ]
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return candidates.some((candidate) => segment === candidate);
 }
 
 function splitPath(path: string) {

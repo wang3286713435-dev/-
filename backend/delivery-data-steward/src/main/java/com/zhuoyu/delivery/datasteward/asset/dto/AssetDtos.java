@@ -1,6 +1,7 @@
 package com.zhuoyu.delivery.datasteward.asset.dto;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.zhuoyu.delivery.shared.api.PageResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -887,7 +888,19 @@ public final class AssetDtos {
         Long projectId,
         String projectCode,
         Integer fileCount,
-        Long totalSizeBytes
+        Long totalSizeBytes,
+        String directoryName,
+        Boolean hasChildren,
+        Boolean physicalDirectory
+    ) {
+    }
+
+    public record CatalogDirectoryChildrenResponse(
+        Long projectId,
+        String projectCode,
+        String directoryPath,
+        List<CatalogDirectoryResponse> directories,
+        PageResponse<CatalogFileResponse> files
     ) {
     }
 
@@ -922,7 +935,9 @@ public final class AssetDtos {
         String ownershipNodeLabel,
         String ownershipNodePath,
         String ownershipConfidence,
-        String ownershipSource
+        String ownershipSource,
+        Boolean registered,
+        String registrationStatus
     ) {
     }
 
@@ -958,7 +973,9 @@ public final class AssetDtos {
         String ownershipNodeLabel,
         String ownershipNodePath,
         String ownershipConfidence,
-        String ownershipSource
+        String ownershipSource,
+        Boolean registered,
+        String registrationStatus
     ) {
     }
 

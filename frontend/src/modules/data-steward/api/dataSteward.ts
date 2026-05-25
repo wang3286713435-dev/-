@@ -838,10 +838,13 @@ export interface CatalogDirectory {
   projectCode: string;
   fileCount: number;
   totalSizeBytes: number;
+  directoryName?: string | null;
+  hasChildren?: boolean | null;
+  physicalDirectory?: boolean | null;
 }
 
 export interface CatalogFile {
-  fileId: number;
+  fileId: number | null;
   projectId: number;
   projectCode: string;
   projectName: string;
@@ -872,6 +875,8 @@ export interface CatalogFile {
   ownershipNodePath?: string | null;
   ownershipConfidence?: string | null;
   ownershipSource?: string | null;
+  registered?: boolean;
+  registrationStatus?: string | null;
 }
 
 export interface CatalogFileDetail extends CatalogFile {
@@ -1112,6 +1117,23 @@ export interface CatalogFilesQuery {
   pageSize?: number;
 }
 
+export interface CatalogDirectoryChildrenQuery extends CatalogFilesQuery {
+  projectId: number;
+}
+
+export interface CatalogDirectoryChildrenResult {
+  projectId: number;
+  projectCode: string | null;
+  directoryPath: string;
+  directories: CatalogDirectory[];
+  files: {
+    page: number;
+    pageSize: number;
+    total: number;
+    rows: CatalogFile[];
+  };
+}
+
 export interface FileOwnershipTypeSummary {
   ownershipType: string;
   label: string;
@@ -1339,6 +1361,32 @@ export async function fetchCatalogFiles(params: CatalogFilesQuery = {}) {
     pageSize: resp.data.data?.pageSize ?? 20,
     total: resp.data.data?.total ?? 0,
     rows: resp.data.data?.items ?? []
+  };
+}
+
+export async function fetchCatalogDirectoryChildren(params: CatalogDirectoryChildrenQuery) {
+  const normalized = Object.fromEntries(
+    Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  );
+  const resp = await http.get<ApiResponse<{
+    projectId: number;
+    projectCode: string | null;
+    directoryPath: string;
+    directories: CatalogDirectory[];
+    files: { pageNo: number; pageSize: number; total: number; items: CatalogFile[] };
+  }>>('/api/data-steward/catalog/directory-children', { params: normalized });
+  const payload = resp.data.data;
+  return {
+    projectId: payload.projectId,
+    projectCode: payload.projectCode,
+    directoryPath: payload.directoryPath,
+    directories: payload.directories ?? [],
+    files: {
+      page: payload.files?.pageNo ?? 1,
+      pageSize: payload.files?.pageSize ?? 20,
+      total: payload.files?.total ?? 0,
+      rows: payload.files?.items ?? []
+    }
   };
 }
 

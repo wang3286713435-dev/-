@@ -3,6 +3,7 @@ package com.zhuoyu.delivery.datasteward.asset.controller;
 import com.zhuoyu.delivery.core.auth.application.SecurityPrincipalAccessor;
 import com.zhuoyu.delivery.datasteward.asset.application.CatalogApplicationService;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.AuditContextResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogDirectoryChildrenResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogDirectoryResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogFileDetailResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CatalogFileResponse;
@@ -56,6 +57,26 @@ public class CatalogController {
     ) {
         Long userId = currentUserId();
         return ApiResponse.success(catalogApplicationService.listCatalogDirectories(userId, projectId));
+    }
+
+    @GetMapping("/directory-children")
+    public ApiResponse<CatalogDirectoryChildrenResponse> listDirectoryChildren(
+        @RequestParam Long projectId,
+        @RequestParam(required = false) String directoryPath,
+        @RequestParam(required = false) String keyword,
+        @RequestParam(required = false) String fileExt,
+        @RequestParam(required = false) String fileKind,
+        @RequestParam(required = false) String disciplineCode,
+        @RequestParam(required = false) String version,
+        @RequestParam(required = false) String qualityIssue,
+        @RequestParam(required = false) String ownershipStatus,
+        @RequestParam(defaultValue = "1") int page,
+        @RequestParam(defaultValue = "20") int pageSize
+    ) {
+        Long userId = currentUserId();
+        return ApiResponse.success(catalogApplicationService.listCatalogDirectoryChildren(
+            userId, projectId, directoryPath, keyword, fileExt, fileKind, disciplineCode, version,
+            qualityIssue, ownershipStatus, page, pageSize));
     }
 
     @GetMapping("/files")
