@@ -4,14 +4,21 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileAssetResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileStorageStatusResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageProviderHealthResponse;
 import com.zhuoyu.delivery.shared.exception.BusinessException;
+import io.minio.BucketExistsArgs;
 import io.minio.GetObjectArgs;
+import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
+import io.minio.PutObjectArgs;
 import io.minio.StatObjectArgs;
 import io.minio.StatObjectResponse;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
@@ -82,6 +89,56 @@ public class StorageService {
         } catch (Exception exception) {
             throw new BusinessException("ASSET_FILE_NOT_READABLE",
                 "对象存储文件不存在或不可读取", HttpStatus.PRECONDITION_FAILED);
+        }
+    }
+
+    public ObjectMirrorResult mirrorNasFileToObject(FileAssetResponse file, String targetProvider) {
+        String providerCode = normalizeTargetProvider(targetProvider);
+        ObjectStorageProvider provider = providerFor(providerCode);
+        String bucket = defaultBucket(providerCode);
+        StorageReference sourceReference = sourceReferenceForMigration(file);
+        Path sourcePath = resolveNasPath(sourceReference);
+        Long sizeBytes = readableSize(sourcePath);
+        String checksum = sha256File(sourcePath);
+        String contentType = detectNasContentType(sourcePath, file);
+        String objectKey = stableObjectKey(file, checksum);
+        try {
+            ensureBucket(provider.client(), bucket);
+            try (InputStream inputStream = Files.newInputStream(sourcePath)) {
+                provider.client().putObject(PutObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objectKey)
+                    .contentType(contentType)
+                    .stream(inputStream, sizeBytes, -1)
+                    .build());
+            }
+            StatObjectResponse stat = provider.client().statObject(StatObjectArgs.builder()
+                .bucket(bucket)
+                .object(objectKey)
+                .build());
+            if (stat.size() != sizeBytes) {
+                throw new BusinessException("STORAGE_MIGRATION_VERIFY_FAILED",
+                    "对象存储校验失败：文件大小不一致", HttpStatus.PRECONDITION_FAILED);
+            }
+            Instant verifiedAt = Instant.now();
+            return new ObjectMirrorResult(
+                providerCode,
+                bucket,
+                objectKey,
+                stat.etag(),
+                checksum,
+                contentType,
+                sizeBytes,
+                "NAS",
+                sha256Text(sourceReference.rawReference()),
+                sha256Text(sourcePath.toString()),
+                verifiedAt
+            );
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new BusinessException("STORAGE_MIGRATION_UPLOAD_FAILED",
+                "对象存储镜像上传失败", HttpStatus.PRECONDITION_FAILED);
         }
     }
 
@@ -176,6 +233,14 @@ public class StorageService {
     }
 
     private StorageReference referenceFor(FileAssetResponse file) {
+        StorageReference activeObjectReference = activeObjectReference(file.fileId());
+        if (activeObjectReference != null) {
+            return activeObjectReference;
+        }
+        return sourceReferenceForMigration(file);
+    }
+
+    private StorageReference sourceReferenceForMigration(FileAssetResponse file) {
         String storagePath = text(file.storagePath());
         if (storagePath == null) {
             throw new BusinessException("ASSET_FILE_PATH_INVALID", "文件缺少存储引用", HttpStatus.PRECONDITION_FAILED);
@@ -196,6 +261,26 @@ public class StorageService {
             return new StorageReference("NAS", null, null, storagePath);
         }
         throw new BusinessException("ASSET_FILE_PATH_INVALID", "存储引用格式不受支持", HttpStatus.PRECONDITION_FAILED);
+    }
+
+    private StorageReference activeObjectReference(Long fileId) {
+        List<StorageReference> rows = jdbcTemplate.query("""
+            SELECT so.provider, so.bucket, so.object_key
+            FROM data_file_object_versions fov
+            JOIN data_storage_objects so ON so.id = fov.storage_object_id AND so.deleted = 0
+            WHERE fov.file_id = :fileId
+              AND fov.active = 1
+              AND fov.deleted = 0
+              AND fov.storage_state = 'OBJECT_STORED'
+            ORDER BY fov.id DESC
+            LIMIT 1
+            """, new MapSqlParameterSource("fileId", fileId), (rs, rowNum) -> new StorageReference(
+            normalizeProvider(rs.getString("provider"), null, null),
+            rs.getString("bucket"),
+            rs.getString("object_key"),
+            null
+        ));
+        return rows.isEmpty() ? null : rows.getFirst();
     }
 
     private ObjectLocation parseObjectLocation(String value) {
@@ -222,6 +307,27 @@ public class StorageService {
                 "对象存储提供方未配置或未启用", HttpStatus.PRECONDITION_FAILED);
         }
         return new ObjectStorageProvider(providerCode, minioClient(config));
+    }
+
+    private String defaultBucket(String providerCode) {
+        StorageProperties.ObjectStorageProvider config = switch (providerCode) {
+            case "MINIO" -> storageProperties.getMinio();
+            case "S3_COMPATIBLE" -> storageProperties.getS3Compatible();
+            default -> null;
+        };
+        String bucket = config == null ? null : text(config.getDefaultBucket());
+        if (bucket == null) {
+            throw new BusinessException("STORAGE_PROVIDER_BUCKET_REQUIRED",
+                "对象存储默认空间未配置", HttpStatus.PRECONDITION_FAILED);
+        }
+        return bucket;
+    }
+
+    private void ensureBucket(MinioClient client, String bucket) throws Exception {
+        boolean exists = client.bucketExists(BucketExistsArgs.builder().bucket(bucket).build());
+        if (!exists) {
+            client.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
+        }
     }
 
     private MinioClient minioClient(StorageProperties.ObjectStorageProvider config) {
@@ -345,6 +451,18 @@ public class StorageService {
         return "NAS";
     }
 
+    private String normalizeTargetProvider(String value) {
+        String normalized = text(value);
+        if (normalized == null) return "MINIO";
+        normalized = normalized.toUpperCase(Locale.ROOT);
+        if ("S3".equals(normalized) || "OSS".equals(normalized)) return "S3_COMPATIBLE";
+        if (!List.of("MINIO", "S3_COMPATIBLE").contains(normalized)) {
+            throw new BusinessException("STORAGE_MIGRATION_TARGET_PROVIDER_INVALID",
+                "对象存储目标只能是 MINIO 或 S3_COMPATIBLE", HttpStatus.BAD_REQUEST);
+        }
+        return normalized;
+    }
+
     private String safeStorageState(String value, String fallback) {
         String normalized = text(value);
         if (normalized == null) return fallback;
@@ -367,6 +485,49 @@ public class StorageService {
         return dot < 0 ? "" : fileName.substring(dot).toLowerCase(Locale.ROOT);
     }
 
+    private String stableObjectKey(FileAssetResponse file, String checksum) {
+        String safeName = file.fileName() == null || file.fileName().isBlank()
+            ? "file-" + file.fileId()
+            : file.fileName().replaceAll("[\\\\/\\p{Cntrl}]+", "_");
+        return "projects/" + file.projectId() + "/files/" + file.fileId() + "/" + checksum + "/" + safeName;
+    }
+
+    private String sha256File(Path path) {
+        try (InputStream inputStream = Files.newInputStream(path)) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+            return hex(digest.digest());
+        } catch (IOException exception) {
+            throw new BusinessException("ASSET_FILE_NOT_READABLE", "文件不存在或不可读取", HttpStatus.PRECONDITION_FAILED);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new BusinessException("STORAGE_MIGRATION_CHECKSUM_FAILED",
+                "文件校验值计算失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private String sha256Text(String value) {
+        if (value == null) return null;
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return hex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new BusinessException("STORAGE_MIGRATION_CHECKSUM_FAILED",
+                "文件校验值计算失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private String hex(byte[] bytes) {
+        StringBuilder builder = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) {
+            builder.append(String.format("%02x", b));
+        }
+        return builder.toString();
+    }
+
     private String text(String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }
@@ -376,6 +537,21 @@ public class StorageService {
     }
 
     public record StoredResource(Resource resource, String contentType, Long contentLength, String provider) {
+    }
+
+    public record ObjectMirrorResult(
+        String provider,
+        String bucket,
+        String objectKey,
+        String etag,
+        String checksum,
+        String contentType,
+        Long sizeBytes,
+        String sourceProvider,
+        String sourceUriDigest,
+        String sourcePathDigest,
+        Instant verifiedAt
+    ) {
     }
 
     private record StorageReference(String provider, String bucket, String objectKey, String rawReference) {

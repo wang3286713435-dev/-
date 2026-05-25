@@ -1355,4 +1355,67 @@ public final class AssetDtos {
         String message
     ) {
     }
+
+    // ===== M3B: object storage mirror migration trial =====
+
+    public record StorageMigrationTaskCreateRequest(
+        @NotNull(message = "文件ID列表不能为空")
+        List<Long> fileIds,
+        String targetProvider
+    ) {
+    }
+
+    public record StorageMigrationTaskListItemResponse(
+        Long taskId,
+        Long projectId,
+        String targetProvider,
+        String taskStatus,
+        String storageState,
+        Integer totalCount,
+        Integer successCount,
+        Integer failureCount,
+        Integer skippedCount,
+        String message,
+        Instant startedAt,
+        Instant completedAt,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
+    }
+
+    public record StorageMigrationTaskDetailResponse(
+        Long taskId,
+        Long projectId,
+        String targetProvider,
+        String taskStatus,
+        String storageState,
+        Integer totalCount,
+        Integer successCount,
+        Integer failureCount,
+        Integer skippedCount,
+        String message,
+        Instant startedAt,
+        Instant completedAt,
+        Instant createdAt,
+        Instant updatedAt,
+        List<StorageMigrationTaskRowResponse> rows
+    ) {
+    }
+
+    public record StorageMigrationTaskRowResponse(
+        Long rowId,
+        Long fileId,
+        String fileName,
+        String fileKind,
+        Long sizeBytes,
+        String migrationStatus,
+        String storageState,
+        String resultCode,
+        String message,
+        Boolean objectStored,
+        Instant startedAt,
+        Instant completedAt,
+        Instant lastVerifiedAt
+    ) {
+    }
 }

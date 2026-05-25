@@ -52,6 +52,52 @@
   - 不自动进入 M3B。
   - 下一步建议为先提交 / 推送 M3A，再由用户确认是否进入 `M3B：105 小样本对象存储镜像迁移`。
 
+## 2026-05-25：M3B 启动
+
+- M3A 已提交并合并到远端 `main`。
+- 用户确认进入下一步。
+- 主 agent 新建分支：`codex/m3b-object-storage-mirror-trial`。
+- M3B 目标：
+  - 105 项目少量文件小样本迁移到 MinIO / S3-compatible。
+  - 写对象记录和文件对象版本。
+  - `storage-status` 显示对象已存储。
+  - 迁移后仍通过现有受控 `file-access` 访问。
+  - 重跑不重复污染对象记录。
+  - 失败可追踪原因。
+- M3B 禁止：
+  - 全量 NAS 迁移。
+  - 真实 NAS 文件移动、删除、重命名。
+  - 正文读取、语义索引、Hermes 正文问答、真实 BIM 接入。
+- 已写入：
+  - `handoff/main-agent/m3b-object-storage-mirror-trial-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+- 当前裁决：
+  - 交给开发 agent 实现。
+  - M3B 未通过前，不进入 M3C。
+
+## 2026-05-26：M3B 收口裁决
+
+- 开发 agent 完成 M3B，报告写入 `handoff/dev-agent/latest-report.md`。
+- 测试 agent 完成 M3B 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结果：
+  - 当前 P0：无。
+  - 当前 P1：无。
+  - M3B 专项脚本 `PASS=11 FAIL=0`。
+  - M3A / M2J / M2I / M2H / M2F / file-access 回归全部通过。
+- 主 agent 审计确认：
+  - 迁移入口只支持显式 `fileIds`。
+  - 单次最多 10 个文件。
+  - 未发现项目 / 目录 / 类型全量迁移入口。
+  - 测试只使用 `/tmp` 隔离文件资源，不触碰真实业务 NAS 文件。
+  - 未发现真实 NAS 路径、bucket、object key、storage URI、SQL、raw row、token、secret 泄露。
+  - 未发现 Hermes 正文问答、parser/indexing、真实 BIM 引擎等越界。
+- 主 agent 裁决：
+  - `M3B：105 小样本对象存储镜像迁移` 正式收口。
+  - 当前 active 批次切换为 `待用户确认`。
+  - 不自动进入 M3C。
+  - 下一步建议为先提交 / 推送 M3B，再由用户确认是否进入 `M3C：对象存储迁移任务中心与批量策略`。
+
 ## 2026-05-22：M2E 测试不通过，转入 P1 修复
 
 - 测试 agent 完成 M2E 验收，报告写入 `handoff/test-agent/latest-report.md`。

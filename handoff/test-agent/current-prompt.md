@@ -1,19 +1,20 @@
-# 测试 Agent 当前任务：M3A 对象存储与 StorageService 基线验收
+# 测试 Agent 当前任务：M3B 105 小样本对象存储镜像迁移验收
 
 你是数字化交付平台测试 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
-本轮测试批次：
+当前测试批次：
 
-`M3A：对象存储与 StorageService 基线`
+`M3B：105 小样本对象存储镜像迁移`
 
-本轮只验收存储底座，不验收全量 NAS 迁移、语义解析、Hermes 正文问答或真实 BIM 引擎。
+本轮只验收小样本对象存储镜像迁移，不验收全量 NAS 搬迁、语义解析、Hermes 正文问答或真实 BIM 引擎。
 
 ## 0. 必须先阅读
 
 - `handoff/dev-agent/latest-report.md`
-- `handoff/main-agent/m3a-storage-service-foundation-plan.md`
+- `handoff/main-agent/m3b-object-storage-mirror-trial-plan.md`
+- `handoff/main-agent/m3a-storage-service-foundation-closure.md`
 - `handoff/main-agent/status.md`
 
 ## 1. 必跑命令
@@ -25,43 +26,35 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-m3b-object-storage-mirror-trial.sh
 bash scripts/dev/check-m3a-storage-service-foundation.sh
 bash scripts/dev/check-m2j-105-ownership-review.sh
 bash scripts/dev/check-m2i-105-file-ownership-governance.sh
 bash scripts/dev/check-m2h-windows-file-manager.sh
 bash scripts/dev/check-m2f-real-project-delivery-loop.sh
-bash scripts/dev/check-m2b-nas-write-trial.sh
 bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
 
-## 2. M3A 专项验收
+## 2. 专项验收
 
 必须验证：
 
-1. `GET /api/data-steward/storage/providers/health`
-   - 返回统一响应。
-   - 包含 NAS / MinIO 或 S3-compatible 的配置状态。
-   - 未配置对象存储时不 500。
-   - 不返回 endpoint 密钥、access key、secret key、bucket key、真实路径。
-
-2. `GET /api/data-steward/assets/files/{fileId}/storage-status`
-   - 返回统一响应。
-   - 能表达 `NAS_ONLY` / `OBJECT_STORED` / `MIGRATION_PENDING` / `MIGRATION_FAILED` 等状态之一。
-   - 不返回真实 NAS 路径、bucket、object key、storage_uri。
-
-3. `file-access` 回归
-   - 原有 NAS 文件预览 / 下载仍可用。
-   - 权限校验、生命周期校验、审计链路不回归。
-   - 响应契约不破坏前端。
-
-4. 对象存储受控读取
-   - 如果开发 agent 提供了 minio/s3 测试对象，需验证可通过后端受控读取。
-   - 若本地 MinIO 不可用，必须确认接口返回业务化不可用原因，不 500。
+1. 小样本迁移任务可创建。
+2. 创建任务必须显式传入少量 `fileIds`。
+3. 任务数量上限生效，不能一键全量迁移。
+4. 文件必须属于当前项目。
+5. 已删除、回收站、路径不可读文件不能迁移。
+6. 成功后 `storage-status` 显示 `OBJECT_STORED` 或等价对象已存储状态。
+7. `data_storage_objects` 与 `data_file_object_versions` 有可解释记录。
+8. 重跑同一文件不会重复污染对象记录。
+9. 失败场景有失败原因。
+10. 迁移后 file-access 仍通过受控 ticket 访问。
+11. NAS 原文件未被移动、删除、重命名。
 
 ## 3. 禁出字段扫描
 
-对 M3A 新接口和 `file-access` 相关响应扫描，禁止出现：
+对 M3B 新接口、任务详情、storage-status、file-access 响应扫描，禁止出现：
 
 - `/Volumes`
 - `smb://`
@@ -81,7 +74,7 @@ git diff --check
 - `access_key`
 - `secret_key`
 
-如果出现在内部日志不直接返回前端，可记录但不直接判失败；如果出现在 API 响应中，按 P0/P1 判定。
+服务端内部日志或数据库字段不是本轮禁出对象；API 响应泄露才按 P0/P1。
 
 ## 4. 越界检查
 
@@ -92,7 +85,7 @@ git diff --name-only
 git status --short
 ```
 
-重点检查是否出现以下越界：
+重点确认没有：
 
 - 全量 NAS 迁移。
 - 真实 NAS 文件移动、删除、重命名。
@@ -102,9 +95,7 @@ git status --short
 - 真实 BIM 引擎接入。
 - `docs/**` 未授权修改。
 
-发现上述越界，按影响判 P0/P1。
-
-`.claude/**`、`CLAUDE.md`、`tmp/**` 如仍为既有非交付未跟踪项，不直接判失败，但报告中提醒收口时排除。
+`.claude/**`、`CLAUDE.md`、`tmp/**` 如仍为非交付未跟踪项，不直接判失败，但报告中提醒收口时排除。
 
 ## 5. 判定标准
 
@@ -112,22 +103,24 @@ P0：
 
 - API 响应泄露真实 NAS 路径、bucket/object key、token、secret、raw row 或 SQL。
 - `file-access` 权限绕过。
-- 测试或实现移动、删除、重命名真实 NAS 文件。
-- Hermes 直接访问 MySQL / NAS / MinIO / 向量库 / 搜索引擎。
-- 新增正文解析、索引写入或真实 BIM 解析能力。
+- 迁移过程移动、删除、重命名真实 NAS 文件。
+- 出现全量 NAS 迁移入口。
+- 新增 Hermes 正文问答、parser/indexing、真实 BIM 解析。
 
 P1：
 
-- 后端构建、前端构建、健康检查、M3A 专项脚本、核心回归脚本失败。
-- Provider health 接口不可用或未纳入 OpenAPI。
-- File storage status 接口不可用或返回底层路径。
-- NAS 原有预览 / 下载回归。
-- `minio://` / `s3://` 仍只有生硬 `STORAGE_PROVIDER_UNSUPPORTED`，没有受控业务化处理路径。
+- M3B 专项脚本失败。
+- 后端构建、前端构建、健康检查、核心回归失败。
+- 小样本迁移任务不可创建。
+- storage-status 不能表达对象已存储。
+- 重跑迁移重复污染记录。
+- 迁移失败无失败原因。
+- M3A provider health / file-access 受控读取回归。
 
 P2：
 
 - 既有 Vite chunk warning。
-- 非阻塞文案、状态命名或交互粗糙。
+- 非阻塞文案或状态命名问题。
 - 非交付未跟踪文件提醒。
 
 ## 6. 报告要求
@@ -138,14 +131,15 @@ P2：
 
 报告至少包含：
 
-- 总结论：通过 / 不通过。
+- 总结论。
 - P0 / P1 / P2。
 - 必跑命令结果。
-- M3A 专项脚本结果。
-- Provider health 接口抽查。
-- File storage status 接口抽查。
-- NAS file-access 回归结果。
-- 对象存储测试对象受控读取结果或不可用原因。
+- M3B 专项脚本结果。
+- 小样本迁移任务验证结果。
+- storage-status 结果。
+- 幂等验证结果。
+- file-access 回归结果。
+- NAS 原文件未被改动的确认。
 - 禁出字段扫描结果。
 - 是否发现越界。
-- 是否建议主 agent 收口 M3A。
+- 是否建议主 agent 收口 M3B。

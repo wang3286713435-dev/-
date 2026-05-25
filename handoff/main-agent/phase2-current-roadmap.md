@@ -21,7 +21,7 @@
 - Hermes 继续冻结，不作为当前主线继续扩展。
 - 真实 BIM 引擎未确定，8B / 8C 不启动。
 - 9A 客户交付准备不启动。
-- M3A 已收口；当前等待用户确认是否进入 M3B。
+- M3A 已收口并合并远端 main；M3B 已收口，当前等待用户确认是否进入 M3C。
 
 ## 当前最新裁决
 
@@ -51,13 +51,36 @@ M3A 收口依据：
 - 开发报告：`handoff/dev-agent/latest-report.md`
 - 测试报告：`handoff/test-agent/latest-report.md`
 
-下一阶段顺序：
+M3B 已完成：
 
-1. `M3B：105 小样本对象存储镜像迁移`
-2. `M3C：迁移任务中心与批量策略`
-3. `M3D：预览产物与交付包归档对象化`
-4. `M4：语义证据层`
-5. `M5：Hermes 受控证据问答`
+- 只选 105 少量安全样本文件。
+- NAS 原文件保留不动。
+- 上传 MinIO / S3-compatible 镜像。
+- 校验 etag / checksum / size。
+- 写入对象版本记录。
+- storage-status 显示对象已存储。
+- 迁移后仍走受控 file-access。
+
+M3B 明确未做：
+
+- 全量 NAS 迁移。
+- 语义解析。
+- Hermes 正文问答。
+- 真实 BIM 引擎接入。
+
+M3B 收口依据：
+
+- 计划：`handoff/main-agent/m3b-object-storage-mirror-trial-plan.md`
+- 收口报告：`handoff/main-agent/m3b-object-storage-mirror-trial-closure.md`
+- 开发报告：`handoff/dev-agent/latest-report.md`
+- 测试报告：`handoff/test-agent/latest-report.md`
+
+后续阶段顺序：
+
+1. `M3C：迁移任务中心与批量策略`
+2. `M3D：预览产物与交付包归档对象化`
+3. `M4：语义证据层`
+4. `M5：Hermes 受控证据问答`
 
 以下为历史收口记录：
 

@@ -54,6 +54,50 @@
   - 先提交 / 推送 M3A。
   - 后续如继续 M3 路线，进入 `M3B：105 小样本对象存储镜像迁移`。
 
+## 2026-05-25 M3B 启动：105 小样本对象存储镜像迁移
+
+- 用户确认进入 `M3B：105 小样本对象存储镜像迁移`。
+- 当前分支：`codex/m3b-object-storage-mirror-trial`。
+- M3B 定位：
+  - 只做 105 项目少量安全样本文件的对象存储镜像迁移。
+  - 验证 NAS 原件保留、MinIO 镜像上传、对象校验、对象版本记录和受控访问闭环。
+  - 不做全量 NAS 搬迁。
+  - 不做语义解析、Hermes 正文问答或真实 BIM 引擎接入。
+- 已写入：
+  - M3B 计划：`handoff/main-agent/m3b-object-storage-mirror-trial-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+- 当前 active 批次：`M3B：105 小样本对象存储镜像迁移`。
+- 下一步：
+  - 交给开发 agent 按 M3B prompt 执行。
+  - 主 agent 负责监控、审计、纠偏和收口判断。
+
+## 2026-05-26 M3B 正式收口
+
+- 测试 agent 已完成 `M3B：105 小样本对象存储镜像迁移` 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- P2：
+  - 既有 Vite chunk warning。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪项继续排除。
+- 已确认：
+  - M3B 专项脚本通过，`PASS=11 FAIL=0`。
+  - M3A / M2J / M2I / M2H / M2F / file-access 回归全部通过。
+  - 小样本迁移任务可创建。
+  - 单次 10 个文件上限生效。
+  - 跨项目 / 删除文件 / 路径不可读文件被拒绝。
+  - 迁移后 `storage-status` 显示 `OBJECT_STORED / MINIO`。
+  - 重跑同一文件返回 `ALREADY_STORED`，不重复污染对象版本。
+  - 迁移后受控 `file-access` 可读取 MinIO 镜像。
+  - API 响应未泄露真实 NAS 路径、bucket、object key、storage URI、SQL、raw row、token、secret。
+  - 未发现全量 NAS 迁移、真实 NAS 改动、正文解析、Hermes 正文问答或 BIM 引擎越界。
+- 主 agent 裁决：`M3B：105 小样本对象存储镜像迁移` 正式收口。
+- 当前 active 批次：`待用户确认`。
+- 下一步建议：
+  - 先提交 / 推送 M3B。
+  - 后续如继续 M3 路线，进入 `M3C：对象存储迁移任务中心与批量策略`。
+
 ## 2026-05-23 M2H 开发完成，进入测试验收
 
 - 开发 agent 已完成 `M2H：Windows 风格文件管理器交互升级`，报告写入 `handoff/dev-agent/latest-report.md`。
