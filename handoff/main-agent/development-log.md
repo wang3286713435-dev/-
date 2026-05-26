@@ -180,6 +180,49 @@
   - 未写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
   - 未修改仓库 `docs/**`。
 
+## 2026-05-26：M3C 合并 main，M3D 启动
+
+- 已将 `codex/m3c-storage-migration-task-center` 快进合并到 `main`。
+- 已推送 `main`。
+- 已从最新 `main` 创建：
+  - `codex/m3d-real-nas-object-mirror-gray`
+- 已写入 M3D 开发 / 测试交接：
+  - `handoff/main-agent/m3d-real-nas-object-mirror-gray-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+- M3D 目标：
+  - 用 105 / 503 少量真实业务文件进行对象存储灰度镜像。
+  - 验证 PDF / DWG / RVT 或模型类样本。
+  - 保证 NAS 原文件不被移动、删除、改名。
+  - 保证 file-access 仍然受控。
+- 边界：
+  - 不全量迁移 NAS。
+  - 不做 Hermes 正文问答。
+  - 不写语义索引。
+  - 不修改仓库 `docs/**`。
+
+## 2026-05-26：M3D 正式收口
+
+- 测试 agent 完成 M3D 正式验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 结论：通过，未发现 P0 / P1。
+- 已确认：
+  - `scripts/dev/check-m3d-real-nas-object-mirror-gray.sh` 通过，`PASS=19 FAIL=0`。
+  - M3C / M3C-1 / M3B / M3A / M2J / M2I / M2H / file-access 回归通过。
+  - PDF / DWG / RVT 样本均覆盖。
+  - 三份样本均已对象化，复跑按幂等策略跳过。
+  - NAS 原文件 size / mtime 未变化。
+  - 禁出字段扫描通过。
+- 主 agent 判定：
+  - `M3D：真实 NAS 小范围灰度镜像` 正式收口。
+  - 后续进入 `M3E：预览与转换产物对象化` 前，应先提交 / 推送 M3D。
+- 边界：
+  - 未做全量 NAS 搬迁。
+  - 未触碰真实业务 NAS 文件。
+  - 未新增 Hermes 正文问答。
+  - 未写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
+  - 未启动 BIM parser / 真实轻量化。
+  - 未修改仓库 `docs/**`。
+
 ## 2026-05-22：M2E 测试不通过，转入 P1 修复
 
 - 测试 agent 完成 M2E 验收，报告写入 `handoff/test-agent/latest-report.md`。

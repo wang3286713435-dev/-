@@ -225,6 +225,59 @@
   - 先提交 / 推送 M3C。
   - 后续如继续 M3 路线，进入 `M3D：真实 NAS 小范围灰度镜像`。
 
+## 2026-05-26 M3C 合并主线并启动 M3D
+
+- 已将 `codex/m3c-storage-migration-task-center` 快进合并回 `main`。
+- 已推送 `main`，当前主线最新进度为 M3C。
+- 已从最新 `main` 新开分支：
+  - `codex/m3d-real-nas-object-mirror-gray`
+- 当前 active 批次：`M3D：真实 NAS 小范围灰度镜像`。
+- 已写入：
+  - `handoff/main-agent/m3d-real-nas-object-mirror-gray-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+- 本批定位：
+  - 使用 105 / 503 少量真实业务文件验证对象存储镜像灰度。
+  - 覆盖 PDF / DWG / RVT 或模型类小样本。
+  - NAS 原文件保留。
+  - file-access 继续作为受控访问入口。
+- 本批禁止：
+  - 全量 NAS 搬迁。
+  - 目录一键迁移。
+  - Hermes 正文问答。
+  - documents / chunks / 向量库 / 搜索索引。
+  - parser / BIM 轻量化。
+  - 修改仓库 `docs/**`。
+
+## 2026-05-26 M3D 正式收口：真实 NAS 小范围灰度镜像
+
+- 测试 agent 已完成 M3D 正式验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- P2：
+  - 既有 Vite chunk warning。
+  - 非交付未跟踪项 `.claude/**`、`CLAUDE.md`、`tmp/**` 继续排除。
+  - `handoff/main-agent/m3d-real-nas-object-mirror-gray-plan.md` 建议纳入本批提交。
+- 已确认：
+  - 后端构建、前端构建、健康检查通过。
+  - M3D 专项脚本通过，`PASS=19 FAIL=0`。
+  - M3C / M3C-1 / M3B / M3A / M2J / M2I / M2H / file-access 回归通过。
+  - 105 / 503 真实业务文件 PDF / DWG / RVT 样本均覆盖。
+  - 三份样本均为 `OBJECT_STORED`。
+  - checksum 覆盖率 `3/3`。
+  - file-access 可读取对象镜像。
+  - NAS 原文件未被移动、删除、改名或写入。
+  - 未新增 Hermes 正文问答。
+  - 未写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
+  - 未启动 BIM parser 或真实轻量化。
+  - 未修改仓库 `docs/**`。
+- 主 agent 裁决：`M3D：真实 NAS 小范围灰度镜像` 正式收口。
+- 当前 active 批次：`待用户确认`。
+- 下一步建议：
+  - 先提交 / 推送 M3D。
+  - 后续如继续 M3 路线，进入 `M3E：预览与转换产物对象化`。
+
 ## 2026-05-23 M2H 开发完成，进入测试验收
 
 - 开发 agent 已完成 `M2H：Windows 风格文件管理器交互升级`，报告写入 `handoff/dev-agent/latest-report.md`。
