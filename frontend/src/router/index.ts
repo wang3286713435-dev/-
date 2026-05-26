@@ -173,6 +173,12 @@ const router = createRouter({
           component: () => import('@/modules/data-steward/pages/DataStewardFileServicePage.vue'),
           meta: { requiresAuth: true }
         },
+        {
+          path: 'data-steward/assets/:projectId/data-steward/storage-migration',
+          name: 'project-data-steward-storage-migration',
+          component: () => import('@/modules/data-steward/pages/DataStewardFileServicePage.vue'),
+          meta: { requiresAuth: true }
+        },
         // Project-internal routes: master-data
         {
           path: 'data-steward/assets/:projectId/master-data/sections',

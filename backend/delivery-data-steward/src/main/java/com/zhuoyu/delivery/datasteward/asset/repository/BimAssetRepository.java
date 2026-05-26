@@ -14,6 +14,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -297,12 +298,12 @@ public class BimAssetRepository {
         String kind = fileKind != null && !fileKind.isBlank() ? fileKind.toUpperCase() : "OTHER";
         String sql = """
             INSERT INTO data_file_resources (
-                project_id, original_name, file_kind, mime_type, size_bytes, storage_uri,
+                asset_uuid, project_id, original_name, file_kind, mime_type, size_bytes, storage_uri,
                 storage_provider, storage_key, logical_path, source_path_digest, business_tag,
                 discipline, source_type, version_no, process_status, processed_at,
                 last_verified_at, review_status, confidence_level, created_by, updated_by
             ) VALUES (
-                :projectId, :originalName, :fileKind, 'application/octet-stream', :sizeBytes, :storageUri,
+                :assetUuid, :projectId, :originalName, :fileKind, 'application/octet-stream', :sizeBytes, :storageUri,
                 :storageProvider, :storageKey, :storageKey, :digest, :discipline,
                 :discipline, :sourceType, :versionNo, 'PROCESSED', CURRENT_TIMESTAMP,
                 CURRENT_TIMESTAMP, :reviewStatus, :confidenceLevel, :operatorId, :operatorId
@@ -310,6 +311,7 @@ public class BimAssetRepository {
             """;
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(sql, new MapSqlParameterSource()
+            .addValue("assetUuid", UUID.randomUUID().toString())
             .addValue("projectId", projectId)
             .addValue("originalName", originalName)
             .addValue("fileKind", kind)
@@ -370,6 +372,7 @@ public class BimAssetRepository {
     public List<ModelAssetResponse> listModels(Long userId, String keyword, Long projectId, String discipline) {
         return jdbcTemplate.query("""
             SELECT f.id AS file_id,
+                   f.asset_uuid AS asset_uuid,
                    p.id AS project_id,
                    p.code AS project_code,
                    p.name AS project_name,
@@ -394,6 +397,7 @@ public class BimAssetRepository {
                   OR p.code LIKE :likeKeyword
                   OR p.name LIKE :likeKeyword
                   OR f.original_name LIKE :likeKeyword
+                  OR f.asset_uuid LIKE :likeKeyword
                   OR f.storage_key LIKE :likeKeyword
               )
             ORDER BY f.updated_at DESC, f.id DESC
@@ -408,6 +412,7 @@ public class BimAssetRepository {
     public Optional<ModelAssetResponse> findModel(Long userId, Long projectId, Long fileId) {
         List<ModelAssetResponse> rows = jdbcTemplate.query("""
             SELECT f.id AS file_id,
+                   f.asset_uuid AS asset_uuid,
                    p.id AS project_id,
                    p.code AS project_code,
                    p.name AS project_name,
@@ -738,6 +743,7 @@ public class BimAssetRepository {
         String indexEligibility = fileIndexEligibility(sourceType, originalName);
         return new ModelAssetResponse(
             fileId,
+            rs.getString("asset_uuid"),
             projectId,
             rs.getString("project_code"),
             rs.getString("project_name"),
@@ -762,7 +768,7 @@ public class BimAssetRepository {
 
     public List<FileAssetResponse> listFileById(Long userId, Long fileId) {
         return jdbcTemplate.query("""
-            SELECT f.id AS file_id, f.project_id, p.code AS project_code, p.name AS project_name,
+            SELECT f.id AS file_id, f.asset_uuid AS asset_uuid, f.project_id, p.code AS project_code, p.name AS project_name,
                    f.original_name, f.file_kind, f.discipline, f.version_no, f.size_bytes,
                    f.checksum, f.storage_provider, f.storage_uri, f.logical_path,
                    f.source_type, f.process_status, f.review_status, f.confidence_level,
@@ -785,7 +791,7 @@ public class BimAssetRepository {
                     ? (ua == null ? null : ua.toInstant())
                     : lastVerifiedAt.toInstant();
                 return new FileAssetResponse(
-                    rs.getLong("file_id"), rs.getLong("project_id"),
+                    rs.getLong("file_id"), rs.getString("asset_uuid"), rs.getLong("project_id"),
                     rs.getString("project_code"), rs.getString("project_name"),
                     originalName,
                     extensionOf(originalName),
@@ -818,7 +824,7 @@ public class BimAssetRepository {
                                                String sourceType, String keyword, String assetSource,
                                                String qualityIssue, int offset, int limit) {
         StringBuilder sb = new StringBuilder("""
-            SELECT f.id AS file_id, f.project_id, p.code AS project_code, p.name AS project_name,
+            SELECT f.id AS file_id, f.asset_uuid AS asset_uuid, f.project_id, p.code AS project_code, p.name AS project_name,
                    f.original_name, f.file_kind, f.discipline, f.version_no, f.size_bytes,
                    f.checksum, f.storage_provider, f.storage_uri, f.logical_path,
                    f.source_type, f.process_status, f.review_status, f.confidence_level,
@@ -846,7 +852,7 @@ public class BimAssetRepository {
                 ? (ua == null ? null : ua.toInstant())
                 : lastVerifiedAt.toInstant();
             return new FileAssetResponse(
-                rs.getLong("file_id"), rs.getLong("project_id"),
+                rs.getLong("file_id"), rs.getString("asset_uuid"), rs.getLong("project_id"),
                 rs.getString("project_code"), rs.getString("project_name"),
                 originalName,
                 extensionOf(originalName),
@@ -974,7 +980,7 @@ public class BimAssetRepository {
 
     public java.util.Optional<FileAssetResponse> getFileByIdPlain(Long fileId) {
         List<FileAssetResponse> rows = jdbcTemplate.query("""
-            SELECT f.id AS file_id, f.project_id, '' AS project_code, '' AS project_name,
+            SELECT f.id AS file_id, f.asset_uuid AS asset_uuid, f.project_id, '' AS project_code, '' AS project_name,
                    f.original_name, f.file_kind, f.discipline, f.version_no, f.size_bytes,
                    f.checksum, f.storage_provider, f.storage_uri, f.logical_path,
                    f.source_type, f.process_status, f.review_status, f.confidence_level,
@@ -993,7 +999,7 @@ public class BimAssetRepository {
                     ? (ua == null ? null : ua.toInstant())
                     : lastVerifiedAt.toInstant();
                 return new FileAssetResponse(
-                    rs.getLong("file_id"), rs.getLong("project_id"),
+                    rs.getLong("file_id"), rs.getString("asset_uuid"), rs.getLong("project_id"),
                     rs.getString("project_code"), rs.getString("project_name"),
                     originalName,
                     extensionOf(originalName),
@@ -1096,7 +1102,7 @@ public class BimAssetRepository {
         }
         appendIf(sb, params, "AND f.source_type = :sourceType", "sourceType", blankToNull(sourceType));
         if (keyword != null && !keyword.isBlank()) {
-            sb.append(" AND (p.code LIKE :likeKeyword OR p.name LIKE :likeKeyword OR f.original_name LIKE :likeKeyword OR f.storage_uri LIKE :likeKeyword)");
+            sb.append(" AND (p.code LIKE :likeKeyword OR p.name LIKE :likeKeyword OR f.original_name LIKE :likeKeyword OR f.asset_uuid LIKE :likeKeyword OR f.storage_uri LIKE :likeKeyword)");
             params.addValue("likeKeyword", likeKeyword(keyword));
         }
         appendQualityIssueFilter(sb, qualityIssue);

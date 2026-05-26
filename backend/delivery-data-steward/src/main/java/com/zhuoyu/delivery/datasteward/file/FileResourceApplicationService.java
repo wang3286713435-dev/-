@@ -114,6 +114,7 @@ public class FileResourceApplicationService {
         }
         return new FileResourceResponse(
             file.id(),
+            file.assetUuid(),
             file.projectId(),
             file.originalName(),
             file.fileKind(),

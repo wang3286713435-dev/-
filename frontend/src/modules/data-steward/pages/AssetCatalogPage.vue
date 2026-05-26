@@ -183,7 +183,8 @@
         <div class="catalog-detail-section">
           <h3>文件信息</h3>
           <el-descriptions :column="1" border size="small">
-            <el-descriptions-item label="文件ID">{{ detail.fileId }}</el-descriptions-item>
+            <el-descriptions-item label="平台资产ID">{{ detail.assetUuid || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="内部文件ID">{{ detail.fileId }}</el-descriptions-item>
             <el-descriptions-item label="文件名">{{ detail.fileName }}</el-descriptions-item>
             <el-descriptions-item label="扩展名">{{ detail.fileExt }}</el-descriptions-item>
             <el-descriptions-item label="文件类型">{{ detail.fileKind }}</el-descriptions-item>

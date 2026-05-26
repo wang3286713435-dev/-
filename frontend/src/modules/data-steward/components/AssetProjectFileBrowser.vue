@@ -81,7 +81,7 @@
           <el-input
             v-model="filters.keyword"
             clearable
-            placeholder="搜索文件名或平台文件ID"
+            placeholder="搜索文件名或平台资产ID"
             :prefix-icon="Search"
             @keyup.enter="reloadFiles"
             @clear="reloadFiles"
@@ -302,7 +302,8 @@
           <el-table-column v-if="diagnosticInfoVisible" label="技术信息 / 诊断" min-width="260">
             <template #default="{ row }">
               <div v-if="row.kind === 'FILE'" class="file-browser__diagnostic-cell">
-                <span>平台文件ID：{{ row.file.fileId }}</span>
+                <span>平台资产ID：{{ row.file.assetUuid || '-' }}</span>
+                <span>内部文件ID：{{ row.file.fileId ?? '-' }}</span>
                 <span>扩展名：{{ row.file.fileExt || '-' }}</span>
                 <span>置信度：{{ row.file.confidenceLevel ?? '-' }}</span>
                 <span v-if="!isRegisteredFile(row.file)">登记状态：未入库</span>
@@ -370,7 +371,8 @@
         <el-descriptions v-if="modelPreviewEntry?.kind === 'FILE'" :column="1" border size="small">
           <el-descriptions-item label="文件名">{{ modelPreviewEntry.file.fileName }}</el-descriptions-item>
           <el-descriptions-item label="文件类型">{{ modelPreviewEntry.file.fileKind }} {{ modelPreviewEntry.file.fileExt || '' }}</el-descriptions-item>
-          <el-descriptions-item label="平台文件ID">{{ modelPreviewEntry.file.fileId }}</el-descriptions-item>
+          <el-descriptions-item label="平台资产ID">{{ modelPreviewEntry.file.assetUuid || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="内部文件ID">{{ modelPreviewEntry.file.fileId }}</el-descriptions-item>
           <el-descriptions-item label="处理方式">后续接入 BIM 轻量化引擎后再进入真实模型预览。</el-descriptions-item>
         </el-descriptions>
       </div>
@@ -859,7 +861,7 @@ const continuitySummary = computed(() => {
     filters.qualityIssue !== 'ALL' ? `质量：${qualityIssueLabel(filters.qualityIssue)}` : '',
     filters.ownershipStatus !== 'ALL' ? `归属：${ownershipStatusLabel(filters.ownershipStatus)}` : '',
     `第 ${pagination.page} 页`,
-    lastFileId.value ? `最近文件：${lastFileName.value || `平台文件ID ${lastFileId.value}`}` : ''
+    lastFileId.value ? `最近文件：${lastFileName.value || `内部文件ID ${lastFileId.value}`}` : ''
   ].filter(Boolean);
   return `${parts.join(' / ')}。可重置视图，不会修改 NAS 文件。`;
 });

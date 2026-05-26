@@ -1,6 +1,7 @@
 package com.zhuoyu.delivery.datasteward.asset.dto;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.zhuoyu.delivery.shared.api.PageResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -371,6 +372,7 @@ public final class AssetDtos {
 
     public record FileAssetResponse(
         Long fileId,
+        String assetUuid,
         Long projectId,
         String projectCode,
         String projectName,
@@ -439,6 +441,7 @@ public final class AssetDtos {
 
     public record ModelAssetResponse(
         Long fileId,
+        String assetUuid,
         Long projectId,
         String projectCode,
         String projectName,
@@ -906,6 +909,7 @@ public final class AssetDtos {
 
     public record CatalogFileResponse(
         Long fileId,
+        String assetUuid,
         Long projectId,
         String projectCode,
         String projectName,
@@ -941,8 +945,10 @@ public final class AssetDtos {
     ) {
     }
 
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public record CatalogFileDetailResponse(
         Long fileId,
+        String assetUuid,
         Long projectId,
         String projectCode,
         String projectName,
@@ -1054,6 +1060,7 @@ public final class AssetDtos {
         String assetKind,
         String sourceView,
         Long fileId,
+        String assetUuid,
         Long modelId,
         Long projectId,
         String projectCode,
@@ -1345,6 +1352,7 @@ public final class AssetDtos {
 
     public record FileStorageStatusResponse(
         Long fileId,
+        String assetUuid,
         Long projectId,
         String storageState,
         String activeProvider,
@@ -1402,9 +1410,25 @@ public final class AssetDtos {
     ) {
     }
 
+    public record StorageMigrationSummaryResponse(
+        Long projectId,
+        Long totalFileCount,
+        Long objectStoredCount,
+        Long nasOnlyCount,
+        Long runningTaskCount,
+        Long failedTaskCount,
+        Long latestTaskId,
+        Instant latestTaskUpdatedAt,
+        Integer maxFilesPerTask,
+        Long maxFileSizeBytes,
+        String policyMessage
+    ) {
+    }
+
     public record StorageMigrationTaskRowResponse(
         Long rowId,
         Long fileId,
+        String assetUuid,
         String fileName,
         String fileKind,
         Long sizeBytes,

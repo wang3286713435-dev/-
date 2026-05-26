@@ -7,6 +7,7 @@ import java.sql.Timestamp;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -40,10 +41,10 @@ public class FileResourceRepository {
     ) {
         String sql = """
             INSERT INTO data_file_resources (
-                project_id, original_name, file_kind, mime_type, size_bytes, storage_uri,
+                asset_uuid, project_id, original_name, file_kind, mime_type, size_bytes, storage_uri,
                 checksum, business_tag, version_no, process_status, processed_at, created_by, updated_by
             ) VALUES (
-                :projectId, :originalName, :fileKind, :mimeType, :sizeBytes, :storageUri,
+                :assetUuid, :projectId, :originalName, :fileKind, :mimeType, :sizeBytes, :storageUri,
                 :checksum, :businessTag, :versionNo, :processStatus,
                 CASE WHEN :processStatus = 'PROCESSED' THEN CURRENT_TIMESTAMP ELSE NULL END,
                 :operatorId, :operatorId
@@ -51,6 +52,7 @@ public class FileResourceRepository {
             """;
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(sql, new MapSqlParameterSource()
+            .addValue("assetUuid", UUID.randomUUID().toString())
             .addValue("projectId", projectId)
             .addValue("originalName", originalName)
             .addValue("fileKind", fileKind)
@@ -94,7 +96,7 @@ public class FileResourceRepository {
 
     public List<FileResourceResponse> findByProject(Long projectId, String fileKind) {
         String sql = """
-            SELECT id, project_id, original_name, file_kind, mime_type, size_bytes, storage_uri,
+            SELECT id, asset_uuid, project_id, original_name, file_kind, mime_type, size_bytes, storage_uri,
                    checksum, business_tag, version_no, process_status, processed_at
             FROM data_file_resources
             WHERE project_id = :projectId
@@ -109,7 +111,7 @@ public class FileResourceRepository {
 
     public Optional<FileResourceResponse> findByProjectAndId(Long projectId, Long fileId) {
         String sql = """
-            SELECT id, project_id, original_name, file_kind, mime_type, size_bytes, storage_uri,
+            SELECT id, asset_uuid, project_id, original_name, file_kind, mime_type, size_bytes, storage_uri,
                    checksum, business_tag, version_no, process_status, processed_at
             FROM data_file_resources
             WHERE project_id = :projectId AND id = :fileId AND deleted = 0
@@ -149,7 +151,7 @@ public class FileResourceRepository {
         int limit
     ) {
         String sql = """
-            SELECT id, project_id, original_name, file_kind, mime_type, size_bytes, storage_uri,
+            SELECT id, asset_uuid, project_id, original_name, file_kind, mime_type, size_bytes, storage_uri,
                    checksum, business_tag, version_no, process_status, processed_at
             FROM data_file_resources
             WHERE project_id = :projectId
@@ -159,6 +161,7 @@ public class FileResourceRepository {
               AND (
                   :keyword IS NULL
                   OR original_name LIKE :keywordLike
+                  OR asset_uuid LIKE :keywordLike
                   OR storage_uri LIKE :keywordLike
                   OR business_tag LIKE :keywordLike
                   OR version_no LIKE :keywordLike
@@ -186,6 +189,7 @@ public class FileResourceRepository {
               AND (
                   :keyword IS NULL
                   OR original_name LIKE :keywordLike
+                  OR asset_uuid LIKE :keywordLike
                   OR storage_uri LIKE :keywordLike
                   OR business_tag LIKE :keywordLike
                   OR version_no LIKE :keywordLike
@@ -204,6 +208,7 @@ public class FileResourceRepository {
         Timestamp processedAt = rs.getTimestamp("processed_at");
         return new FileResourceResponse(
             rs.getLong("id"),
+            rs.getString("asset_uuid"),
             rs.getLong("project_id"),
             rs.getString("original_name"),
             rs.getString("file_kind"),

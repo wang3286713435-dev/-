@@ -339,6 +339,7 @@ public class AgentApplicationService {
     private FileAssetResponse withProjectScope(FileAssetResponse file, AgentPrincipal agent) {
         return new FileAssetResponse(
             file.fileId(),
+            file.assetUuid(),
             file.projectId(),
             file.projectCode(),
             file.projectName(),
@@ -370,6 +371,7 @@ public class AgentApplicationService {
     private ModelAssetResponse withProjectScope(ModelAssetResponse model, AgentPrincipal agent) {
         return new ModelAssetResponse(
             model.fileId(),
+            model.assetUuid(),
             model.projectId(),
             model.projectCode(),
             model.projectName(),

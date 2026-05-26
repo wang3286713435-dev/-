@@ -8,6 +8,7 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageMigrationTaskC
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageMigrationTaskDetailResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageMigrationTaskListItemResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageMigrationTaskRowResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageMigrationSummaryResponse;
 import com.zhuoyu.delivery.shared.exception.BusinessException;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -96,6 +97,70 @@ public class StorageMigrationApplicationService {
             instant(rs.getTimestamp("created_at")),
             instant(rs.getTimestamp("updated_at"))
         ));
+    }
+
+    public StorageMigrationSummaryResponse summary(Long userId, Long projectId) {
+        ensureProjectAccess(userId, projectId);
+        MigrationSummaryCounts counts = jdbcTemplate.queryForObject("""
+            SELECT
+                COUNT(f.id) AS total_file_count,
+                SUM(CASE WHEN fov.file_id IS NOT NULL THEN 1 ELSE 0 END) AS object_stored_count
+            FROM data_file_resources f
+            LEFT JOIN (
+                SELECT DISTINCT file_id
+                FROM data_file_object_versions
+                WHERE active = 1
+                  AND deleted = 0
+                  AND storage_state = 'OBJECT_STORED'
+            ) fov ON fov.file_id = f.id
+            WHERE f.project_id = :projectId
+              AND f.deleted = 0
+            """, new MapSqlParameterSource("projectId", projectId), (rs, rowNum) -> new MigrationSummaryCounts(
+            rs.getLong("total_file_count"),
+            rs.getLong("object_stored_count")
+        ));
+        if (counts == null) {
+            counts = new MigrationSummaryCounts(0L, 0L);
+        }
+        MigrationTaskSummary taskSummary = jdbcTemplate.queryForObject("""
+            SELECT
+                SUM(CASE WHEN task_status = 'RUNNING' THEN 1 ELSE 0 END) AS running_task_count,
+                SUM(CASE WHEN task_status IN ('FAILED', 'PARTIAL_FAILED') THEN 1 ELSE 0 END) AS failed_task_count,
+                MAX(id) AS latest_task_id,
+                MAX(updated_at) AS latest_task_updated_at
+            FROM data_object_migration_task_batches
+            WHERE project_id = :projectId
+              AND deleted = 0
+            """, new MapSqlParameterSource("projectId", projectId), (rs, rowNum) -> {
+            Long latestTaskId = rs.getLong("latest_task_id");
+            if (rs.wasNull()) {
+                latestTaskId = null;
+            }
+            return new MigrationTaskSummary(
+                rs.getLong("running_task_count"),
+                rs.getLong("failed_task_count"),
+                latestTaskId,
+                instant(rs.getTimestamp("latest_task_updated_at"))
+            );
+        });
+        if (taskSummary == null) {
+            taskSummary = new MigrationTaskSummary(0L, 0L, null, null);
+        }
+        long objectStoredCount = counts.objectStoredCount() == null ? 0L : counts.objectStoredCount();
+        long totalFileCount = counts.totalFileCount() == null ? 0L : counts.totalFileCount();
+        return new StorageMigrationSummaryResponse(
+            projectId,
+            totalFileCount,
+            objectStoredCount,
+            Math.max(0L, totalFileCount - objectStoredCount),
+            taskSummary.runningTaskCount() == null ? 0L : taskSummary.runningTaskCount(),
+            taskSummary.failedTaskCount() == null ? 0L : taskSummary.failedTaskCount(),
+            taskSummary.latestTaskId(),
+            taskSummary.latestTaskUpdatedAt(),
+            DEFAULT_MAX_FILES,
+            DEFAULT_MAX_FILE_SIZE_BYTES,
+            "当前只允许显式选择文件做对象存储镜像；NAS 原文件保留，不生成语义证据。"
+        );
     }
 
     public StorageMigrationTaskDetailResponse getTask(Long userId, Long taskId) {
@@ -511,7 +576,7 @@ public class StorageMigrationApplicationService {
 
     private List<StorageMigrationTaskRowResponse> listRows(Long taskId) {
         return jdbcTemplate.query("""
-            SELECT t.id, t.file_id, f.original_name, f.file_kind, f.size_bytes,
+            SELECT t.id, t.file_id, f.asset_uuid, f.original_name, f.file_kind, f.size_bytes,
                    t.migration_status, t.storage_state, t.failure_reason,
                    t.target_object_id, t.started_at, t.completed_at, t.last_verified_at
             FROM data_object_migration_tasks t
@@ -525,6 +590,7 @@ public class StorageMigrationApplicationService {
             return new StorageMigrationTaskRowResponse(
                 rs.getLong("id"),
                 rs.getLong("file_id"),
+                rs.getString("asset_uuid"),
                 rs.getString("original_name"),
                 rs.getString("file_kind"),
                 rs.getLong("size_bytes"),
@@ -663,6 +729,17 @@ public class StorageMigrationApplicationService {
     }
 
     private record ResultMessage(String resultCode, String message) {
+    }
+
+    private record MigrationSummaryCounts(Long totalFileCount, Long objectStoredCount) {
+    }
+
+    private record MigrationTaskSummary(
+        Long runningTaskCount,
+        Long failedTaskCount,
+        Long latestTaskId,
+        Instant latestTaskUpdatedAt
+    ) {
     }
 
     private record BatchRow(

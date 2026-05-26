@@ -32,6 +32,7 @@ public final class DataStewardDtos {
 
     public record FileResourceResponse(
         Long id,
+        String assetUuid,
         Long projectId,
         String originalName,
         String fileKind,

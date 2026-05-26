@@ -98,6 +98,133 @@
   - 先提交 / 推送 M3B。
   - 后续如继续 M3 路线，进入 `M3C：对象存储迁移任务中心与批量策略`。
 
+## 2026-05-26 M3-M5 任务图冻结
+
+- 用户提供 `NAS 台账治理升级为对象存储与 Hermes 语义证据链` 路线。
+- 主 agent 已将路线落为任务图 TODO：
+  - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
+- 后续 M3-M5 批次规划以该任务图为准。
+- 当前已勾选：
+  - `M3A：对象存储与 StorageService 基线`
+  - `M3B：105 小样本对象存储镜像迁移`
+- 下一步候选：
+  - `M3C-0：资产存储与证据链契约冻结`
+  - `M3C-1：资产 UUID 与存储状态统一`
+  - `M3C：对象存储迁移任务中心与批量策略`
+- 当前裁决：
+  - 不直接进入 Hermes 正文问答。
+  - 不把对象存储迁移等同于语义理解完成。
+  - 不修改 `docs/**`。
+
+## 2026-05-26 M3C-0 契约冻结完成
+
+- `M3C-0：资产存储与证据链契约冻结` 已完成。
+- 已同步共享文档：
+  - `DigitalDeliveryProject/integration-contracts/asset_storage_evidence_chain_contract.md`
+  - `DigitalDeliveryProject/adr/ADR-007-object-storage-evidence-chain-boundary.md`
+  - `DigitalDeliveryProject/integration-contracts/platform_to_hermes_contract.md`
+  - `DigitalDeliveryProject/integration-contracts/gateway_response_contract.md`
+  - `DigitalDeliveryProject/docs/01_capability_matrix.md`
+- 本仓库同步更新：
+  - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
+  - `handoff/main-agent/m3c-0-storage-evidence-contract-freeze-closure.md`
+- 当前下一步建议：
+  - 优先进入 `M3C-1：资产 UUID 与存储状态统一`。
+  - 然后进入 `M3C：对象存储迁移任务中心与批量策略`。
+- 当前仍禁止：
+  - Hermes 正文问答。
+  - 向量库写入。
+  - 全量 NAS 搬迁。
+  - 暴露 raw NAS path / bucket / object key / storage_uri。
+
+## 2026-05-26 M3C-1 启动：资产 UUID 与存储状态统一
+
+- 用户确认按任务图执行下一步。
+- 当前 active 批次：`M3C-1：资产 UUID 与存储状态统一`。
+- 已写入：
+  - `handoff/main-agent/m3c1-asset-uuid-storage-status-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+- 本批定位：
+  - 为 `data_file_resources` 建立稳定 `asset_uuid`。
+  - 保留数值 `fileId` 作为内部主键和排障 ID。
+  - 让 FileAssetView / ModelAssetView / API 能输出安全 `assetUuid`。
+  - 统一单文件 storage status 为 `NAS_ONLY / MIGRATION_PENDING / OBJECT_STORED / MIGRATION_FAILED`。
+- 本批禁止：
+  - 全量 NAS 迁移。
+  - 迁移任务中心。
+  - Hermes 正文问答。
+  - documents / chunks / 向量库 / 搜索索引。
+  - 修改仓库 `docs/**`。
+
+## 2026-05-26 M3C-1 正式收口
+
+- 测试 agent 已完成 `M3C-1：资产 UUID 与存储状态统一` 验收和 P1 极短复核，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- P2：
+  - 既有 Vite chunk size warning。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪项继续排除。
+- 已确认：
+  - `data_file_resources.asset_uuid` 已新增、回填并唯一。
+  - 新建文件入口由后端生成 `assetUuid`，数据库默认值兜底。
+  - `FileAssetView` / `ModelAssetView` 已输出 `asset_uuid`。
+  - 文件资源、文件资产、catalog list/detail/search、storage-status、M3B 迁移行已输出 `assetUuid`。
+  - 前端主展示改为“平台资产ID”，内部数字 ID 保留为诊断信息。
+  - 单文件 storage status 统一为 `NAS_ONLY / MIGRATION_PENDING / OBJECT_STORED / MIGRATION_FAILED`。
+  - M3C-1 专项脚本通过，`PASS=15 FAIL=0`。
+  - M3B / M3A / M2J / M2I / M2H / M2F / file-access 回归通过。
+  - 禁出字段扫描通过，未发现真实 NAS 路径、bucket、object key、`storage_uri`、SQL、raw row、token、secret 泄露。
+  - 原 P1：V30 迁移和 M3C-1 专项脚本未跟踪，已复核为 `A` 且 `git ls-files` 可识别。
+- 主 agent 裁决：`M3C-1：资产 UUID 与存储状态统一` 正式收口。
+
+## 2026-05-26 M3C 启动：对象存储迁移任务中心与批量策略
+
+- 用户确认继续下一步。
+- 当前 active 批次：`M3C：对象存储迁移任务中心与批量策略`。
+- 已写入：
+  - `handoff/main-agent/m3c-object-storage-migration-task-center-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+- 本批定位：
+  - 基于 M3A / M3B / M3C-1，把对象存储小样本迁移补成受控任务中心。
+  - 提供任务创建、列表、详情、行级结果、重试、批量策略、幂等和审计。
+- 本批禁止：
+  - 全量 NAS 搬迁。
+  - 目录一键全量迁移。
+  - Hermes 正文问答。
+  - documents / chunks / 向量库 / 搜索索引。
+  - parser / BIM 轻量化。
+  - 修改仓库 `docs/**`。
+
+## 2026-05-26 M3C 正式收口：对象存储迁移任务中心与批量策略
+
+- 测试 agent 已完成 M3C 正式验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- P2：
+  - 既有 Vite chunk warning。
+  - 非交付未跟踪项 `.claude/**`、`CLAUDE.md`、`tmp/**` 继续排除。
+  - 页面安全说明中出现 `bucket / object key` 字面词，但未泄露真实底层定位值。
+- 已确认：
+  - 后端构建、前端构建、健康检查通过。
+  - M3C 专项脚本通过，`PASS=9 FAIL=0`。
+  - M3C-1 / M3B / M3A / M2J / M2I / M2H / file-access 回归通过。
+  - 任务可创建、列表可查、详情可查、失败可重试。
+  - 任务详情行级结果返回 `assetUuid` 和对象化状态。
+  - 重复迁移幂等跳过，不重复污染 active 对象版本。
+  - 未发现真实 NAS 文件被移动、删除、重命名或改写。
+  - 未新增 Hermes 正文问答。
+  - 未写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
+  - 未修改仓库 `docs/**`。
+- 主 agent 裁决：`M3C：对象存储迁移任务中心与批量策略` 正式收口。
+- 当前 active 批次：`待用户确认`。
+- 下一步建议：
+  - 先提交 / 推送 M3C。
+  - 后续如继续 M3 路线，进入 `M3D：真实 NAS 小范围灰度镜像`。
+
 ## 2026-05-23 M2H 开发完成，进入测试验收
 
 - 开发 agent 已完成 `M2H：Windows 风格文件管理器交互升级`，报告写入 `handoff/dev-agent/latest-report.md`。

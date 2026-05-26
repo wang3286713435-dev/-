@@ -155,6 +155,7 @@ public class StorageService {
         if (objectStatus != null) {
             return new FileStorageStatusResponse(
                 file.fileId(),
+                file.assetUuid(),
                 file.projectId(),
                 safeStorageState(objectStatus.storageState(), "OBJECT_STORED"),
                 normalizeProvider(objectStatus.provider(), file.storageProvider(), file.storagePath()),
@@ -169,6 +170,7 @@ public class StorageService {
         if (migrationStatus != null && "FAILED".equalsIgnoreCase(migrationStatus.migrationStatus())) {
             return new FileStorageStatusResponse(
                 file.fileId(),
+                file.assetUuid(),
                 file.projectId(),
                 "MIGRATION_FAILED",
                 normalizeProvider(file.storageProvider(), null, file.storagePath()),
@@ -182,6 +184,7 @@ public class StorageService {
         if (migrationStatus != null) {
             return new FileStorageStatusResponse(
                 file.fileId(),
+                file.assetUuid(),
                 file.projectId(),
                 "MIGRATION_PENDING",
                 normalizeProvider(file.storageProvider(), null, file.storagePath()),
@@ -196,6 +199,7 @@ public class StorageService {
         boolean objectStored = isObjectProvider(activeProvider);
         return new FileStorageStatusResponse(
             file.fileId(),
+            file.assetUuid(),
             file.projectId(),
             objectStored ? "OBJECT_STORED" : "NAS_ONLY",
             activeProvider,
@@ -466,7 +470,11 @@ public class StorageService {
     private String safeStorageState(String value, String fallback) {
         String normalized = text(value);
         if (normalized == null) return fallback;
-        return normalized.toUpperCase(Locale.ROOT);
+        return switch (normalized.toUpperCase(Locale.ROOT)) {
+            case "NAS_ONLY", "MIGRATION_PENDING", "OBJECT_STORED", "MIGRATION_FAILED" -> normalized.toUpperCase(Locale.ROOT);
+            case "MIGRATION_PARTIAL" -> "MIGRATION_PENDING";
+            default -> fallback;
+        };
     }
 
     private String safeMigrationStatus(String value, String fallback) {

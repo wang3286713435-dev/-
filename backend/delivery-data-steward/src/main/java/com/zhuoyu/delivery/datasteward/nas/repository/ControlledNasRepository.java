@@ -8,6 +8,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -228,19 +229,20 @@ public class ControlledNasRepository {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update("""
             INSERT INTO data_file_resources (
-                project_id, original_name, file_kind, mime_type, size_bytes,
+                asset_uuid, project_id, original_name, file_kind, mime_type, size_bytes,
                 storage_uri, storage_provider, storage_key, logical_path, source_path_digest,
                 checksum, business_tag, discipline, source_type, version_no,
                 process_status, processed_at, review_status, confidence_level,
                 last_verified_at, created_by, updated_by
             ) VALUES (
-                :projectId, :originalName, :fileKind, :mimeType, :sizeBytes,
+                :assetUuid, :projectId, :originalName, :fileKind, :mimeType, :sizeBytes,
                 :storageUri, 'NAS', NULL, :logicalPath, SHA2(:storageUri, 256),
                 NULL, :discipline, :discipline, 'USER_UPLOAD', :versionNo,
                 'PROCESSED', CURRENT_TIMESTAMP, 'APPROVED', 'HIGH',
                 CURRENT_TIMESTAMP, :operatorId, :operatorId
             )
             """, new MapSqlParameterSource()
+            .addValue("assetUuid", UUID.randomUUID().toString())
             .addValue("projectId", projectId)
             .addValue("originalName", originalName)
             .addValue("fileKind", fileKind)

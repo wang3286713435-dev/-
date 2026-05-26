@@ -3,6 +3,7 @@ import type { ApiResponse } from '@/modules/core/api/types';
 
 export interface FileResource {
   id: number;
+  assetUuid: string;
   projectId: number;
   originalName: string;
   fileKind: string;
@@ -247,6 +248,7 @@ export interface AssetQualityOverview {
 
 export interface FileAsset {
   fileId: number;
+  assetUuid: string;
   projectId: number;
   projectCode: string;
   projectName: string;
@@ -258,7 +260,7 @@ export interface FileAsset {
   sizeBytes: number;
   checksum: string | null;
   storageProvider: string;
-  storagePath: string;
+  storagePath: string | null;
   logicalPath: string | null;
   sourceType: string | null;
   processStatus: string;
@@ -340,6 +342,63 @@ export interface FileAccessTicket {
   previewable: boolean;
   downloadable: boolean;
   message: string;
+}
+
+export interface StorageMigrationSummary {
+  projectId: number;
+  totalFileCount: number;
+  objectStoredCount: number;
+  nasOnlyCount: number;
+  runningTaskCount: number;
+  failedTaskCount: number;
+  latestTaskId: number | null;
+  latestTaskUpdatedAt: string | null;
+  maxFilesPerTask: number;
+  maxFileSizeBytes: number;
+  policyMessage: string;
+}
+
+export interface StorageMigrationTaskPayload {
+  fileIds: number[];
+  targetProvider?: string;
+}
+
+export interface StorageMigrationTaskListItem {
+  taskId: number;
+  projectId: number;
+  targetProvider: string;
+  taskStatus: string;
+  storageState: string;
+  totalCount: number;
+  successCount: number;
+  failureCount: number;
+  skippedCount: number;
+  message: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StorageMigrationTaskRow {
+  rowId: number;
+  fileId: number;
+  assetUuid: string | null;
+  fileName: string;
+  fileKind: string;
+  sizeBytes: number;
+  migrationStatus: string;
+  storageState: string;
+  resultCode: string | null;
+  message: string;
+  objectStored: boolean;
+  startedAt: string | null;
+  completedAt: string | null;
+  lastVerifiedAt: string | null;
+}
+
+export interface StorageMigrationTaskDetail extends StorageMigrationTaskListItem {
+  rows: StorageMigrationTaskRow[];
 }
 
 export interface AssetDiscipline {
@@ -710,6 +769,42 @@ export async function createFileAccessTicket(fileId: number, action: 'PREVIEW' |
   return data.data;
 }
 
+export async function fetchStorageMigrationSummary(projectId: number) {
+  const { data } = await http.get<ApiResponse<StorageMigrationSummary>>(
+    `/api/data-steward/projects/${projectId}/storage-migration-summary`
+  );
+  return data.data;
+}
+
+export async function fetchStorageMigrationTasks(projectId: number) {
+  const { data } = await http.get<ApiResponse<StorageMigrationTaskListItem[]>>(
+    `/api/data-steward/projects/${projectId}/storage-migration-tasks`
+  );
+  return data.data ?? [];
+}
+
+export async function fetchStorageMigrationTask(taskId: number) {
+  const { data } = await http.get<ApiResponse<StorageMigrationTaskDetail>>(
+    `/api/data-steward/storage-migration-tasks/${taskId}`
+  );
+  return data.data;
+}
+
+export async function createStorageMigrationTask(projectId: number, payload: StorageMigrationTaskPayload) {
+  const { data } = await http.post<ApiResponse<StorageMigrationTaskDetail>>(
+    `/api/data-steward/projects/${projectId}/storage-migration-tasks`,
+    payload
+  );
+  return data.data;
+}
+
+export async function retryStorageMigrationTask(taskId: number) {
+  const { data } = await http.post<ApiResponse<StorageMigrationTaskDetail>>(
+    `/api/data-steward/storage-migration-tasks/${taskId}:retry`
+  );
+  return data.data;
+}
+
 export async function updateFileAssetMetadata(fileId: number, payload: FileAssetMetadataPayload) {
   const { data } = await http.patch<ApiResponse<FileAsset>>(
     `/api/data-steward/assets/files/${fileId}/metadata`,
@@ -845,6 +940,7 @@ export interface CatalogDirectory {
 
 export interface CatalogFile {
   fileId: number | null;
+  assetUuid: string | null;
   projectId: number;
   projectCode: string;
   projectName: string;
@@ -1068,6 +1164,7 @@ export interface CatalogSearchResult {
   assetKind: string;
   sourceView: string;
   fileId: number;
+  assetUuid: string;
   modelId: number | null;
   projectId: number;
   projectCode: string;

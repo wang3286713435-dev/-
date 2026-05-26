@@ -246,7 +246,7 @@ public class CatalogApplicationService {
         int limit = Math.max(1, Math.min(pageSize, 200));
 
         StringBuilder sb = new StringBuilder("""
-            SELECT f.id AS file_id, f.project_id, p.code AS project_code, p.name AS project_name,
+            SELECT f.id AS file_id, f.asset_uuid AS asset_uuid, f.project_id, p.code AS project_code, p.name AS project_name,
                    f.original_name, f.file_kind, f.discipline AS discipline_code,
                    f.version_no, f.size_bytes, f.checksum, f.storage_provider,
                    f.storage_uri, f.logical_path, f.process_status, f.confidence_level,
@@ -267,7 +267,7 @@ public class CatalogApplicationService {
             params.addValue("projectId", projectId);
         }
         if (keyword != null && !keyword.isBlank()) {
-            sb.append(" AND (p.code LIKE :likeKw OR p.name LIKE :likeKw OR f.original_name LIKE :likeKw OR f.storage_uri LIKE :likeKw)");
+            sb.append(" AND (p.code LIKE :likeKw OR p.name LIKE :likeKw OR f.original_name LIKE :likeKw OR f.asset_uuid LIKE :likeKw OR f.storage_uri LIKE :likeKw)");
             params.addValue("likeKw", "%" + keyword.trim() + "%");
         }
         String normalizedDirectoryPath = normalizeCatalogDirectoryPath(directoryPath);
@@ -329,7 +329,7 @@ public class CatalogApplicationService {
 
         String lifecycleExpression = lifecycleExpression("f");
         StringBuilder sql = new StringBuilder("""
-            SELECT f.id AS file_id, f.project_id, p.code AS project_code, p.name AS project_name,
+            SELECT f.id AS file_id, f.asset_uuid AS asset_uuid, f.project_id, p.code AS project_code, p.name AS project_name,
                    f.original_name, f.file_kind, f.discipline AS discipline_code, f.version_no,
                    f.size_bytes, f.process_status, f.source_type, f.last_verified_at, f.updated_at,
                    f.logical_path,
@@ -350,9 +350,10 @@ public class CatalogApplicationService {
         if (query != null && !query.isBlank()) {
             sql.append("""
                  AND (p.code LIKE :keyword
-                   OR p.name LIKE :keyword
-                   OR f.original_name LIKE :keyword
-                   OR f.logical_path LIKE :keyword)
+                  OR p.name LIKE :keyword
+                  OR f.original_name LIKE :keyword
+                  OR f.asset_uuid LIKE :keyword
+                  OR f.logical_path LIKE :keyword)
                 """);
             params.addValue("keyword", "%" + query.trim() + "%");
         }
@@ -393,6 +394,7 @@ public class CatalogApplicationService {
                 rs.getString("file_kind"),
                 "FileAssetView",
                 rs.getLong("file_id"),
+                rs.getString("asset_uuid"),
                 null,
                 rs.getLong("project_id"),
                 rs.getString("project_code"),
@@ -507,7 +509,7 @@ public class CatalogApplicationService {
             );
 
             return new CatalogFileResponse(
-                fileId, pId,
+                fileId, rs.getString("asset_uuid"), pId,
                 rs.getString("project_code"), rs.getString("project_name"),
                 fileName, ext,
                 rs.getString("file_kind"),
@@ -524,7 +526,7 @@ public class CatalogApplicationService {
                 toInstant(rs, "last_verified_at"),
                 toInstant(rs, "updated_at"),
                     true, "FORMAL_ASSET_IN_SCOPE",
-                    List.of("fileName", "fileExt", "fileKind", "disciplineCode", "disciplineName",
+                    List.of("assetUuid", "fileName", "fileExt", "fileKind", "disciplineCode", "disciplineName",
                         "version", "sizeBytes", "checksum", "status", "confidenceLevel",
                     "storageProvider", "logicalPath", "qualityFlags", "lastVerifiedAt", "updatedAt",
                     "ownershipStatus", "ownershipType", "ownershipNodeLabel", "ownershipNodePath"),
@@ -545,7 +547,7 @@ public class CatalogApplicationService {
 
     public CatalogFileDetailResponse getCatalogFileDetail(Long userId, Long fileId) {
         List<CatalogFileDetailResponse> rows = jdbcTemplate.query("""
-            SELECT f.id AS file_id, f.project_id, p.code AS project_code, p.name AS project_name,
+            SELECT f.id AS file_id, f.asset_uuid AS asset_uuid, f.project_id, p.code AS project_code, p.name AS project_name,
                    f.original_name, f.file_kind, f.discipline AS discipline_code,
                    f.version_no, f.size_bytes, f.checksum, f.storage_provider,
                    f.storage_uri, f.logical_path, f.process_status, f.confidence_level,
@@ -579,7 +581,7 @@ public class CatalogApplicationService {
                 );
 
                 return new CatalogFileDetailResponse(
-                    rs.getLong("file_id"), pId,
+                    rs.getLong("file_id"), rs.getString("asset_uuid"), pId,
                     rs.getString("project_code"), rs.getString("project_name"),
                     fileName, ext,
                     rs.getString("file_kind"),
@@ -866,7 +868,7 @@ public class CatalogApplicationService {
         String ownershipStatus
     ) {
         StringBuilder sb = new StringBuilder("""
-            SELECT f.id AS file_id, f.project_id, p.code AS project_code, p.name AS project_name,
+            SELECT f.id AS file_id, f.asset_uuid AS asset_uuid, f.project_id, p.code AS project_code, p.name AS project_name,
                    f.original_name, f.file_kind, f.discipline AS discipline_code,
                    f.version_no, f.size_bytes, f.checksum, f.storage_provider,
                    f.storage_uri, f.logical_path, f.process_status, f.confidence_level,
@@ -886,7 +888,7 @@ public class CatalogApplicationService {
             .addValue("projectId", projectId);
         appendDirectDirectoryFilter(sb, params, projectId, safeDirectoryPath);
         if (keyword != null && !keyword.isBlank()) {
-            sb.append(" AND (p.code LIKE :likeKw OR p.name LIKE :likeKw OR f.original_name LIKE :likeKw OR f.storage_uri LIKE :likeKw)");
+            sb.append(" AND (p.code LIKE :likeKw OR p.name LIKE :likeKw OR f.original_name LIKE :likeKw OR f.asset_uuid LIKE :likeKw OR f.storage_uri LIKE :likeKw)");
             params.addValue("likeKw", "%" + keyword.trim() + "%");
         }
         if (fileExt != null && !fileExt.isBlank()) {
@@ -964,6 +966,7 @@ public class CatalogApplicationService {
         String ext = extensionOf(physical.fileName());
         String logicalPath = joinDirectoryPath(safeDirectoryPath, physical.fileName());
         return new CatalogFileResponse(
+            null,
             null,
             project.projectId(),
             project.projectCode(),
@@ -1532,7 +1535,7 @@ public class CatalogApplicationService {
     }
 
     private List<String> catalogContractFields(boolean storagePathVisible) {
-        List<String> fields = new ArrayList<>(List.of("fileName", "fileExt", "fileKind",
+        List<String> fields = new ArrayList<>(List.of("assetUuid", "fileName", "fileExt", "fileKind",
             "disciplineCode", "disciplineName", "version", "sizeBytes", "checksum", "status",
             "confidenceLevel", "storageProvider", "logicalPath", "qualityFlags",
             "lastVerifiedAt", "updatedAt"));

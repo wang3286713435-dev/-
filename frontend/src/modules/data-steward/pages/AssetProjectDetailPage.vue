@@ -261,7 +261,7 @@
               <article v-for="item in recentFiles" :key="item.fileId" class="asset-activity-item">
                 <div>
                   <strong>{{ item.fileName }}</strong>
-                  <span>平台文件ID {{ item.fileId }} / {{ formatBytes(item.sizeBytes) }} / {{ formatDate(item.updatedAt) }}</span>
+                  <span>平台资产ID {{ item.assetUuid || '-' }} / {{ formatBytes(item.sizeBytes) }} / {{ formatDate(item.updatedAt) }}</span>
                 </div>
                 <el-tag size="small">{{ item.fileKind }}</el-tag>
               </article>
@@ -448,9 +448,10 @@
         <section class="asset-detail-section">
           <h3>文件识别</h3>
           <el-descriptions :column="1" border size="small">
-            <el-descriptions-item label="平台文件ID">{{ selectedFile.fileId }}</el-descriptions-item>
+            <el-descriptions-item label="平台资产ID">{{ selectedFile.assetUuid || '-' }}</el-descriptions-item>
             <el-descriptions-item label="文件名">{{ selectedFile.fileName }}</el-descriptions-item>
             <el-descriptions-item label="项目">{{ selectedFile.projectCode }} {{ selectedFile.projectName }}</el-descriptions-item>
+            <el-descriptions-item label="内部文件ID">{{ selectedFile.fileId }}</el-descriptions-item>
             <el-descriptions-item label="项目平台内部ID">{{ selectedFile.projectId }}</el-descriptions-item>
             <el-descriptions-item label="文件类型">{{ selectedFile.fileKind }}</el-descriptions-item>
             <el-descriptions-item label="扩展名">{{ selectedFile.fileExt || '-' }}</el-descriptions-item>
@@ -910,6 +911,7 @@ const moduleCards: ModuleCard[] = [
   { label: '模型集成', group: '项目资产', description: '登记模型集成与发布状态', phase: 'ASSET', name: 'project-data-steward-models' },
   { label: '管理对象', group: '项目资产', description: '对象与模型集成登记', phase: 'ASSET', name: 'project-data-steward-objects' },
   { label: '文件服务', group: '项目资产', description: '预览、下载权限与禁用写操作', phase: 'ASSET', name: 'project-data-steward-file-service' },
+  { label: '对象存储', group: '项目资产', description: '查看镜像任务、对象化状态和受控迁移', phase: 'ASSET', name: 'project-data-steward-storage-migration' },
   { label: '初始化向导', group: '工程主数据', description: '从目录线索生成主数据草案', phase: 'MASTER_DATA', name: 'project-master-data-initialization' },
   { label: '部位树', group: '工程主数据', description: '维护楼栋、楼层、房间和系统部位', phase: 'MASTER_DATA', name: 'project-master-data-sections' },
   { label: '节点类型', group: '工程主数据', description: '确认部位层级和锁定规则', phase: 'MASTER_DATA', name: 'project-master-data-node-types' },
@@ -998,8 +1000,8 @@ const catalogInitialQualityIssue = computed(() => queryString(route.query.qualit
 const checksumJobTargetLabel = computed(() => {
   const file = selectedChecksumJobFile.value;
   const job = selectedChecksumJob.value;
-  if (file) return `${file.fileName} / 平台文件ID ${file.fileId}`;
-  if (job?.targetId) return `${checksumJobFileName(job)} / 平台文件ID ${job.targetId}`;
+  if (file) return `${file.fileName} / 平台资产ID ${file.assetUuid || '-'}`;
+  if (job?.targetId) return `${checksumJobFileName(job)} / 内部文件ID ${job.targetId}`;
   return '文件资产 checksum 计算';
 });
 const cards = computed(() => {
@@ -1262,7 +1264,7 @@ async function hydrateChecksumJobFiles(jobs: AssetJob[]) {
     try {
       nextMap[fileId] = await fetchFileAsset(fileId);
     } catch {
-      // 任务仍可展示，文件名拿不到时退回平台文件ID。
+      // 任务仍可展示，文件名拿不到时退回内部文件 ID。
     }
   }));
   checksumJobFileMap.value = nextMap;
@@ -1271,7 +1273,7 @@ async function hydrateChecksumJobFiles(jobs: AssetJob[]) {
 function checksumJobFileName(job: AssetJob) {
   const targetId = Number(job.targetId ?? 0);
   const file = targetId ? checksumJobFileMap.value[targetId] : null;
-  return file?.fileName ?? (targetId ? `平台文件ID ${targetId}` : '未绑定文件');
+  return file?.fileName ?? (targetId ? `内部文件ID ${targetId}` : '未绑定文件');
 }
 
 function openChecksumJob(job: AssetJob) {

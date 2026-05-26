@@ -900,6 +900,7 @@ public class AssetApplicationService {
         }
         return new FileAssetResponse(
             file.fileId(),
+            file.assetUuid(),
             file.projectId(),
             file.projectCode(),
             file.projectName(),

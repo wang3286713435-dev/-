@@ -4,6 +4,7 @@ import com.zhuoyu.delivery.core.auth.application.SecurityPrincipalAccessor;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageMigrationTaskCreateRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageMigrationTaskDetailResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageMigrationTaskListItemResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageMigrationSummaryResponse;
 import com.zhuoyu.delivery.shared.api.ApiResponse;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -40,6 +41,11 @@ public class StorageMigrationController {
     @GetMapping("/projects/{projectId}/storage-migration-tasks")
     public ApiResponse<List<StorageMigrationTaskListItemResponse>> listTasks(@PathVariable Long projectId) {
         return ApiResponse.success(storageMigrationApplicationService.listTasks(currentUserId(), projectId));
+    }
+
+    @GetMapping("/projects/{projectId}/storage-migration-summary")
+    public ApiResponse<StorageMigrationSummaryResponse> summary(@PathVariable Long projectId) {
+        return ApiResponse.success(storageMigrationApplicationService.summary(currentUserId(), projectId));
     }
 
     @GetMapping("/storage-migration-tasks/{taskId}")

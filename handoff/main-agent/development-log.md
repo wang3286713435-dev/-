@@ -98,6 +98,88 @@
   - 不自动进入 M3C。
   - 下一步建议为先提交 / 推送 M3B，再由用户确认是否进入 `M3C：对象存储迁移任务中心与批量策略`。
 
+## 2026-05-26：M3-M5 任务图落地
+
+- 用户给出 `NAS 台账治理升级为对象存储与 Hermes 语义证据链` 路线。
+- 主 agent 按要求将任务图落为 TODO 文档：
+  - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
+- 任务图包含：
+  - 契约与边界冻结。
+  - 平台资产 UUID 与文件状态统一。
+  - 对象存储迁移任务中心。
+  - 真实 NAS 小范围灰度镜像。
+  - 预览与转换产物对象化。
+  - documents / chunks 语义契约。
+  - 向量库与关键词索引试点。
+  - Hermes 受控 Evidence API。
+  - 工程主数据与交付治理 Agent 化。
+- 当前已完成项：
+  - M3A。
+  - M3B。
+- 当前裁决：
+  - 后续 M3 系列批次按该任务图规划。
+  - 每完成一项由主 agent 更新复选框。
+  - 不修改 `docs/**`。
+  - 不跳过对象存储、权限、证据契约直接进入 Hermes 正文问答。
+
+## 2026-05-26：M3C-0 资产存储与证据链契约冻结完成
+
+- 按 `handoff/main-agent/m3-storage-evidence-chain-todo.md` 执行第一项。
+- 新增共享契约：
+  - `DigitalDeliveryProject/integration-contracts/asset_storage_evidence_chain_contract.md`
+- 新增 ADR：
+  - `DigitalDeliveryProject/adr/ADR-007-object-storage-evidence-chain-boundary.md`
+- 同步更新共享文档：
+  - `DigitalDeliveryProject/integration-contracts/platform_to_hermes_contract.md`
+  - `DigitalDeliveryProject/integration-contracts/gateway_response_contract.md`
+  - `DigitalDeliveryProject/docs/01_capability_matrix.md`
+- 本仓库更新：
+  - `handoff/main-agent/m3-storage-evidence-chain-todo.md` 标记阶段 0 完成。
+  - `handoff/main-agent/status.md`
+  - `handoff/main-agent/phase2-current-roadmap.md`
+  - `handoff/main-agent/m3c-0-storage-evidence-contract-freeze-closure.md`
+- 边界：
+  - 未修改业务代码。
+  - 未修改仓库 `docs/**`。
+  - 未进入 Hermes 正文问答。
+  - 未进入向量库 / 语义解析 / 全量 NAS 迁移。
+
+## 2026-05-26：M3C-1 启动
+
+- 用户确认进入任务图下一步。
+- 主 agent 将 active 批次切换为 `M3C-1：资产 UUID 与存储状态统一`。
+- 已写入开发 agent prompt：
+  - `handoff/dev-agent/current-prompt.md`
+- 已写入测试 agent prompt：
+  - `handoff/test-agent/current-prompt.md`
+- 已写入主 agent 计划：
+  - `handoff/main-agent/m3c1-asset-uuid-storage-status-plan.md`
+- 当前边界：
+  - 不做全量 NAS 迁移。
+  - 不做迁移任务中心。
+  - 不做 Hermes 正文问答。
+  - 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
+  - 不修改仓库 `docs/**`。
+
+## 2026-05-26：M3C 正式收口
+
+- 测试 agent 完成 M3C 正式验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 结论：通过，未发现 P0 / P1。
+- 已确认：
+  - `scripts/dev/check-m3c-storage-migration-task-center.sh` 通过，`PASS=9 FAIL=0`。
+  - M3C-1 / M3B / M3A / M2J / M2I / M2H / file-access 回归通过。
+  - Git 跟踪检查通过。
+  - 浏览器短验通过。
+- 主 agent 判定：
+  - `M3C：对象存储迁移任务中心与批量策略` 正式收口。
+  - 后续进入 `M3D：真实 NAS 小范围灰度镜像` 前，应先提交 / 推送 M3C。
+- 边界：
+  - 未做全量 NAS 搬迁。
+  - 未触碰真实业务 NAS 文件。
+  - 未新增 Hermes 正文问答。
+  - 未写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
+  - 未修改仓库 `docs/**`。
+
 ## 2026-05-22：M2E 测试不通过，转入 P1 修复
 
 - 测试 agent 完成 M2E 验收，报告写入 `handoff/test-agent/latest-report.md`。

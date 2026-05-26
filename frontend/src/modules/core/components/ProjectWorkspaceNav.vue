@@ -107,6 +107,14 @@
               >
                 文件服务
               </el-button>
+              <el-button
+                text
+                size="small"
+                :type="isActive(['project-data-steward-storage-migration']) ? 'primary' : undefined"
+                @click="go('project-data-steward-storage-migration')"
+              >
+                对象存储
+              </el-button>
             </div>
           </details>
         </div>
@@ -275,7 +283,8 @@ const isAssetMoreActive = computed(() => isActive([
   'project-data-steward-issues',
   'project-data-steward-tasks',
   'project-data-steward-exports',
-  'project-data-steward-file-service'
+  'project-data-steward-file-service',
+  'project-data-steward-storage-migration'
 ]));
 const isMasterDataMoreActive = computed(() => isActive([
   'project-master-data-sections',
