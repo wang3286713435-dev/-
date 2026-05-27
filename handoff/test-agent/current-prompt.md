@@ -32,6 +32,8 @@
 - `handoff/dev-agent/latest-report.md`
 - `handoff/dev-agent/current-prompt.md`
 - `handoff/main-agent/m3g-nas-minio-real-project-object-storage-plan.md`
+- `handoff/main-agent/m3g1-task-graph.md`
+- `handoff/main-agent/m3g1-nas-minio-ops-preparation.md`
 - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
 - `scripts/dev/check-m3g-nas-minio-readiness-inventory.sh`
 

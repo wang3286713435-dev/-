@@ -80,6 +80,12 @@
   - 开发 prompt：`handoff/dev-agent/current-prompt.md`
   - 测试 prompt：`handoff/test-agent/current-prompt.md`
   - M3G 计划：`handoff/main-agent/m3g-nas-minio-real-project-object-storage-plan.md`
+  - M3G-1 任务图：`handoff/main-agent/m3g1-task-graph.md`
+  - NAS 侧 MinIO 配置交接：`handoff/main-agent/m3g1-nas-minio-ops-preparation.md`
+- 当前 NAS 侧 MinIO 探测：
+  - `192.168.1.181:9000` 未响应。
+  - `192.168.1.181:9001` 未响应。
+  - 因此当前不能判定 NAS 侧 MinIO 已部署，开发 agent 必须把 `LOCAL_DEV_MINIO` 与 `NAS_SIDE_MINIO` 严格区分。
 - 当前裁决：
   - 交给开发 agent 按 M3G-1 prompt 执行。
   - M3G-1 未通过前，不进入真实历史文件对象化执行。

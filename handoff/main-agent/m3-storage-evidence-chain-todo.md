@@ -303,6 +303,10 @@ M3G-1 交付要求：
 - 提供单项目对象化 dry-run 计划。
 - dry-run 不复制文件、不启动真实迁移任务。
 - 页面或接口清楚提示当前是否具备正式 NAS 侧 MinIO 条件。
+- 运维 / NAS 管理员配置依据：
+  - `handoff/main-agent/m3g1-nas-minio-ops-preparation.md`
+- M3G-1 子任务跟踪：
+  - `handoff/main-agent/m3g1-task-graph.md`
 
 ## 9. 阶段 5：documents / chunks 语义契约
 

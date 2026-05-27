@@ -4142,3 +4142,28 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - `handoff/main-agent/status.md`
   - `handoff/main-agent/phase2-current-roadmap.md`
 - 原下一步建议为 `M4A：documents / chunks 语义证据契约`；2026-05-27 已根据用户新裁决插入 `M3F：新文件对象存储优先写入` 与后续 `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`，M4A 顺延。
+
+## 2026-05-27 M3G-1 准备：任务图与 NAS 侧 MinIO 配置交接
+
+- 用户要求进入 `M3G-1`，先规划任务图并配置 NAS 端 MinIO。
+- 主 agent 已冻结本批定位：
+  - `M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划`
+  - 本批不执行真实历史文件对象化迁移。
+  - 本批不移动、删除、重命名真实 NAS 原项目资料。
+- 已做非侵入式探测：
+  - `192.168.1.181:9000` 未响应。
+  - `192.168.1.181:9001` 未响应。
+  - 当前不能宣称 NAS 侧 MinIO 已部署。
+- 已新增：
+  - `handoff/main-agent/m3g1-task-graph.md`
+  - `handoff/main-agent/m3g1-nas-minio-ops-preparation.md`
+- 已更新：
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+  - `handoff/main-agent/status.md`
+  - `handoff/main-agent/phase2-current-roadmap.md`
+  - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
+- 当前裁决：
+  - 先由运维 / NAS 负责人完成 NAS 侧 MinIO 部署与 service account 准备。
+  - 开发 agent 只实现 readiness、全项目对象化盘点和 dry-run。
+  - M3G-1 未通过前，不进入 M3G-2 历史文件真实对象化执行。

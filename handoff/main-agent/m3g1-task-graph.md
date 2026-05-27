@@ -1,0 +1,59 @@
+# M3G-1 任务图：NAS 侧 MinIO readiness、对象化盘点与 dry-run
+
+更新时间：2026-05-27
+
+## 批次定位
+
+`M3G-1` 是 `M3G：NAS 侧 MinIO 对象存储接管真实项目文件` 的第一个子批次。
+
+本批只做就绪检查、盘点和 dry-run，不执行真实历史文件对象化迁移。
+
+## 当前结论
+
+- NAS 地址 `192.168.1.181` 已知为现有项目资料 NAS。
+- 2026-05-27 非侵入式探测结果：
+  - `192.168.1.181:9000` 未发现 MinIO API 响应。
+  - `192.168.1.181:9001` 未发现 MinIO Console 响应。
+- 因此当前不能声称已具备 NAS 侧 MinIO 条件。
+- M3G-1 必须先完成 NAS 侧 MinIO 部署契约、平台 readiness 识别和对象化盘点。
+
+## 任务图
+
+- [x] 0. 冻结 M3G-1 边界：只做 readiness / inventory / dry-run。
+- [x] 1. 输出开发 agent prompt。
+- [x] 2. 输出测试 agent prompt。
+- [x] 3. 输出 NAS 侧 MinIO 配置交接清单。
+- [ ] 4. NAS 侧 MinIO 服务部署完成。
+- [ ] 5. 平台安全注入 NAS 侧 MinIO endpoint / service account / bucket。
+- [ ] 6. 平台 readiness 能区分本机 MinIO 与 NAS 侧 MinIO。
+- [ ] 7. 全项目对象化覆盖率盘点 API 可用。
+- [ ] 8. 单项目对象化 dry-run 计划 API 可用。
+- [ ] 9. 前端可查看对象存储就绪状态、覆盖率和 dry-run 结果。
+- [ ] 10. M3G-1 专项脚本通过。
+- [ ] 11. M3F / M3E / M3C / file-access 回归通过。
+- [ ] 12. 主 agent 审计通过并收口 M3G-1。
+
+## M3G-1 完成定义
+
+M3G-1 通过时，平台应能回答：
+
+1. 当前对象存储是否是真正的 NAS 侧 MinIO。
+2. 当前所有真实项目对象化覆盖率是多少。
+3. 如果选择某项目、目录、文件类型、文件大小范围做对象化，会选中多少文件、多少容量、有哪些风险。
+
+M3G-1 不验收：
+
+- 历史文件真实批量迁移。
+- 全量 NAS 搬迁。
+- Hermes 正文问答。
+- documents / chunks / Qdrant / OpenSearch。
+- 文件正文读取。
+- 真实 BIM 引擎。
+
+## 红线
+
+- 不移动、删除、重命名、覆盖真实 NAS 原项目文件。
+- 不把本机 Docker MinIO 说成 NAS 侧 MinIO。
+- 不在 API、前端、日志、审计中暴露真实 NAS 路径、bucket、object key、storage URI、SQL、raw row、token、secret。
+- 不让 Hermes 直接访问 NAS、MinIO、MySQL 或向量库。
+- 不修改 `docs/**`。

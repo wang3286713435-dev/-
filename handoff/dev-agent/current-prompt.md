@@ -28,6 +28,8 @@ M3G 总目标是把真实项目文件从“NAS 文件夹路径管理”升级为
 
 - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
 - `handoff/main-agent/m3g-nas-minio-real-project-object-storage-plan.md`
+- `handoff/main-agent/m3g1-task-graph.md`
+- `handoff/main-agent/m3g1-nas-minio-ops-preparation.md`
 - `handoff/main-agent/m3f-object-storage-first-write-closure.md`
 - `handoff/dev-agent/latest-report.md`
 - `handoff/test-agent/latest-report.md`
