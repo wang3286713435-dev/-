@@ -1,5 +1,73 @@
 # 主 Agent 开发监控日志
 
+## 2026-05-27：M3F 启动
+
+- 用户确认：先做 M3F，后续再做 `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`。
+- 主 agent 已将 active 批次切换为：
+  - `M3F：新文件对象存储优先写入与 NAS 兼容回退`
+- 当前分支：
+  - `codex/m3f-object-storage-first-write`
+- M3F 目标：
+  - 新增上传文件默认写入对象存储。
+  - 新增文件仍进入 `data_file_resources` 业务台账。
+  - 新增文件生成 `assetUuid`。
+  - 新增文件写入 `data_storage_objects` 和 active `data_file_object_versions`。
+  - 新增文件 `storage-status=OBJECT_STORED`。
+  - 新增文件通过受控 `file-access` 访问。
+- M3F 禁止：
+  - 全量 NAS 搬迁。
+  - 真实 NAS 文件移动、删除、重命名。
+  - 文件正文读取。
+  - Hermes 正文问答。
+  - documents / chunks / Qdrant / OpenSearch / Hermes memory。
+  - 真实 BIM 引擎接入。
+- 已写入：
+  - `handoff/main-agent/m3f-object-storage-first-write-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+  - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
+- 当前裁决：
+  - 交给开发 agent 实现。
+  - M3F 未验收通过前，不进入 `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`。
+
+## 2026-05-27：M3G 架构口径更新
+
+- 用户提供更新后的 M3G PR Prompt。
+- 主 agent 已将 M3G 口径从“全量项目副本升级对象存储”更新为：
+  - `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`
+- 新架构裁决：
+  - MinIO 服务部署在 NAS 上，不以本机 Docker MinIO 作为正式业务对象存储。
+  - NAS 原项目资料区冻结为只读备份和回滚来源。
+  - NAS 侧 MinIO 成为真实文件本体主读取入口。
+  - MySQL 继续作为业务台账、权限、版本、checksum、交付关系中心。
+  - 本机 Hermes 后续通过平台授权，从 NAS 侧 MinIO 复制文件副本到本机工作区解析。
+  - M3G 不做 Hermes 正文问答，不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
+- 已更新：
+  - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
+  - `handoff/main-agent/m3g-nas-minio-real-project-object-storage-plan.md`
+  - `handoff/main-agent/phase2-current-roadmap.md`
+  - `handoff/main-agent/status.md`
+
+## 2026-05-27：M3F 收口裁决
+
+- 开发 agent 完成 M3F，报告写入 `handoff/dev-agent/latest-report.md`。
+- 测试 agent 完成 M3F 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：
+  - 当前 P0：无。
+  - 当前 P1：无。
+  - M3F 专项脚本通过，`PASS=10 FAIL=0`。
+  - M3E / M3D / M3C / M3B / M3A / file-access 回归均通过。
+- 主 agent 审计确认：
+  - 新上传文件默认写入对象存储。
+  - 新上传文件进入 MySQL 业务台账。
+  - 新上传文件具备 `assetUuid`、active object version、`OBJECT_STORED` 状态。
+  - 受控 `file-access` 可读取对象存储新增文件。
+  - 对象存储不可用时 fail-closed，不静默写 NAS fallback。
+  - 未发现全量 NAS 搬迁、Hermes 正文问答、documents / chunks、Qdrant / OpenSearch、BIM 引擎、parser / indexing 越界。
+- 主 agent 裁决：
+  - `M3F：新文件对象存储优先写入与 NAS 兼容回退` 正式收口。
+  - M3G 计划文件可随 M3F checkpoint 一并提交，但 M3G 不自动启动。
+
 ## 2026-05-25：M3A 启动
 
 - 用户确认执行对象存储路线规划。
@@ -4049,4 +4117,4 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - `handoff/main-agent/m3e-preview-artifacts-object-storage-closure.md`
   - `handoff/main-agent/status.md`
   - `handoff/main-agent/phase2-current-roadmap.md`
-- 下一步建议：`M4A：documents / chunks 语义证据契约`。
+- 原下一步建议为 `M4A：documents / chunks 语义证据契约`；2026-05-27 已根据用户新裁决插入 `M3F：新文件对象存储优先写入` 与后续 `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`，M4A 顺延。

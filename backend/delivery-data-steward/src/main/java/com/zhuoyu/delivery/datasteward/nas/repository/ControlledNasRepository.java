@@ -2,6 +2,7 @@ package com.zhuoyu.delivery.datasteward.nas.repository;
 
 import com.zhuoyu.delivery.datasteward.nas.dto.ControlledNasDtos.NasOperationRecordResponse;
 import com.zhuoyu.delivery.datasteward.nas.dto.ControlledNasDtos.NasQuarantineRecordResponse;
+import com.zhuoyu.delivery.datasteward.storage.StorageService;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -254,6 +255,153 @@ public class ControlledNasRepository {
             .addValue("versionNo", versionNo)
             .addValue("operatorId", operatorId), keyHolder);
         return keyHolder.getKey().longValue();
+    }
+
+    public Long insertObjectUploadedFile(
+        String assetUuid,
+        Long projectId,
+        String originalName,
+        String fileKind,
+        String mimeType,
+        Long sizeBytes,
+        String storageUri,
+        String logicalPath,
+        String checksum,
+        String discipline,
+        String versionNo,
+        Long operatorId
+    ) {
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update("""
+            INSERT INTO data_file_resources (
+                asset_uuid, project_id, original_name, file_kind, mime_type, size_bytes,
+                storage_uri, storage_provider, storage_key, logical_path, source_path_digest,
+                checksum, business_tag, discipline, source_type, version_no,
+                process_status, processed_at, review_status, confidence_level,
+                last_verified_at, created_by, updated_by
+            ) VALUES (
+                :assetUuid, :projectId, :originalName, :fileKind, :mimeType, :sizeBytes,
+                :storageUri, 'OBJECT_STORAGE', NULL, :logicalPath, SHA2(:storageUri, 256),
+                :checksum, :discipline, :discipline, 'USER_UPLOAD', :versionNo,
+                'PROCESSED', CURRENT_TIMESTAMP, 'APPROVED', 'HIGH',
+                CURRENT_TIMESTAMP, :operatorId, :operatorId
+            )
+            """, new MapSqlParameterSource()
+            .addValue("assetUuid", assetUuid)
+            .addValue("projectId", projectId)
+            .addValue("originalName", originalName)
+            .addValue("fileKind", fileKind)
+            .addValue("mimeType", blankToNull(mimeType))
+            .addValue("sizeBytes", sizeBytes)
+            .addValue("storageUri", storageUri)
+            .addValue("logicalPath", logicalPath)
+            .addValue("checksum", blankToNull(checksum))
+            .addValue("discipline", blankToNull(discipline))
+            .addValue("versionNo", versionNo)
+            .addValue("operatorId", operatorId), keyHolder);
+        return keyHolder.getKey().longValue();
+    }
+
+    public boolean activeLogicalFileExists(Long projectId, String logicalPath) {
+        Integer count = jdbcTemplate.queryForObject("""
+            SELECT COUNT(1)
+            FROM data_file_resources
+            WHERE project_id = :projectId
+              AND logical_path = :logicalPath
+              AND deleted = 0
+            """, new MapSqlParameterSource()
+            .addValue("projectId", projectId)
+            .addValue("logicalPath", logicalPath), Integer.class);
+        return count != null && count > 0;
+    }
+
+    public Long upsertStorageObject(StorageService.ObjectWriteResult object, Long operatorId) {
+        jdbcTemplate.update("""
+            INSERT INTO data_storage_objects (
+                provider, bucket, object_key, etag, checksum, content_type, size_bytes,
+                source_provider, source_uri_digest, source_path_digest,
+                storage_state, migration_status, last_verified_at, created_by, updated_by
+            ) VALUES (
+                :provider, :bucket, :objectKey, :etag, :checksum, :contentType, :sizeBytes,
+                'USER_UPLOAD', :sourceUriDigest, NULL,
+                'OBJECT_STORED', 'COMPLETED', :verifiedAt, :operatorId, :operatorId
+            )
+            ON DUPLICATE KEY UPDATE
+                etag = VALUES(etag),
+                checksum = VALUES(checksum),
+                content_type = VALUES(content_type),
+                size_bytes = VALUES(size_bytes),
+                source_provider = VALUES(source_provider),
+                source_uri_digest = VALUES(source_uri_digest),
+                storage_state = 'OBJECT_STORED',
+                migration_status = 'COMPLETED',
+                last_verified_at = VALUES(last_verified_at),
+                updated_by = VALUES(updated_by),
+                deleted = 0,
+                delete_token = 0
+            """, new MapSqlParameterSource()
+            .addValue("provider", object.provider())
+            .addValue("bucket", object.bucket())
+            .addValue("objectKey", object.objectKey())
+            .addValue("etag", object.etag())
+            .addValue("checksum", object.checksum())
+            .addValue("contentType", object.contentType())
+            .addValue("sizeBytes", object.sizeBytes())
+            .addValue("sourceUriDigest", object.sourceUriDigest())
+            .addValue("verifiedAt", Timestamp.from(object.verifiedAt()))
+            .addValue("operatorId", operatorId));
+        List<Long> rows = jdbcTemplate.query("""
+            SELECT id
+            FROM data_storage_objects
+            WHERE provider = :provider
+              AND bucket = :bucket
+              AND object_key = :objectKey
+              AND deleted = 0
+            ORDER BY id DESC
+            LIMIT 1
+            """, new MapSqlParameterSource()
+            .addValue("provider", object.provider())
+            .addValue("bucket", object.bucket())
+            .addValue("objectKey", object.objectKey()), (rs, rowNum) -> rs.getLong("id"));
+        return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    public void insertActiveObjectVersion(
+        Long fileId,
+        Long storageObjectId,
+        String versionNo,
+        StorageService.ObjectWriteResult object,
+        Long operatorId
+    ) {
+        jdbcTemplate.update("""
+            UPDATE data_file_object_versions
+            SET active = 0,
+                updated_by = :operatorId
+            WHERE file_id = :fileId
+              AND active = 1
+              AND deleted = 0
+            """, new MapSqlParameterSource()
+            .addValue("fileId", fileId)
+            .addValue("operatorId", operatorId));
+        jdbcTemplate.update("""
+            INSERT INTO data_file_object_versions (
+                file_id, storage_object_id, version_no, active,
+                storage_state, migration_status, checksum, content_type, size_bytes,
+                last_verified_at, created_by, updated_by
+            ) VALUES (
+                :fileId, :storageObjectId, :versionNo, 1,
+                'OBJECT_STORED', 'COMPLETED', :checksum, :contentType, :sizeBytes,
+                :verifiedAt, :operatorId, :operatorId
+            )
+            """, new MapSqlParameterSource()
+            .addValue("fileId", fileId)
+            .addValue("storageObjectId", storageObjectId)
+            .addValue("versionNo", versionNo)
+            .addValue("checksum", object.checksum())
+            .addValue("contentType", object.contentType())
+            .addValue("sizeBytes", object.sizeBytes())
+            .addValue("verifiedAt", Timestamp.from(object.verifiedAt()))
+            .addValue("operatorId", operatorId));
     }
 
     public void updateFilePathAndName(

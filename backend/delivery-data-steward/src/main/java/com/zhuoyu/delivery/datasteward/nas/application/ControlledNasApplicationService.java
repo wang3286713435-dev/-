@@ -25,13 +25,13 @@ import com.zhuoyu.delivery.datasteward.nas.repository.ControlledNasRepository.Di
 import com.zhuoyu.delivery.datasteward.nas.repository.ControlledNasRepository.FileRecord;
 import com.zhuoyu.delivery.datasteward.nas.repository.ControlledNasRepository.QuarantineRecord;
 import com.zhuoyu.delivery.datasteward.nas.repository.ControlledNasRepository.TrialConfigRecord;
+import com.zhuoyu.delivery.datasteward.storage.StorageService;
 import com.zhuoyu.delivery.shared.exception.BusinessException;
 import com.zhuoyu.delivery.shared.trace.TraceIdHolder;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
@@ -70,19 +70,22 @@ public class ControlledNasApplicationService {
     private final ControlledNasRepository repository;
     private final AuditLogApplicationService auditLogApplicationService;
     private final ObjectMapper objectMapper;
+    private final StorageService storageService;
 
     public ControlledNasApplicationService(
         ProjectAccessApplicationService projectAccessApplicationService,
         AssetPathMappingRepository pathMappingRepository,
         ControlledNasRepository repository,
         AuditLogApplicationService auditLogApplicationService,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        StorageService storageService
     ) {
         this.projectAccessApplicationService = projectAccessApplicationService;
         this.pathMappingRepository = pathMappingRepository;
         this.repository = repository;
         this.auditLogApplicationService = auditLogApplicationService;
         this.objectMapper = objectMapper;
+        this.storageService = storageService;
     }
 
     public NasWriteTrialStatusResponse getWriteTrialStatus(Long userId, Long projectId, String directoryPath) {
@@ -161,25 +164,54 @@ public class ControlledNasApplicationService {
         Path parent = resolveExistingDirectory(root, normalizedParentPath);
         Path target = resolveNewChild(root, parent, fileName);
         ensureTargetAvailable(target, "NAS_UPLOAD_FILE_EXISTS", "同名文件已存在，当前批次不覆盖文件");
-        try (InputStream inputStream = file.getInputStream()) {
-            Files.copy(inputStream, target);
-            Long fileId = repository.insertUploadedFile(
-                projectId,
-                fileName,
-                normalizeFileKind(fileKind, fileName),
-                file.getContentType(),
-                Files.size(target),
-                storageUri(target),
-                logicalPath(target),
-                blankToNull(discipline),
-                defaultVersion(versionNo),
-                userId
-            );
-            return recordSuccess(userId, projectId, "FILE_UPLOAD", "FILE", fileId, fileId,
-                null, null, null, target, fileName, targetRelativePath, "文件已上传到公司 NAS");
+        if (repository.activeLogicalFileExists(projectId, targetRelativePath)) {
+            throw new BusinessException("NAS_UPLOAD_FILE_EXISTS", "同名文件已登记，当前批次不覆盖文件", HttpStatus.CONFLICT);
+        }
+        String assetUuid = UUID.randomUUID().toString();
+        String checksum = checksum(file);
+        String contentType = uploadContentType(file, fileName);
+        String version = defaultVersion(versionNo);
+        StorageService.ObjectWriteResult object = writeUploadObject(projectId, assetUuid, fileName,
+            checksum, contentType, file.getSize(), file);
+        Long fileId = repository.insertObjectUploadedFile(
+            assetUuid,
+            projectId,
+            fileName,
+            normalizeFileKind(fileKind, fileName),
+            contentType,
+            object.sizeBytes(),
+            objectStorageUri(assetUuid),
+            targetRelativePath,
+            object.checksum(),
+            blankToNull(discipline),
+            version,
+            userId
+        );
+        Long objectId = repository.upsertStorageObject(object, userId);
+        if (objectId == null) {
+            throw new BusinessException("OBJECT_UPLOAD_RECORD_FAILED", "对象存储记录写入失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        repository.insertActiveObjectVersion(fileId, objectId, version, object, userId);
+        return recordSuccess(userId, projectId, "FILE_UPLOAD", "FILE", fileId, fileId,
+            null, null, null, null, fileName, targetRelativePath,
+            "文件已写入对象存储，未在真实 NAS 目录生成文件本体",
+            new UploadStorageInfo(assetUuid, object.checksum(), "OBJECT_STORED", "OBJECT_STORAGE", object.sizeBytes()));
+    }
+
+    private StorageService.ObjectWriteResult writeUploadObject(
+        Long projectId,
+        String assetUuid,
+        String fileName,
+        String checksum,
+        String contentType,
+        Long sizeBytes,
+        MultipartFile file
+    ) {
+        try {
+            return storageService.writeUploadToObject(projectId, assetUuid, fileName, checksum,
+                contentType, sizeBytes, file.getInputStream(), null);
         } catch (IOException exception) {
-            safeDeleteIfExists(target);
-            throw sanitizedIo("NAS_UPLOAD_FAILED", "文件上传失败，请稍后重试");
+            throw sanitizedIo("OBJECT_UPLOAD_READ_FAILED", "上传文件读取失败，新增文件未写入");
         }
     }
 
@@ -412,6 +444,26 @@ public class ControlledNasApplicationService {
         String displayPath,
         String message
     ) {
+        return recordSuccess(userId, projectId, operationType, targetType, targetId, fileId,
+            directoryId, quarantineRecordId, source, target, displayName, displayPath, message, null);
+    }
+
+    private NasOperationResponse recordSuccess(
+        Long userId,
+        Long projectId,
+        String operationType,
+        String targetType,
+        Long targetId,
+        Long fileId,
+        Long directoryId,
+        Long quarantineRecordId,
+        Path source,
+        Path target,
+        String displayName,
+        String displayPath,
+        String message,
+        UploadStorageInfo storageInfo
+    ) {
         String targetHash = target == null ? null : sha256(target.toString());
         String sourceHash = source == null ? null : sha256(source.toString());
         Long operationId = repository.insertOperation(projectId, operationType, targetType, targetId, fileId,
@@ -428,7 +480,12 @@ public class ControlledNasApplicationService {
             ));
         return new NasOperationResponse(operationId, projectId, operationType, targetType, targetId, fileId,
             directoryId, quarantineRecordId, "SUCCEEDED", displayName, displayPath,
-            pathHint(displayPath), message, TraceIdHolder.getTraceId(), Instant.now());
+            pathHint(displayPath), message, TraceIdHolder.getTraceId(), Instant.now(),
+            storageInfo == null ? null : storageInfo.assetUuid(),
+            storageInfo == null ? null : storageInfo.checksum(),
+            storageInfo == null ? null : storageInfo.storageStatus(),
+            storageInfo == null ? null : storageInfo.storageProvider(),
+            storageInfo == null ? null : storageInfo.sizeBytes());
     }
 
     private String actionCode(String operationType) {
@@ -826,6 +883,44 @@ public class ControlledNasApplicationService {
         return versionNo == null || versionNo.isBlank() ? "V1" : versionNo.trim();
     }
 
+    private String checksum(MultipartFile file) {
+        try (InputStream inputStream = file.getInputStream()) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (IOException exception) {
+            throw sanitizedIo("OBJECT_UPLOAD_READ_FAILED", "上传文件读取失败，新增文件未写入");
+        } catch (NoSuchAlgorithmException exception) {
+            throw new BusinessException("OBJECT_UPLOAD_CHECKSUM_FAILED", "上传文件校验值计算失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private String uploadContentType(MultipartFile file, String fileName) {
+        String contentType = blankToNull(file.getContentType());
+        if (contentType != null) {
+            return contentType;
+        }
+        return switch (extension(fileName)) {
+            case "pdf" -> "application/pdf";
+            case "png" -> "image/png";
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "webp" -> "image/webp";
+            case "gif" -> "image/gif";
+            case "bmp" -> "image/bmp";
+            case "svg" -> "image/svg+xml";
+            case "txt" -> "text/plain";
+            default -> "application/octet-stream";
+        };
+    }
+
+    private String objectStorageUri(String assetUuid) {
+        return "object://asset/" + assetUuid;
+    }
+
     private String parentPath(String relativePath) {
         int slash = relativePath == null ? -1 : relativePath.lastIndexOf('/');
         return slash <= 0 ? "" : relativePath.substring(0, slash);
@@ -881,14 +976,6 @@ public class ControlledNasApplicationService {
         }
     }
 
-    private void safeDeleteIfExists(Path path) {
-        try {
-            Files.deleteIfExists(path);
-        } catch (IOException ignored) {
-            // Best-effort cleanup for failed upload only.
-        }
-    }
-
     private BusinessException sanitizedIo(String code, String message) {
         return new BusinessException(code, message, HttpStatus.BAD_REQUEST);
     }
@@ -909,6 +996,15 @@ public class ControlledNasApplicationService {
     ) {
     }
 
+    private record UploadStorageInfo(
+        String assetUuid,
+        String checksum,
+        String storageStatus,
+        String storageProvider,
+        Long sizeBytes
+    ) {
+    }
+
     private record ProjectRoot(Path realRoot) {
         Path resolveRelative(String relativePath) {
             Path path = relativePath == null || relativePath.isBlank()
@@ -922,6 +1018,10 @@ public class ControlledNasApplicationService {
 
         Path resolveStorageUri(String storageUri) {
             String raw = storageUri == null ? "" : storageUri.trim();
+            if (raw.startsWith("object://")) {
+                throw new BusinessException("NAS_OPERATION_OBJECT_STORED_UNSUPPORTED",
+                    "对象存储文件不能通过 NAS 文件操作移动、重命名或移入回收站", HttpStatus.PRECONDITION_FAILED);
+            }
             if (raw.startsWith("nas://")) {
                 raw = raw.substring("nas://".length());
             }

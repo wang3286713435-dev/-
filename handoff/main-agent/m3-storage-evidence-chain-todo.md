@@ -34,6 +34,8 @@ NAS 原始文件保留
 - [x] 2. 对象存储迁移任务中心（M3C 已收口）
 - [x] 3. 真实 NAS 小范围灰度镜像（M3D 已收口）
 - [x] 4. 预览与转换产物对象化（M3E 已收口）
+- [x] 4.5 新文件对象存储优先写入（M3F 已收口）
+- [ ] 4.6 NAS 侧 MinIO 对象存储接管真实项目文件（M3G 待启动）
 - [ ] 5. documents / chunks 语义契约
 - [ ] 6. 向量库与关键词索引试点
 - [ ] 7. Hermes 受控 Evidence API
@@ -217,7 +219,80 @@ NAS 原始文件保留
 - 收口记录：
   - `handoff/main-agent/m3e-preview-artifacts-object-storage-closure.md`
 
-## 7. 阶段 5：documents / chunks 语义契约
+## 7. 阶段 4.5：新文件对象存储优先写入
+
+状态：`已完成`
+
+建议批次名：`M3F：新文件对象存储优先写入与 NAS 兼容回退`
+
+交付要求：
+
+- 文件管理器新增上传的文件优先写入对象存储。
+- 新上传文件仍进入 `data_file_resources` 业务台账。
+- 新上传文件生成稳定 `assetUuid`。
+- 新上传文件写入 `data_storage_objects` 与 active `data_file_object_versions`。
+- 新上传文件 `storage-status=OBJECT_STORED`。
+- 新上传文件预览 / 下载继续通过受控 `file-access`。
+- 对象存储不可用时返回业务错误，或在显式配置下进入可审计 NAS fallback；不得假成功。
+- 不影响历史 NAS 文件访问，不影响 M3C 迁移任务中心。
+
+验收条件：
+
+- [x] 新上传文件默认对象存储化。
+- [x] 受控 `file-access` 可读取对象存储新增文件。
+- [x] API / 前端不暴露真实 NAS 路径、bucket、object key、`storage_uri`。
+- [x] M3E / M3D / M3C / M3B / M3A / file-access 回归通过。
+
+完成记录：
+
+- M3F 专项脚本：
+  - `scripts/dev/check-m3f-object-storage-first-write.sh`
+- 收口记录：
+  - `handoff/main-agent/m3f-object-storage-first-write-closure.md`
+
+## 8. 阶段 4.6：NAS 侧 MinIO 对象存储接管真实项目文件
+
+状态：`待启动`
+
+建议批次名：`M3G：NAS 侧 MinIO 对象存储接管真实项目文件`
+
+交付要求：
+
+- M3G 只能在 M3F 正式收口后启动。
+- 目标架构调整为：
+  - NAS 运行 MinIO 服务，并提供 MinIO 专用对象数据区。
+  - NAS 原项目资料区冻结为只读备份和回滚来源。
+  - NAS 侧 MinIO 存真实文件本体，作为平台后续文件主读取入口。
+  - MySQL 继续存业务台账、权限、版本、checksum、交付关系。
+  - 本机 Hermes 后续通过平台授权，从 NAS 侧 MinIO 复制文件副本到本机工作区解析。
+- 平台对象存储配置从本机 MinIO 切换到 NAS 侧 MinIO endpoint。
+- 正式 bucket 名称必须脱离测试语义，不能继续使用 `delivery-m3a-smoke` 这类名称。
+- 对当前所有已登记真实项目做对象化盘点，输出容量、文件类型、checksum 覆盖率、对象化覆盖率和失败风险。
+- 按项目、目录、文件类型、文件大小、checksum 覆盖情况、最近更新时间分批对象化。
+- 支持 dry-run、暂停、继续、重试、跳过、失败原因查看、断点续跑、速率限制和并发上限。
+- 历史文件对象 key 必须使用 opaque 规则，例如 `objects/{assetUuid}/{objectVersion}/{checksum}`，不得包含真实业务路径、项目名、楼栋、专业目录或用户名。
+- 平台读取链路优先使用 active object version；NAS_ONLY 文件继续可用但必须明确显示“未对象化”。
+- 大文件下载需要支持平台审计后从 NAS 侧 MinIO 直连或等价加速方案。
+- Hermes 副本取用只做契约预留，不做正文问答，不写 documents / chunks / 向量库。
+
+验收条件：
+
+- M3F 已正式收口。
+- NAS 侧 MinIO 健康检查通过。
+- 平台对象存储 endpoint 已切换到 NAS 侧 MinIO。
+- 正式 bucket 已创建并可读写。
+- 全项目对象化盘点报告已生成。
+- 至少完成主 agent 确认的一批真实项目对象化，且方案可复用到全部真实项目。
+- 每个对象化文件都有 `assetUuid`、checksum 和 active object version。
+- 已对象化文件默认从 NAS 侧 MinIO 读取，并显示 `OBJECT_STORED`。
+- 未镜像文件仍按 NAS 台账链路可用。
+- NAS 原文件未被移动、删除、改名。
+- 大文件下载支持平台审计后的 NAS 侧 MinIO 直连或等价加速方案。
+- Hermes 文件副本取用契约已预留，但未写正文 evidence。
+- 禁出字段扫描通过。
+- M3F / M3E / M3D / M3C / file-access 回归通过。
+
+## 9. 阶段 5：documents / chunks 语义契约
 
 状态：`待启动`
 
@@ -247,7 +322,7 @@ NAS 原始文件保留
 - 不写 Hermes memory。
 - 不把 catalog-only 当正文 evidence。
 
-## 8. 阶段 6：向量库与关键词索引试点
+## 10. 阶段 6：向量库与关键词索引试点
 
 状态：`待启动`
 
@@ -268,7 +343,7 @@ NAS 原始文件保留
 - 索引失效 / 重建策略可验证。
 - 不暴露未授权 evidence。
 
-## 9. 阶段 7：Hermes 受控 Evidence API
+## 11. 阶段 7：Hermes 受控 Evidence API
 
 状态：`待启动`
 
@@ -297,7 +372,7 @@ NAS 原始文件保留
 - 缺证据和权限拒绝口径明确。
 - API 不返回底层路径、object key、raw row、SQL。
 
-## 10. 阶段 8：工程主数据与交付治理 Agent 化
+## 12. 阶段 8：工程主数据与交付治理 Agent 化
 
 状态：`待启动`
 
@@ -322,7 +397,7 @@ NAS 原始文件保留
 - 不自动执行危险动作。
 - 交付治理仍可追溯。
 
-## 11. 统一验收红线
+## 13. 统一验收红线
 
 每阶段都必须满足：
 
@@ -334,7 +409,7 @@ NAS 原始文件保留
 - Hermes 回答必须有 evidence 或明确缺证据 / 权限拒绝。
 - 每阶段专项脚本、回归脚本、健康检查、禁出字段扫描通过。
 
-## 12. 当前完成标记
+## 14. 当前完成标记
 
 已完成并收口：
 
@@ -345,7 +420,9 @@ NAS 原始文件保留
 - [x] M3C：对象存储迁移任务中心与批量策略
 - [x] M3D：真实 NAS 小范围灰度镜像
 - [x] M3E：预览与转换产物对象化
+- [x] M3F：新文件对象存储优先写入
 
 下一步候选：
 
+- [ ] M3G：NAS 侧 MinIO 对象存储接管真实项目文件
 - [ ] M4A：documents / chunks 语义证据契约

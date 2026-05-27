@@ -1,4 +1,4 @@
-# 开发 Agent 当前任务：M3E 预览与转换产物对象化
+# 开发 Agent 当前任务：M3F 新文件对象存储优先写入
 
 你是卓羽智能数据中台 v1 的开发 agent。工作目录：
 
@@ -6,164 +6,184 @@
 
 当前分支：
 
-`codex/m3e-preview-artifacts-object-storage`
+`codex/m3f-object-storage-first-write`
 
 ## 0. 本批定位
 
 本批是：
 
-`M3E：预览与转换产物对象化`
+`M3F：新文件对象存储优先写入与 NAS 兼容回退`
 
-M3A/M3B/M3C/M3D 已经完成：
+M3A-M3E 已完成：
 
 - StorageService 与对象存储基础表。
 - assetUuid / storage-status。
 - 对象存储迁移任务中心。
-- 105 项目 PDF / DWG / RVT 小范围真实 NAS 对象镜像。
+- 105 真实 NAS 小样本对象存储镜像。
+- PDF / 图片预览产物对象化，以及 DWG / RVT / Office 转换占位。
 
-M3E 的目标不是做真实转换器，而是把“预览产物 / 转换产物 / 未来 BIM 轻量化产物”的关系接入对象存储底座，让平台能清楚回答：
+M3F 的目标是让**新增上传文件**优先进入对象存储，让后续新数据天然走对象存储底座；历史 NAS 文件仍按既有台账和迁移任务逐步处理。
 
-- 这个文件有没有可用预览产物？
-- 预览产物是否已经对象化？
-- 如果不能预览，是缺转换、格式不支持，还是权限不足？
-- 预览/转换产物是否仍通过平台受控 file-access / preview ticket 访问？
+本批不是全量历史项目迁移，也不是 Hermes 正文问答。
 
 ## 1. 必须先阅读
 
 开始前先阅读：
 
 - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
-- `handoff/main-agent/m3d-real-nas-object-mirror-gray-closure.md`
+- `handoff/main-agent/m3f-object-storage-first-write-plan.md`
 - `handoff/dev-agent/latest-report.md`
 - `handoff/test-agent/latest-report.md`
-- `backend/delivery-app/src/main/resources/db/migration/V28__m3a_storage_objects_foundation.sql`
 - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageService.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/AssetApplicationService.java`
-- `backend/delivery-shared/src/main/java/com/zhuoyu/delivery/shared/preview/FilePreviewPolicy.java`
-- `backend/delivery-shared/src/main/java/com/zhuoyu/delivery/shared/preview/PreviewDecision.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/controller/AssetController.java`
-- `frontend/src/modules/data-steward/api/dataSteward.ts`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageRepository.java`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/application/ControlledNasApplicationService.java`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/controller/ControlledNasController.java`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/repository/ControlledNasRepository.java`
 - `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
-- `frontend/src/modules/data-steward/utils/previewStatus.ts`
-- `frontend/src/modules/work-center/pages/DeliveryPackageArchivePage.vue`
+- `frontend/src/modules/data-steward/api/dataSteward.ts`
+- `scripts/dev/check-m3e-preview-artifacts-object-storage.sh`
+- `scripts/dev/check-m3d-real-nas-object-mirror-gray.sh`
+
+重点先确认现状：
+
+1. 文件管理器上传当前是否仍走 `ControlledNasApplicationService.uploadFile(...)` 写 NAS。
+2. `StorageService` 目前是否只有 NAS 文件镜像到对象存储能力，是否缺“直接写入对象存储”的能力。
+3. `file-access` 是否能读取 active object version。
+4. 新上传文件如何创建 `data_file_resources`、`asset_uuid`、`data_storage_objects`、`data_file_object_versions`。
 
 ## 2. 严格边界
 
 本批允许：
 
-- 后端接入已有 `data_file_derivatives`、`data_preview_artifacts` 表。
-- 如确实缺字段，可追加新 Flyway 迁移；不得修改已应用迁移。
-- 新增只读 / 受控 prepare 接口。
-- 前端展示预览产物状态、转换状态、对象化状态。
+- 修改后端文件上传链路，使新增文件内容优先写入对象存储。
+- 扩展 `StorageService`，增加受控对象写入能力。
+- 必要时追加 Flyway 迁移；不得修改旧迁移。
+- 更新文件管理器上传后的状态展示。
 - 新增专项脚本。
+- 修改 handoff 报告。
 
 本批禁止：
 
-- 不做真实 PDF / Office / CAD / BIM 转换器。
+- 不做全量 NAS 搬迁。
+- 不批量迁移所有项目历史文件。
+- 不移动、删除、重命名、覆盖真实 NAS 文件。
 - 不读取 PDF / Office / DWG / RVT / IFC 正文。
 - 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
 - 不新增 Hermes 正文问答。
 - 不进入 BIM 引擎真实接入。
-- 不移动、删除、重命名、覆盖真实 NAS 文件。
-- 不全量迁移 NAS。
+- 不开放永久删除。
 - 不暴露 `/Volumes`、`smb://`、`nas://`、`storage_uri`、bucket、object_key、raw row、SQL、token、secret。
 - 不修改 `docs/**`。
 
 ## 3. 推荐实现口径
 
-### A. 产物模型
+### A. 新上传文件默认对象存储优先
 
-优先复用 M3A 已有表：
+文件管理器上传文件时，目标口径是：
 
-- `data_file_derivatives`
-- `data_preview_artifacts`
+1. 校验项目权限、灰度写开关和当前目录权限。
+2. 接收 multipart 文件。
+3. 计算 checksum / size / contentType。
+4. 上传到对象存储 active provider（MinIO / S3-compatible）。
+5. 写入 `data_storage_objects`。
+6. 写入 `data_file_resources` 业务台账。
+7. 写入 `data_file_object_versions`，并标记 active。
+8. 单文件 `storage-status` 返回 `OBJECT_STORED`。
+9. `file-access` 预览 / 下载可读取对象存储内容。
 
-建议最小状态口径：
+新增文件不应再为了保存内容而先写入真实业务 NAS 目录。
 
-- `artifactType`
-  - `BROWSER_NATIVE_PREVIEW`
-  - `OFFICE_PREVIEW_PLACEHOLDER`
-  - `CAD_PREVIEW_PLACEHOLDER`
-  - `BIM_LIGHTWEIGHT_PLACEHOLDER`
-  - `THUMBNAIL_PLACEHOLDER`
-- `previewStatus`
-  - `AVAILABLE`
-  - `NEEDS_CONVERSION`
-  - `UNSUPPORTED`
-  - `BLOCKED`
-  - `NOT_STARTED`
-- `storageState`
-  - `OBJECT_STORED`
-  - `PENDING`
-  - `NOT_REQUIRED`
-- `generationStatus`
-  - `COMPLETED`
-  - `NOT_STARTED`
-  - `SKIPPED`
-  - `FAILED`
+### B. NAS 兼容回退必须受控
 
-### B. 浏览器原生预览
+如果对象存储未配置或不可用，请不要静默假成功。
 
-对 PDF / 图片这类浏览器原生可预览文件：
+推荐策略：
 
-- 如果文件已有 active 对象版本，可创建或更新 `BROWSER_NATIVE_PREVIEW` artifact。
-- artifact 可指向同一个 active storage object，不需要重复上传一份对象。
-- `file-access` 仍是唯一受控访问入口。
-- 前端不得拿到 bucket / object_key。
+- 默认返回清晰业务错误：`对象存储暂不可用，新增文件未写入`。
+- 如代码中已有明确兼容配置，可支持显式 `OBJECT_FIRST_WITH_NAS_FALLBACK`，但必须：
+  - 写审计。
+  - response / operation log 显示发生 NAS fallback。
+  - storage-status 为 `NAS_ONLY`，不能伪装成 `OBJECT_STORED`。
 
-### C. 需要转换的文件
+不要把对象存储失败时的 NAS fallback 做成用户无感的默认行为。
 
-对 Office / DWG / RVT / IFC / NWD / NWC 等需要后续转换的文件：
+### C. 空文件夹仍按现有 NAS 目录能力处理
 
-- 本批只创建或返回 placeholder 状态。
-- 不调用转换器。
-- 不读取正文。
-- 不伪造可预览。
-- 页面应明确显示“需要转换产物，当前未生成”。
+对象存储天然没有真实空目录。本批不要求重做目录模型。
 
-### D. 交付包预检查
+保持：
 
-交付包 / 档案目录中已有 `previewStatus`、`conversionStatus`、`conversionRequired`。
+- 新建文件夹仍走现有受控 NAS 目录能力。
+- 历史 NAS 文件仍按既有文件管理器和迁移任务工作。
+- 本批只改变“新增文件内容”的默认落点。
 
-本批需要让这些字段与 preview artifact 口径保持一致：
+如需在对象存储中表达逻辑目录，请先在报告中说明，不要大改目录系统。
 
-- 已有浏览器原生预览 artifact 的条目可显示可预览。
-- 需要转换但没有产物的条目继续作为阻塞 / 需转换。
-- 不生成真实 ZIP。
-- 不复制 NAS 文件。
+### D. 业务台账必须继续稳定
 
-## 4. 建议新增接口
+新上传对象存储文件仍必须进入 `data_file_resources`，并具备：
 
-命名按现有代码风格微调，但语义必须稳定：
+- `assetUuid`
+- `projectId`
+- `fileName`
+- `fileKind`
+- `extension`
+- `sizeBytes`
+- `checksum`
+- `version`
+- `discipline`
+- 当前目录逻辑路径或相对路径提示
+- `processStatus`
+- `confidenceLevel`
 
-- `GET /api/data-steward/assets/files/{fileId}/preview-artifacts`
-  - 查询某个文件的预览 / 转换产物状态。
-- `POST /api/data-steward/assets/files/{fileId}/preview-artifacts:prepare`
-  - 受控创建或刷新该文件的预览产物记录。
-  - 对 PDF / 图片：如已有对象版本，创建 `AVAILABLE` artifact。
-  - 对 DWG / RVT / Office：只创建 `NEEDS_CONVERSION` placeholder。
+前端和 API 不得返回底层对象定位。用户只能看到平台资产 ID、文件名、类型、大小、预览状态、对象存储状态等业务字段。
 
-响应必须包含：
+### E. 审计与操作记录
+
+新上传对象存储文件必须写审计或操作记录，至少表达：
+
+- 谁上传。
+- 上传到哪个项目。
+- 文件名。
+- 写入对象存储是否成功。
+- 是否发生 fallback。
+
+审计 / 操作记录不得包含 bucket、object_key、真实 NAS 路径。
+
+## 4. 建议新增或调整接口
+
+优先复用现有上传接口：
+
+- `POST /api/data-steward/projects/{projectId}/nas/files:upload`
+
+外部契约尽量不变，但行为改为对象存储优先。
+
+如你认为接口名称里的 `nas` 会造成误解，本批不要直接删除旧接口；可以：
+
+- 保留旧接口兼容。
+- 内部实现转为 object-first。
+- 可新增别名接口，但必须保证旧前端和测试不回归。
+
+上传响应建议返回：
 
 - `fileId`
 - `assetUuid`
 - `projectId`
-- `artifactType`
-- `previewStatus`
-- `conversionRequired`
-- `generationStatus`
-- `storageState`
-- `contentType`
+- `fileName`
+- `fileKind`
+- `extension`
 - `sizeBytes`
-- `lastVerifiedAt`
+- `checksum`
+- `storageStatus=OBJECT_STORED`
+- `storageProvider=OBJECT_STORAGE` 或业务化 provider label
 - `message`
 
-响应绝不包含：
+绝不返回：
 
-- 真实 NAS 路径
 - bucket
 - object key
 - `storage_uri`
+- 真实 NAS 路径
 - raw row
 - SQL
 - token / secret
@@ -172,49 +192,42 @@ M3E 的目标不是做真实转换器，而是把“预览产物 / 转换产物 
 
 最小前端接入即可，不要大改 UI：
 
-- 文件管理器中预览状态可显示“对象化预览 / 需转换 / 暂不支持”。
-- 文件详情或预览状态区域能看到预览产物状态。
-- 对 `NEEDS_CONVERSION` 的文件，按钮或提示要明确“后续接入转换服务后可生成预览”，不能假装可预览。
-- PDF / 图片继续通过受控 `file-access` 打开。
-- DWG / RVT 仍走模型/转换占位，不跳转伪 3D。
+- 文件管理器上传后刷新当前目录。
+- 新上传文件在列表中可见。
+- 新上传文件的存储状态能显示为“对象存储”或 `OBJECT_STORED` 对应业务文案。
+- 文件详情 / 技术信息中可看到平台资产 ID，但不暴露对象 key。
+- 预览 / 下载仍走受控 `file-access`。
+- 对象存储不可用时显示友好错误，不要只弹英文堆栈。
 
-## 6. 审计与权限
-
-- `prepare` 接口必须校验当前用户项目权限。
-- 不允许跨项目 fileId。
-- 创建 / 刷新 artifact 记录必须写审计日志。
-- 普通查看不会全量审计，按现有风格即可。
-- 无权限返回业务化错误，不泄露文件存在性和底层路径。
-
-## 7. 专项脚本
+## 6. 专项脚本
 
 新增：
 
-`scripts/dev/check-m3e-preview-artifacts-object-storage.sh`
+`scripts/dev/check-m3f-object-storage-first-write.sh`
 
 脚本至少验证：
 
 1. 登录管理员。
-2. 选择 105 / projectId=503。
-3. 找到已 `OBJECT_STORED` 的 PDF 样本。
-4. 调用 prepare，返回 `BROWSER_NATIVE_PREVIEW / AVAILABLE / OBJECT_STORED`。
-5. 查询 preview-artifacts，能看到同一状态。
-6. 通过受控 file-access 仍可打开 PDF，不暴露底层定位。
-7. 找到 DWG 或 RVT 样本。
-8. 调用 prepare，只返回 `NEEDS_CONVERSION` placeholder，不读取正文、不生成真实转换文件。
-9. 交付包预检查字段不回归。
-10. 禁出字段扫描通过。
+2. 准备隔离测试项目或安全测试目录，不能写真实业务目录。
+3. 通过现有上传接口上传一个小文件。
+4. 新文件生成 `assetUuid`。
+5. 新文件 `storage-status=OBJECT_STORED`。
+6. 数据库存在 active object version。
+7. 受控 `file-access` 可读取上传内容。
+8. 响应和访问结果不包含 `/Volumes`、`smb://`、`nas://`、`storage_uri`、bucket、object_key、SQL、raw row、token、secret。
+9. 对象存储不可用场景返回业务错误或明确 fallback 状态，不 500，不假成功。
+10. 未在真实业务 NAS 目录生成新增文件本体。
 
 必须回归：
 
+- `scripts/dev/check-m3e-preview-artifacts-object-storage.sh`
 - `scripts/dev/check-m3d-real-nas-object-mirror-gray.sh`
 - `scripts/dev/check-m3c-storage-migration-task-center.sh`
-- `scripts/dev/check-m3c1-asset-uuid-storage-status.sh`
 - `scripts/dev/check-m3b-object-storage-mirror-trial.sh`
 - `scripts/dev/check-m3a-storage-service-foundation.sh`
 - `scripts/dev/check-phase2-batch4-file-access.sh`
 
-## 8. 自测要求
+## 7. 自测要求
 
 完成后至少执行并记录：
 
@@ -225,17 +238,19 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-m3f-object-storage-first-write.sh
 bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
 bash scripts/dev/check-m3d-real-nas-object-mirror-gray.sh
 bash scripts/dev/check-m3c-storage-migration-task-center.sh
-bash scripts/dev/check-m3c1-asset-uuid-storage-status.sh
 bash scripts/dev/check-m3b-object-storage-mirror-trial.sh
 bash scripts/dev/check-m3a-storage-service-foundation.sh
 bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
 
-## 9. 报告要求
+如后端未启动，请按项目已有方式启动后再重试健康检查和脚本。
+
+## 8. 报告要求
 
 完成后写入：
 
@@ -245,22 +260,25 @@ git diff --check
 
 - 改动文件清单。
 - 是否新增迁移。
-- 是否复用 `data_file_derivatives` / `data_preview_artifacts`。
-- PDF / 图片 preview artifact 口径。
-- DWG / RVT / Office placeholder 口径。
-- file-access 是否回归。
-- 交付包预检查是否回归。
+- 新上传文件写入对象存储的完整流程。
+- 是否保留旧上传接口兼容。
+- 是否存在 NAS fallback，以及 fallback 是否显式。
+- 新文件如何写入 `data_file_resources` / `data_storage_objects` / `data_file_object_versions`。
+- file-access 是否可读取对象存储新增文件。
+- 前端显示变化。
 - 禁出字段扫描结果。
 - 自测命令结果。
 - 未完成事项和风险。
 
-## 10. 完成定义
+## 9. 完成定义
 
 只有同时满足以下条件，才可交给测试 agent：
 
-- PDF / 图片对象化预览产物状态可查。
-- DWG / RVT / Office 只返回需转换状态，不伪造预览。
-- file-access 仍是唯一受控访问入口。
-- API / 前端不泄露真实路径或对象定位。
-- 不读取正文、不写语义索引、不动 Hermes。
-- 前后端构建、专项脚本、关键回归和 `git diff --check` 通过。
+1. 新上传文件默认进入对象存储。
+2. 新上传文件有稳定 `assetUuid`。
+3. 新上传文件 `storage-status=OBJECT_STORED`。
+4. `file-access` 可受控读取对象存储新增文件。
+5. 响应不暴露底层对象定位或真实 NAS 路径。
+6. 对象存储不可用时不假成功。
+7. 历史 NAS 文件、对象迁移任务、预览产物不回归。
+8. 前后端构建、专项脚本、回归脚本和 `git diff --check` 通过。

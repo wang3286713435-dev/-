@@ -1407,6 +1407,11 @@ export interface NasOperationResponse {
   message: string;
   traceId: string;
   createdAt: string;
+  assetUuid?: string | null;
+  checksum?: string | null;
+  storageStatus?: string | null;
+  storageProvider?: string | null;
+  sizeBytes?: number | null;
 }
 
 export interface NasOperationRecord {

@@ -291,6 +291,7 @@
                 <el-tag v-if="!isRegisteredFile(row.file)" type="warning" size="small">未登记</el-tag>
                 <el-tag v-else-if="!row.file.qualityFlags || row.file.qualityFlags.length === 0" type="success" size="small">正常</el-tag>
                 <el-tag v-else type="warning" size="small">{{ row.file.qualityFlags.length }} 项待处理</el-tag>
+                <el-tag v-if="isObjectStoredFile(row.file)" type="success" size="small">对象存储</el-tag>
                 <span>{{ isRegisteredFile(row.file) ? (row.file.confidenceLevel === 'HIGH' ? '高置信度' : '需复核') : '需扫描入库后治理' }}</span>
               </div>
               <div v-else class="file-browser__status-cell">
@@ -1482,7 +1483,8 @@ async function runNasOperation(action: () => Promise<{ operationId: number; mess
   nasBusy.value = true;
   try {
     const result = await action();
-    ElMessage.success(`${result.message}。操作编号 ${result.operationId}，traceId ${result.traceId}`);
+    const storageText = result.storageStatus === 'OBJECT_STORED' ? '，存储：对象存储' : '';
+    ElMessage.success(`${result.message}${storageText}。操作编号 ${result.operationId}，traceId ${result.traceId}`);
     await refreshBrowserViews();
     return true;
   } catch (error) {
@@ -1880,6 +1882,11 @@ function previewForFileEntry(entry: FileBrowserEntry): PreviewStatusLike {
 
 function isRegisteredFile(file: CatalogFile) {
   return file.registered !== false && Number.isFinite(Number(file.fileId));
+}
+
+function isObjectStoredFile(file: CatalogFile) {
+  const provider = (file.storageProvider || '').toUpperCase();
+  return provider === 'OBJECT_STORAGE' || provider === 'MINIO' || provider === 'S3_COMPATIBLE';
 }
 
 async function renameEntry(entry: BrowserEntry) {

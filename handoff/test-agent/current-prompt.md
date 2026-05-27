@@ -1,4 +1,4 @@
-# 测试 Agent 当前任务：M3E 预览与转换产物对象化验收
+# 测试 Agent 当前任务：M3F 新文件对象存储优先写入验收
 
 你是卓羽智能数据中台的测试 agent。工作目录：
 
@@ -6,35 +6,34 @@
 
 当前验收批次：
 
-`M3E：预览与转换产物对象化`
+`M3F：新文件对象存储优先写入与 NAS 兼容回退`
 
-## 0. 重要上下文
+## 0. 验收目标
 
-本轮 M3E 开发文件已经 staged。请重点检查 staged M3E 交付，不要把工作区里未暂存的品牌命名口径修改、`.claude/**`、`CLAUDE.md`、`tmp/**` 当作 M3E 越界。
+本轮只验收 M3F：
 
-M3E 目标：
+- 通过平台上传的新文件默认写入对象存储。
+- 新文件仍进入 MySQL 业务台账。
+- 新文件有 `assetUuid` 和 active object version。
+- 新文件 `storage-status=OBJECT_STORED`。
+- 新文件可通过受控 `file-access` 读取。
+- 历史 NAS 文件、迁移任务、预览产物不回归。
 
-- PDF / 图片等浏览器原生可预览文件，可以登记 `BROWSER_NATIVE_PREVIEW / AVAILABLE / OBJECT_STORED`。
-- Office / CAD / BIM / RVT / DWG 等需要转换的文件，只登记转换占位，不做真实转换。
-- 预览打开仍走受控 `file-access`。
-- 不暴露真实 NAS 路径、bucket、object_key、storage_uri。
+本轮不验收：
 
-M3E 不做：
-
-- 不读取 PDF / Office / DWG / RVT / IFC 正文。
-- 不做真实转换器。
-- 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
-- 不做 Hermes 正文问答。
-- 不移动、删除、重命名、覆盖真实 NAS 文件。
-- 不修改 `docs/**`。
+- 全量 NAS 搬迁。
+- Hermes 正文问答。
+- documents / chunks / Qdrant / OpenSearch。
+- 文件正文读取。
+- 真实 BIM 引擎。
 
 ## 1. 必读文件
 
 - `handoff/dev-agent/latest-report.md`
 - `handoff/dev-agent/current-prompt.md`
+- `handoff/main-agent/m3f-object-storage-first-write-plan.md`
 - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
-- `handoff/main-agent/m3e-preview-artifacts-object-storage-plan.md`
-- `scripts/dev/check-m3e-preview-artifacts-object-storage.sh`
+- `scripts/dev/check-m3f-object-storage-first-write.sh`
 
 ## 2. 必跑命令
 
@@ -47,112 +46,121 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-m3f-object-storage-first-write.sh
 bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
 bash scripts/dev/check-m3d-real-nas-object-mirror-gray.sh
 bash scripts/dev/check-m3c-storage-migration-task-center.sh
-bash scripts/dev/check-m3c1-asset-uuid-storage-status.sh
 bash scripts/dev/check-m3b-object-storage-mirror-trial.sh
 bash scripts/dev/check-m3a-storage-service-foundation.sh
 bash scripts/dev/check-phase2-batch4-file-access.sh
-git diff --cached --check
 git diff --check
 ```
 
-如后端未运行，可按项目既有脚本启动后重试健康检查和专项脚本。
+如后端未运行，可按项目已有方式启动后重试健康检查和专项脚本。
 
 ## 3. Git 范围检查
 
-请检查 staged 文件：
+请检查：
 
 ```bash
+git status --short
+git diff --name-only
 git diff --cached --name-status
 ```
 
-M3E staged 允许包含：
+M3F 允许包含：
 
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/AssetApplicationService.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/controller/AssetController.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/dto/AssetDtos.java`
-- `frontend/src/modules/data-steward/api/dataSteward.ts`
-- `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
-- `scripts/dev/check-m3e-preview-artifacts-object-storage.sh`
+- `backend/**` 中与 StorageService、文件上传、对象版本、受控访问相关的最小改动。
+- `frontend/**` 中文件管理器上传后状态展示的最小改动。
+- `scripts/dev/check-m3f-object-storage-first-write.sh`
 - `handoff/dev-agent/latest-report.md`
-- 测试报告本身
+- 必要的 Flyway 新迁移。
 
-不允许 staged 出现：
+M3F 不允许包含：
 
 - `docs/**`
-- `backend/delivery-app/src/main/resources/db/migration/*.sql` 新迁移，除非报告明确说明原因
-- Hermes 正文问答相关大改
-- parser / indexing / Qdrant / OpenSearch / documents / chunks
-- 真实 NAS 写操作扩展
+- Hermes 正文问答。
+- documents / chunks / Qdrant / OpenSearch / parser / indexing。
+- 真实 BIM 引擎。
+- 全量 NAS 迁移入口。
+- 真实 NAS 批量移动、删除、重命名能力扩展。
 
-## 4. API / 脚本验收重点
+## 4. 核心验收点
 
 重点确认：
 
-1. `GET /api/data-steward/assets/files/{fileId}/preview-artifacts` 可用。
-2. `POST /api/data-steward/assets/files/{fileId}/preview-artifacts:prepare` 可用。
-3. 已对象化 PDF / 图片样本返回：
-   - `artifactType=BROWSER_NATIVE_PREVIEW`
-   - `previewStatus=AVAILABLE`
-   - `generationStatus=COMPLETED`
-   - `storageState=OBJECT_STORED`
-4. DWG / RVT / Office 样本返回转换占位：
-   - `previewStatus=NEEDS_CONVERSION`
-   - `generationStatus=NOT_STARTED`
-   - `storageState=PENDING`
-5. `file-access` 仍可读取对象镜像。
-6. 交付包导出预检查不回归。
-7. 所有响应禁出字段扫描通过，不包含：
-   - `/Volumes`
-   - `/Users`
-   - `smb://`
-   - `nas://`
-   - `storage_uri`
-   - `storageUri`
-   - `bucket`
-   - `object_key`
-   - `objectKey`
-   - raw row
-   - SQL
-   - token / secret / password
+1. 新上传文件不是先写真实业务 NAS 目录。
+2. 新上传文件创建 `data_file_resources` 记录。
+3. 新上传文件有 `assetUuid`。
+4. 新上传文件创建 `data_storage_objects`。
+5. 新上传文件创建 active `data_file_object_versions`。
+6. `GET /api/data-steward/assets/files/{fileId}/storage-status` 返回 `OBJECT_STORED`。
+7. `file-access` 可读取对象存储新增文件内容。
+8. 对象存储不可用时不 500、不假成功。
+9. 历史 NAS 文件仍可走原有受控访问。
+10. M3E 预览产物、M3D 灰度镜像、M3C 迁移任务不回归。
 
-## 5. 浏览器检查
+## 5. 禁出字段扫描
 
-本轮不要求全量浏览器逐页点击。
+所有 M3F 响应和脚本输出中不得出现：
 
-只做轻量检查：
+- `/Volumes`
+- `/Users`
+- `smb://`
+- `nas://`
+- `storage_uri`
+- `storageUri`
+- `bucket`
+- `object_key`
+- `objectKey`
+- raw row
+- SQL
+- token
+- secret
+- password
+
+说明性文案里可以出现“对象存储”这个业务词，但不能出现真实 bucket / object key 值。
+
+## 6. 浏览器轻量检查
+
+本轮不要求全量浏览器逐页点击，只做轻量检查：
 
 - 打开 `http://127.0.0.1:5173/data-steward/assets/503?tab=files`
 - 文件管理器页面不白屏。
-- 文件列表能看到“预览产物”列或对应入口。
-- 点击/右键“准备预览产物状态”不导致页面崩溃。
-- 不需要执行真实 NAS 写操作。
+- 上传入口仍可见。
+- 上传成功后的文件能显示在当前目录。
+- 新文件的存储状态或详情可体现对象存储状态。
+- 不需要在真实业务目录执行破坏性操作。
 
-## 6. P0 / P1 判定
+## 7. P0 / P1 判定
 
 P0：
 
-- 真实 NAS 文件被移动、删除、重命名或覆盖。
-- API / 前端泄露真实 NAS 路径、bucket、object_key、storage_uri、token、secret。
-- Hermes 正文问答、parser、indexing、documents/chunks 被误引入。
+- 新上传文件泄露真实 NAS 路径、bucket、object key、storage URI、token、secret。
+- 真实业务 NAS 文件被移动、删除、覆盖或改名。
 - file-access 权限链路回归失败。
+- 引入 Hermes 正文问答、parser、indexing、documents / chunks。
+- 全量历史 NAS 迁移被误开启。
 
 P1：
 
-- PDF / 图片无法登记对象化预览产物。
-- DWG / RVT / Office 被误标记为已可预览，或伪造转换完成。
-- M3E 专项脚本失败。
-- staged 文件遗漏 M3E 专项脚本。
-- staged 中出现 `docs/**` 或无关大改。
+- 新上传文件仍默认写 NAS，未写对象存储。
+- 新文件无 `assetUuid`。
+- 新文件无 active object version。
+- 新文件 storage-status 不是 `OBJECT_STORED`。
+- 新文件无法通过受控 file-access 读取。
+- 对象存储不可用时假成功或 500。
+- M3F 专项脚本失败。
+- M3E / M3D / M3C / M3B / M3A 关键回归失败。
+- M3F 专项脚本未纳入 Git。
 
 P2：
 
 - 既有 Vite chunk warning。
-- 非本批 unstaged 命名口径修改或 `.claude/**`、`CLAUDE.md`、`tmp/**` 未跟踪项，只记录，不阻塞 M3E。
+- `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪项，只记录，不阻塞。
+- 文案细节粗糙但不影响主链路。
 
-## 7. 报告要求
+## 8. 报告要求
 
 完成后写入：
 
@@ -163,10 +171,12 @@ P2：
 - 测试结论：通过 / 不通过。
 - P0 / P1 / P2。
 - 必跑命令结果。
-- M3E 专项脚本结果。
-- PDF / 图片对象化预览产物验证结果。
-- DWG / RVT / Office 转换占位验证结果。
-- file-access 和交付包预检查回归结果。
-- staged 文件范围检查结果。
+- M3F 专项脚本结果。
+- 新上传文件对象存储验证结果。
+- `assetUuid` / active object version / storage-status 验证结果。
+- file-access 读取验证结果。
+- 对象存储不可用场景验证结果。
+- 回归脚本结果。
 - 禁出字段扫描结果。
-- 是否建议主 agent 收口 M3E。
+- Git 范围检查结果。
+- 是否建议主 agent 收口 M3F。

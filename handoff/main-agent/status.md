@@ -1,5 +1,60 @@
 # 主 Agent 项目状态
 
+## 2026-05-27 M3F 启动：新文件对象存储优先写入
+
+- 用户确认：先做 `M3F`，后续再做 `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`。
+- 当前分支：`codex/m3f-object-storage-first-write`。
+- 当前 active 批次：`M3F：新文件对象存储优先写入与 NAS 兼容回退`。
+- M3F 定位：
+  - 让后续通过平台上传的新文件优先进入对象存储。
+  - 新文件仍写入 MySQL 业务台账，并生成 `assetUuid`。
+  - 新文件应写入 `data_storage_objects` 与 active `data_file_object_versions`。
+  - 新文件 `storage-status` 应显示 `OBJECT_STORED`。
+  - 预览 / 下载仍走受控 `file-access`。
+- M3F 不做：
+  - 不做全量历史 NAS 项目迁移。
+  - 不移动、删除、重命名真实 NAS 文件。
+  - 不读取文件正文。
+  - 不进入 Hermes 正文问答。
+  - 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
+  - 不接入真实 BIM 引擎。
+- 后续批次裁决：
+  - `M3G：NAS 侧 MinIO 对象存储接管真实项目文件` 才负责将对象存储主链路切换到 NAS 侧 MinIO，并按项目 / 目录 / 文件类型 / 大小范围分批对象化历史真实项目。
+- 已写入：
+  - M3F 计划：`handoff/main-agent/m3f-object-storage-first-write-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+  - 任务图更新：`handoff/main-agent/m3-storage-evidence-chain-todo.md`
+- 当前裁决：
+  - 交给开发 agent 按 M3F prompt 执行。
+  - M3F 通过前，不进入 M3G、M4A 或 Hermes 正文问答。
+
+## 2026-05-27 M3F 正式收口
+
+- 测试 agent 已完成 M3F 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- P2：
+  - 既有 Vite chunk size warning。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪项继续排除。
+  - `handoff/main-agent/m3g-nas-minio-real-project-object-storage-plan.md` 随 M3F checkpoint 一并提交，作为后续路线文件，不代表 M3G 已启动。
+- 已确认：
+  - 新上传文件默认写入对象存储。
+  - 新上传文件生成 `assetUuid`。
+  - 新上传文件创建 active object version。
+  - 新上传文件 `storage-status=OBJECT_STORED`。
+  - 新上传文件可通过受控 `file-access` 读取。
+  - 对象存储不可用时 fail-closed，不静默回退真实 NAS。
+  - M3E / M3D / M3C / M3B / M3A / file-access 回归通过。
+  - 未新增 Hermes 正文问答、documents / chunks、Qdrant、OpenSearch、parser、BIM 引擎。
+  - 未修改 `docs/**`。
+- 主 agent 裁决：`M3F：新文件对象存储优先写入与 NAS 兼容回退` 正式收口。
+- 当前 active 批次：`待用户确认`。
+- 下一步候选：
+  - `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`。
+  - M3G 需要单独启动，不自动进入。
+
 ## 2026-05-25 M3A 启动：对象存储与 StorageService 基线
 
 - 用户确认执行 `M3 执行计划：对象存储底座先行，语义与 Hermes 后置`。
@@ -1972,7 +2027,7 @@
   - 未暴露真实路径、bucket、object_key、`storage_uri`。
 - 主 agent 裁决：`M3E：预览与转换产物对象化` 正式收口。
 - 收口记录：`handoff/main-agent/m3e-preview-artifacts-object-storage-closure.md`。
-- 下一步建议：`M4A：documents / chunks 语义证据契约`，先做契约，不直接进入向量库或 Hermes 正文问答。
+- 原下一步建议为 `M4A：documents / chunks 语义证据契约`；2026-05-27 已根据用户新裁决插入 `M3F：新文件对象存储优先写入` 与后续 `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`，M4A 顺延。
 
 ## 跨机器交接入口
 

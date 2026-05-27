@@ -97,8 +97,34 @@ public final class ControlledNasDtos {
         String pathHint,
         String message,
         String traceId,
-        Instant createdAt
+        Instant createdAt,
+        String assetUuid,
+        String checksum,
+        String storageStatus,
+        String storageProvider,
+        Long sizeBytes
     ) {
+        public NasOperationResponse(
+            Long operationId,
+            Long projectId,
+            String operationType,
+            String targetType,
+            Long targetId,
+            Long fileId,
+            Long directoryId,
+            Long quarantineRecordId,
+            String status,
+            String displayName,
+            String displayPath,
+            String pathHint,
+            String message,
+            String traceId,
+            Instant createdAt
+        ) {
+            this(operationId, projectId, operationType, targetType, targetId, fileId, directoryId,
+                quarantineRecordId, status, displayName, displayPath, pathHint, message, traceId,
+                createdAt, null, null, null, null, null);
+        }
     }
 
     public record NasOperationRecordResponse(

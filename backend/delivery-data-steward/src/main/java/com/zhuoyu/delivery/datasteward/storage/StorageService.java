@@ -20,9 +20,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import okhttp3.OkHttpClient;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
@@ -139,6 +141,57 @@ public class StorageService {
         } catch (Exception exception) {
             throw new BusinessException("STORAGE_MIGRATION_UPLOAD_FAILED",
                 "对象存储镜像上传失败", HttpStatus.PRECONDITION_FAILED);
+        }
+    }
+
+    public ObjectWriteResult writeUploadToObject(
+        Long projectId,
+        String assetUuid,
+        String fileName,
+        String checksum,
+        String contentType,
+        Long sizeBytes,
+        InputStream inputStream,
+        String targetProvider
+    ) {
+        String providerCode = normalizeTargetProvider(targetProvider);
+        ObjectStorageProvider provider = providerFor(providerCode);
+        String bucket = defaultBucket(providerCode);
+        String objectKey = stableUploadObjectKey(projectId, assetUuid, checksum, fileName);
+        String safeContentType = hasText(contentType) ? contentType : contentTypeFromFileName(fileName);
+        try (InputStream uploadStream = inputStream) {
+            ensureBucket(provider.client(), bucket);
+            provider.client().putObject(PutObjectArgs.builder()
+                .bucket(bucket)
+                .object(objectKey)
+                .contentType(safeContentType)
+                .stream(uploadStream, sizeBytes == null ? -1 : sizeBytes, -1)
+                .build());
+            StatObjectResponse stat = provider.client().statObject(StatObjectArgs.builder()
+                .bucket(bucket)
+                .object(objectKey)
+                .build());
+            if (sizeBytes != null && stat.size() != sizeBytes) {
+                throw new BusinessException("OBJECT_UPLOAD_VERIFY_FAILED",
+                    "对象存储写入校验失败：文件大小不一致", HttpStatus.PRECONDITION_FAILED);
+            }
+            Instant verifiedAt = Instant.now();
+            return new ObjectWriteResult(
+                providerCode,
+                bucket,
+                objectKey,
+                stat.etag(),
+                checksum,
+                safeContentType,
+                stat.size(),
+                sha256Text("USER_UPLOAD:" + assetUuid),
+                verifiedAt
+            );
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new BusinessException("OBJECT_UPLOAD_FAILED",
+                "对象存储暂不可用，新增文件未写入", HttpStatus.PRECONDITION_FAILED);
         }
     }
 
@@ -338,6 +391,12 @@ public class StorageService {
         return MinioClient.builder()
             .endpoint(config.getEndpoint())
             .credentials(config.getAccessKey(), config.getSecretKey())
+            .httpClient(new OkHttpClient.Builder()
+                .connectTimeout(Duration.ofSeconds(3))
+                .readTimeout(Duration.ofSeconds(5))
+                .writeTimeout(Duration.ofSeconds(30))
+                .callTimeout(Duration.ofSeconds(45))
+                .build())
             .build();
     }
 
@@ -386,7 +445,11 @@ public class StorageService {
         if (hasText(contentType)) {
             return contentType;
         }
-        return switch (extensionOf(file.fileName())) {
+        return contentTypeFromFileName(file.fileName());
+    }
+
+    private String contentTypeFromFileName(String fileName) {
+        return switch (extensionOf(fileName)) {
             case ".pdf" -> "application/pdf";
             case ".png" -> "image/png";
             case ".jpg", ".jpeg" -> "image/jpeg";
@@ -500,6 +563,13 @@ public class StorageService {
         return "projects/" + file.projectId() + "/files/" + file.fileId() + "/" + checksum + "/" + safeName;
     }
 
+    private String stableUploadObjectKey(Long projectId, String assetUuid, String checksum, String fileName) {
+        String safeName = fileName == null || fileName.isBlank()
+            ? "upload-" + assetUuid
+            : fileName.replaceAll("[\\\\/\\p{Cntrl}]+", "_");
+        return "projects/" + projectId + "/uploads/" + assetUuid + "/" + checksum + "/" + safeName;
+    }
+
     private String sha256File(Path path) {
         try (InputStream inputStream = Files.newInputStream(path)) {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -558,6 +628,19 @@ public class StorageService {
         String sourceProvider,
         String sourceUriDigest,
         String sourcePathDigest,
+        Instant verifiedAt
+    ) {
+    }
+
+    public record ObjectWriteResult(
+        String provider,
+        String bucket,
+        String objectKey,
+        String etag,
+        String checksum,
+        String contentType,
+        Long sizeBytes,
+        String sourceUriDigest,
         Instant verifiedAt
     ) {
     }
