@@ -4201,3 +4201,25 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - `M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划` 正式收口。
   - 当前不进入真实历史文件对象化执行。
   - 下一步如继续 M3G，应单独启动 `M3G-2：历史文件对象化执行与读取链路切换灰度`。
+
+## 2026-05-27 M3G-2 启动
+
+- 用户确认可以开始做文件上传 MinIO，范围先限定 105 项目。
+- 主 agent 已核对当前 `StorageService` 读取策略：
+  - 已有 active object version：优先读取对象存储。
+  - 无 active object version：读取原 NAS 台账路径。
+  - active object version 存在但对象副本不可读：fail-closed，不静默回退 NAS。
+- 主 agent 裁决当前批次：
+  - `M3G-2：105 项目历史文件对象化上传灰度`
+- 已新增 / 更新：
+  - `handoff/main-agent/m3g2-105-objectification-gray-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+  - `handoff/main-agent/status.md`
+  - `handoff/main-agent/phase2-current-roadmap.md`
+  - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
+- 本批继续禁止：
+  - 全量迁移所有项目。
+  - 移动、删除、改名真实 NAS 原项目文件。
+  - Hermes 正文问答、语义索引、文件正文读取。
+  - 暴露真实路径、bucket、object key、storage URI、SQL、raw row、token、secret。

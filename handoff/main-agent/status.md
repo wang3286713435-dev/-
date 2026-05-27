@@ -92,9 +92,9 @@
   - 注意：当前为本机会话级环境变量注入，不代表生产持久化部署完成；开发 agent 仍需实现 readiness，明确区分 `LOCAL_DEV_MINIO` 与 `NAS_SIDE_MINIO`。
 - 当前裁决：
   - M3G-1 已于 2026-05-27 正式收口。
-  - 当前 active 批次：`待用户确认`。
-  - 下一步候选：`M3G-2：历史文件对象化执行与读取链路切换灰度`。
-  - M3G-2 未启动前，不进入真实历史文件对象化执行。
+  - 当前 active 批次：`M3G-2：105 项目历史文件对象化上传灰度`。
+  - 本批只针对 105 / `projectId=503` 小批量执行真实历史文件对象化。
+  - 其他项目和全量迁移继续等待后续批次。
 
 ## 2026-05-27 M3G-1 正式收口
 
@@ -2045,6 +2045,26 @@
   - P2 返修：项目工作台顶栏已展示负责人；后端当前用户项目摘要已补充 `projectManagerName` 字段，空值显示为 `待维护`。
   - 验证通过：前端构建、后端构建、临时 `18080` 后端接口抽查、`git diff --check`。
   - 短回归入口：`handoff/test-agent/current-prompt.md`。
+
+## 2026-05-27 M3G-2 启动：105 项目历史文件对象化上传灰度
+
+- `M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划` 已正式收口。
+- 用户确认可以开始把文件上传到 MinIO，范围先限定在 105 项目。
+- 主 agent 裁决当前 active 批次：
+  - `M3G-2：105 项目历史文件对象化上传灰度`
+- 当前读取降级策略已确认：
+  - 有 active object version 且 `OBJECT_STORED`：优先读取 NAS 侧 MinIO。
+  - 无 active object version：继续读取原 NAS 台账路径。
+  - 已标记对象化但对象副本不可读：fail-closed，不静默回退 NAS。
+- 本批边界：
+  - 只针对 105 / `projectId=503` 小批量执行。
+  - NAS 原文件保留，不移动、不删除、不改名。
+  - 不读正文、不写语义索引、不做 Hermes 正文问答。
+  - 不修改 `docs/**`。
+- 已写入：
+  - `handoff/main-agent/m3g2-105-objectification-gray-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
 
 ## 跨机器交接入口
 

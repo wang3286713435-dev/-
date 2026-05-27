@@ -1,4 +1,4 @@
-# 开发 Agent 当前任务：M3G-1 P1 回归修复
+# 开发 Agent 当前任务：M3G-2 105 项目历史文件对象化上传灰度
 
 你是卓羽智能数据中台 v1 的开发 agent。工作目录：
 
@@ -8,118 +8,137 @@
 
 `codex/m3g-nas-minio-real-project-object-storage`
 
-## 0. 当前结论
+## 0. 当前结论与目标
 
-M3G-1 核心能力已通过：
+M3G-1 已正式收口：
 
-- readiness 能识别 `NAS_SIDE_MINIO / READY`。
+- 平台能识别 NAS 侧 MinIO：`NAS_SIDE_MINIO / READY`。
 - 全项目对象化覆盖率可查。
 - 503 / 105 项目 dry-run 可生成计划。
-- dry-run 未启动真实迁移、未复制文件。
+- M3E / M3F / M3C / file-access 回归均已通过。
 
-但测试 agent 判定 M3G-1 暂不收口，当前有 2 个 P1：
+当前进入：
 
-1. M3E 回归失败：切到 NAS 侧 MinIO 后，既有对象化预览产物通过 file-access 读取失败，返回 `ASSET_FILE_NOT_READABLE`。
-2. M3F 回归脚本失败：脚本仍假设对象存储是本机 Docker MinIO，通过停止本机 MinIO 模拟不可用；当前实际对象存储已切到 NAS 侧 MinIO，因此停止本机 MinIO 不会让对象存储不可用，脚本误判。
+`M3G-2：105 项目历史文件对象化上传灰度`
 
-本轮只修这两个 P1 和一个测试报告记录的 P2：
+本批目标是让 105 项目少量历史 NAS 文件真实上传到 NAS 侧 MinIO，并验证读取链路切换。
 
-- 单项目对象化盘点接口 `projectCode / projectName` 返回 `null`，应与全项目盘点保持一致。
+重要：这里的“上传 MinIO”是复制副本到对象存储，不是移动、删除或改名 NAS 原文件。
 
 ## 1. 必须先阅读
 
-- `handoff/test-agent/latest-report.md`
 - `handoff/dev-agent/latest-report.md`
-- `handoff/test-agent/current-prompt.md`
+- `handoff/test-agent/latest-report.md`
 - `handoff/main-agent/m3g1-task-graph.md`
-- `handoff/main-agent/m3g1-nas-minio-ops-preparation.md`
+- `handoff/main-agent/m3g1-nas-minio-readiness-inventory-closure.md`
+- `handoff/main-agent/m3g2-105-objectification-gray-plan.md`
 - `scripts/dev/check-m3e-preview-artifacts-object-storage.sh`
 - `scripts/dev/check-m3f-object-storage-first-write.sh`
 - `scripts/dev/check-m3g-nas-minio-readiness-inventory.sh`
+- `scripts/dev/check-m3c-storage-migration-task-center.sh`
 - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageService.java`
 - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageMigrationApplicationService.java`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageMigrationController.java`
+- `frontend/src/modules/data-steward/pages/FileServicePage.vue`
+- `frontend/src/modules/data-steward/api/dataSteward.ts`
 
 ## 2. 严格边界
 
 本轮允许：
 
-- 修复 M3E 在 NAS 侧 MinIO 下的预览产物 / file-access 回归。
-- 修复 M3F 脚本对 `LOCAL_DEV_MINIO` 和 `NAS_SIDE_MINIO` 的环境判断。
-- 修复单项目对象化盘点展示字段。
-- 更新专项脚本和 `handoff/dev-agent/latest-report.md`。
+- 只针对 105 项目，即本地 `projectId=503`，执行小批量对象化上传灰度。
+- 复用或扩展已有对象迁移任务中心。
+- 从 dry-run 结果生成受控迁移任务。
+- 让 105 覆盖率页面展示对象化前后变化。
+- 增加 M3G-2 专项脚本。
+- 更新 `handoff/dev-agent/latest-report.md`。
 
 本轮禁止：
 
-- 不执行历史文件真实批量迁移。
+- 不全量迁移全部项目。
+- 不一键迁移 NAS 根目录。
 - 不移动、删除、重命名、覆盖真实 NAS 原项目文件。
 - 不做 Hermes 正文问答。
 - 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
 - 不读取 PDF / Office / DWG / RVT / IFC 正文。
 - 不接入真实 BIM 引擎。
-- 不把 file-access 改成静默绕过对象存储失败后读取 NAS 并伪装成功。
+- 不把 `OBJECT_STORED` 但对象读取失败的文件静默 fallback 到 NAS 并伪装成功。
 - 不暴露 `/Volumes`、`smb://`、`nas://`、`storage_uri`、bucket、object key、endpoint 原文、SQL、raw row、token、secret。
 - 不修改 `docs/**`。
 
-## 3. P1-1：M3E 预览产物在 NAS MinIO 下不可读
+## 3. 必须明确当前降级策略
 
-### 问题
+当前平台读取策略应保持：
 
-M3E 脚本选择了一个已对象化原生预览样本 `fileId=993`，但当前平台对象存储 endpoint 已切到 NAS 侧 MinIO。该文件的历史 object metadata 可能指向旧本机 MinIO 对象，NAS MinIO 中没有对应对象本体，所以 file-access 返回：
+1. 文件有 active object version 且状态 `OBJECT_STORED`：优先读取对象存储。
+2. 文件没有 active object version：读取原 NAS 台账路径。
+3. 文件标记 `OBJECT_STORED` 但对象副本不可读：fail-closed，提示对象副本异常；不得偷偷读 NAS。
 
-`ASSET_FILE_NOT_READABLE`
+第 3 条不能改。这是对象存储治理的可信边界。
 
-### 修复目标
+## 4. 本轮必须完成
 
-M3E 回归在 NAS 侧 MinIO 下必须通过。
+### A. 105 小批量对象化执行
 
-允许的修复方向：
+请基于已有 dry-run / migration task 能力完成：
 
-1. `preview-artifacts:prepare` 对 PDF / 图片原生预览样本应保证当前 active object version 在当前对象存储 provider 下可读。
-2. 如果已有 active object version 不可读，不要让 file-access 静默伪装成功；应由 prepare 流程基于受控源文件重新对象化到当前 NAS 侧 MinIO，并创建新的 active object version 或修复预览产物关联。
-3. 如选择脚本修复，脚本必须显式准备一个“当前 provider 可读”的对象化样本，而不是随机拿历史 `OBJECT_STORED` 记录。
+- 确认 readiness 是 `NAS_SIDE_MINIO / READY`。
+- 对 105 / `projectId=503` 生成 dry-run 计划。
+- 从 dry-run 计划选择一批文件创建对象化迁移任务。
+- 每批保持小批量，建议沿用现有后端安全上限，不要为了本轮放大到全项目。
+- 任务执行后写入 `data_storage_objects` 和 active `data_file_object_versions`。
+- 任务失败时必须保留失败原因。
+- 重复执行必须幂等，不能污染 active object version。
 
-不允许：
+如果当前接口已经支持明确 `fileIds` 创建任务，可以优先复用；如前端缺少“从 dry-run 执行”的入口，可在前端补一个最小受控入口。
 
-- 不允许把对象读取失败静默 fallback 到 NAS 并仍称 `OBJECT_STORED`。
-- 不允许暴露对象 bucket / object key。
-- 不允许读取文件正文内容。
-- 不允许批量迁移整个项目。
+### B. 读取链路验证
 
-## 4. P1-2：M3F 脚本本机 MinIO 停止模拟不适配 NAS MinIO
+必须证明：
 
-### 问题
+- 已对象化文件 `storage-status=OBJECT_STORED`。
+- 已对象化文件通过受控 `file-access` 可读取。
+- 未对象化文件仍显示 `NAS_ONLY`，并通过原 NAS 链路可用。
+- 对象副本异常时不静默 fallback。
 
-`check-m3f-object-storage-first-write.sh` 通过停止 / 暂停本机 `delivery-minio` 容器来模拟对象存储不可用。
+### C. 前端可见性
 
-当前后端实际连接的是 NAS 侧 MinIO，所以本机 MinIO 停止后对象存储仍可用，脚本期望失败但实际上传成功。
+文件服务 / 对象存储页面至少能让用户看懂：
 
-### 修复目标
+- 当前是 NAS 侧 MinIO。
+- 105 当前对象化覆盖率。
+- dry-run 将选择多少文件、多少容量。
+- 执行灰度后成功 / 跳过 / 失败数量。
+- 对象化完成后，哪些文件已是 `OBJECT_STORED`。
 
-M3F 回归脚本必须适配两类环境：
+文案要清楚说明：NAS 原文件保留，平台只是复制副本到对象存储。
 
-- `LOCAL_DEV_MINIO`：可以按旧逻辑暂停本机 MinIO 容器验证 fail-closed。
-- `NAS_SIDE_MINIO`：不能停止 NAS MinIO；脚本应跳过本机容器暂停模拟，明确记录“NAS MinIO 环境下不执行本机容器不可用模拟”，并继续验证对象存储优先上传、active object version、file-access、禁出字段。
+### D. 新增专项脚本
 
-建议实现：
+新增：
 
-- 脚本先调用 readiness 接口读取 `endpointType / readinessStatus`。
-- 当 `endpointType=LOCAL_DEV_MINIO` 且本机容器存在时，执行旧的 unavailable 模拟。
-- 当 `endpointType=NAS_SIDE_MINIO` 时，不暂停本机 MinIO，不要求上传失败；改为通过 readiness `READY` 和正常上传链路证明当前对象存储可用。
-- 输出中要明确这是环境分支，不是跳过 M3F 主链路。
+`scripts/dev/check-m3g2-105-objectification-gray.sh`
 
-不允许：
+脚本至少验证：
 
-- 不允许为了让脚本通过去关闭 NAS 侧 MinIO。
-- 不允许要求用户提供密钥到脚本、报告或仓库。
-- 不允许把测试环境假设写死为本机 MinIO。
+1. readiness 是 `NAS_SIDE_MINIO / READY`。
+2. 105 对象化盘点可查。
+3. dry-run 可生成计划。
+4. 小批量迁移任务可创建并完成。
+5. `OBJECT_STORED` 数量增加或重复运行幂等跳过。
+6. 已对象化文件可通过受控 `file-access` 读取。
+7. 未对象化文件仍可用，并仍解释为 `NAS_ONLY`。
+8. NAS 原项目文件未被移动、删除、改名。
+9. 响应禁出字段扫描通过。
 
-## 5. P2：单项目对象化盘点字段
+## 5. 推荐灰度范围
 
-修复：
+默认只选 105 项目安全小批：
 
-- `/api/data-steward/projects/{projectId}/storage-objectification-inventory`
-- `projectCode / projectName` 不应为 `null`。
-- 应与全项目盘点中的同项目值一致。
+- 优先 PDF / 图片 / 小型 Office / 小型 DWG。
+- 第一批不要包含超大文件。
+- 第一批不要超过现有迁移任务安全上限。
+- 如果 dry-run 没有合适样本，脚本应明确失败原因，不要扩大到其他项目。
 
 ## 6. 自测要求
 
@@ -132,6 +151,7 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-m3g2-105-objectification-gray.sh
 bash scripts/dev/check-m3g-nas-minio-readiness-inventory.sh
 bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
 bash scripts/dev/check-m3f-object-storage-first-write.sh
@@ -149,24 +169,24 @@ git diff --cached --check
 
 报告必须说明：
 
-1. M3E file-access 失败根因。
-2. 采用的修复方式。
-3. M3F 脚本如何区分 `LOCAL_DEV_MINIO` 与 `NAS_SIDE_MINIO`。
-4. 单项目盘点字段是否修复。
-5. 是否执行真实历史文件迁移，必须明确回答“否”。
-6. 是否触碰真实 NAS 文件，必须明确回答“否”。
-7. 自测结果。
-8. 未完成事项。
+1. 本轮实际对象化了多少个 105 文件。
+2. 成功 / 跳过 / 失败数量。
+3. 105 覆盖率变化。
+4. 已对象化文件是否经由 `file-access` 从对象存储读取。
+5. 未对象化文件是否仍按 NAS_ONLY 可用。
+6. NAS 原文件是否被移动、删除、改名，必须明确回答“否”。
+7. 是否读取正文、写语义索引、触发 Hermes，必须明确回答“否”。
+8. 自测结果。
+9. 未完成事项。
 
 ## 8. 完成定义
 
 只有同时满足以下条件，才能标记完成：
 
-- M3E 回归通过。
-- M3F 回归通过。
-- M3G-1 专项通过。
+- M3G-2 专项通过。
+- 105 至少一批真实历史文件对象化成功，或已对象化样本幂等跳过且脚本能证明读取链路。
+- 已对象化文件显示 `OBJECT_STORED`。
+- 未对象化文件仍显示 / 解释为 `NAS_ONLY`。
 - file-access 回归通过。
-- 单项目盘点字段不再为 null。
-- 未发生真实历史文件迁移。
 - 未触碰真实 NAS 原项目文件。
 - 未修改 `docs/**`。
