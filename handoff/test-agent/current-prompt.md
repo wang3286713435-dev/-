@@ -1,166 +1,118 @@
-# 测试 Agent 当前任务：M3F 新文件对象存储优先写入验收
+# 测试 Agent 当前任务：8B-GD0 葛兰岱尔引擎对接握手验收
 
 你是卓羽智能数据中台的测试 agent。工作目录：
 
-`/Users/vc/Documents/数字化交付平台`
+`/Users/vc/Documents/数字化交付平台-8b-gd`
 
 当前验收批次：
 
-`M3F：新文件对象存储优先写入与 NAS 兼容回退`
+`8B-GD0：葛兰岱尔引擎对接握手`
 
 ## 0. 验收目标
 
-本轮只验收 M3F：
+本轮只验收 8B-GD0 是否完成葛兰岱尔引擎对接握手准备。
 
-- 通过平台上传的新文件默认写入对象存储。
-- 新文件仍进入 MySQL 业务台账。
-- 新文件有 `assetUuid` 和 active object version。
-- 新文件 `storage-status=OBJECT_STORED`。
-- 新文件可通过受控 `file-access` 读取。
-- 历史 NAS 文件、迁移任务、预览产物不回归。
-
-本轮不验收：
-
-- 全量 NAS 搬迁。
-- Hermes 正文问答。
-- documents / chunks / Qdrant / OpenSearch。
-- 文件正文读取。
-- 真实 BIM 引擎。
+8B-GD0 是文档 / handoff 批次，不应出现业务代码变更。
 
 ## 1. 必读文件
 
 - `handoff/dev-agent/latest-report.md`
 - `handoff/dev-agent/current-prompt.md`
-- `handoff/main-agent/m3f-object-storage-first-write-plan.md`
-- `handoff/main-agent/m3-storage-evidence-chain-todo.md`
-- `scripts/dev/check-m3f-object-storage-first-write.sh`
+- `handoff/main-agent/8b-gd-roadmap.md`
+- `handoff/main-agent/8b-gd0-glandar-engine-handshake-plan.md`
+- `handoff/main-agent/8b-gd0-glandar-engine-api-handoff-template.md`
+- `handoff/main-agent/8b-gd0-glandar-api-review.md`
 
 ## 2. 必跑命令
 
 请执行：
 
 ```bash
-cd /Users/vc/Documents/数字化交付平台/backend
-./mvnw -pl delivery-app -am -DskipTests package
-
-cd /Users/vc/Documents/数字化交付平台
-corepack pnpm --dir frontend build
-curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-m3f-object-storage-first-write.sh
-bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
-bash scripts/dev/check-m3d-real-nas-object-mirror-gray.sh
-bash scripts/dev/check-m3c-storage-migration-task-center.sh
-bash scripts/dev/check-m3b-object-storage-mirror-trial.sh
-bash scripts/dev/check-m3a-storage-service-foundation.sh
-bash scripts/dev/check-phase2-batch4-file-access.sh
-git diff --check
-```
-
-如后端未运行，可按项目已有方式启动后重试健康检查和专项脚本。
-
-## 3. Git 范围检查
-
-请检查：
-
-```bash
+cd /Users/vc/Documents/数字化交付平台-8b-gd
 git status --short
 git diff --name-only
 git diff --cached --name-status
+git diff --check
 ```
 
-M3F 允许包含：
+本批不要求跑后端构建、前端构建或业务回归，因为理论上不应改业务代码。
 
-- `backend/**` 中与 StorageService、文件上传、对象版本、受控访问相关的最小改动。
-- `frontend/**` 中文件管理器上传后状态展示的最小改动。
-- `scripts/dev/check-m3f-object-storage-first-write.sh`
+## 3. Git 范围检查
+
+8B-GD0 允许包含：
+
+- `handoff/main-agent/8b-gd-roadmap.md`
+- `handoff/main-agent/8b-gd0-glandar-engine-handshake-plan.md`
+- `handoff/main-agent/8b-gd0-glandar-engine-api-handoff-template.md`
+- `handoff/main-agent/status.md`
+- `handoff/main-agent/development-log.md`
+- `handoff/dev-agent/current-prompt.md`
+- `handoff/test-agent/current-prompt.md`
 - `handoff/dev-agent/latest-report.md`
-- 必要的 Flyway 新迁移。
 
-M3F 不允许包含：
+8B-GD0 不允许包含：
 
 - `docs/**`
-- Hermes 正文问答。
-- documents / chunks / Qdrant / OpenSearch / parser / indexing。
-- 真实 BIM 引擎。
-- 全量 NAS 迁移入口。
-- 真实 NAS 批量移动、删除、重命名能力扩展。
+- `backend/**`
+- `frontend/**`
+- `scripts/**`
+- Flyway 迁移
+- vendor token / secret / password
+- 真实 NAS 路径
+- 真实 bucket 名 / 真实 object key 值
+- 真实转换任务调用代码
 
 ## 4. 核心验收点
 
 重点确认：
 
-1. 新上传文件不是先写真实业务 NAS 目录。
-2. 新上传文件创建 `data_file_resources` 记录。
-3. 新上传文件有 `assetUuid`。
-4. 新上传文件创建 `data_storage_objects`。
-5. 新上传文件创建 active `data_file_object_versions`。
-6. `GET /api/data-steward/assets/files/{fileId}/storage-status` 返回 `OBJECT_STORED`。
-7. `file-access` 可读取对象存储新增文件内容。
-8. 对象存储不可用时不 500、不假成功。
-9. 历史 NAS 文件仍可走原有受控访问。
-10. M3E 预览产物、M3D 灰度镜像、M3C 迁移任务不回归。
+1. 对接清单覆盖 Station API/Web、认证、分片上传、任务状态、viewer、callback、错误码、格式限制。
+2. 明确平台后端分片上传为 PoC 首选链路，不让引擎直连 NAS / MinIO 底层目录。
+3. 明确前端只拿平台 viewer ticket，不拿厂商 token。
+4. 明确 8B-GD0 不写业务代码。
+5. 明确 8B-GD1 的启动条件。
+6. 开发报告写清已确认项和缺失项。
 
 ## 5. 禁出字段扫描
 
-所有 M3F 响应和脚本输出中不得出现：
+所有 handoff 和报告中不得出现真实敏感值：
 
 - `/Volumes`
-- `/Users`
 - `smb://`
 - `nas://`
 - `storage_uri`
 - `storageUri`
-- `bucket`
-- `object_key`
-- `objectKey`
+- 真实 bucket 名
+- 真实 object key 值
 - raw row
 - SQL
 - token
 - secret
 - password
 
-说明性文案里可以出现“对象存储”这个业务词，但不能出现真实 bucket / object key 值。
+说明性文案中可以出现“短时授权链接”“对象存储”“viewer ticket”“bucket / object key 字段不得暴露”等概念，但不能出现真实密钥或底层定位值。
 
-## 6. 浏览器轻量检查
-
-本轮不要求全量浏览器逐页点击，只做轻量检查：
-
-- 打开 `http://127.0.0.1:5173/data-steward/assets/503?tab=files`
-- 文件管理器页面不白屏。
-- 上传入口仍可见。
-- 上传成功后的文件能显示在当前目录。
-- 新文件的存储状态或详情可体现对象存储状态。
-- 不需要在真实业务目录执行破坏性操作。
-
-## 7. P0 / P1 判定
+## 6. P0 / P1 判定
 
 P0：
 
-- 新上传文件泄露真实 NAS 路径、bucket、object key、storage URI、token、secret。
-- 真实业务 NAS 文件被移动、删除、覆盖或改名。
-- file-access 权限链路回归失败。
-- 引入 Hermes 正文问答、parser、indexing、documents / chunks。
-- 全量历史 NAS 迁移被误开启。
+- 修改了 `backend/**`、`frontend/**` 或 `scripts/**`。
+- 写入了 vendor token / secret / password。
+- 引擎被要求直连 NAS、MinIO 底层目录或 MySQL。
+- 把 8B-GD0 写成真实转换上线。
 
 P1：
 
-- 新上传文件仍默认写 NAS，未写对象存储。
-- 新文件无 `assetUuid`。
-- 新文件无 active object version。
-- 新文件 storage-status 不是 `OBJECT_STORED`。
-- 新文件无法通过受控 file-access 读取。
-- 对象存储不可用时假成功或 500。
-- M3F 专项脚本失败。
-- M3E / M3D / M3C / M3B / M3A 关键回归失败。
-- M3F 专项脚本未纳入 Git。
+- 对接清单缺 health、submit、status、viewer 四类核心接口之一，且报告未说明。
+- 未明确权限和短时取用票据边界。
+- 未明确 8B-GD1 启动条件。
+- 开发报告未写。
 
 P2：
 
-- 既有 Vite chunk warning。
-- `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪项，只记录，不阻塞。
-- 文案细节粗糙但不影响主链路。
+- 文案细节可读性一般，但不影响后续对接。
 
-## 8. 报告要求
+## 7. 报告要求
 
 完成后写入：
 
@@ -171,12 +123,8 @@ P2：
 - 测试结论：通过 / 不通过。
 - P0 / P1 / P2。
 - 必跑命令结果。
-- M3F 专项脚本结果。
-- 新上传文件对象存储验证结果。
-- `assetUuid` / active object version / storage-status 验证结果。
-- file-access 读取验证结果。
-- 对象存储不可用场景验证结果。
-- 回归脚本结果。
+- Git 范围检查。
+- 对接清单完整性判断。
+- 安全边界检查。
 - 禁出字段扫描结果。
-- Git 范围检查结果。
-- 是否建议主 agent 收口 M3F。
+- 是否建议主 agent 收口 8B-GD0。

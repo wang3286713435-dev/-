@@ -4118,3 +4118,47 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - `handoff/main-agent/status.md`
   - `handoff/main-agent/phase2-current-roadmap.md`
 - 原下一步建议为 `M4A：documents / chunks 语义证据契约`；2026-05-27 已根据用户新裁决插入 `M3F：新文件对象存储优先写入` 与后续 `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`，M4A 顺延。
+# 2026-05-27 8B-GD0 葛兰岱尔轻量化引擎支线启动
+
+- 用户确认真实 BIM 轻量化引擎厂商为 `葛兰岱尔轻量化引擎`。
+- 主 agent 已从 `main` 创建独立 worktree：
+
+```text
+/Users/vc/Documents/数字化交付平台-8b-gd
+```
+
+- 独立分支：
+
+```text
+codex/8b-gd-lightweight-engine-adapter
+```
+
+- 本支线不在当前 M3G 对象存储主线分支上叠加开发。
+- 当前批次冻结为 `8B-GD0：葛兰岱尔引擎对接握手`。
+- 已新增对接路线、握手计划、引擎团队接口模板，并覆盖开发 / 测试 agent prompt。
+- 本批只允许 handoff 层更新，不允许修改后端、前端、脚本、迁移和仓库 `docs/**`。
+- 下一步需要引擎团队提供：
+  - base URL
+  - health API
+  - 认证方式
+  - submit conversion API
+  - task status API
+  - viewer session / URL API
+  - 错误码、格式限制、并发和文件大小限制
+
+## 2026-05-27 8B-GD0 葛兰岱尔 API 文档评审
+
+- 已阅读 `/Users/vc/Downloads/葛兰岱尔StationManagement平台接入API文档.md`。
+- 已新增评审文件：
+
+```text
+handoff/main-agent/8b-gd0-glandar-api-review.md
+```
+
+- 已确认 Station API 端口为 `18086`，Station Web / 引擎静态资源端口为 `18087`。
+- 已确认文档推荐大模型通过 `SplitUploadFile` 分片上传，不是引擎主动拉取。
+- 主 agent 裁决：
+  - 8B-GD1 / GD2 优先按“平台后端读取 StorageService 文件流并分片上传 Station API”实现。
+  - `ModelUploadUrl` / 引擎主动拉取短时链接保留为后续扩展，不作为首轮 PoC 前置。
+  - Station Token 必须由后端安全注入，不得进入前端、handoff 或 Git。
+  - `modelAccessAddress` 必须做可访问性校验，尤其要防止历史 `18087/Tools/output/model/...` 返回 404。

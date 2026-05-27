@@ -1,284 +1,159 @@
-# 开发 Agent 当前任务：M3F 新文件对象存储优先写入
+# 开发 Agent 当前任务：8B-GD0 葛兰岱尔引擎对接握手
 
 你是卓羽智能数据中台 v1 的开发 agent。工作目录：
 
-`/Users/vc/Documents/数字化交付平台`
+`/Users/vc/Documents/数字化交付平台-8b-gd`
 
 当前分支：
 
-`codex/m3f-object-storage-first-write`
+`codex/8b-gd-lightweight-engine-adapter`
 
 ## 0. 本批定位
 
 本批是：
 
-`M3F：新文件对象存储优先写入与 NAS 兼容回退`
+`8B-GD0：葛兰岱尔引擎对接握手`
 
-M3A-M3E 已完成：
+这是 3D / BIM 轻量化引擎接入支线，独立于当前 M3G 对象存储主线。
 
-- StorageService 与对象存储基础表。
-- assetUuid / storage-status。
-- 对象存储迁移任务中心。
-- 105 真实 NAS 小样本对象存储镜像。
-- PDF / 图片预览产物对象化，以及 DWG / RVT / Office 转换占位。
+本批只做接口握手、边界冻结和 handoff 交接，不写业务代码。
 
-M3F 的目标是让**新增上传文件**优先进入对象存储，让后续新数据天然走对象存储底座；历史 NAS 文件仍按既有台账和迁移任务逐步处理。
+引擎厂商已确定为：
 
-本批不是全量历史项目迁移，也不是 Hermes 正文问答。
+`葛兰岱尔轻量化引擎`
+
+对接方式：
+
+`HTTP API`
+
+PoC 范围：
+
+`105 项目 RVT 模型优先`
+
+数据流锁定为：
+
+```text
+平台校验权限
+-> 平台生成短时模型取用票据 / 授权链接
+-> 平台提交葛兰岱尔转换任务
+-> 引擎通过平台授权链接拉取模型
+-> 引擎转换
+-> 平台查询 / 接收任务状态
+-> 平台生成短时 viewer ticket
+-> 前端通过平台 viewer 入口打开
+```
 
 ## 1. 必须先阅读
 
 开始前先阅读：
 
-- `handoff/main-agent/m3-storage-evidence-chain-todo.md`
-- `handoff/main-agent/m3f-object-storage-first-write-plan.md`
+- `handoff/main-agent/8b-gd-roadmap.md`
+- `handoff/main-agent/8b-gd0-glandar-engine-handshake-plan.md`
+- `handoff/main-agent/8b-gd0-glandar-engine-api-handoff-template.md`
+- `handoff/main-agent/8b-gd0-glandar-api-review.md`
+- `handoff/main-agent/phase2-batch8a-bim-lightweight-adapter-plan.md`
+- `handoff/main-agent/lightweight-test-strategy.md`
 - `handoff/dev-agent/latest-report.md`
 - `handoff/test-agent/latest-report.md`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageService.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageRepository.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/application/ControlledNasApplicationService.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/controller/ControlledNasController.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/repository/ControlledNasRepository.java`
-- `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
-- `frontend/src/modules/data-steward/api/dataSteward.ts`
-- `scripts/dev/check-m3e-preview-artifacts-object-storage.sh`
-- `scripts/dev/check-m3d-real-nas-object-mirror-gray.sh`
-
-重点先确认现状：
-
-1. 文件管理器上传当前是否仍走 `ControlledNasApplicationService.uploadFile(...)` 写 NAS。
-2. `StorageService` 目前是否只有 NAS 文件镜像到对象存储能力，是否缺“直接写入对象存储”的能力。
-3. `file-access` 是否能读取 active object version。
-4. 新上传文件如何创建 `data_file_resources`、`asset_uuid`、`data_storage_objects`、`data_file_object_versions`。
 
 ## 2. 严格边界
 
 本批允许：
 
-- 修改后端文件上传链路，使新增文件内容优先写入对象存储。
-- 扩展 `StorageService`，增加受控对象写入能力。
-- 必要时追加 Flyway 迁移；不得修改旧迁移。
-- 更新文件管理器上传后的状态展示。
-- 新增专项脚本。
-- 修改 handoff 报告。
+- 整理葛兰岱尔接口对接清单。
+- 如果用户或引擎团队提供了接口文档，可把非密钥信息摘录到 handoff。
+- 如果用户提供了内网 base URL，可只执行安全 health curl。
+- 更新 `handoff/dev-agent/latest-report.md`。
+- 必要时更新 `handoff/main-agent/8b-gd0-glandar-engine-api-handoff-template.md` 中的非密钥字段。
 
 本批禁止：
 
-- 不做全量 NAS 搬迁。
-- 不批量迁移所有项目历史文件。
-- 不移动、删除、重命名、覆盖真实 NAS 文件。
-- 不读取 PDF / Office / DWG / RVT / IFC 正文。
-- 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
-- 不新增 Hermes 正文问答。
-- 不进入 BIM 引擎真实接入。
-- 不开放永久删除。
-- 不暴露 `/Volumes`、`smb://`、`nas://`、`storage_uri`、bucket、object_key、raw row、SQL、token、secret。
-- 不修改 `docs/**`。
+- 禁止修改 `backend/**`。
+- 禁止修改 `frontend/**`。
+- 禁止修改 `scripts/**`。
+- 禁止新增 Flyway 迁移。
+- 禁止修改 `docs/**`。
+- 禁止提交真实转换任务。
+- 禁止读取 RVT / IFC / DWG / PDF / Office 正文。
+- 禁止移动、删除、重命名 NAS 文件。
+- 禁止访问 MinIO 底层目录。
+- 禁止写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
+- 禁止把 vendor token、secret、password 写入聊天、报告、Git 或日志。
 
-## 3. 推荐实现口径
+## 3. 你要完成的内容
 
-### A. 新上传文件默认对象存储优先
+### A. 对接清单核对
 
-文件管理器上传文件时，目标口径是：
+根据 `8b-gd0-glandar-engine-api-handoff-template.md` 和 `8b-gd0-glandar-api-review.md`，确认是否已拿到以下信息：
 
-1. 校验项目权限、灰度写开关和当前目录权限。
-2. 接收 multipart 文件。
-3. 计算 checksum / size / contentType。
-4. 上传到对象存储 active provider（MinIO / S3-compatible）。
-5. 写入 `data_storage_objects`。
-6. 写入 `data_file_resources` 业务台账。
-7. 写入 `data_file_object_versions`，并标记 active。
-8. 单文件 `storage-status` 返回 `OBJECT_STORED`。
-9. `file-access` 预览 / 下载可读取对象存储内容。
+- 引擎内网 base URL。
+- health API。
+- 认证方式。
+- 提交转换任务 API。
+- 查询任务状态 API。
+- viewer URL / session API。
+- callback 机制。
+- 支持格式，尤其 RVT 版本。
+- 文件大小、并发、超时限制。
+- 错误码。
+- 最小 curl 样例。
 
-新增文件不应再为了保存内容而先写入真实业务 NAS 目录。
+如果缺失，请在报告中列出缺口，不要自行猜测。
 
-### B. NAS 兼容回退必须受控
+当前 API 文档已确认：
 
-如果对象存储未配置或不可用，请不要静默假成功。
+- Station API 端口为 `18086`。
+- Station Web / 引擎静态资源端口为 `18087`。
+- 大 RVT 优先走 `SplitUploadFile` 分片上传。
+- 状态查询走 `query-model-info`。
+- 成功口径为 `status == 100`。
+- `modelAccessAddress` 必须校验客户端可访问性。
 
-推荐策略：
+### B. 数据流边界确认
 
-- 默认返回清晰业务错误：`对象存储暂不可用，新增文件未写入`。
-- 如代码中已有明确兼容配置，可支持显式 `OBJECT_FIRST_WITH_NAS_FALLBACK`，但必须：
-  - 写审计。
-  - response / operation log 显示发生 NAS fallback。
-  - storage-status 为 `NAS_ONLY`，不能伪装成 `OBJECT_STORED`。
+报告必须明确：
 
-不要把对象存储失败时的 NAS fallback 做成用户无感的默认行为。
+- 引擎不直接访问 NAS 共享目录。
+- 引擎不直接访问 MinIO 底层对象目录。
+- 8B-GD1 / GD2 优先由平台后端读取 StorageService 文件流并分片上传 Station。
+- `ModelUploadUrl` / 引擎主动拉取短时链接仅作为后续扩展位。
+- 前端只拿平台 viewer ticket。
+- 平台对前端不暴露厂商 token、真实路径、bucket、object key。
 
-### C. 空文件夹仍按现有 NAS 目录能力处理
+### C. 最小健康检查
 
-对象存储天然没有真实空目录。本批不要求重做目录模型。
-
-保持：
-
-- 新建文件夹仍走现有受控 NAS 目录能力。
-- 历史 NAS 文件仍按既有文件管理器和迁移任务工作。
-- 本批只改变“新增文件内容”的默认落点。
-
-如需在对象存储中表达逻辑目录，请先在报告中说明，不要大改目录系统。
-
-### D. 业务台账必须继续稳定
-
-新上传对象存储文件仍必须进入 `data_file_resources`，并具备：
-
-- `assetUuid`
-- `projectId`
-- `fileName`
-- `fileKind`
-- `extension`
-- `sizeBytes`
-- `checksum`
-- `version`
-- `discipline`
-- 当前目录逻辑路径或相对路径提示
-- `processStatus`
-- `confidenceLevel`
-
-前端和 API 不得返回底层对象定位。用户只能看到平台资产 ID、文件名、类型、大小、预览状态、对象存储状态等业务字段。
-
-### E. 审计与操作记录
-
-新上传对象存储文件必须写审计或操作记录，至少表达：
-
-- 谁上传。
-- 上传到哪个项目。
-- 文件名。
-- 写入对象存储是否成功。
-- 是否发生 fallback。
-
-审计 / 操作记录不得包含 bucket、object_key、真实 NAS 路径。
-
-## 4. 建议新增或调整接口
-
-优先复用现有上传接口：
-
-- `POST /api/data-steward/projects/{projectId}/nas/files:upload`
-
-外部契约尽量不变，但行为改为对象存储优先。
-
-如你认为接口名称里的 `nas` 会造成误解，本批不要直接删除旧接口；可以：
-
-- 保留旧接口兼容。
-- 内部实现转为 object-first。
-- 可新增别名接口，但必须保证旧前端和测试不回归。
-
-上传响应建议返回：
-
-- `fileId`
-- `assetUuid`
-- `projectId`
-- `fileName`
-- `fileKind`
-- `extension`
-- `sizeBytes`
-- `checksum`
-- `storageStatus=OBJECT_STORED`
-- `storageProvider=OBJECT_STORAGE` 或业务化 provider label
-- `message`
-
-绝不返回：
-
-- bucket
-- object key
-- `storage_uri`
-- 真实 NAS 路径
-- raw row
-- SQL
-- token / secret
-
-## 5. 前端要求
-
-最小前端接入即可，不要大改 UI：
-
-- 文件管理器上传后刷新当前目录。
-- 新上传文件在列表中可见。
-- 新上传文件的存储状态能显示为“对象存储”或 `OBJECT_STORED` 对应业务文案。
-- 文件详情 / 技术信息中可看到平台资产 ID，但不暴露对象 key。
-- 预览 / 下载仍走受控 `file-access`。
-- 对象存储不可用时显示友好错误，不要只弹英文堆栈。
-
-## 6. 专项脚本
-
-新增：
-
-`scripts/dev/check-m3f-object-storage-first-write.sh`
-
-脚本至少验证：
-
-1. 登录管理员。
-2. 准备隔离测试项目或安全测试目录，不能写真实业务目录。
-3. 通过现有上传接口上传一个小文件。
-4. 新文件生成 `assetUuid`。
-5. 新文件 `storage-status=OBJECT_STORED`。
-6. 数据库存在 active object version。
-7. 受控 `file-access` 可读取上传内容。
-8. 响应和访问结果不包含 `/Volumes`、`smb://`、`nas://`、`storage_uri`、bucket、object_key、SQL、raw row、token、secret。
-9. 对象存储不可用场景返回业务错误或明确 fallback 状态，不 500，不假成功。
-10. 未在真实业务 NAS 目录生成新增文件本体。
-
-必须回归：
-
-- `scripts/dev/check-m3e-preview-artifacts-object-storage.sh`
-- `scripts/dev/check-m3d-real-nas-object-mirror-gray.sh`
-- `scripts/dev/check-m3c-storage-migration-task-center.sh`
-- `scripts/dev/check-m3b-object-storage-mirror-trial.sh`
-- `scripts/dev/check-m3a-storage-service-foundation.sh`
-- `scripts/dev/check-phase2-batch4-file-access.sh`
-
-## 7. 自测要求
-
-完成后至少执行并记录：
+只有在用户提供了可访问的 base URL 且不需要密钥时，才允许执行：
 
 ```bash
-cd /Users/vc/Documents/数字化交付平台/backend
-./mvnw -pl delivery-app -am -DskipTests package
-
-cd /Users/vc/Documents/数字化交付平台
-corepack pnpm --dir frontend build
-curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-m3f-object-storage-first-write.sh
-bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
-bash scripts/dev/check-m3d-real-nas-object-mirror-gray.sh
-bash scripts/dev/check-m3c-storage-migration-task-center.sh
-bash scripts/dev/check-m3b-object-storage-mirror-trial.sh
-bash scripts/dev/check-m3a-storage-service-foundation.sh
-bash scripts/dev/check-phase2-batch4-file-access.sh
-git diff --check
+curl -fsS <engine-health-url>
 ```
 
-如后端未启动，请按项目已有方式启动后再重试健康检查和脚本。
+如果需要密钥，只记录“待安全注入”，不要要求用户把密钥发到聊天。
 
-## 8. 报告要求
+### D. 最新报告
 
 完成后写入：
 
-`handoff/dev-agent/latest-report.md`
+```text
+handoff/dev-agent/latest-report.md
+```
 
 报告必须包含：
 
-- 改动文件清单。
-- 是否新增迁移。
-- 新上传文件写入对象存储的完整流程。
-- 是否保留旧上传接口兼容。
-- 是否存在 NAS fallback，以及 fallback 是否显式。
-- 新文件如何写入 `data_file_resources` / `data_storage_objects` / `data_file_object_versions`。
-- file-access 是否可读取对象存储新增文件。
-- 前端显示变化。
-- 禁出字段扫描结果。
-- 自测命令结果。
-- 未完成事项和风险。
+1. 已确认的引擎接口信息。
+2. 仍缺失的信息。
+3. 是否执行了 health curl。
+4. 是否发现安全风险。
+5. 是否修改了业务代码。
+6. 是否可以进入 8B-GD1。
+7. 是否接受“平台后端分片上传”为 PoC 首选链路。
 
-## 9. 完成定义
+## 4. 完成定义
 
-只有同时满足以下条件，才可交给测试 agent：
+只有以下条件满足，才能标记完成：
 
-1. 新上传文件默认进入对象存储。
-2. 新上传文件有稳定 `assetUuid`。
-3. 新上传文件 `storage-status=OBJECT_STORED`。
-4. `file-access` 可受控读取对象存储新增文件。
-5. 响应不暴露底层对象定位或真实 NAS 路径。
-6. 对象存储不可用时不假成功。
-7. 历史 NAS 文件、对象迁移任务、预览产物不回归。
-8. 前后端构建、专项脚本、回归脚本和 `git diff --check` 通过。
+- `handoff/dev-agent/latest-report.md` 已写。
+- 无 `backend/**`、`frontend/**`、`scripts/**`、`docs/**` 改动。
+- 无密钥、token、密码写入仓库。
+- 对接缺口清晰。
+- 主 agent 可以基于报告判断是否进入 `8B-GD1`。

@@ -1,5 +1,44 @@
 # 主 Agent 项目状态
 
+## 2026-05-27 8B-GD0 启动：葛兰岱尔轻量化引擎对接握手
+
+- 用户确认：真实 BIM 轻量化引擎厂商为 `葛兰岱尔轻量化引擎`。
+- 对接方式：`HTTP API`。
+- 引擎部署：公司局域网另一台电脑。
+- 当前 3D 引擎支线独立 worktree：
+
+```text
+/Users/vc/Documents/数字化交付平台-8b-gd
+```
+
+- 当前分支：
+
+```text
+codex/8b-gd-lightweight-engine-adapter
+```
+
+- 当前 active 批次：`8B-GD0：葛兰岱尔引擎对接握手`。
+- 8B-GD0 定位：
+  - 只做接口清单和边界冻结。
+  - 不写业务代码。
+  - 不提交真实转换任务。
+  - 不影响 M3G 对象存储主线。
+- 已写入：
+  - `handoff/main-agent/8b-gd-roadmap.md`
+  - `handoff/main-agent/8b-gd0-glandar-engine-handshake-plan.md`
+  - `handoff/main-agent/8b-gd0-glandar-engine-api-handoff-template.md`
+  - `handoff/main-agent/8b-gd0-glandar-api-review.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+- 当前裁决：
+  - 引擎 API 文档已提供，主 agent 已完成初步评审。
+  - PoC 首选链路从“引擎主动拉取短时链接”调整为“平台后端通过 StorageService 读取文件流并分片上传 Station API”。
+  - 该调整不改变安全边界：引擎仍不直连 NAS / MinIO 底层目录，前端仍只拿平台 viewer ticket。
+  - 待开发 agent 报告确认无业务代码改动后，可安排 8B-GD0 极短验收。
+  - 验收通过后再判断是否进入 `8B-GD1：平台侧葛兰岱尔适配骨架`。
+  - 8B-GD1 仍必须默认 `BIM_ENGINE_PROVIDER=MOCK`，显式配置 `GLANDAR` 才启用真实引擎。
+  - 8B-GD 不得在 M3G 分支上开发。
+
 ## 2026-05-27 M3F 启动：新文件对象存储优先写入
 
 - 用户确认：先做 `M3F`，后续再做 `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`。
