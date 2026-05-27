@@ -4167,3 +4167,19 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - 先由运维 / NAS 负责人完成 NAS 侧 MinIO 部署与 service account 准备。
   - 开发 agent 只实现 readiness、全项目对象化盘点和 dry-run。
   - M3G-1 未通过前，不进入 M3G-2 历史文件真实对象化执行。
+
+## 2026-05-27 M3G-1 环境就绪：NAS 侧 MinIO 已启动
+
+- 用户已在 Synology NAS 上通过 Container Manager 启动 MinIO。
+- 当前验证：
+  - `http://192.168.1.181:9000/minio/health/ready` 可达。
+  - `http://192.168.1.181:9001` Console 端口可达。
+  - bucket `zy-datahub-assets-prod` 已创建。
+  - 平台后端已临时注入 NAS MinIO 环境变量并启动，`/actuator/health` 返回 `UP`。
+- 当前边界：
+  - 这只代表 NAS 侧 MinIO 服务和平台运行环境已具备 M3G-1 开发验证条件。
+  - 不代表历史项目文件已经对象化。
+  - 不允许跳过 M3G-1 直接执行全量迁移。
+- 下一步：
+  - 开发 agent 按 `handoff/dev-agent/current-prompt.md` 执行 M3G-1。
+  - 重点实现 readiness、全项目对象化盘点和 dry-run 计划。

@@ -8,6 +8,23 @@
 
 `codex/m3g-nas-minio-real-project-object-storage`
 
+## 当前运行环境补充
+
+2026-05-27 用户已在 Synology NAS 上启动 MinIO：
+
+- NAS MinIO API：`http://192.168.1.181:9000`
+- MinIO Console：`http://192.168.1.181:9001`
+- 正式 bucket：`zy-datahub-assets-prod`
+- 平台后端已由用户在本机终端临时注入 NAS MinIO 环境变量并重启。
+- 当前健康检查：`http://127.0.0.1:8080/actuator/health` 返回 `UP`。
+- NAS MinIO ready：`http://192.168.1.181:9000/minio/health/ready` 可达。
+
+注意：
+
+- 不要要求用户把 Access Key / Secret Key 写进 prompt、报告、仓库或聊天。
+- 当前只是本机会话级注入，M3G-1 仍需要实现平台 readiness，让页面 / API 能清楚识别当前是否为 NAS 侧 MinIO。
+- 不能因为 MinIO ready 就执行历史文件真实迁移。
+
 ## 0. 本批定位
 
 本批是 M3G 的首个可验收子批次：

@@ -12,10 +12,13 @@
 
 - NAS 地址 `192.168.1.181` 已知为现有项目资料 NAS。
 - 2026-05-27 非侵入式探测结果：
-  - `192.168.1.181:9000` 未发现 MinIO API 响应。
-  - `192.168.1.181:9001` 未发现 MinIO Console 响应。
-- 因此当前不能声称已具备 NAS 侧 MinIO 条件。
-- M3G-1 必须先完成 NAS 侧 MinIO 部署契约、平台 readiness 识别和对象化盘点。
+  - 初次探测：`192.168.1.181:9000/9001` 未发现 MinIO 响应。
+  - 用户已在 Synology NAS 上通过 Container Manager 启动 MinIO。
+  - 复测结果：`192.168.1.181:9000/minio/health/ready` 可达。
+  - MinIO Console `9001` 可达。
+  - bucket `zy-datahub-assets-prod` 已创建。
+- 平台后端已由用户在本机终端临时注入 NAS 侧 MinIO 环境变量并重启，健康检查为 `UP`。
+- 这代表 M3G-1 已具备开发验证条件；但这仍不等于历史项目文件已经对象化。
 
 ## 任务图
 
@@ -23,8 +26,8 @@
 - [x] 1. 输出开发 agent prompt。
 - [x] 2. 输出测试 agent prompt。
 - [x] 3. 输出 NAS 侧 MinIO 配置交接清单。
-- [ ] 4. NAS 侧 MinIO 服务部署完成。
-- [ ] 5. 平台安全注入 NAS 侧 MinIO endpoint / service account / bucket。
+- [x] 4. NAS 侧 MinIO 服务部署完成。
+- [x] 5. 平台已临时注入 NAS 侧 MinIO endpoint / access key / bucket 并启动。
 - [ ] 6. 平台 readiness 能区分本机 MinIO 与 NAS 侧 MinIO。
 - [ ] 7. 全项目对象化覆盖率盘点 API 可用。
 - [ ] 8. 单项目对象化 dry-run 计划 API 可用。

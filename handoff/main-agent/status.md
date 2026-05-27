@@ -83,9 +83,13 @@
   - M3G-1 任务图：`handoff/main-agent/m3g1-task-graph.md`
   - NAS 侧 MinIO 配置交接：`handoff/main-agent/m3g1-nas-minio-ops-preparation.md`
 - 当前 NAS 侧 MinIO 探测：
-  - `192.168.1.181:9000` 未响应。
-  - `192.168.1.181:9001` 未响应。
-  - 因此当前不能判定 NAS 侧 MinIO 已部署，开发 agent 必须把 `LOCAL_DEV_MINIO` 与 `NAS_SIDE_MINIO` 严格区分。
+  - 初次探测时 `192.168.1.181:9000/9001` 未响应。
+  - 用户已在 Synology NAS 上部署并启动 MinIO。
+  - 当前 `http://192.168.1.181:9000/minio/health/ready` 可达。
+  - 当前 `9001` MinIO Console 可达。
+  - bucket `zy-datahub-assets-prod` 已创建。
+  - 用户已在本机终端临时注入 NAS MinIO 环境变量并重启平台后端，后端健康检查 `UP`。
+  - 注意：当前为本机会话级环境变量注入，不代表生产持久化部署完成；开发 agent 仍需实现 readiness，明确区分 `LOCAL_DEV_MINIO` 与 `NAS_SIDE_MINIO`。
 - 当前裁决：
   - 交给开发 agent 按 M3G-1 prompt 执行。
   - M3G-1 未通过前，不进入真实历史文件对象化执行。
