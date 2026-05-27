@@ -1,6 +1,6 @@
-# 数字化交付平台 v1 PRD
+# 卓羽智能数据中台 v1 PRD
 
-> 版本说明：本文档保留早期 `标准驱动交付 MVP` 的产品口径和链路说明。当前项目已经升级为三期路线，后续开发必须同时参考 [07-complete-delivery-prd.md](/Users/vc/Documents/数字化交付平台/docs/07-complete-delivery-prd.md) 和 [08-acceptance-and-agent-integration.md](/Users/vc/Documents/数字化交付平台/docs/08-acceptance-and-agent-integration.md)。一期开发优先级已调整为 `后端数据治理优先 + 内部 BIM 资产管理试点 + NAS 原地接管 + 企业 agent 可检索底座`，二期继续完成客户可交付的数字化交付平台完整版。
+> 版本说明：本文档保留早期 `标准驱动交付 MVP` 的产品口径和链路说明。当前项目已经升级为三期路线，后续开发必须同时参考 [07-complete-delivery-prd.md](/Users/vc/Documents/数字化交付平台/docs/07-complete-delivery-prd.md) 和 [08-acceptance-and-agent-integration.md](/Users/vc/Documents/数字化交付平台/docs/08-acceptance-and-agent-integration.md)。一期开发优先级已调整为 `后端数据治理优先 + 内部 BIM 资产管理试点 + NAS 原地接管 + 企业 agent 可检索底座`，二期继续完成客户可交付的卓羽智能数据中台完整版。
 
 ## 1. 项目背景
 
@@ -15,7 +15,7 @@
 
 ## 2. 产品定位
 
-数字化交付平台 v1 是一套面向 `建筑机电/BIM交付` 场景的私有化平台，帮助项目从 `部位/EBS策划`、`交付标准定义`、`文件与模型归集`、`管理对象绑定` 走到 `文档/图纸交付视图` 和 `项目可视化展示`。
+卓羽智能数据中台 v1 是一套面向 `建筑机电/BIM交付` 场景的私有化平台，帮助项目从 `部位/EBS策划`、`交付标准定义`、`文件与模型归集`、`管理对象绑定` 走到 `文档/图纸交付视图` 和 `项目可视化展示`。
 
 平台不以三维浏览为主卖点，而以 `标准驱动交付` 为核心竞争力。
 

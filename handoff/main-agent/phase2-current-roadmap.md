@@ -335,6 +335,36 @@ M2D 不做：
 - 自动挂接、自动审核、自动整改。
 - 客户交付准备。
 
+## M3E 收口状态
+
+最近完成批次：
+
+`M3E：预览与转换产物对象化`
+
+当前分支：
+
+`codex/m3e-preview-artifacts-object-storage`
+
+M3E 已完成：
+
+- 接入预览产物 / 转换产物与对象存储的关系。
+- PDF / 图片等浏览器原生预览文件可形成对象化 preview artifact。
+- DWG / RVT / Office 等文件只形成需转换 placeholder，不伪造可预览。
+- file-access 仍是唯一受控访问入口。
+
+M3E 已确认未做：
+
+- Hermes 正文问答。
+- documents / chunks / 语义索引。
+- 真实 CAD / BIM 转换。
+- DWG / RVT 深层内容解析。
+
+下一步候选：
+
+`M4A：documents / chunks 语义证据契约`
+
+M4A 应先冻结语义证据契约和 Missing Evidence 口径，不直接进入向量库写入或 Hermes 正文问答。
+
 ## 后续路线
 
 M2E 收口后再评估：

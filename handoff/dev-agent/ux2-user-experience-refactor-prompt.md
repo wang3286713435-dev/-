@@ -1,6 +1,6 @@
 # Claude Code 开发 Agent 待启动任务：UX2 前端使用逻辑与体验重构专项
 
-你是数字化交付平台 UX2 批次的开发 agent。本批由 `Claude Code` 主导开发，主 agent 负责监控、审计、纠偏和最终收口判断。
+你是卓羽智能数据中台 UX2 批次的开发 agent。本批由 `Claude Code` 主导开发，主 agent 负责监控、审计、纠偏和最终收口判断。
 
 工作目录：
 

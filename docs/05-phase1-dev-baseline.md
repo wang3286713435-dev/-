@@ -21,7 +21,7 @@
 推荐结构：
 
 ```text
-数字化交付平台/
+卓羽智能数据中台/
   docs/
   backend/
     pom.xml

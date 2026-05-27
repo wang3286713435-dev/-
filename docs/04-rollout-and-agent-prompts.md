@@ -374,7 +374,7 @@
 ## 7.1 `core` 模块 prompt
 
 ```text
-你负责数字化交付平台 v1 的 core 模块实现，只能修改 core 相关后后端代码与对应前端页面，不要改 master-data、data-steward、work-center、visualization-adapter 业务逻辑。
+你负责卓羽智能数据中台 v1 的 core 模块实现，只能修改 core 相关后后端代码与对应前端页面，不要改 master-data、data-steward、work-center、visualization-adapter 业务逻辑。
 
 目标：
 1. 实现项目、组织、用户、角色、权限、消息、审计基础能力。
@@ -397,7 +397,7 @@
 ## 7.2 `master-data` 模块 prompt
 
 ```text
-你负责数字化交付平台 v1 的 master-data 模块实现，只能修改主数据与标准相关代码。
+你负责卓羽智能数据中台 v1 的 master-data 模块实现，只能修改主数据与标准相关代码。
 
 目标：
 1. 实现部位树、节点类型、交付物定义、交付物类型、交付物属性、目录模板、关联模型。
@@ -419,7 +419,7 @@
 ## 7.3 `data-steward` 模块 prompt
 
 ```text
-你负责数字化交付平台 v1 的 data-steward 模块实现，只能修改文件、模型、对象、服务相关代码。
+你负责卓羽智能数据中台 v1 的 data-steward 模块实现，只能修改文件、模型、对象、服务相关代码。
 
 目标：
 1. 实现文件资源上传与处理状态。
@@ -442,7 +442,7 @@
 ## 7.4 `work-center` 模块 prompt
 
 ```text
-你负责数字化交付平台 v1 的 work-center 模块实现，只能修改项目首页、交付管理、事项任务和看板聚合相关代码。
+你负责卓羽智能数据中台 v1 的 work-center 模块实现，只能修改项目首页、交付管理、事项任务和看板聚合相关代码。
 
 目标：
 1. 实现项目首页数据概览。
@@ -465,7 +465,7 @@
 ## 7.5 `visualization-adapter` 模块 prompt
 
 ```text
-你负责数字化交付平台 v1 的 visualization-adapter 模块实现，只能修改三维适配相关代码。
+你负责卓羽智能数据中台 v1 的 visualization-adapter 模块实现，只能修改三维适配相关代码。
 
 目标：
 1. 提供模型发布、构件定位、构件高亮、图模联动、上下文注入五类接口。

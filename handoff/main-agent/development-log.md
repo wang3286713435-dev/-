@@ -1607,7 +1607,7 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
 
 ## 2026-05-11：企业 Agent 本机同环境联调口径更新
 
-- 用户确认：企业 Agent 后续会更新到本地 Hermes，并与数字化交付平台数据库运行在同一台本机环境中。
+- 用户确认：企业 Agent 后续会更新到本地 Hermes，并与卓羽智能数据中台数据库运行在同一台本机环境中。
 - 主 agent 已将 DB-2 对接口径调整为：
   - 本机 `delivery-mysql` + `hermes_agent_ro` 是一期 DB-2 首轮正式联调路径。
   - 当前不再要求立即获取 shared-dev / staging 账号。
@@ -4012,3 +4012,41 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
 - 收口提交建议：
   - 纳入本批后端 catalog files direct-only 改动、前端文件管理器改动、目录树工具改动、M2H 专项脚本和 handoff 文件。
   - 排除 `.claude/**`、`CLAUDE.md`、`tmp/**`。
+
+## 2026-05-26 M3E 启动
+
+- M3D 已合并回 `main` 并推送，`main` 最新进度为 M3D。
+- 已创建新分支：`codex/m3e-preview-artifacts-object-storage`。
+- 当前 active 批次：`M3E：预览与转换产物对象化`。
+- 主 agent 已写入：
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/main-agent/m3e-preview-artifacts-object-storage-plan.md`
+  - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
+- M3E 开发边界：
+  - 只处理预览 / 转换产物与对象存储关系。
+  - 不做真实转换器。
+  - 不做 Hermes 正文问答。
+  - 不写语义索引。
+  - 不读取文件正文。
+  - 不暴露真实路径或对象定位。
+
+## 2026-05-27 M3E 正式收口
+
+- 测试 agent 已完成 M3E 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：通过。
+- 当前无 P0 / P1。
+- 已确认：
+  - `scripts/dev/check-m3e-preview-artifacts-object-storage.sh` 通过，`PASS=8 FAIL=0`。
+  - M3D / M3C / M3C-1 / M3B / M3A / file-access 回归通过。
+  - PDF / 图片对象化预览产物状态可查。
+  - DWG / RVT / Office 只生成转换占位，不伪造可预览。
+  - file-access 与交付包预检查未回归。
+  - staged 范围不含 `docs/**`、Hermes 正文问答、parser/indexing、真实 NAS 写操作扩展。
+  - 禁出字段扫描通过。
+- 主 agent 裁决：`M3E：预览与转换产物对象化` 正式收口。
+- 已更新：
+  - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
+  - `handoff/main-agent/m3e-preview-artifacts-object-storage-closure.md`
+  - `handoff/main-agent/status.md`
+  - `handoff/main-agent/phase2-current-roadmap.md`
+- 下一步建议：`M4A：documents / chunks 语义证据契约`。

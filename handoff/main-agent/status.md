@@ -1930,6 +1930,52 @@
 
 ## 跨机器交接入口
 
+## 2026-05-26 M3E 启动
+
+- `M3D：真实 NAS 小范围灰度镜像` 已合并回 `main`，`main` 最新进度为 M3D。
+- 已从最新 `main` 创建分支：`codex/m3e-preview-artifacts-object-storage`。
+- 当前 active 批次：`M3E：预览与转换产物对象化`。
+- M3E 定位：
+  - 复用对象存储底座。
+  - 接入 `data_file_derivatives` / `data_preview_artifacts`。
+  - 让 PDF / 图片等浏览器原生预览产物具备对象化状态。
+  - 让 DWG / RVT / Office 等文件明确显示需转换状态。
+- M3E 禁止：
+  - 不做真实转换器。
+  - 不读取正文。
+  - 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
+  - 不新增 Hermes 正文问答。
+  - 不暴露真实路径、bucket、object_key、`storage_uri`。
+- 已写入开发 agent prompt：`handoff/dev-agent/current-prompt.md`。
+- 分支计划文档：`handoff/main-agent/m3e-preview-artifacts-object-storage-plan.md`。
+
+## 2026-05-27 M3E 正式收口
+
+- 测试 agent 已完成 M3E 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：通过。
+- 当前无 P0 / P1。
+- P2：
+  - 既有 Vite chunk size warning。
+  - 未暂存的品牌命名口径修改与 `.claude/**`、`CLAUDE.md`、`tmp/**` 不属于 M3E。
+- M3E 已完成：
+  - PDF / 图片对象化预览产物状态。
+  - DWG / RVT / Office 转换占位状态。
+  - `preview-artifacts` 查询与 prepare 接口。
+  - 文件管理器“预览产物”列与准备入口。
+  - M3E 专项脚本。
+- 已确认：
+  - file-access 不回归。
+  - 交付包预检查不回归。
+  - 未读取正文。
+  - 未做真实转换。
+  - 未写 semantic documents / chunks / Qdrant / OpenSearch / Hermes memory。
+  - 未暴露真实路径、bucket、object_key、`storage_uri`。
+- 主 agent 裁决：`M3E：预览与转换产物对象化` 正式收口。
+- 收口记录：`handoff/main-agent/m3e-preview-artifacts-object-storage-closure.md`。
+- 下一步建议：`M4A：documents / chunks 语义证据契约`，先做契约，不直接进入向量库或 Hermes 正文问答。
+
+## 跨机器交接入口
+
 后续迁移时，接手 agent 请从以下文件开始：
 
 - `handoff/main-agent/status.md`

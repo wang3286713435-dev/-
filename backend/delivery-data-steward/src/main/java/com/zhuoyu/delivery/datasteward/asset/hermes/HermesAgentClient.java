@@ -86,7 +86,7 @@ public class HermesAgentClient {
         platformContext.put("query", request.query());
         platformContext.put("response_requirements", request.responseRequirements());
         return """
-            你是 Hermes Agent，正在通过数字化交付平台后端网关提供只读目录级辅助。
+            你是 Hermes Agent，正在通过卓羽智能数据中台后端网关提供只读目录级辅助。
             必须遵守：
             1. 只基于 platform_context 中的资产目录、项目上下文和权限证明回答。
             2. 不得声称已读取 PDF、Office、DWG、RVT、IFC 或其他文件正文。

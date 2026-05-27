@@ -6,7 +6,7 @@ v1.1 最小实现补丁更新：2026-05-11
 
 v1.1 目标部署更新：2026-05-12
 
-责任方：数字化交付平台一期数据库后端团队 / 主 agent
+责任方：卓羽智能数据中台一期数据库后端团队 / 主 agent
 
 接收方：Hermes_memory / Hermes 企业 Agent 开发团队
 
@@ -21,7 +21,7 @@ v1.1 目标部署更新：2026-05-12
 
 ## 1. 交付原则
 
-企业 Agent DB-2 阶段需要的数据库连接、只读账号、schema 名称、View 字段、权限默认值、游标语义和样例读取许可，均由数字化交付平台一期数据库后端团队与主 agent 提供。
+企业 Agent DB-2 阶段需要的数据库连接、只读账号、schema 名称、View 字段、权限默认值、游标语义和样例读取许可，均由卓羽智能数据中台一期数据库后端团队与主 agent 提供。
 
 企业 Agent 团队不需要、也不应自行猜测以下信息：
 
@@ -598,6 +598,6 @@ handoff/main-agent/enterprise-agent-db2-staging-shared-dev-ops-request.md
 - 权限缺失默认 `DENIED` 的确认。
 - 企业 Agent 团队不外发、不外部云持久化、不写库、不写 NAS 的确认。
 
-以上交付物由数字化交付平台一期数据库后端团队和主 agent 对企业 Agent 团队提供，不应转嫁给企业 Agent 团队自行推断。
+以上交付物由卓羽智能数据中台一期数据库后端团队和主 agent 对企业 Agent 团队提供，不应转嫁给企业 Agent 团队自行推断。
 
 本文件现在可作为本机 dev DB-2 联调边界文档使用；本机同环境是当前一期正式联调路径。但本文不能作为 shared-dev、staging 或生产环境的最终连接凭据。shared-dev / staging 只有在触发远程协作或交付验证时再按运维执行单开通，状态为 `DEFERRED_UNTIL_REMOTE_COLLAB_OR_STAGING_REQUIRED`。

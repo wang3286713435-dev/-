@@ -7,7 +7,7 @@
 标准唯一源头为：
 
 ```text
-/Users/Weishengsu/Library/Mobile Documents/com~apple~CloudDocs/数字化交付平台/DigitalDeliveryProject/
+/Users/Weishengsu/Library/Mobile Documents/com~apple~CloudDocs/卓羽智能数据中台/DigitalDeliveryProject/
 ```
 
 核心文件：
@@ -33,7 +33,7 @@ RISK_RED_LINES.md
 数据库 / 平台 Agent 只读同步目录：
 
 ```text
-/Volumes/vc/Documents/数字化交付平台/docs/digital-delivery-standards/
+/Volumes/vc/Documents/卓羽智能数据中台/docs/digital-delivery-standards/
 ```
 
 Hermes Agent 只读同步目录：

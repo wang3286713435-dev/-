@@ -1,161 +1,222 @@
-# 开发 Agent 当前任务：M3D 真实 NAS 小范围灰度镜像
+# 开发 Agent 当前任务：M3E 预览与转换产物对象化
 
-你是数字化交付平台开发 agent。工作目录：
+你是卓羽智能数据中台 v1 的开发 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
 当前分支：
 
-`codex/m3d-real-nas-object-mirror-gray`
+`codex/m3e-preview-artifacts-object-storage`
 
-本轮批次：
+## 0. 本批定位
 
-`M3D：真实 NAS 小范围灰度镜像`
+本批是：
 
-本轮不是全量 NAS 搬迁，也不是语义解析或 Hermes 正文问答。目标是在 M3C 任务中心已经收口的基础上，用 105 项目少量真实业务文件做一次受控对象存储镜像灰度，验证真实文件链路可用、可追踪、可回滚、不可越界。
+`M3E：预览与转换产物对象化`
 
-## 0. 必须先阅读
+M3A/M3B/M3C/M3D 已经完成：
+
+- StorageService 与对象存储基础表。
+- assetUuid / storage-status。
+- 对象存储迁移任务中心。
+- 105 项目 PDF / DWG / RVT 小范围真实 NAS 对象镜像。
+
+M3E 的目标不是做真实转换器，而是把“预览产物 / 转换产物 / 未来 BIM 轻量化产物”的关系接入对象存储底座，让平台能清楚回答：
+
+- 这个文件有没有可用预览产物？
+- 预览产物是否已经对象化？
+- 如果不能预览，是缺转换、格式不支持，还是权限不足？
+- 预览/转换产物是否仍通过平台受控 file-access / preview ticket 访问？
+
+## 1. 必须先阅读
+
+开始前先阅读：
 
 - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
-- `handoff/main-agent/m3c-storage-migration-task-center-closure.md`
-- `handoff/main-agent/m3c1-asset-uuid-storage-status-closure.md`
-- `handoff/main-agent/m3b-object-storage-mirror-trial-closure.md`
-- `handoff/main-agent/m3a-storage-service-foundation-closure.md`
-- `handoff/main-agent/status.md`
+- `handoff/main-agent/m3d-real-nas-object-mirror-gray-closure.md`
 - `handoff/dev-agent/latest-report.md`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageMigrationApplicationService.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageMigrationController.java`
+- `handoff/test-agent/latest-report.md`
+- `backend/delivery-app/src/main/resources/db/migration/V28__m3a_storage_objects_foundation.sql`
 - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageService.java`
-- `frontend/src/modules/data-steward/pages/DataStewardFileServicePage.vue`
-- `scripts/dev/check-m3c-storage-migration-task-center.sh`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/AssetApplicationService.java`
+- `backend/delivery-shared/src/main/java/com/zhuoyu/delivery/shared/preview/FilePreviewPolicy.java`
+- `backend/delivery-shared/src/main/java/com/zhuoyu/delivery/shared/preview/PreviewDecision.java`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/controller/AssetController.java`
+- `frontend/src/modules/data-steward/api/dataSteward.ts`
+- `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
+- `frontend/src/modules/data-steward/utils/previewStatus.ts`
+- `frontend/src/modules/work-center/pages/DeliveryPackageArchivePage.vue`
 
-## 1. 本轮目标
+## 2. 严格边界
 
-在 105 项目，也就是当前库中的 `projectId=503`，选择少量真实业务文件执行对象存储镜像灰度。
+本批允许：
 
-最低覆盖：
+- 后端接入已有 `data_file_derivatives`、`data_preview_artifacts` 表。
+- 如确实缺字段，可追加新 Flyway 迁移；不得修改已应用迁移。
+- 新增只读 / 受控 prepare 接口。
+- 前端展示预览产物状态、转换状态、对象化状态。
+- 新增专项脚本。
 
-- PDF 小样本。
-- DWG 小样本。
-- RVT / BIM 模型类小样本，如果当前 105 项目存在且单文件大小不超过灰度上限。
+本批禁止：
 
-验收链路：
+- 不做真实 PDF / Office / CAD / BIM 转换器。
+- 不读取 PDF / Office / DWG / RVT / IFC 正文。
+- 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
+- 不新增 Hermes 正文问答。
+- 不进入 BIM 引擎真实接入。
+- 不移动、删除、重命名、覆盖真实 NAS 文件。
+- 不全量迁移 NAS。
+- 不暴露 `/Volumes`、`smb://`、`nas://`、`storage_uri`、bucket、object_key、raw row、SQL、token、secret。
+- 不修改 `docs/**`。
 
-```text
-真实 NAS 文件台账
--> 显式选择少量 fileIds / assetUuid
--> M3C 迁移任务中心创建任务
--> 读取 NAS 源文件
--> checksum
--> 上传 MinIO
--> 校验
--> 写对象版本
--> storage-status 显示 OBJECT_STORED
--> file-access 继续受控读取
--> NAS 原文件保持不变
--> 灰度报告可查
-```
+## 3. 推荐实现口径
 
-## 2. 优先实现策略
+### A. 产物模型
 
-优先复用 M3C 已有能力，不要为了 M3D 大改后端。
+优先复用 M3A 已有表：
 
-如果现有 M3C 任务中心已经足以完成真实文件灰度，则本轮主要新增：
+- `data_file_derivatives`
+- `data_preview_artifacts`
 
-- M3D 专项脚本。
-- 灰度报告或 handoff 记录。
-- 必要的前端提示微调。
+建议最小状态口径：
 
-只有在发现真实 NAS 文件灰度无法被现有 M3C 安全验收时，才做最小代码补强。
+- `artifactType`
+  - `BROWSER_NATIVE_PREVIEW`
+  - `OFFICE_PREVIEW_PLACEHOLDER`
+  - `CAD_PREVIEW_PLACEHOLDER`
+  - `BIM_LIGHTWEIGHT_PLACEHOLDER`
+  - `THUMBNAIL_PLACEHOLDER`
+- `previewStatus`
+  - `AVAILABLE`
+  - `NEEDS_CONVERSION`
+  - `UNSUPPORTED`
+  - `BLOCKED`
+  - `NOT_STARTED`
+- `storageState`
+  - `OBJECT_STORED`
+  - `PENDING`
+  - `NOT_REQUIRED`
+- `generationStatus`
+  - `COMPLETED`
+  - `NOT_STARTED`
+  - `SKIPPED`
+  - `FAILED`
 
-## 3. 灰度选择规则
+### B. 浏览器原生预览
 
-必须使用显式选择，不允许项目全量、目录全量、后缀全量自动迁移。
+对 PDF / 图片这类浏览器原生可预览文件：
 
-建议脚本逻辑：
+- 如果文件已有 active 对象版本，可创建或更新 `BROWSER_NATIVE_PREVIEW` artifact。
+- artifact 可指向同一个 active storage object，不需要重复上传一份对象。
+- `file-access` 仍是唯一受控访问入口。
+- 前端不得拿到 bucket / object_key。
 
-1. 登录管理员。
-2. 切换到 `projectId=503`。
-3. 查询 105 项目中真实文件候选。
-4. 从 PDF / DWG / RVT 或模型类文件中各挑少量候选。
-5. 跳过已删除、回收站、路径不可读、超过单文件大小上限、不属于 105 项目的文件。
-6. 创建迁移任务。
-7. 查询任务详情。
-8. 查询 `storage-status`。
-9. 用受控 `file-access` 做 PREVIEW 或 DOWNLOAD 验证。
-10. 输出灰度摘要。
+### C. 需要转换的文件
 
-如果找不到符合大小上限的 RVT / BIM 文件，脚本不能失败成 P0，应记录为 `SKIPPED_NO_ELIGIBLE_MODEL_SAMPLE`，并继续验证 PDF / DWG。
+对 Office / DWG / RVT / IFC / NWD / NWC 等需要后续转换的文件：
 
-## 4. 必做能力
+- 本批只创建或返回 placeholder 状态。
+- 不调用转换器。
+- 不读取正文。
+- 不伪造可预览。
+- 页面应明确显示“需要转换产物，当前未生成”。
 
-### A. M3D 专项脚本
+### D. 交付包预检查
+
+交付包 / 档案目录中已有 `previewStatus`、`conversionStatus`、`conversionRequired`。
+
+本批需要让这些字段与 preview artifact 口径保持一致：
+
+- 已有浏览器原生预览 artifact 的条目可显示可预览。
+- 需要转换但没有产物的条目继续作为阻塞 / 需转换。
+- 不生成真实 ZIP。
+- 不复制 NAS 文件。
+
+## 4. 建议新增接口
+
+命名按现有代码风格微调，但语义必须稳定：
+
+- `GET /api/data-steward/assets/files/{fileId}/preview-artifacts`
+  - 查询某个文件的预览 / 转换产物状态。
+- `POST /api/data-steward/assets/files/{fileId}/preview-artifacts:prepare`
+  - 受控创建或刷新该文件的预览产物记录。
+  - 对 PDF / 图片：如已有对象版本，创建 `AVAILABLE` artifact。
+  - 对 DWG / RVT / Office：只创建 `NEEDS_CONVERSION` placeholder。
+
+响应必须包含：
+
+- `fileId`
+- `assetUuid`
+- `projectId`
+- `artifactType`
+- `previewStatus`
+- `conversionRequired`
+- `generationStatus`
+- `storageState`
+- `contentType`
+- `sizeBytes`
+- `lastVerifiedAt`
+- `message`
+
+响应绝不包含：
+
+- 真实 NAS 路径
+- bucket
+- object key
+- `storage_uri`
+- raw row
+- SQL
+- token / secret
+
+## 5. 前端要求
+
+最小前端接入即可，不要大改 UI：
+
+- 文件管理器中预览状态可显示“对象化预览 / 需转换 / 暂不支持”。
+- 文件详情或预览状态区域能看到预览产物状态。
+- 对 `NEEDS_CONVERSION` 的文件，按钮或提示要明确“后续接入转换服务后可生成预览”，不能假装可预览。
+- PDF / 图片继续通过受控 `file-access` 打开。
+- DWG / RVT 仍走模型/转换占位，不跳转伪 3D。
+
+## 6. 审计与权限
+
+- `prepare` 接口必须校验当前用户项目权限。
+- 不允许跨项目 fileId。
+- 创建 / 刷新 artifact 记录必须写审计日志。
+- 普通查看不会全量审计，按现有风格即可。
+- 无权限返回业务化错误，不泄露文件存在性和底层路径。
+
+## 7. 专项脚本
 
 新增：
 
-`scripts/dev/check-m3d-real-nas-object-mirror-gray.sh`
+`scripts/dev/check-m3e-preview-artifacts-object-storage.sh`
 
-脚本必须覆盖：
+脚本至少验证：
 
-- 105 / 503 真实项目登录与权限。
-- 真实业务文件候选选择。
-- PDF / DWG / RVT 或模型类覆盖情况。
-- 显式 fileIds 创建迁移任务。
-- 迁移后 `OBJECT_STORED` 状态。
-- 受控 file-access 可访问。
-- 重跑幂等。
-- NAS 原文件未被移动、删除、改名。
-- 灰度报告字段：
-  - 成功数
-  - 失败数
-  - 跳过数
-  - 文件类型覆盖
-  - checksum 覆盖率
-  - 禁出字段扫描结果
+1. 登录管理员。
+2. 选择 105 / projectId=503。
+3. 找到已 `OBJECT_STORED` 的 PDF 样本。
+4. 调用 prepare，返回 `BROWSER_NATIVE_PREVIEW / AVAILABLE / OBJECT_STORED`。
+5. 查询 preview-artifacts，能看到同一状态。
+6. 通过受控 file-access 仍可打开 PDF，不暴露底层定位。
+7. 找到 DWG 或 RVT 样本。
+8. 调用 prepare，只返回 `NEEDS_CONVERSION` placeholder，不读取正文、不生成真实转换文件。
+9. 交付包预检查字段不回归。
+10. 禁出字段扫描通过。
 
-### B. 灰度报告
+必须回归：
 
-完成后在 `handoff/dev-agent/latest-report.md` 写清：
+- `scripts/dev/check-m3d-real-nas-object-mirror-gray.sh`
+- `scripts/dev/check-m3c-storage-migration-task-center.sh`
+- `scripts/dev/check-m3c1-asset-uuid-storage-status.sh`
+- `scripts/dev/check-m3b-object-storage-mirror-trial.sh`
+- `scripts/dev/check-m3a-storage-service-foundation.sh`
+- `scripts/dev/check-phase2-batch4-file-access.sh`
 
-- 选择了哪些类型的样本。
-- 是否覆盖 PDF / DWG / RVT。
-- 如果某类未覆盖，原因是什么。
-- 成功 / 失败 / 跳过数量。
-- 是否触碰真实 NAS 文件。
-- 是否发生真实 NAS 写操作。
-- 是否出现 raw path / bucket / object key 泄露。
+## 8. 自测要求
 
-### C. UI / API 最小补强
-
-如现有页面已经足够，本轮可以不改 UI。
-
-如需要微调，仅允许：
-
-- 增加“真实 NAS 小范围灰度”提示。
-- 增加灰度执行前的风险说明。
-- 增加按文件类型 / storageState 筛选，帮助选择 PDF / DWG / 模型小样本。
-
-不要新增大页面，不要重做文件服务页面。
-
-## 5. 明确禁止
-
-严禁：
-
-1. 不做全量 NAS 迁移。
-2. 不做目录一键全量迁移。
-3. 不自动扫描并迁移整个项目。
-4. 不移动、删除、重命名真实 NAS 文件。
-5. 不读取 PDF / Office / DWG / RVT / IFC 正文。
-6. 不写 documents / chunks / OpenSearch / Qdrant / Hermes memory。
-7. 不新增 Hermes 正文问答。
-8. 不启动 BIM parser 或真实轻量化。
-9. 不开放 bucket、object key、`storage_uri`、真实 NAS 路径。
-10. 不修改仓库 `docs/**`。
-11. 不把对象存储镜像说成语义理解完成。
-
-## 6. 必跑验证
-
-完成后至少执行：
+完成后至少执行并记录：
 
 ```bash
 cd /Users/vc/Documents/数字化交付平台/backend
@@ -164,49 +225,42 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
 bash scripts/dev/check-m3d-real-nas-object-mirror-gray.sh
 bash scripts/dev/check-m3c-storage-migration-task-center.sh
 bash scripts/dev/check-m3c1-asset-uuid-storage-status.sh
 bash scripts/dev/check-m3b-object-storage-mirror-trial.sh
 bash scripts/dev/check-m3a-storage-service-foundation.sh
-bash scripts/dev/check-m2j-105-ownership-review.sh
-bash scripts/dev/check-m2i-105-file-ownership-governance.sh
-bash scripts/dev/check-m2h-windows-file-manager.sh
 bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
 
-## 7. 报告要求
+## 9. 报告要求
 
-写入：
+完成后写入：
 
 `handoff/dev-agent/latest-report.md`
 
 报告必须包含：
 
 - 改动文件清单。
-- 是否复用 M3C，是否新增代码。
-- 灰度样本选择规则。
-- PDF / DWG / RVT 覆盖情况。
-- 成功 / 失败 / 跳过数量。
-- checksum 覆盖率。
-- `OBJECT_STORED` 验证结果。
-- file-access 回归结果。
+- 是否新增迁移。
+- 是否复用 `data_file_derivatives` / `data_preview_artifacts`。
+- PDF / 图片 preview artifact 口径。
+- DWG / RVT / Office placeholder 口径。
+- file-access 是否回归。
+- 交付包预检查是否回归。
 - 禁出字段扫描结果。
-- 是否触碰真实 NAS 文件。
-- 是否修改 `docs/**`。
-- 已知风险和 M3E 建议。
+- 自测命令结果。
+- 未完成事项和风险。
 
-## 8. 完成定义
+## 10. 完成定义
 
-同时满足才算完成：
+只有同时满足以下条件，才可交给测试 agent：
 
-- M3D 专项脚本通过。
-- 105 真实业务小样本完成对象存储镜像。
-- NAS 原文件未被移动、删除、改名。
-- 已镜像文件显示 `OBJECT_STORED`。
-- file-access 受控访问不回归。
-- 失败 / 跳过原因可解释。
-- 禁出字段扫描通过。
-- M3C / M3C-1 / M3B / M3A 回归通过。
-- `handoff/dev-agent/latest-report.md` 已写。
+- PDF / 图片对象化预览产物状态可查。
+- DWG / RVT / Office 只返回需转换状态，不伪造预览。
+- file-access 仍是唯一受控访问入口。
+- API / 前端不泄露真实路径或对象定位。
+- 不读取正文、不写语义索引、不动 Hermes。
+- 前后端构建、专项脚本、关键回归和 `git diff --check` 通过。

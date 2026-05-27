@@ -13,7 +13,7 @@ DigitalDeliveryProject/
 镜像目录：
 
 ```text
-/Volumes/vc/Documents/数字化交付平台/docs/digital-delivery-standards/
+/Volumes/vc/Documents/卓羽智能数据中台/docs/digital-delivery-standards/
 /Users/Weishengsu/Hermes_memory/docs/digital-delivery-standards/
 ```
 

@@ -1,6 +1,6 @@
 # Frontend
 
-数字化交付平台一期前端工程，采用 Vue 3 + TypeScript + Vite + Element Plus + Pinia。
+卓羽智能数据中台一期前端工程，采用 Vue 3 + TypeScript + Vite + Element Plus + Pinia。
 
 ## 页面骨架
 

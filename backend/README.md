@@ -1,6 +1,6 @@
 # Backend
 
-数字化交付平台后端工程，采用 Spring Boot 3.3.x + Java 21 + Maven 多模块。
+卓羽智能数据中台后端工程，采用 Spring Boot 3.3.x + Java 21 + Maven 多模块。
 
 ## 模块
 

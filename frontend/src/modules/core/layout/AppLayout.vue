@@ -2,8 +2,8 @@
   <div class="app-layout">
     <aside class="app-layout__sidebar">
       <div class="app-layout__brand">
-        <strong>数字化交付平台</strong>
-        <span>ZHUOYU · BIM DELIVERY</span>
+        <strong>卓羽智能数据中台</strong>
+        <span>ZHUOYU · DATA HUB</span>
       </div>
       <SidebarMenu :menus="menus" />
       <div class="app-layout__sidebar-foot">
@@ -189,7 +189,7 @@ const shellTitle = computed(() => {
     'admin-employees': '员工权限管理',
     'access-pending': '等待项目授权'
   };
-  return labels[String(route.name ?? '')] ?? '数字化交付平台';
+  return labels[String(route.name ?? '')] ?? '卓羽智能数据中台';
 });
 
 const shellSubtitle = computed(() => {

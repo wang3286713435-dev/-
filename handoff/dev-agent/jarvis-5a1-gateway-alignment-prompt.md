@@ -1,6 +1,6 @@
 # 开发 Agent 备用任务：批次 5A.1 贾维斯 Gateway 合同对齐与联调增强
 
-你是数字化交付平台 v1 的开发 agent。工作目录：
+你是卓羽智能数据中台 v1 的开发 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 

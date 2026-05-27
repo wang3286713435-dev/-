@@ -4,7 +4,7 @@
 
 适用对象：Hermes_memory / 企业 Agent DB-2 开发团队。
 
-本文是企业 Agent 只读接入数字化交付平台 MySQL View 的主入口文档。DB-2 阶段只做数据库连接、字段握手、只读 proof-of-contract 和 mirror schema 准备；不得进入 DB-3 retrieval、embedding、OpenSearch、Qdrant 或外部持久化。
+本文是企业 Agent 只读接入卓羽智能数据中台 MySQL View 的主入口文档。DB-2 阶段只做数据库连接、字段握手、只读 proof-of-contract 和 mirror schema 准备；不得进入 DB-3 retrieval、embedding、OpenSearch、Qdrant 或外部持久化。
 
 ## 1. 当前结论
 

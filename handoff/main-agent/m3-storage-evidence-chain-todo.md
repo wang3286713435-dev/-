@@ -33,7 +33,7 @@ NAS 原始文件保留
 - [x] 1. 平台资产 UUID 与文件状态统一（M3C-1 已收口）
 - [x] 2. 对象存储迁移任务中心（M3C 已收口）
 - [x] 3. 真实 NAS 小范围灰度镜像（M3D 已收口）
-- [ ] 4. 预览与转换产物对象化
+- [x] 4. 预览与转换产物对象化（M3E 已收口）
 - [ ] 5. documents / chunks 语义契约
 - [ ] 6. 向量库与关键词索引试点
 - [ ] 7. Hermes 受控 Evidence API
@@ -181,9 +181,15 @@ NAS 原始文件保留
 
 ## 6. 阶段 4：预览与转换产物对象化
 
-状态：`待启动`
+状态：`已完成`
 
 建议批次名：`M3E：预览与转换产物对象化`
+
+启动记录：
+
+- 分支：`codex/m3e-preview-artifacts-object-storage`
+- M3D 已合并回 `main` 后启动。
+- 当前开发 prompt：`handoff/dev-agent/current-prompt.md`
 
 交付要求：
 
@@ -194,10 +200,22 @@ NAS 原始文件保留
 
 验收条件：
 
-- 衍生产物与源文件关系可查。
-- 预览产物走受控 `file-access` 或受控 preview ticket。
-- 不暴露底层对象定位。
-- DWG / RVT 未转换时能安全展示 Missing Conversion。
+- [x] 衍生产物与源文件关系可查。
+- [x] 预览产物走受控 `file-access` 或受控 preview ticket。
+- [x] 不暴露底层对象定位。
+- [x] DWG / RVT / Office 未转换时能安全展示转换占位。
+
+完成记录：
+
+- M3E 专项脚本：
+  - `scripts/dev/check-m3e-preview-artifacts-object-storage.sh`
+- 已覆盖：
+  - PDF / 图片：`BROWSER_NATIVE_PREVIEW / AVAILABLE / OBJECT_STORED`
+  - DWG：`CAD_PREVIEW_PLACEHOLDER / NEEDS_CONVERSION / PENDING`
+  - RVT：`BIM_LIGHTWEIGHT_PLACEHOLDER / NEEDS_CONVERSION / PENDING`
+  - Office：`OFFICE_PREVIEW_PLACEHOLDER / NEEDS_CONVERSION / PENDING`
+- 收口记录：
+  - `handoff/main-agent/m3e-preview-artifacts-object-storage-closure.md`
 
 ## 7. 阶段 5：documents / chunks 语义契约
 
@@ -326,7 +344,8 @@ NAS 原始文件保留
 - [x] M3C-1：资产 UUID 与存储状态统一
 - [x] M3C：对象存储迁移任务中心与批量策略
 - [x] M3D：真实 NAS 小范围灰度镜像
+- [x] M3E：预览与转换产物对象化
 
 下一步候选：
 
-- [ ] M3E：预览与转换产物对象化
+- [ ] M4A：documents / chunks 语义证据契约

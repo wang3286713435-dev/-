@@ -56,7 +56,7 @@ Hermes 当前主线阶段已由旧的 2.86 口径更新为 V3 口径：
 
 ## 4. 当前平台已有基础
 
-当前数字化交付平台已经具备并通过 5A 验收的基础接入能力：
+当前卓羽智能数据中台已经具备并通过 5A 验收的基础接入能力：
 
 - 后端已有 `AgentGatewayController`：
   - `GET /api/agent/hermes/capabilities`

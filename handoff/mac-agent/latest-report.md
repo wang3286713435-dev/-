@@ -187,4 +187,4 @@ trust_level = "trusted"
 
 可以正式认定迁移完成。
 
-当前新 Mac 已具备数字化交付平台的原生继续开发条件，后续可以按 `handoff/dev-agent/current-prompt.md` 继续推进一期 BIM 资产管理试点。
+当前新 Mac 已具备卓羽智能数据中台的原生继续开发条件，后续可以按 `handoff/dev-agent/current-prompt.md` 继续推进一期 BIM 资产管理试点。

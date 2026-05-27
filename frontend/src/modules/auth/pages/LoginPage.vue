@@ -9,8 +9,8 @@
     <ParticleField :count="22" :speed="0.22" :link-distance="160" />
     <section class="login-panel zy-glass">
       <div class="login-brand">
-        <span class="login-brand__eyebrow">ZHUOYU · BIM DELIVERY</span>
-        <h1>数字化交付平台</h1>
+        <span class="login-brand__eyebrow">ZHUOYU · DATA HUB</span>
+        <h1>卓羽智能数据中台</h1>
         <p>建筑空间的数据底座 · 从 BIM 模型到运营闭环</p>
       </div>
 

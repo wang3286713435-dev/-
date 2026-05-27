@@ -7,7 +7,7 @@
 
 ## 0. 结论
 
-当前建议路线是：**NAS 和业务数据库继续作为 source of truth，数字化交付平台负责资产目录、扫描、审核、checksum、事件流和审计，Hermes_memory 作为 memory index / governance layer 接入稳定资产目录、派生索引、chunk、embedding、BM25、citation、权限快照、版本和 trace。**
+当前建议路线是：**NAS 和业务数据库继续作为 source of truth，卓羽智能数据中台负责资产目录、扫描、审核、checksum、事件流和审计，Hermes_memory 作为 memory index / governance layer 接入稳定资产目录、派生索引、chunk、embedding、BM25、citation、权限快照、版本和 trace。**
 
 不要让 Hermes_memory 复制整个 NAS，不要让 Hermes Agent 直接增删改 NAS，也不要默认把 10TB NAS 全量解析、全量 embedding、全量写入向量库。
 
@@ -19,7 +19,7 @@
 
 ### 1.1 当前数据库与基础设施
 
-当前数字化交付平台为 Java + Spring Boot 模块化单体，数据库迁移使用 Flyway，接口文档使用 Springdoc/OpenAPI。
+当前卓羽智能数据中台为 Java + Spring Boot 模块化单体，数据库迁移使用 Flyway，接口文档使用 Springdoc/OpenAPI。
 
 本地开发基础设施：
 
