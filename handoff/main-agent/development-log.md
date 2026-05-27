@@ -68,6 +68,30 @@
   - `M3F：新文件对象存储优先写入与 NAS 兼容回退` 正式收口。
   - M3G 计划文件可随 M3F checkpoint 一并提交，但 M3G 不自动启动。
 
+## 2026-05-27：M3F 合并主线，M3G-1 启动
+
+- 已将 `codex/m3f-object-storage-first-write` 推送到远端。
+- 已将 M3F 快进合并到 `main` 并推送。
+- 已从最新 `main` 创建：
+  - `codex/m3g-nas-minio-real-project-object-storage`
+- 当前 active 批次：
+  - `M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划`
+- 本批只做：
+  - readiness。
+  - inventory。
+  - dry-run plan。
+- 本批不做：
+  - 历史文件真实批量迁移。
+  - 全量 NAS 搬迁。
+  - Hermes 正文问答。
+  - documents / chunks / Qdrant / OpenSearch。
+  - 文件正文读取。
+- 已更新：
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+  - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
+  - `handoff/main-agent/status.md`
+
 ## 2026-05-25：M3A 启动
 
 - 用户确认执行对象存储路线规划。

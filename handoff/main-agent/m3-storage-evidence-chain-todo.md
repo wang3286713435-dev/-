@@ -35,7 +35,7 @@ NAS 原始文件保留
 - [x] 3. 真实 NAS 小范围灰度镜像（M3D 已收口）
 - [x] 4. 预览与转换产物对象化（M3E 已收口）
 - [x] 4.5 新文件对象存储优先写入（M3F 已收口）
-- [ ] 4.6 NAS 侧 MinIO 对象存储接管真实项目文件（M3G 待启动）
+- [ ] 4.6 NAS 侧 MinIO 对象存储接管真实项目文件（M3G-1 进行中）
 - [ ] 5. documents / chunks 语义契约
 - [ ] 6. 向量库与关键词索引试点
 - [ ] 7. Hermes 受控 Evidence API
@@ -252,9 +252,13 @@ NAS 原始文件保留
 
 ## 8. 阶段 4.6：NAS 侧 MinIO 对象存储接管真实项目文件
 
-状态：`待启动`
+状态：`M3G-1 进行中`
 
 建议批次名：`M3G：NAS 侧 MinIO 对象存储接管真实项目文件`
+
+当前子批次：
+
+`M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划`
 
 交付要求：
 
@@ -291,6 +295,14 @@ NAS 原始文件保留
 - Hermes 文件副本取用契约已预留，但未写正文 evidence。
 - 禁出字段扫描通过。
 - M3F / M3E / M3D / M3C / file-access 回归通过。
+
+M3G-1 交付要求：
+
+- 提供 NAS 侧 MinIO readiness，能区分本机开发 MinIO 与 NAS 侧 MinIO。
+- 提供全项目对象化覆盖率盘点。
+- 提供单项目对象化 dry-run 计划。
+- dry-run 不复制文件、不启动真实迁移任务。
+- 页面或接口清楚提示当前是否具备正式 NAS 侧 MinIO 条件。
 
 ## 9. 阶段 5：documents / chunks 语义契约
 

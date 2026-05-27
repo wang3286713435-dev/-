@@ -1,4 +1,4 @@
-# 测试 Agent 当前任务：M3F 新文件对象存储优先写入验收
+# 测试 Agent 当前任务：M3G-1 NAS 侧 MinIO 就绪检查与对象化盘点验收
 
 你是卓羽智能数据中台的测试 agent。工作目录：
 
@@ -6,21 +6,21 @@
 
 当前验收批次：
 
-`M3F：新文件对象存储优先写入与 NAS 兼容回退`
+`M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划`
 
 ## 0. 验收目标
 
-本轮只验收 M3F：
+本轮只验收 M3G-1：
 
-- 通过平台上传的新文件默认写入对象存储。
-- 新文件仍进入 MySQL 业务台账。
-- 新文件有 `assetUuid` 和 active object version。
-- 新文件 `storage-status=OBJECT_STORED`。
-- 新文件可通过受控 `file-access` 读取。
-- 历史 NAS 文件、迁移任务、预览产物不回归。
+- 平台能业务化展示 NAS 侧 MinIO readiness。
+- 当前对象存储是本机开发 MinIO 还是 NAS 侧 MinIO 不被混淆。
+- 平台能查询全项目对象化覆盖率。
+- 平台能对单项目生成对象化 dry-run 计划。
+- dry-run 不启动真实迁移，不复制文件。
 
 本轮不验收：
 
+- 历史文件真实批量迁移。
 - 全量 NAS 搬迁。
 - Hermes 正文问答。
 - documents / chunks / Qdrant / OpenSearch。
@@ -31,9 +31,9 @@
 
 - `handoff/dev-agent/latest-report.md`
 - `handoff/dev-agent/current-prompt.md`
-- `handoff/main-agent/m3f-object-storage-first-write-plan.md`
+- `handoff/main-agent/m3g-nas-minio-real-project-object-storage-plan.md`
 - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
-- `scripts/dev/check-m3f-object-storage-first-write.sh`
+- `scripts/dev/check-m3g-nas-minio-readiness-inventory.sh`
 
 ## 2. 必跑命令
 
@@ -46,12 +46,10 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-m3g-nas-minio-readiness-inventory.sh
 bash scripts/dev/check-m3f-object-storage-first-write.sh
 bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
-bash scripts/dev/check-m3d-real-nas-object-mirror-gray.sh
 bash scripts/dev/check-m3c-storage-migration-task-center.sh
-bash scripts/dev/check-m3b-object-storage-mirror-trial.sh
-bash scripts/dev/check-m3a-storage-service-foundation.sh
 bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
@@ -68,41 +66,42 @@ git diff --name-only
 git diff --cached --name-status
 ```
 
-M3F 允许包含：
+M3G-1 允许包含：
 
-- `backend/**` 中与 StorageService、文件上传、对象版本、受控访问相关的最小改动。
-- `frontend/**` 中文件管理器上传后状态展示的最小改动。
-- `scripts/dev/check-m3f-object-storage-first-write.sh`
+- `backend/**` 中 readiness、inventory、dry-run、storage migration 查询相关最小改动。
+- `frontend/**` 中对象存储状态、覆盖率、dry-run 计划展示相关最小改动。
+- `scripts/dev/check-m3g-nas-minio-readiness-inventory.sh`
 - `handoff/dev-agent/latest-report.md`
-- 必要的 Flyway 新迁移。
+- 必要的新迁移。
 
-M3F 不允许包含：
+M3G-1 不允许包含：
 
 - `docs/**`
 - Hermes 正文问答。
 - documents / chunks / Qdrant / OpenSearch / parser / indexing。
 - 真实 BIM 引擎。
-- 全量 NAS 迁移入口。
+- 历史文件真实批量迁移执行入口绕过 dry-run。
 - 真实 NAS 批量移动、删除、重命名能力扩展。
 
 ## 4. 核心验收点
 
 重点确认：
 
-1. 新上传文件不是先写真实业务 NAS 目录。
-2. 新上传文件创建 `data_file_resources` 记录。
-3. 新上传文件有 `assetUuid`。
-4. 新上传文件创建 `data_storage_objects`。
-5. 新上传文件创建 active `data_file_object_versions`。
-6. `GET /api/data-steward/assets/files/{fileId}/storage-status` 返回 `OBJECT_STORED`。
-7. `file-access` 可读取对象存储新增文件内容。
-8. 对象存储不可用时不 500、不假成功。
-9. 历史 NAS 文件仍可走原有受控访问。
-10. M3E 预览产物、M3D 灰度镜像、M3C 迁移任务不回归。
+1. NAS 侧 MinIO readiness 接口可用。
+2. readiness 响应不泄露 endpoint、bucket、object key、secret。
+3. 如果当前仍是本机 MinIO，响应必须清楚表达 `LOCAL_DEV_MINIO` 或等价业务状态，不能冒充 NAS 侧 MinIO。
+4. 全项目对象化覆盖率可查。
+5. 至少包含一个真实项目聚合，例如 105 / 503 或 93 / 506。
+6. 单项目 dry-run 可生成计划。
+7. dry-run 返回 `dryRun=true`、`migrationStarted=false`。
+8. dry-run 不创建真实迁移任务、不复制文件。
+9. dry-run sampleItems 不含真实 NAS 路径、bucket、object key。
+10. M3F 新文件对象存储优先写入不回归。
+11. file-access 不回归。
 
 ## 5. 禁出字段扫描
 
-所有 M3F 响应和脚本输出中不得出现：
+所有 M3G-1 响应和脚本输出中不得出现：
 
 - `/Volumes`
 - `/Users`
@@ -110,7 +109,7 @@ M3F 不允许包含：
 - `nas://`
 - `storage_uri`
 - `storageUri`
-- `bucket`
+- bucket 真实值
 - `object_key`
 - `objectKey`
 - raw row
@@ -119,46 +118,43 @@ M3F 不允许包含：
 - secret
 - password
 
-说明性文案里可以出现“对象存储”这个业务词，但不能出现真实 bucket / object key 值。
+说明性文案可以出现“bucket / object key 不展示”这类安全说明，但不能出现真实值。
 
 ## 6. 浏览器轻量检查
 
 本轮不要求全量浏览器逐页点击，只做轻量检查：
 
-- 打开 `http://127.0.0.1:5173/data-steward/assets/503?tab=files`
-- 文件管理器页面不白屏。
-- 上传入口仍可见。
-- 上传成功后的文件能显示在当前目录。
-- 新文件的存储状态或详情可体现对象存储状态。
-- 不需要在真实业务目录执行破坏性操作。
+- 打开对象存储 / 文件服务 / 迁移任务相关页面。
+- 页面不白屏。
+- 能看到对象存储就绪状态或覆盖率入口。
+- dry-run 入口如果已做前端，则点击后只生成计划，不启动迁移。
+- 不需要在真实业务目录执行写操作。
 
 ## 7. P0 / P1 判定
 
 P0：
 
-- 新上传文件泄露真实 NAS 路径、bucket、object key、storage URI、token、secret。
-- 真实业务 NAS 文件被移动、删除、覆盖或改名。
-- file-access 权限链路回归失败。
+- 真实 NAS 文件被移动、删除、覆盖或改名。
+- dry-run 实际启动了迁移或复制文件。
+- 响应泄露真实路径、bucket、object key、token、secret。
 - 引入 Hermes 正文问答、parser、indexing、documents / chunks。
-- 全量历史 NAS 迁移被误开启。
+- file-access 权限链路回归失败。
 
 P1：
 
-- 新上传文件仍默认写 NAS，未写对象存储。
-- 新文件无 `assetUuid`。
-- 新文件无 active object version。
-- 新文件 storage-status 不是 `OBJECT_STORED`。
-- 新文件无法通过受控 file-access 读取。
-- 对象存储不可用时假成功或 500。
-- M3F 专项脚本失败。
-- M3E / M3D / M3C / M3B / M3A 关键回归失败。
-- M3F 专项脚本未纳入 Git。
+- readiness 无法区分本机 MinIO 和 NAS 侧 MinIO。
+- 全项目对象化覆盖率不可查。
+- 单项目 dry-run 不可用。
+- dry-run 响应缺少 `dryRun=true` 或 `migrationStarted=false`。
+- M3G-1 专项脚本失败。
+- M3F / M3E / M3C / file-access 关键回归失败。
+- M3G-1 专项脚本未纳入 Git。
 
 P2：
 
 - 既有 Vite chunk warning。
 - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪项，只记录，不阻塞。
-- 文案细节粗糙但不影响主链路。
+- UI 文案细节粗糙但不影响主链路。
 
 ## 8. 报告要求
 
@@ -171,12 +167,11 @@ P2：
 - 测试结论：通过 / 不通过。
 - P0 / P1 / P2。
 - 必跑命令结果。
-- M3F 专项脚本结果。
-- 新上传文件对象存储验证结果。
-- `assetUuid` / active object version / storage-status 验证结果。
-- file-access 读取验证结果。
-- 对象存储不可用场景验证结果。
-- 回归脚本结果。
+- M3G-1 专项脚本结果。
+- readiness 验证结果。
+- 全项目对象化覆盖率验证结果。
+- dry-run 计划验证结果。
+- 是否发生真实迁移，必须说明。
 - 禁出字段扫描结果。
 - Git 范围检查结果。
-- 是否建议主 agent 收口 M3F。
+- 是否建议主 agent 收口 M3G-1。

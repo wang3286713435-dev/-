@@ -55,6 +55,35 @@
   - `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`。
   - M3G 需要单独启动，不自动进入。
 
+## 2026-05-27 M3G-1 启动：NAS 侧 MinIO readiness 与对象化盘点
+
+- M3F 已合并回 `main` 并推送，`main` 最新进度为 M3F。
+- 已从最新 `main` 创建分支：
+  - `codex/m3g-nas-minio-real-project-object-storage`
+- 当前 active 批次：
+  - `M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划`
+- M3G 总目标：
+  - 将正式文件本体治理升级为 NAS 侧 MinIO 对象存储。
+  - 原 NAS 项目资料区冻结为只读备份和回滚来源。
+  - 平台通过 MySQL 台账管理业务关系、权限、版本、checksum 和交付关系。
+  - Hermes 后续只能通过平台授权，从 NAS 侧 MinIO 复制文件副本到本机工作区解析。
+- M3G-1 只做：
+  - NAS 侧 MinIO readiness。
+  - 全项目对象化覆盖率盘点。
+  - 单项目对象化 dry-run 计划。
+- M3G-1 不做：
+  - 不执行真实历史文件批量迁移。
+  - 不移动、删除、重命名真实 NAS 文件。
+  - 不做 Hermes 正文问答。
+  - 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
+- 已写入：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+  - M3G 计划：`handoff/main-agent/m3g-nas-minio-real-project-object-storage-plan.md`
+- 当前裁决：
+  - 交给开发 agent 按 M3G-1 prompt 执行。
+  - M3G-1 未通过前，不进入真实历史文件对象化执行。
+
 ## 2026-05-25 M3A 启动：对象存储与 StorageService 基线
 
 - 用户确认执行 `M3 执行计划：对象存储底座先行，语义与 Hermes 后置`。
