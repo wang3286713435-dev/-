@@ -24,6 +24,7 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.NonstandardDirectoryU
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.PathMappingRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.PathMappingResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.PathMappingUpdateRequest;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.PreviewArtifactResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ReviewUpdateRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ScanCandidateResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ScanReportResponse;
@@ -345,6 +346,16 @@ public class AssetController {
     @GetMapping("/files/{fileId}/storage-status")
     public ApiResponse<FileStorageStatusResponse> getFileStorageStatus(@PathVariable Long fileId) {
         return ApiResponse.success(assetApplicationService.getFileStorageStatus(currentUserId(), fileId));
+    }
+
+    @GetMapping("/files/{fileId}/preview-artifacts")
+    public ApiResponse<List<PreviewArtifactResponse>> listPreviewArtifacts(@PathVariable Long fileId) {
+        return ApiResponse.success(assetApplicationService.listPreviewArtifacts(currentUserId(), fileId));
+    }
+
+    @PostMapping("/files/{fileId}/preview-artifacts:prepare")
+    public ApiResponse<PreviewArtifactResponse> preparePreviewArtifact(@PathVariable Long fileId) {
+        return ApiResponse.success(assetApplicationService.preparePreviewArtifact(currentUserId(), fileId));
     }
 
     @PostMapping("/files/{fileId}/access-tickets")

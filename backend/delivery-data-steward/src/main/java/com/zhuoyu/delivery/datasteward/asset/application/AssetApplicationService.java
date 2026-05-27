@@ -24,6 +24,7 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.NonstandardDirectoryD
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.NonstandardDirectoryResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.NonstandardDirectoryUpdateRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.PathMappingResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.PreviewArtifactResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ReviewUpdateRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ScanCandidateResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ScanReportResponse;
@@ -49,6 +50,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
@@ -717,6 +719,77 @@ public class AssetApplicationService {
         );
     }
 
+    public List<PreviewArtifactResponse> listPreviewArtifacts(Long userId, Long fileId) {
+        FileAssetResponse file = getFileById(userId, fileId);
+        PreviewDecision decision = decidePreview(normalizePreviewExt(file.fileExt(), file.fileName()), file.fileKind());
+        List<PreviewArtifactResponse> rows = jdbcTemplate.query("""
+            SELECT pa.file_id,
+                   pa.artifact_type,
+                   pa.preview_status,
+                   pa.storage_state,
+                   COALESCE(d.generation_status, 'NOT_STARTED') AS generation_status,
+                   COALESCE(pa.content_type, d.content_type) AS content_type,
+                   COALESCE(pa.size_bytes, d.size_bytes) AS size_bytes,
+                   COALESCE(pa.last_verified_at, d.last_verified_at) AS last_verified_at
+            FROM data_preview_artifacts pa
+            LEFT JOIN data_file_derivatives d ON d.id = pa.derivative_id AND d.deleted = 0
+            WHERE pa.file_id = ?
+              AND pa.deleted = 0
+            ORDER BY pa.updated_at DESC, pa.id DESC
+            """, (rs, rowNum) -> new PreviewArtifactResponse(
+            file.fileId(),
+            file.assetUuid(),
+            file.projectId(),
+            rs.getString("artifact_type"),
+            rs.getString("preview_status"),
+            Boolean.TRUE.equals(decision.conversionRequired()),
+            rs.getString("generation_status"),
+            rs.getString("storage_state"),
+            rs.getString("content_type"),
+            nullableLong(rs.getObject("size_bytes")),
+            instant(rs.getTimestamp("last_verified_at")),
+            previewArtifactMessage(rs.getString("artifact_type"), rs.getString("preview_status"),
+                rs.getString("storage_state"), rs.getString("generation_status"), decision)
+        ), file.fileId());
+        if (!rows.isEmpty()) {
+            return rows;
+        }
+        ActiveObjectVersion activeObject = findActiveObjectVersion(file.fileId());
+        return List.of(initialPreviewArtifact(file, decision, activeObject));
+    }
+
+    @Transactional
+    public PreviewArtifactResponse preparePreviewArtifact(Long userId, Long fileId) {
+        FileAssetResponse file = getFileById(userId, fileId);
+        validateFileLifecycle(file);
+        PreviewDecision decision = decidePreview(normalizePreviewExt(file.fileExt(), file.fileName()), file.fileKind());
+        ActiveObjectVersion activeObject = findActiveObjectVersion(file.fileId());
+        PreparedPreviewArtifact prepared = preparePreviewArtifactRecord(file, decision, activeObject, userId);
+        auditLogApplicationService.record(file.projectId(), MODULE_CODE, "asset.file.preview_artifact.prepare",
+            "FILE_RESOURCE", String.valueOf(file.fileId()), userId,
+            Map.of(
+                "fileId", file.fileId(),
+                "artifactType", prepared.artifactType(),
+                "previewStatus", prepared.previewStatus(),
+                "storageState", prepared.storageState(),
+                "generationStatus", prepared.generationStatus()
+            ));
+        return new PreviewArtifactResponse(
+            file.fileId(),
+            file.assetUuid(),
+            file.projectId(),
+            prepared.artifactType(),
+            prepared.previewStatus(),
+            Boolean.TRUE.equals(decision.conversionRequired()),
+            prepared.generationStatus(),
+            prepared.storageState(),
+            prepared.contentType(),
+            prepared.sizeBytes(),
+            prepared.lastVerifiedAt(),
+            prepared.message()
+        );
+    }
+
     public AccessTicketResponse createFileAccessTicket(Long userId, Long fileId, AccessTicketCreateRequest request) {
         String action = normalizeAccessAction(request == null ? null : request.action());
         FileAssetResponse file = getFileById(userId, fileId);
@@ -815,6 +888,253 @@ public class AssetApplicationService {
     public FileStorageStatusResponse getFileStorageStatus(Long userId, Long fileId) {
         FileAssetResponse file = getFileById(userId, fileId);
         return storageService.fileStorageStatus(file);
+    }
+
+    private PreviewArtifactResponse initialPreviewArtifact(
+        FileAssetResponse file,
+        PreviewDecision decision,
+        ActiveObjectVersion activeObject
+    ) {
+        String artifactType = artifactType(decision);
+        boolean browserNativeReady = "BROWSER_NATIVE_PREVIEW".equals(artifactType) && activeObject != null;
+        String previewStatus = browserNativeReady ? "AVAILABLE" : initialPreviewStatus(decision);
+        String storageState = browserNativeReady ? "OBJECT_STORED" : initialStorageState(decision);
+        String generationStatus = "UNSUPPORTED".equals(decision.previewStatus()) ? "SKIPPED" : "NOT_STARTED";
+        return new PreviewArtifactResponse(
+            file.fileId(),
+            file.assetUuid(),
+            file.projectId(),
+            artifactType,
+            previewStatus,
+            Boolean.TRUE.equals(decision.conversionRequired()),
+            generationStatus,
+            storageState,
+            activeObject == null ? null : activeObject.contentType(),
+            activeObject == null ? null : activeObject.sizeBytes(),
+            activeObject == null ? null : activeObject.lastVerifiedAt(),
+            previewArtifactMessage(artifactType, previewStatus, storageState, generationStatus, decision)
+        );
+    }
+
+    private PreparedPreviewArtifact preparePreviewArtifactRecord(
+        FileAssetResponse file,
+        PreviewDecision decision,
+        ActiveObjectVersion activeObject,
+        Long userId
+    ) {
+        String artifactType = artifactType(decision);
+        if ("BROWSER_NATIVE_PREVIEW".equals(artifactType) && activeObject != null) {
+            Long derivativeId = upsertPreviewDerivative(file.fileId(), activeObject.storageObjectId(), artifactType,
+                activeObject.provider(), activeObject.contentType(), activeObject.checksum(), activeObject.sizeBytes(),
+                "OBJECT_STORED", "COMPLETED", activeObject.lastVerifiedAt(), userId);
+            upsertPreviewArtifact(file.fileId(), derivativeId, activeObject.storageObjectId(), artifactType,
+                activeObject.provider(), activeObject.contentType(), activeObject.checksum(), activeObject.sizeBytes(),
+                "AVAILABLE", "OBJECT_STORED", activeObject.lastVerifiedAt(), userId);
+            return new PreparedPreviewArtifact(artifactType, "AVAILABLE", "COMPLETED", "OBJECT_STORED",
+                activeObject.contentType(), activeObject.sizeBytes(), activeObject.lastVerifiedAt(),
+                previewArtifactMessage(artifactType, "AVAILABLE", "OBJECT_STORED", "COMPLETED", decision));
+        }
+
+        String previewStatus = initialPreviewStatus(decision);
+        String storageState = initialStorageState(decision);
+        String generationStatus = "UNSUPPORTED".equals(decision.previewStatus()) ? "SKIPPED" : "NOT_STARTED";
+        Long derivativeId = upsertPreviewDerivative(file.fileId(), null, artifactType, null, null, null, null,
+            storageState, generationStatus, null, userId);
+        upsertPreviewArtifact(file.fileId(), derivativeId, null, artifactType, null, null, null, null,
+            previewStatus, storageState, null, userId);
+        return new PreparedPreviewArtifact(artifactType, previewStatus, generationStatus, storageState,
+            null, null, null, previewArtifactMessage(artifactType, previewStatus, storageState, generationStatus, decision));
+    }
+
+    private Long upsertPreviewDerivative(
+        Long fileId,
+        Long storageObjectId,
+        String derivativeType,
+        String provider,
+        String contentType,
+        String checksum,
+        Long sizeBytes,
+        String storageState,
+        String generationStatus,
+        Instant lastVerifiedAt,
+        Long userId
+    ) {
+        jdbcTemplate.update("""
+            INSERT INTO data_file_derivatives (
+                file_id, storage_object_id, derivative_type, provider, content_type, checksum, size_bytes,
+                storage_state, generation_status, last_verified_at, created_by, updated_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                storage_object_id = VALUES(storage_object_id),
+                provider = VALUES(provider),
+                content_type = VALUES(content_type),
+                checksum = VALUES(checksum),
+                size_bytes = VALUES(size_bytes),
+                storage_state = VALUES(storage_state),
+                generation_status = VALUES(generation_status),
+                last_verified_at = VALUES(last_verified_at),
+                updated_by = VALUES(updated_by),
+                deleted = 0,
+                delete_token = 0
+            """, fileId, storageObjectId, derivativeType, provider, contentType, checksum, sizeBytes,
+            storageState, generationStatus, timestamp(lastVerifiedAt), userId, userId);
+        List<Long> rows = jdbcTemplate.query("""
+            SELECT id
+            FROM data_file_derivatives
+            WHERE file_id = ?
+              AND derivative_type = ?
+              AND deleted = 0
+            ORDER BY id DESC
+            LIMIT 1
+            """, (rs, rowNum) -> rs.getLong("id"), fileId, derivativeType);
+        if (rows.isEmpty()) {
+            throw new BusinessException("ASSET_PREVIEW_DERIVATIVE_RECORD_FAILED",
+                "预览衍生产物记录写入失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        return rows.getFirst();
+    }
+
+    private void upsertPreviewArtifact(
+        Long fileId,
+        Long derivativeId,
+        Long storageObjectId,
+        String artifactType,
+        String provider,
+        String contentType,
+        String checksum,
+        Long sizeBytes,
+        String previewStatus,
+        String storageState,
+        Instant lastVerifiedAt,
+        Long userId
+    ) {
+        List<Long> existing = jdbcTemplate.query("""
+            SELECT id
+            FROM data_preview_artifacts
+            WHERE file_id = ?
+              AND artifact_type = ?
+              AND deleted = 0
+            ORDER BY id DESC
+            LIMIT 1
+            """, (rs, rowNum) -> rs.getLong("id"), fileId, artifactType);
+        if (existing.isEmpty()) {
+            jdbcTemplate.update("""
+                INSERT INTO data_preview_artifacts (
+                    file_id, derivative_id, storage_object_id, artifact_type, provider, content_type,
+                    checksum, size_bytes, preview_status, storage_state, last_verified_at, created_by, updated_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, fileId, derivativeId, storageObjectId, artifactType, provider, contentType,
+                checksum, sizeBytes, previewStatus, storageState, timestamp(lastVerifiedAt), userId, userId);
+            return;
+        }
+        jdbcTemplate.update("""
+            UPDATE data_preview_artifacts
+            SET derivative_id = ?,
+                storage_object_id = ?,
+                provider = ?,
+                content_type = ?,
+                checksum = ?,
+                size_bytes = ?,
+                preview_status = ?,
+                storage_state = ?,
+                last_verified_at = ?,
+                updated_by = ?
+            WHERE id = ?
+            """, derivativeId, storageObjectId, provider, contentType, checksum, sizeBytes,
+            previewStatus, storageState, timestamp(lastVerifiedAt), userId, existing.getFirst());
+    }
+
+    private ActiveObjectVersion findActiveObjectVersion(Long fileId) {
+        List<ActiveObjectVersion> rows = jdbcTemplate.query("""
+            SELECT so.id AS storage_object_id,
+                   so.provider,
+                   COALESCE(fov.content_type, so.content_type) AS content_type,
+                   COALESCE(fov.checksum, so.checksum) AS checksum,
+                   COALESCE(fov.size_bytes, so.size_bytes) AS size_bytes,
+                   COALESCE(fov.last_verified_at, so.last_verified_at) AS last_verified_at
+            FROM data_file_object_versions fov
+            JOIN data_storage_objects so ON so.id = fov.storage_object_id AND so.deleted = 0
+            WHERE fov.file_id = ?
+              AND fov.active = 1
+              AND fov.deleted = 0
+              AND fov.storage_state = 'OBJECT_STORED'
+            ORDER BY fov.id DESC
+            LIMIT 1
+            """, (rs, rowNum) -> new ActiveObjectVersion(
+            rs.getLong("storage_object_id"),
+            rs.getString("provider"),
+            rs.getString("content_type"),
+            rs.getString("checksum"),
+            nullableLong(rs.getObject("size_bytes")),
+            instant(rs.getTimestamp("last_verified_at"))
+        ), fileId);
+        return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    private String artifactType(PreviewDecision decision) {
+        return switch (decision.previewMode()) {
+            case "BROWSER_NATIVE" -> "BROWSER_NATIVE_PREVIEW";
+            case "OFFICE_CONVERSION" -> "OFFICE_PREVIEW_PLACEHOLDER";
+            case "CAD_CONVERSION" -> "CAD_PREVIEW_PLACEHOLDER";
+            case "BIM_LIGHTWEIGHT" -> "BIM_LIGHTWEIGHT_PLACEHOLDER";
+            case "DOWNLOAD_ONLY" -> "DOWNLOAD_ONLY_PLACEHOLDER";
+            default -> "UNSUPPORTED_PREVIEW_PLACEHOLDER";
+        };
+    }
+
+    private String initialPreviewStatus(PreviewDecision decision) {
+        if ("AVAILABLE".equals(decision.previewStatus())) {
+            return "NOT_STARTED";
+        }
+        return decision.previewStatus();
+    }
+
+    private String initialStorageState(PreviewDecision decision) {
+        if ("UNSUPPORTED".equals(decision.previewStatus())) {
+            return "NOT_REQUIRED";
+        }
+        return "PENDING";
+    }
+
+    private String previewArtifactMessage(
+        String artifactType,
+        String previewStatus,
+        String storageState,
+        String generationStatus,
+        PreviewDecision decision
+    ) {
+        if ("BROWSER_NATIVE_PREVIEW".equals(artifactType) && "AVAILABLE".equals(previewStatus)
+            && "OBJECT_STORED".equals(storageState)) {
+            return "浏览器原生预览产物已对象化；实际打开仍通过平台受控预览票据。";
+        }
+        if ("BROWSER_NATIVE_PREVIEW".equals(artifactType)) {
+            return "源文件尚未完成对象存储镜像，预览产物保持待准备；平台不会读取文件正文。";
+        }
+        if (Boolean.TRUE.equals(decision.conversionRequired())) {
+            return decision.actionHint() + " 当前仅登记转换占位，不读取文件正文，不生成转换产物。";
+        }
+        if ("UNSUPPORTED".equals(previewStatus) || "SKIPPED".equals(generationStatus)) {
+            return "当前格式不支持在线预览，未生成对象化预览产物。";
+        }
+        return decision.message();
+    }
+
+    private static Long nullableLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return Long.valueOf(value.toString());
+    }
+
+    private static Instant instant(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toInstant();
+    }
+
+    private static Timestamp timestamp(Instant instant) {
+        return instant == null ? null : Timestamp.from(instant);
     }
 
     @Transactional
@@ -1318,6 +1638,28 @@ public class AssetApplicationService {
         String dispositionType,
         String fileName,
         Long contentLength
+    ) {
+    }
+
+    private record ActiveObjectVersion(
+        Long storageObjectId,
+        String provider,
+        String contentType,
+        String checksum,
+        Long sizeBytes,
+        Instant lastVerifiedAt
+    ) {
+    }
+
+    private record PreparedPreviewArtifact(
+        String artifactType,
+        String previewStatus,
+        String generationStatus,
+        String storageState,
+        String contentType,
+        Long sizeBytes,
+        Instant lastVerifiedAt,
+        String message
     ) {
     }
 

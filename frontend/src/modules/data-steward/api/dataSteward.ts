@@ -331,6 +331,21 @@ export interface FilePreview {
   updatedAt: string | null;
 }
 
+export interface PreviewArtifact {
+  fileId: number;
+  assetUuid: string;
+  projectId: number;
+  artifactType: string;
+  previewStatus: string;
+  conversionRequired: boolean;
+  generationStatus: string;
+  storageState: string;
+  contentType: string | null;
+  sizeBytes: number | null;
+  lastVerifiedAt: string | null;
+  message: string;
+}
+
 export interface FileAccessTicket {
   ticketId: number;
   ticket: string;
@@ -758,6 +773,20 @@ export async function fetchFileAsset(fileId: number) {
 
 export async function fetchFilePreview(fileId: number) {
   const { data } = await http.get<ApiResponse<FilePreview>>(`/api/data-steward/assets/files/${fileId}/preview`);
+  return data.data;
+}
+
+export async function fetchPreviewArtifacts(fileId: number) {
+  const { data } = await http.get<ApiResponse<PreviewArtifact[]>>(
+    `/api/data-steward/assets/files/${fileId}/preview-artifacts`
+  );
+  return data.data ?? [];
+}
+
+export async function preparePreviewArtifact(fileId: number) {
+  const { data } = await http.post<ApiResponse<PreviewArtifact>>(
+    `/api/data-steward/assets/files/${fileId}/preview-artifacts:prepare`
+  );
   return data.data;
 }
 

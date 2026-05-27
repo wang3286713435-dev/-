@@ -437,6 +437,22 @@ public final class AssetDtos {
     ) {
     }
 
+    public record PreviewArtifactResponse(
+        Long fileId,
+        String assetUuid,
+        Long projectId,
+        String artifactType,
+        String previewStatus,
+        Boolean conversionRequired,
+        String generationStatus,
+        String storageState,
+        String contentType,
+        Long sizeBytes,
+        Instant lastVerifiedAt,
+        String message
+    ) {
+    }
+
     // ===== model asset (existing, keep) =====
 
     public record ModelAssetResponse(

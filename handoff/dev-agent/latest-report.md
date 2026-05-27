@@ -1,140 +1,122 @@
-# 开发 Agent 报告：M3D 真实 NAS 小范围灰度镜像
+# 开发 Agent 报告：M3E 预览与转换产物对象化
 
 时间：2026-05-26 CST
 
 ## 1. 本轮目标
 
-本轮按 `M3D：真实 NAS 小范围灰度镜像` 执行。
+本轮按 `M3E：预览与转换产物对象化` 执行。
 
-目标是在 M3C 任务中心已收口的基础上，选择 105 / projectId=503 的少量真实业务文件，执行受控对象存储镜像灰度，验证真实 NAS 源文件读取、checksum、MinIO 镜像、对象版本、storage-status、file-access、幂等和禁出字段扫描。
+目标是在 M3A-M3D 对象存储基础上，把 PDF / 图片的浏览器原生预览产物登记到对象化链路，并为 Office / CAD / BIM 等需要转换的格式建立只读转换占位状态。
 
-本轮不是全量 NAS 搬迁，不做目录一键迁移，不做 parser / indexing / BIM 轻量化，不做 Hermes 正文问答。
+本轮不做真实转换，不读取 PDF / Office / DWG / RVT / IFC 正文，不写 documents / chunks / Qdrant / OpenSearch / Hermes memory，不做 BIM 轻量化，不触碰真实 NAS 文件。
 
-## 2. 改动文件清单
+## 2. 已阅读关键文件
 
-- `scripts/dev/check-m3d-real-nas-object-mirror-gray.sh`
+- `handoff/main-agent/m3-storage-evidence-chain-todo.md`
+- `handoff/main-agent/m3d-real-nas-object-mirror-gray-closure.md`
+- `handoff/dev-agent/latest-report.md`
+- `handoff/test-agent/latest-report.md`
+- `backend/delivery-app/src/main/resources/db/migration/V28__m3a_storage_objects_foundation.sql`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageService.java`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/AssetApplicationService.java`
+- `backend/delivery-shared/src/main/java/com/zhuoyu/delivery/shared/preview/FilePreviewPolicy.java`
+- `backend/delivery-shared/src/main/java/com/zhuoyu/delivery/shared/preview/PreviewDecision.java`
+- `frontend/src/modules/data-steward/api/dataSteward.ts`
+- `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
+- `frontend/src/modules/data-steward/utils/previewStatus.ts`
+- `frontend/src/modules/work-center/pages/DeliveryPackageArchivePage.vue`
+
+## 3. 改动文件列表
+
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/AssetApplicationService.java`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/controller/AssetController.java`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/dto/AssetDtos.java`
+- `frontend/src/modules/data-steward/api/dataSteward.ts`
+- `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
+- `scripts/dev/check-m3e-preview-artifacts-object-storage.sh`
 - `handoff/dev-agent/latest-report.md`
 
-本轮未修改后端业务代码，未修改前端业务页面，未新增数据库迁移，未修改仓库 `docs/**`。
+未修改 `docs/**`。
 
-## 3. 是否复用 M3C
+## 4. 后端改动
 
-是。
+新增只读/受控预览产物接口：
 
-M3D 复用了 M3C 已有能力：
+- `GET /api/data-steward/assets/files/{fileId}/preview-artifacts`
+- `POST /api/data-steward/assets/files/{fileId}/preview-artifacts:prepare`
 
-- `POST /api/data-steward/projects/{projectId}/storage-migration-tasks`
-- `GET /api/data-steward/storage-migration-tasks/{taskId}`
-- `GET /api/data-steward/assets/files/{fileId}/storage-status`
-- `POST /api/data-steward/assets/files/{fileId}/access-tickets`
+接口返回：
 
-现有 M3C 能力已经足够完成真实 NAS 小范围灰度，因此本轮只新增 M3D 专项脚本，没有新增危险全量执行接口。
+- `fileId`
+- `assetUuid`
+- `projectId`
+- `artifactType`
+- `previewStatus`
+- `conversionRequired`
+- `generationStatus`
+- `storageState`
+- `contentType`
+- `sizeBytes`
+- `lastVerifiedAt`
+- `message`
 
-## 4. 灰度样本选择规则
+实现规则：
 
-脚本只从 105 / projectId=503 中显式选择少量真实业务文件：
+- PDF / 图片：若存在 active `OBJECT_STORED` 对象版本，则登记 `BROWSER_NATIVE_PREVIEW / AVAILABLE / COMPLETED / OBJECT_STORED`，引用同一个 storage object，不重复上传对象。
+- Office：登记 `OFFICE_PREVIEW_PLACEHOLDER / NEEDS_CONVERSION / NOT_STARTED / PENDING`。
+- CAD：登记 `CAD_PREVIEW_PLACEHOLDER / NEEDS_CONVERSION / NOT_STARTED / PENDING`。
+- BIM / 模型：登记 `BIM_LIGHTWEIGHT_PLACEHOLDER / NEEDS_CONVERSION / NOT_STARTED / PENDING`。
+- 不支持格式：登记跳过/不需要对象化的占位状态。
+- `prepare` 会校验当前用户对文件所在项目的访问权限，并写审计日志。
+- 响应不返回 bucket、object_key、storage_path、storage_uri、NAS 绝对路径或 SQL。
 
-- 项目必须为 503。
-- 文件必须未删除。
-- 文件必须有 NAS 存储引用。
-- 本地 NAS 源文件必须存在且可读。
-- 文件大小必须大于 0 且不超过 10MB。
-- 覆盖 PDF、DWG、RVT / 模型类；如果没有合格模型文件则记录 `SKIPPED_NO_ELIGIBLE_MODEL_SAMPLE`，不把模型缺失作为 P0。
+## 5. 前端改动
 
-本轮实际覆盖：
+文件管理器新增“预览产物”列：
 
-| 类型 | fileId | assetUuid | 大小 | 结果 |
-| --- | ---: | --- | ---: | --- |
-| PDF | 993 | `72f19096-58b2-11f1-aae9-1e851063bccc` | 1452359 | `OBJECT_STORED` |
-| DWG | 935 | `72f0e8c1-58b2-11f1-aae9-1e851063bccc` | 291104 | `OBJECT_STORED` |
-| RVT / MODEL | 1257 | `72f4838a-58b2-11f1-aae9-1e851063bccc` | 10014720 | `OBJECT_STORED` |
+- 已对象化 PDF / 图片显示“对象化预览”。
+- 需转换格式显示“需转换占位”或后端返回的占位结果。
+- 未登记文件显示“未登记 / 需扫描入库”。
+- 点击“准备状态”会调用后端 prepare 接口，只登记产物状态或占位，不读取文件正文。
+- 右键菜单新增“准备预览产物状态”，与同一后端接口对齐。
 
-未在报告中记录或暴露真实 NAS 路径。
+PDF / 图片的真实打开仍走原有受控 `file-access` 票据，不直接暴露对象存储定位。
 
-## 5. 灰度执行结果
+## 6. 数据库迁移
 
-首次真实灰度执行：
+未新增数据库迁移。
 
-- 灰度任务：`taskId=57`
-- 成功数：3
-- 失败数：0
-- 跳过数：0
-- 覆盖类型：PDF / DWG / RVT
-- checksum 覆盖率：3/3
+本轮复用 M3A 既有表：
 
-脚本修正后复跑验证：
+- `data_file_derivatives`
+- `data_preview_artifacts`
+- `data_file_object_versions`
+- `data_storage_objects`
 
-- 验证任务：`taskId=59`
-- 成功数：0
-- 跳过数：3
-- 失败数：0
-- 原因：三份样本已由首次灰度进入 `OBJECT_STORED`，复跑按 M3C 幂等策略返回 `ALREADY_STORED` / `SKIPPED`。
+## 7. 安全边界
 
-幂等复验：
+- 未触碰真实 NAS 文件内容。
+- 未移动、删除、重命名、覆盖真实 NAS 文件。
+- 未读取 PDF / Office / DWG / RVT / IFC 正文。
+- 未做真实转换。
+- 未做 BIM 轻量化。
+- 未写 OpenSearch / Qdrant / MinIO documents / chunks。
+- 未写 Hermes memory。
+- 未暴露真实 NAS 路径、`storage_path`、`storage_uri`、bucket、object_key、raw DB row、SQL、secret、token、password。
 
-- 复跑任务：`taskId=60`
-- 全部样本再次跳过。
-- active 对象版本数量未重复污染。
-
-## 6. OBJECT_STORED 与 file-access 验证
-
-三份真实样本均已验证：
-
-- `storage-status.storageState = OBJECT_STORED`
-- `storage-status.objectStored = true`
-- `checksumAvailable = true`
-- 受控 `DOWNLOAD` access ticket 可读取对象镜像。
-- API 响应未返回底层路径或对象定位。
-
-## 7. NAS 原文件保护
-
-脚本在迁移前后对真实 NAS 源文件做了只读校验：
-
-- 原文件仍存在。
-- 原文件仍可读。
-- size 未变化。
-- mtime 未变化。
-
-本轮没有移动、删除、改名、覆盖或写入真实 NAS 文件。
-
-## 8. 禁出字段扫描
-
-M3D 专项脚本对迁移创建、任务详情、storage-status、access ticket、幂等复跑响应执行 forbidden-field scan。
-
-未发现以下真值泄露：
-
-- `/Volumes`
-- `/Users`
-- `nas://`
-- `smb://`
-- `storage_path`
-- `storage_uri`
-- `storagePath`
-- `storageUri`
-- `bucket`
-- `object_key`
-- `objectKey`
-- raw DB row
-- SQL
-- secret / password / token
-
-说明：脚本内部为了选择真实样本会读取数据库中的存储引用并在本机做只读存在性校验，但不输出真实路径，不通过 API 或前端暴露。
-
-## 9. 自测结果
+## 8. 自测结果
 
 ```text
 后端构建                                                     PASS
 前端构建                                                     PASS（仅既有 Vite chunk size warning）
 后端健康检查                                                 PASS {"status":"UP"}
-M3D 真实 NAS 小范围灰度镜像专项                              PASS=19 FAIL=0
-M3C 对象存储迁移任务中心回归                                 PASS=9 FAIL=0
-M3C-1 asset UUID / storage status 回归                        PASS=15 FAIL=0
-M3B 对象存储镜像迁移回归                                     PASS=11 FAIL=0
-M3A StorageService 回归                                      PASS=8 FAIL=0
-M2J 105 归属复核回归                                         PASS=6 FAIL=0
-M2I 105 文件归属治理回归                                     PASS=8 FAIL=0
-M2H Windows 文件管理器回归                                   PASS=53 FAIL=0
-Phase2 batch4 文件访问安全回归                               PASS=18 FAIL=0
+M3E 预览与转换产物对象化专项                                  PASS=8 FAIL=0
+M3D 真实 NAS 小范围灰度镜像回归                               PASS=19 FAIL=0
+M3C 对象存储迁移任务中心回归                                  PASS=9 FAIL=0
+M3C-1 asset UUID / storage status 回归                         PASS=15 FAIL=0
+M3B 对象存储镜像迁移回归                                      PASS=11 FAIL=0
+M3A StorageService 回归                                       PASS=8 FAIL=0
+Phase2 batch4 文件访问安全回归                                PASS=18 FAIL=0
 git diff --check                                             PASS
 ```
 
@@ -147,35 +129,25 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
 bash scripts/dev/check-m3d-real-nas-object-mirror-gray.sh
 bash scripts/dev/check-m3c-storage-migration-task-center.sh
 bash scripts/dev/check-m3c1-asset-uuid-storage-status.sh
 bash scripts/dev/check-m3b-object-storage-mirror-trial.sh
 bash scripts/dev/check-m3a-storage-service-foundation.sh
-bash scripts/dev/check-m2j-105-ownership-review.sh
-bash scripts/dev/check-m2i-105-file-ownership-governance.sh
-bash scripts/dev/check-m2h-windows-file-manager.sh
 bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
 
-## 10. Git 跟踪状态
+## 9. 服务状态
 
-新增专项脚本已纳入 Git 跟踪：
-
-- `scripts/dev/check-m3d-real-nas-object-mirror-gray.sh`
-
-未把 `.claude/**`、`CLAUDE.md`、`tmp/**` 纳入本轮交付。
-
-## 11. 服务状态
-
-- 后端运行中：`http://127.0.0.1:8080`
-- 前端 dev server 运行中：`http://127.0.0.1:5173`
+- 后端已重启并保持运行：`http://127.0.0.1:8080`
+- 前端 dev server 保持运行：`http://127.0.0.1:5173`
 
 按用户要求，本轮完成后未关闭项目服务。
 
-## 12. 已知风险与 M3E 建议
+## 10. 已知风险与后续建议
 
-- M3D 当前仍是同步小范围灰度，适合验证真实链路；如果后续扩大范围，需要异步 worker、速率限制、失败队列和灰度白名单。
-- 当前 file-access 已能读取对象镜像，但预览 / 转换产物尚未对象化。
-- M3E 建议进入 `预览与转换产物对象化`：先做 PDF / 图片 / Office / CAD / BIM 产物关系和受控访问，不要直接进入 Hermes 正文问答。
+- 当前只是对象化状态登记和转换占位，尚未接入真实 Office / CAD / BIM 转换器。
+- `data_preview_artifacts` 目前没有 `(file_id, artifact_type)` 唯一约束，本轮在应用层按最新记录更新；后续如要高并发准备，可追加迁移补唯一约束。
+- 后续若进入真实转换，应继续沿用受控队列、灰度开关、审计、禁出字段扫描，并继续禁止把 catalog metadata 伪装成正文证据。

@@ -299,6 +299,27 @@
               </div>
             </template>
           </el-table-column>
+          <el-table-column label="预览产物" width="190">
+            <template #default="{ row }">
+              <div v-if="row.kind === 'FILE'" class="file-browser__artifact-cell">
+                <el-tag :type="previewArtifactTag(row)" size="small">
+                  {{ previewArtifactLabel(row) }}
+                </el-tag>
+                <span>{{ previewArtifactHint(row) }}</span>
+                <el-button
+                  v-if="isRegisteredFile(row.file)"
+                  link
+                  type="primary"
+                  size="small"
+                  :loading="previewArtifactLoadingId === row.file.fileId"
+                  @click.stop="handlePreparePreviewArtifact(row)"
+                >
+                  准备状态
+                </el-button>
+              </div>
+              <span v-else class="file-browser__muted">-</span>
+            </template>
+          </el-table-column>
           <el-table-column v-if="diagnosticInfoVisible" label="技术信息 / 诊断" min-width="260">
             <template #default="{ row }">
               <div v-if="row.kind === 'FILE'" class="file-browser__diagnostic-cell">
@@ -515,6 +536,7 @@ import {
   fetchNasQuarantine,
   moveNasDirectory,
   moveNasFile,
+  preparePreviewArtifact,
   quarantineNasDirectory,
   quarantineNasFile,
   renameNasDirectory,
@@ -527,7 +549,8 @@ import {
   type FileAccessTicket,
   type NasOperationRecord,
   type NasQuarantineRecord,
-  type NasWriteTrialStatus
+  type NasWriteTrialStatus,
+  type PreviewArtifact
 } from '@/modules/data-steward/api/dataSteward';
 import DirectoryTreePanel from '@/modules/data-steward/components/DirectoryTreePanel.vue';
 import { buildDirectoryTree } from '@/modules/data-steward/utils/directoryTree';
@@ -591,6 +614,7 @@ const files = ref<CatalogFile[]>([]);
 const nasOperations = ref<NasOperationRecord[]>([]);
 const nasQuarantine = ref<NasQuarantineRecord[]>([]);
 const nasTrialStatus = ref<NasWriteTrialStatus | null>(null);
+const previewArtifacts = ref<Record<number, PreviewArtifact>>({});
 const activeDir = ref('');
 const expandedDirs = ref<string[]>([]);
 const lastFileId = ref<number | null>(null);
@@ -606,6 +630,7 @@ const operationsLoading = ref(false);
 const quarantineLoading = ref(false);
 const nasTrialLoading = ref(false);
 const nasTrialLoadFailed = ref(false);
+const previewArtifactLoadingId = ref<number | null>(null);
 const advancedSearchVisible = ref(false);
 const diagnosticInfoVisible = ref(false);
 const treeWidth = ref(DEFAULT_TREE_WIDTH);
@@ -723,6 +748,7 @@ type ContextMenuCommand =
   | 'preview'
   | 'detail'
   | 'metadata'
+  | 'prepare-preview-artifact'
   | 'hermes-ownership'
   | 'checksum'
   | 'rename'
@@ -1571,6 +1597,12 @@ function buildContextMenuItems(entries: BrowserEntry[]): ContextMenuItem[] {
       reason: unregisteredReason || (isModel ? '模型预览引擎未接入' : undefined)
     },
     { command: 'detail', label: '详情', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined },
+    {
+      command: 'prepare-preview-artifact',
+      label: '准备预览产物状态',
+      disabled: Boolean(unregisteredReason),
+      reason: unregisteredReason || '仅登记对象化状态或转换占位，不读取文件正文'
+    },
     { command: 'metadata', label: '治理', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined },
     { command: 'hermes-ownership', label: '询问 Hermes 归属建议', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined },
     { command: 'checksum', label: '补 checksum', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined },
@@ -1627,6 +1659,8 @@ async function runContextMenuCommand(item: ContextMenuItem) {
   const [entry] = entries;
   if (item.command === 'open' || item.command === 'preview') {
     await openEntry(entry);
+  } else if (item.command === 'prepare-preview-artifact' && entry.kind === 'FILE') {
+    await preparePreviewArtifactForEntry(entry);
   } else if (item.command === 'detail' && entry.kind === 'FILE' && isRegisteredFile(entry.file) && entry.file.fileId != null) {
     rememberFile(entry.file);
     emit('open-detail', entry.file.fileId);
@@ -1675,6 +1709,36 @@ async function openFileByPreviewStrategy(entry: FileBrowserEntry) {
     return;
   }
   emit('open-detail', entry.file.fileId);
+}
+
+function handlePreparePreviewArtifact(entry: FileBrowserEntry) {
+  runAsyncAction(() => preparePreviewArtifactForEntry(entry), '预览产物状态准备失败，平台未读取文件正文');
+}
+
+async function preparePreviewArtifactForEntry(entry: FileBrowserEntry) {
+  if (!isRegisteredFile(entry.file) || entry.file.fileId == null) {
+    ElMessage.warning('未登记文件需先扫描入库后才能登记预览产物状态。');
+    return;
+  }
+  if (previewArtifactLoadingId.value != null) return;
+  previewArtifactLoadingId.value = entry.file.fileId;
+  try {
+    const artifact = await preparePreviewArtifact(entry.file.fileId);
+    if (artifact) {
+      previewArtifacts.value = {
+        ...previewArtifacts.value,
+        [entry.file.fileId]: artifact
+      };
+      const message = artifact.message || previewArtifactLabel(entry);
+      if (artifact.previewStatus === 'AVAILABLE' && artifact.storageState === 'OBJECT_STORED') {
+        ElMessage.success(message);
+      } else {
+        ElMessage.info(message);
+      }
+    }
+  } finally {
+    previewArtifactLoadingId.value = null;
+  }
 }
 
 async function openControlledFileAccess(row: CatalogFile, action: 'PREVIEW' | 'DOWNLOAD') {
@@ -1758,6 +1822,56 @@ function showAccessFallback(ticket: FileAccessTicket, fileName: string, action: 
 function openModelPreviewPlaceholder(entry: BrowserEntry) {
   modelPreviewEntry.value = entry;
   modelPreviewDialogVisible.value = true;
+}
+
+function previewArtifactForEntry(entry: FileBrowserEntry): PreviewArtifact | null {
+  if (!isRegisteredFile(entry.file) || entry.file.fileId == null) return null;
+  return previewArtifacts.value[entry.file.fileId] ?? null;
+}
+
+function previewArtifactTag(entry: FileBrowserEntry) {
+  if (!isRegisteredFile(entry.file)) return 'warning';
+  const artifact = previewArtifactForEntry(entry);
+  if (artifact) {
+    if (artifact.previewStatus === 'AVAILABLE' && artifact.storageState === 'OBJECT_STORED') return 'success';
+    if (artifact.previewStatus === 'NEEDS_CONVERSION' || artifact.storageState === 'PENDING') return 'warning';
+    if (artifact.previewStatus === 'BLOCKED' || artifact.generationStatus === 'FAILED') return 'danger';
+    return 'info';
+  }
+  const preview = previewForFileEntry(entry);
+  if (preview.previewStatus === 'AVAILABLE') return 'success';
+  if (preview.previewStatus === 'NEEDS_CONVERSION') return 'warning';
+  if (preview.previewStatus === 'BLOCKED') return 'danger';
+  return 'info';
+}
+
+function previewArtifactLabel(entry: FileBrowserEntry) {
+  if (!isRegisteredFile(entry.file)) return '未登记';
+  const artifact = previewArtifactForEntry(entry);
+  if (artifact) {
+    if (artifact.previewStatus === 'AVAILABLE' && artifact.storageState === 'OBJECT_STORED') return '对象化预览';
+    if (artifact.previewStatus === 'NEEDS_CONVERSION') return '需转换';
+    if (artifact.previewStatus === 'UNSUPPORTED') return '暂不支持';
+    if (artifact.previewStatus === 'NOT_STARTED') return '待准备';
+    return artifact.previewStatus || '-';
+  }
+  const preview = previewForFileEntry(entry);
+  if (preview.previewMode === 'BROWSER_NATIVE') return '可对象化';
+  if (preview.conversionRequired) return '需转换占位';
+  if (preview.downloadOnly) return '仅原文件';
+  return '暂不支持';
+}
+
+function previewArtifactHint(entry: FileBrowserEntry) {
+  if (!isRegisteredFile(entry.file)) return '需扫描入库';
+  const artifact = previewArtifactForEntry(entry);
+  if (artifact?.message) {
+    return artifact.message;
+  }
+  const preview = previewForFileEntry(entry);
+  if (preview.previewMode === 'BROWSER_NATIVE') return '通过受控预览票据打开';
+  if (preview.conversionRequired) return '当前只登记占位';
+  return previewActionHint(preview);
 }
 
 function previewForFileEntry(entry: FileBrowserEntry): PreviewStatusLike {
@@ -3119,6 +3233,7 @@ function formatDate(value: string | null | undefined) {
 }
 
 .file-browser__status-cell,
+.file-browser__artifact-cell,
 .file-browser__diagnostic-cell {
   display: grid;
   gap: 3px;
@@ -3126,10 +3241,17 @@ function formatDate(value: string | null | undefined) {
 }
 
 .file-browser__status-cell span,
+.file-browser__artifact-cell span,
 .file-browser__diagnostic-cell span {
   color: var(--zy-muted);
   font-size: var(--zy-fs-xs);
   line-height: 1.45;
+}
+
+.file-browser__artifact-cell span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-browser__diagnostic-cell span {
