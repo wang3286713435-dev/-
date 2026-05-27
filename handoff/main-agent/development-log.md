@@ -4162,3 +4162,26 @@ handoff/main-agent/8b-gd0-glandar-api-review.md
   - `ModelUploadUrl` / 引擎主动拉取短时链接保留为后续扩展，不作为首轮 PoC 前置。
   - Station Token 必须由后端安全注入，不得进入前端、handoff 或 Git。
   - `modelAccessAddress` 必须做可访问性校验，尤其要防止历史 `18087/Tools/output/model/...` 返回 404。
+
+## 2026-05-27 8B-GD1 任务图与开发 prompt
+
+- 已新增任务图：
+
+```text
+handoff/main-agent/8b-gd-task-graph.md
+```
+
+- 已新增开发计划：
+
+```text
+handoff/main-agent/8b-gd1-glandar-adapter-skeleton-plan.md
+```
+
+- 已覆盖：
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+
+- 8B-GD1 明确为代码骨架批次，但仍禁止真实转换。
+- 默认 provider 必须为 `MOCK`。
+- `GLANDAR` 仅在显式配置时启用，未配置时必须业务化降级。
+- 8B-GD1 不新增 Flyway 迁移，避免与 M3G 主线迁移号冲突。

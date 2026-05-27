@@ -39,6 +39,42 @@ codex/8b-gd-lightweight-engine-adapter
   - 8B-GD1 仍必须默认 `BIM_ENGINE_PROVIDER=MOCK`，显式配置 `GLANDAR` 才启用真实引擎。
   - 8B-GD 不得在 M3G 分支上开发。
 
+## 2026-05-27 8B-GD1 启动：平台侧葛兰岱尔适配骨架
+
+- 用户授权：在不影响 M3G 对象存储主线的前提下，推进葛兰岱尔引擎接入代码开发。
+- 当前分支仍为：
+
+```text
+codex/8b-gd-lightweight-engine-adapter
+```
+
+- 当前 worktree 仍为：
+
+```text
+/Users/vc/Documents/数字化交付平台-8b-gd
+```
+
+- 当前 active 批次切换为：`8B-GD1：平台侧葛兰岱尔适配骨架`。
+- 本批目标：
+  - 默认 `MOCK` 不回归。
+  - 增加 `GLANDAR` provider 配置骨架。
+  - 新增 lightweight job / viewer ticket 平台接口骨架。
+  - GLANDAR 未配置时业务化不可用，不 500。
+- 本批禁止：
+  - 不真实调用 Station `SplitUploadFile`。
+  - 不上传真实 RVT。
+  - 不新增迁移。
+  - 不修改 `docs/**`。
+  - 不改 M3G 对象存储主线。
+- 已写入：
+  - `handoff/main-agent/8b-gd-task-graph.md`
+  - `handoff/main-agent/8b-gd1-glandar-adapter-skeleton-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+- 当前裁决：
+  - 可交给 8B-GD 独立 Claude Code worker 开发。
+  - 开发完成后必须由测试 agent 按 8B-GD1 prompt 验收。
+
 ## 2026-05-27 M3F 启动：新文件对象存储优先写入
 
 - 用户确认：先做 `M3F`，后续再做 `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`。

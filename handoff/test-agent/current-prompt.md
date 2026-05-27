@@ -1,4 +1,4 @@
-# 测试 Agent 当前任务：8B-GD0 葛兰岱尔引擎对接握手验收
+# 测试 Agent 当前任务：8B-GD1 平台侧葛兰岱尔适配骨架验收
 
 你是卓羽智能数据中台的测试 agent。工作目录：
 
@@ -6,76 +6,84 @@
 
 当前验收批次：
 
-`8B-GD0：葛兰岱尔引擎对接握手`
+`8B-GD1：平台侧葛兰岱尔适配骨架`
 
 ## 0. 验收目标
 
-本轮只验收 8B-GD0 是否完成葛兰岱尔引擎对接握手准备。
+本轮只验收 8B-GD1：
 
-8B-GD0 是文档 / handoff 批次，不应出现业务代码变更。
+- 默认 MOCK 模式不回归。
+- GLANDAR provider 配置骨架存在。
+- 新增 lightweight job / viewer ticket 平台接口。
+- 未配置或 MOCK 状态下返回业务化不可用，不 500。
+- 不真实调用 Station `SplitUploadFile`。
+- 不上传真实 RVT。
+- 不暴露 Station token、真实路径、真实 bucket、真实 object key。
 
 ## 1. 必读文件
 
 - `handoff/dev-agent/latest-report.md`
 - `handoff/dev-agent/current-prompt.md`
-- `handoff/main-agent/8b-gd-roadmap.md`
-- `handoff/main-agent/8b-gd0-glandar-engine-handshake-plan.md`
-- `handoff/main-agent/8b-gd0-glandar-engine-api-handoff-template.md`
+- `handoff/main-agent/8b-gd-task-graph.md`
+- `handoff/main-agent/8b-gd1-glandar-adapter-skeleton-plan.md`
 - `handoff/main-agent/8b-gd0-glandar-api-review.md`
+- `scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh`
 
 ## 2. 必跑命令
 
-请执行：
-
 ```bash
+cd /Users/vc/Documents/数字化交付平台-8b-gd/backend
+./mvnw -pl delivery-app -am -DskipTests package
+
 cd /Users/vc/Documents/数字化交付平台-8b-gd
-git status --short
-git diff --name-only
-git diff --cached --name-status
+corepack pnpm --dir frontend build
+curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh
+bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh
+bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
 
-本批不要求跑后端构建、前端构建或业务回归，因为理论上不应改业务代码。
+如后端未运行，可按项目已有方式启动后重试健康检查和脚本。
 
 ## 3. Git 范围检查
 
-8B-GD0 允许包含：
+允许包含：
 
-- `handoff/main-agent/8b-gd-roadmap.md`
-- `handoff/main-agent/8b-gd0-glandar-engine-handshake-plan.md`
-- `handoff/main-agent/8b-gd0-glandar-engine-api-handoff-template.md`
-- `handoff/main-agent/status.md`
-- `handoff/main-agent/development-log.md`
+- `backend/delivery-visualization-adapter/**`
+- `frontend/src/modules/data-steward/pages/ModelIntegrationsPage.vue`
+- `frontend/src/modules/data-steward/api/dataSteward.ts`
+- `frontend/src/modules/visualization/**`
+- `scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh`
+- `handoff/dev-agent/latest-report.md`
 - `handoff/dev-agent/current-prompt.md`
 - `handoff/test-agent/current-prompt.md`
-- `handoff/dev-agent/latest-report.md`
+- `handoff/main-agent/8b-gd-task-graph.md`
+- `handoff/main-agent/8b-gd1-glandar-adapter-skeleton-plan.md`
 
-8B-GD0 不允许包含：
+不允许包含：
 
 - `docs/**`
-- `backend/**`
-- `frontend/**`
-- `scripts/**`
 - Flyway 迁移
-- vendor token / secret / password
-- 真实 NAS 路径
-- 真实 bucket 名 / 真实 object key 值
-- 真实转换任务调用代码
+- `backend/delivery-data-steward/**` 对象存储迁移主线改动
+- Hermes / Qdrant / OpenSearch / documents / chunks
+- 真实 Station token / secret / password
 
 ## 4. 核心验收点
 
-重点确认：
-
-1. 对接清单覆盖 Station API/Web、认证、分片上传、任务状态、viewer、callback、错误码、格式限制。
-2. 明确平台后端分片上传为 PoC 首选链路，不让引擎直连 NAS / MinIO 底层目录。
-3. 明确前端只拿平台 viewer ticket，不拿厂商 token。
-4. 明确 8B-GD0 不写业务代码。
-5. 明确 8B-GD1 的启动条件。
-6. 开发报告写清已确认项和缺失项。
+1. 默认 `BIM_ENGINE_PROVIDER=MOCK`。
+2. `lightweight-status` 返回 MOCK 安全状态。
+3. `lightweight-plan` 仍为 dry-run，不创建任务。
+4. `POST lightweight-jobs` 在 MOCK 下不真实创建转换任务，不 500。
+5. `viewer-ticket` 未 ready 时不可用，不返回真实 viewer URL。
+6. OpenAPI 包含新增 job / viewer-ticket 接口。
+7. 未调用 `SplitUploadFile`、`upload-file` 等真实 Station 上传接口。
+8. 8A 回归通过。
+9. file-access 回归通过。
 
 ## 5. 禁出字段扫描
 
-所有 handoff 和报告中不得出现真实敏感值：
+接口响应、脚本输出和前端可见数据不得包含：
 
 - `/Volumes`
 - `smb://`
@@ -84,33 +92,37 @@ git diff --check
 - `storageUri`
 - 真实 bucket 名
 - 真实 object key 值
+- Station token
+- vendor token
 - raw row
 - SQL
-- token
 - secret
 - password
-
-说明性文案中可以出现“短时授权链接”“对象存储”“viewer ticket”“bucket / object key 字段不得暴露”等概念，但不能出现真实密钥或底层定位值。
 
 ## 6. P0 / P1 判定
 
 P0：
 
-- 修改了 `backend/**`、`frontend/**` 或 `scripts/**`。
-- 写入了 vendor token / secret / password。
-- 引擎被要求直连 NAS、MinIO 底层目录或 MySQL。
-- 把 8B-GD0 写成真实转换上线。
+- 真实调用 Station 上传接口。
+- 上传真实 RVT。
+- 泄露 Station token / secret / password。
+- 引擎直连 NAS / MinIO 底层目录。
+- 修改 `docs/**` 或 M3G 对象存储主线。
+- file-access 权限链路回归失败。
 
 P1：
 
-- 对接清单缺 health、submit、status、viewer 四类核心接口之一，且报告未说明。
-- 未明确权限和短时取用票据边界。
-- 未明确 8B-GD1 启动条件。
-- 开发报告未写。
+- 默认 MOCK 回归失败。
+- 新增接口不在 OpenAPI。
+- MOCK / 未配置状态返回 500。
+- 8B-GD1 专项脚本失败。
+- 8A 回归失败。
+- 脚本未纳入 Git。
 
 P2：
 
-- 文案细节可读性一般，但不影响后续对接。
+- 既有 Vite chunk warning。
+- UI 文案粗糙但不影响主链路。
 
 ## 7. 报告要求
 
@@ -120,11 +132,11 @@ P2：
 
 报告至少包含：
 
-- 测试结论：通过 / 不通过。
+- 测试结论。
 - P0 / P1 / P2。
 - 必跑命令结果。
+- 8B-GD1 专项脚本结果。
+- 8A / file-access 回归结果。
 - Git 范围检查。
-- 对接清单完整性判断。
-- 安全边界检查。
 - 禁出字段扫描结果。
-- 是否建议主 agent 收口 8B-GD0。
+- 是否建议主 agent 收口 8B-GD1。
