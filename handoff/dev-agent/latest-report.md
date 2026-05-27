@@ -1,114 +1,129 @@
-# 开发 Agent 报告：M3F 新文件对象存储优先写入与 NAS 兼容回退
+# 开发 Agent 报告：M3G-1 P1 回归修复
 
 时间：2026-05-27 CST
 
 ## 1. 本轮目标
 
-本轮按 `M3F：新文件对象存储优先写入与 NAS 兼容回退` 执行。
+本轮按当前修复批次执行，目标是修复测试 agent 在 M3G-1 后发现的回归点：
 
-目标是在保留既有上传入口兼容性的前提下，让新上传文件本体优先写入对象存储，并同步写入文件台账、对象台账和活动对象版本；空文件夹等目录能力继续沿用现有 NAS 管理链路。
+1. M3E 预览产物对象化回归在 NAS 侧 MinIO 下失败。
+2. M3F 对象存储优先写入脚本仍按本机 Docker MinIO 模拟故障。
+3. 单项目对象化盘点缺少顶层 `projectCode` / `projectName`。
 
-本轮不做真实业务 NAS 文件本体写入，不做 parser / indexing / Hermes / BIM 能力，不修改 `docs/**`。
+本轮不执行真实历史文件迁移，不移动、删除、重命名或覆盖真实 NAS 项目文件。
 
-## 2. 已阅读关键文件
+## 2. 改动文件清单
 
-- `handoff/dev-agent/current-prompt.md`
-- `handoff/main-agent/m3-storage-evidence-chain-todo.md`
-- `handoff/main-agent/m3f-object-storage-first-write-plan.md`
-- `handoff/dev-agent/latest-report.md`
-- `handoff/test-agent/latest-report.md`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageService.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageProperties.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/application/ControlledNasApplicationService.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/controller/ControlledNasController.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/repository/ControlledNasRepository.java`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/AssetApplicationService.java`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/dto/AssetDtos.java`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageMigrationApplicationService.java`
 - `frontend/src/modules/data-steward/api/dataSteward.ts`
-- `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
-
-## 3. 改动文件列表
-
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageService.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/application/ControlledNasApplicationService.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/dto/ControlledNasDtos.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/repository/ControlledNasRepository.java`
-- `frontend/src/modules/data-steward/api/dataSteward.ts`
-- `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
 - `scripts/dev/check-m3f-object-storage-first-write.sh`
+- `scripts/dev/check-m3g-nas-minio-readiness-inventory.sh`
 - `handoff/dev-agent/latest-report.md`
 
 未修改 `docs/**`。
 
-## 4. 后端改动
+## 3. M3E file-access 失败根因
 
-保留既有兼容入口：
+测试失败样本 `fileId=993` 已有 active object metadata，但该记录指向旧对象存储环境生成的对象。后端切到 NAS 侧 MinIO 后，当前对象存储里没有对应 object body。
 
-- `POST /api/data-steward/projects/{projectId}/nas/files:upload`
+之前流程是：
 
-内部上传语义调整为对象存储优先：
+- `preview-artifacts:prepare` 看到 active object metadata 就认为可复用。
+- 后续受控 `file-access` 严格从对象存储读取。
+- 当前 provider 读不到 body，于是返回 `ASSET_FILE_NOT_READABLE`。
 
-- 校验项目权限、写入灰度、目标目录和同名冲突。
-- 计算上传内容 SHA-256。
-- 生成平台 `assetUuid`。
-- 文件本体写入活动对象存储 provider。
-- `data_file_resources` 写入安全台账，`storage_provider=OBJECT_STORAGE`，`storage_uri=object://asset/{assetUuid}`。
-- `data_storage_objects` 写入对象台账，底层 bucket / object_key 只留在后端表内，不返回前端。
-- `data_file_object_versions` 写入 active 对象版本。
-- 上传响应返回 `storageStatus=OBJECT_STORED`、`storageProvider=OBJECT_STORAGE`、`assetUuid`、`checksum` 等安全字段。
+这个失败不是权限问题，也不是 file-access 应该兜底读 NAS 的问题，而是预览准备阶段没有校验 active object 在当前 provider 下是否真实可读。
 
-对象存储不可用时：
+## 4. M3E 修复方式
 
-- 不静默回退到真实业务 NAS。
-- 返回业务化错误，前端/脚本可识别。
-- MinIO 客户端增加连接/读取/调用超时，避免网关长时间挂起。
+在 `AssetApplicationService.preparePreviewArtifact` 中，仅对 PDF / 图片等 `BROWSER_NATIVE_PREVIEW` 场景增加 active object 可读性确认。
 
-兼容边界：
+修复规则：
 
-- 创建空文件夹、目录树等目录能力仍走现有 NAS 管理链路。
-- 对象存储文件不允许被 NAS 文件移动/重命名/移入回收站接口当成 NAS 路径处理，后端返回清晰业务错误。
+- 如果 active object 在当前对象存储可读，继续复用。
+- 如果 active object 不可读，且错误是 `ASSET_FILE_NOT_READABLE`，在 `preview-artifacts:prepare` 阶段执行一次受控对象修复。
+- 修复使用既有 `StorageService.mirrorNasFileToObject`，将受控源文件重新对象化到当前 provider。
+- 写入或更新 `data_storage_objects`、`data_file_object_versions`，并记录审计动作 `asset.file.preview_artifact.object_repaired`。
+- 受控 `file-access` 本身仍保持对象存储优先和 fail-closed，不做静默 NAS fallback。
 
-## 5. 前端改动
+本轮没有读取文件正文、没有解析 PDF/Office/DWG/RVT/IFC 内容；修复是二进制流式对象修复，不产生正文 evidence。
 
-- `NasOperationResponse` 类型补充安全存储字段。
-- 文件列表对对象存储文件展示 `对象存储` 标签。
-- 上传成功提示追加对象存储状态说明。
-- 未新增 raw path、bucket、object_key、storage_uri 展示。
+## 5. M3F 脚本修复方式
 
-## 6. 数据库迁移
+`scripts/dev/check-m3f-object-storage-first-write.sh` 现在先读取：
 
-未新增数据库迁移。
+- `endpointType`
+- `readinessStatus`
 
-本轮复用 M3A-M3E 已有表：
+脚本分支：
 
-- `data_file_resources`
-- `data_storage_objects`
-- `data_file_object_versions`
+- `LOCAL_DEV_MINIO`：如果发现本机 MinIO 容器，继续暂停容器模拟对象存储不可用，验证 fail-closed。
+- `NAS_SIDE_MINIO`：不暂停本机容器，改为验证 readiness 已识别且对象优先上传链路通过。
+- 其他 endpoint：跳过本机容器暂停模拟，并输出当前 endpointType。
 
-## 7. 安全边界
+这样不会再用本机 Docker 容器去模拟 NAS 侧 MinIO 的故障。
 
-- 未写入真实业务 NAS 文件本体。
-- 未移动、删除、重命名、覆盖真实业务 NAS 文件。
-- 未读取 PDF / Office / DWG / RVT / IFC 正文。
-- 未做 parser / indexing / BIM / Hermes 新能力。
-- 未暴露真实 NAS 路径、`storage_path`、底层 `storage_uri`、bucket、object_key、raw DB row、SQL、secret、token、password。
-- M3F 专项脚本只使用隔离 `/tmp` 测试目录，并在结束时清理。
+## 6. 单项目盘点字段修复
 
-## 8. 自测结果
+`StorageObjectificationInventoryResponse` 顶层补齐：
+
+- `projectCode`
+- `projectName`
+
+当请求为单项目盘点时，这两个字段来自该项目聚合行；全项目盘点时保持 `null`。前端类型 `StorageObjectificationInventory` 已同步更新。
+
+M3G-1 专项脚本已新增断言，确认单项目接口顶层和 `projects[0]` 均返回项目编码和项目名称。
+
+## 7. 是否执行真实历史迁移
+
+否。
+
+本轮没有启动历史文件批量迁移任务，没有执行全量对象化，没有移动、删除、重命名、覆盖真实 NAS 文件。
+
+M3E 修复只在用户显式调用预览产物准备时，对不可读的原生预览对象做受控对象修复；这不是历史文件迁移批处理。
+
+## 8. 是否触碰真实 NAS 文件
+
+未对真实 NAS 做任何写操作。
+
+本轮没有修改、移动、删除、重命名真实 NAS 文件。M3E 预览修复可能以只读流式方式读取受控源文件以补齐当前对象存储缺失的 body，但不解析正文、不写回 NAS、不改变 NAS 目录结构。
+
+## 9. 禁出字段扫描
+
+通过。
+
+脚本与接口响应未发现以下内容泄露：
+
+- `/Volumes`
+- `/Users`
+- `/tmp`
+- `smb://`
+- `nas://`
+- `storage_path`
+- `storage_uri`
+- bucket 真值
+- object key
+- endpoint 原文
+- raw row
+- SQL
+- token / secret / password / access key
+
+## 10. 自测结果
 
 ```text
 后端构建                                                     PASS
 前端构建                                                     PASS（仅既有 Vite chunk size warning）
 后端健康检查                                                 PASS {"status":"UP"}
-M3F 新文件对象存储优先写入专项                                PASS=10 FAIL=0
+M3G-1 NAS 侧 MinIO readiness / inventory / dry-run 专项       PASS=9 FAIL=0
 M3E 预览与转换产物对象化回归                                  PASS=8 FAIL=0
-M3D 真实 NAS 小范围灰度镜像回归                               PASS=19 FAIL=0
+M3F 新文件对象存储优先写入回归                                PASS=11 FAIL=0
 M3C 对象存储迁移任务中心回归                                  PASS=9 FAIL=0
-M3B 对象存储镜像迁移回归                                      PASS=11 FAIL=0
-M3A StorageService 回归                                       PASS=8 FAIL=0
 Phase2 batch4 文件访问安全回归                                PASS=18 FAIL=0
-git diff --check                                             PASS
 ```
 
-执行命令：
+已执行命令：
 
 ```bash
 cd /Users/vc/Documents/数字化交付平台/backend
@@ -117,27 +132,22 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-m3f-object-storage-first-write.sh
+bash scripts/dev/check-m3g-nas-minio-readiness-inventory.sh
 bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
-bash scripts/dev/check-m3d-real-nas-object-mirror-gray.sh
+bash scripts/dev/check-m3f-object-storage-first-write.sh
 bash scripts/dev/check-m3c-storage-migration-task-center.sh
-bash scripts/dev/check-m3b-object-storage-mirror-trial.sh
-bash scripts/dev/check-m3a-storage-service-foundation.sh
 bash scripts/dev/check-phase2-batch4-file-access.sh
-git diff --check
 ```
 
-## 9. 服务状态
+## 11. 服务状态
 
 - 后端保持运行：`http://127.0.0.1:8080`
 - 前端 dev server 保持运行：`http://127.0.0.1:5173`
-- MinIO 容器已确认处于运行状态。
 
-按用户要求，本轮完成后未关闭项目服务。
+按用户要求，本轮完成后不关闭项目服务。
 
-## 10. 已知风险与后续建议
+## 12. 未完成事项和风险
 
-- 既有接口路径仍包含 `nas/files:upload`，这是为了兼容前端和历史调用；实际新文件本体已改为对象存储优先写入。
-- 对象存储文件的移动、重命名、回收站能力尚未扩展，本轮先禁止被 NAS 操作链路误处理。
-- 若后续要支持对象存储文件改名/移动，应新增对象文件管理语义，继续保持审计、权限、灰度和禁出字段扫描。
-- 对象存储不可用时本轮按 fail-closed 处理，不建议加入静默 NAS 回退。
+- M3E 的受控修复目前只挂在原生预览准备链路上，不代表可以对所有历史对象做批量迁移。
+- 若后续要对历史文件做正式对象化迁移，仍需单独确认范围、批量策略、回滚方案和 NAS 原文件冻结边界。
+- 当前修复不改变 file-access 的 fail-closed 策略；如果对象存储不可读且未经过受控修复，访问仍会失败，这是预期安全行为。

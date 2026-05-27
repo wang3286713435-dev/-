@@ -3,16 +3,20 @@ package com.zhuoyu.delivery.datasteward.storage;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileAssetResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileStorageStatusResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageProviderHealthResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageProviderReadinessResponse;
 import com.zhuoyu.delivery.shared.exception.BusinessException;
 import io.minio.BucketExistsArgs;
 import io.minio.GetObjectArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
 import io.minio.StatObjectArgs;
 import io.minio.StatObjectResponse;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -24,6 +28,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 import okhttp3.OkHttpClient;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.InputStreamResource;
@@ -203,6 +208,10 @@ public class StorageService {
         );
     }
 
+    public StorageProviderReadinessResponse minioReadiness() {
+        return providerReadiness("MINIO", storageProperties.getMinio());
+    }
+
     public FileStorageStatusResponse fileStorageStatus(FileAssetResponse file) {
         StoredObjectStatus objectStatus = activeObjectStatus(file.fileId());
         if (objectStatus != null) {
@@ -287,6 +296,97 @@ public class StorageService {
             return new StorageProviderHealthResponse(code, displayName, true, false, true, false,
                 "对象存储当前不可用或凭证不可用");
         }
+    }
+
+    private StorageProviderReadinessResponse providerReadiness(
+        String providerCode,
+        StorageProperties.ObjectStorageProvider config
+    ) {
+        String endpointType = endpointType(config == null ? null : config.getEndpoint());
+        boolean configured = config != null
+            && config.isEnabled()
+            && hasText(config.getEndpoint())
+            && hasText(config.getAccessKey())
+            && hasText(config.getSecretKey())
+            && hasText(config.getDefaultBucket());
+        if (!configured) {
+            return new StorageProviderReadinessResponse(
+                providerCode,
+                false,
+                false,
+                false,
+                false,
+                endpointType,
+                "NOT_CONFIGURED",
+                "对象存储未完整配置，不能启动真实项目对象化。"
+            );
+        }
+        boolean reachable = false;
+        boolean readable = false;
+        boolean writable = false;
+        try {
+            MinioClient client = minioClient(config);
+            String bucket = defaultBucket(providerCode);
+            ensureBucket(client, bucket);
+            reachable = true;
+            readable = true;
+
+            String smokeObjectKey = "smoke/readiness/" + UUID.randomUUID() + ".txt";
+            byte[] payload = ("readiness:" + Instant.now()).getBytes(StandardCharsets.UTF_8);
+            client.putObject(PutObjectArgs.builder()
+                .bucket(bucket)
+                .object(smokeObjectKey)
+                .contentType("text/plain")
+                .stream(new ByteArrayInputStream(payload), payload.length, -1)
+                .build());
+            StatObjectResponse stat = client.statObject(StatObjectArgs.builder()
+                .bucket(bucket)
+                .object(smokeObjectKey)
+                .build());
+            writable = stat.size() == payload.length;
+            client.removeObject(RemoveObjectArgs.builder()
+                .bucket(bucket)
+                .object(smokeObjectKey)
+                .build());
+        } catch (Exception exception) {
+            if (!reachable) {
+                return new StorageProviderReadinessResponse(
+                    providerCode,
+                    true,
+                    false,
+                    false,
+                    false,
+                    endpointType,
+                    "UNREACHABLE",
+                    "对象存储当前不可达或凭证不可用。"
+                );
+            }
+        }
+        String readinessStatus;
+        String message;
+        if ("LOCAL_DEV_MINIO".equals(endpointType)) {
+            readinessStatus = "LOCAL_DEV_ONLY";
+            message = "本机开发对象存储可用，但尚未确认 NAS 侧 MinIO，不能启动真实全项目对象化。";
+        } else if (!writable) {
+            readinessStatus = "WRITE_UNAVAILABLE";
+            message = "对象存储可访问，但写入探测未通过。";
+        } else if ("NAS_SIDE_MINIO".equals(endpointType)) {
+            readinessStatus = "READY";
+            message = "NAS 侧 MinIO 已通过只读/写入探测，可用于 M3G 后续受控对象化。";
+        } else {
+            readinessStatus = "READY";
+            message = "对象存储已通过探测，但 endpoint 类型未能自动归类，请运维确认后再启动真实对象化。";
+        }
+        return new StorageProviderReadinessResponse(
+            providerCode,
+            true,
+            reachable,
+            readable,
+            writable,
+            endpointType,
+            readinessStatus,
+            message
+        );
     }
 
     private StorageReference referenceFor(FileAssetResponse file) {
@@ -398,6 +498,52 @@ public class StorageService {
                 .callTimeout(Duration.ofSeconds(45))
                 .build())
             .build();
+    }
+
+    private String endpointType(String endpoint) {
+        String value = text(endpoint);
+        if (value == null) {
+            return "UNKNOWN";
+        }
+        try {
+            String host = URI.create(value).getHost();
+            if (host == null || host.isBlank()) {
+                return "UNKNOWN";
+            }
+            String normalized = host.toLowerCase(Locale.ROOT);
+            if ("localhost".equals(normalized)
+                || "0.0.0.0".equals(normalized)
+                || "host.docker.internal".equals(normalized)
+                || "127.0.0.1".equals(normalized)
+                || normalized.startsWith("127.")
+                || "::1".equals(normalized)) {
+                return "LOCAL_DEV_MINIO";
+            }
+            if (normalized.startsWith("192.168.")
+                || normalized.startsWith("10.")
+                || private172(normalized)) {
+                return "NAS_SIDE_MINIO";
+            }
+            return "UNKNOWN";
+        } catch (IllegalArgumentException exception) {
+            return "UNKNOWN";
+        }
+    }
+
+    private boolean private172(String host) {
+        if (!host.startsWith("172.")) {
+            return false;
+        }
+        String[] parts = host.split("\\.");
+        if (parts.length < 2) {
+            return false;
+        }
+        try {
+            int second = Integer.parseInt(parts[1]);
+            return second >= 16 && second <= 31;
+        } catch (NumberFormatException exception) {
+            return false;
+        }
     }
 
     private Path resolveNasPath(StorageReference reference) {

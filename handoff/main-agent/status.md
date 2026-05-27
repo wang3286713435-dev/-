@@ -91,8 +91,32 @@
   - 用户已在本机终端临时注入 NAS MinIO 环境变量并重启平台后端，后端健康检查 `UP`。
   - 注意：当前为本机会话级环境变量注入，不代表生产持久化部署完成；开发 agent 仍需实现 readiness，明确区分 `LOCAL_DEV_MINIO` 与 `NAS_SIDE_MINIO`。
 - 当前裁决：
-  - 交给开发 agent 按 M3G-1 prompt 执行。
-  - M3G-1 未通过前，不进入真实历史文件对象化执行。
+  - M3G-1 已于 2026-05-27 正式收口。
+  - 当前 active 批次：`待用户确认`。
+  - 下一步候选：`M3G-2：历史文件对象化执行与读取链路切换灰度`。
+  - M3G-2 未启动前，不进入真实历史文件对象化执行。
+
+## 2026-05-27 M3G-1 正式收口
+
+- 测试 agent 已完成 M3G-1 P1 修复复验，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- P2：
+  - 既有 Vite chunk size warning。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪项继续排除。
+- 已确认：
+  - readiness 为 `NAS_SIDE_MINIO / READY`。
+  - 全项目对象化覆盖率盘点可查。
+  - 503 / 105 单项目 dry-run 可生成计划。
+  - dry-run 不创建真实迁移任务、不复制文件、不修改 NAS。
+  - M3E 预览产物对象化回归已恢复。
+  - M3F 对象存储优先上传脚本已适配 NAS 侧 MinIO。
+  - M3C 与 file-access 回归通过。
+  - 未执行历史文件真实批量迁移。
+  - 未移动、删除、重命名或覆盖真实 NAS 原项目文件。
+  - 未新增 Hermes 正文问答、documents / chunks、Qdrant、OpenSearch、parser、真实 BIM 引擎。
+- 主 agent 裁决：`M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划` 正式收口。
 
 ## 2026-05-25 M3A 启动：对象存储与 StorageService 基线
 

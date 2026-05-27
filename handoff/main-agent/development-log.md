@@ -4183,3 +4183,21 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
 - 下一步：
   - 开发 agent 按 `handoff/dev-agent/current-prompt.md` 执行 M3G-1。
   - 重点实现 readiness、全项目对象化盘点和 dry-run 计划。
+
+## 2026-05-27 M3G-1 正式收口
+
+- 开发 agent 已完成 M3G-1，并完成 P1 修复批次。
+- 测试 agent 复验通过，报告写入 `handoff/test-agent/latest-report.md`。
+- 已关闭上一轮 2 个 P1：
+  - M3E：NAS 侧 MinIO 下旧对象 metadata 指向旧对象存储导致 file-access 失败。
+  - M3F：脚本按本机 Docker MinIO 模拟对象存储不可用，不适配 NAS 侧 MinIO。
+- 当前通过：
+  - M3G-1 专项：`PASS=9 FAIL=0`
+  - M3E：`PASS=8 FAIL=0`
+  - M3F：`PASS=11 FAIL=0`
+  - M3C：`PASS=9 FAIL=0`
+  - file-access：`PASS=18 FAIL=0`
+- 主 agent 裁决：
+  - `M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划` 正式收口。
+  - 当前不进入真实历史文件对象化执行。
+  - 下一步如继续 M3G，应单独启动 `M3G-2：历史文件对象化执行与读取链路切换灰度`。

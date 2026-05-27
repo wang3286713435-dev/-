@@ -18,7 +18,8 @@
   - MinIO Console `9001` 可达。
   - bucket `zy-datahub-assets-prod` 已创建。
 - 平台后端已由用户在本机终端临时注入 NAS 侧 MinIO 环境变量并重启，健康检查为 `UP`。
-- 这代表 M3G-1 已具备开发验证条件；但这仍不等于历史项目文件已经对象化。
+- M3G-1 已完成开发、P1 修复和测试 agent 复验，当前正式收口。
+- 这代表平台具备 NAS 侧 MinIO readiness、全项目对象化盘点和单项目 dry-run 能力；但这仍不等于历史项目文件已经对象化。
 
 ## 任务图
 
@@ -28,13 +29,13 @@
 - [x] 3. 输出 NAS 侧 MinIO 配置交接清单。
 - [x] 4. NAS 侧 MinIO 服务部署完成。
 - [x] 5. 平台已临时注入 NAS 侧 MinIO endpoint / access key / bucket 并启动。
-- [ ] 6. 平台 readiness 能区分本机 MinIO 与 NAS 侧 MinIO。
-- [ ] 7. 全项目对象化覆盖率盘点 API 可用。
-- [ ] 8. 单项目对象化 dry-run 计划 API 可用。
-- [ ] 9. 前端可查看对象存储就绪状态、覆盖率和 dry-run 结果。
-- [ ] 10. M3G-1 专项脚本通过。
-- [ ] 11. M3F / M3E / M3C / file-access 回归通过。
-- [ ] 12. 主 agent 审计通过并收口 M3G-1。
+- [x] 6. 平台 readiness 能区分本机 MinIO 与 NAS 侧 MinIO。
+- [x] 7. 全项目对象化覆盖率盘点 API 可用。
+- [x] 8. 单项目对象化 dry-run 计划 API 可用。
+- [x] 9. 前端可查看对象存储就绪状态、覆盖率和 dry-run 结果。
+- [x] 10. M3G-1 专项脚本通过。
+- [x] 11. M3F / M3E / M3C / file-access 回归通过。
+- [x] 12. 主 agent 审计通过并收口 M3G-1。
 
 ## M3G-1 完成定义
 

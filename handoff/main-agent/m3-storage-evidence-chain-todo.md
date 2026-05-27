@@ -35,7 +35,7 @@ NAS 原始文件保留
 - [x] 3. 真实 NAS 小范围灰度镜像（M3D 已收口）
 - [x] 4. 预览与转换产物对象化（M3E 已收口）
 - [x] 4.5 新文件对象存储优先写入（M3F 已收口）
-- [ ] 4.6 NAS 侧 MinIO 对象存储接管真实项目文件（M3G-1 进行中）
+- [ ] 4.6 NAS 侧 MinIO 对象存储接管真实项目文件（M3G-1 已收口，M3G-2 待启动）
 - [ ] 5. documents / chunks 语义契约
 - [ ] 6. 向量库与关键词索引试点
 - [ ] 7. Hermes 受控 Evidence API
@@ -252,11 +252,11 @@ NAS 原始文件保留
 
 ## 8. 阶段 4.6：NAS 侧 MinIO 对象存储接管真实项目文件
 
-状态：`M3G-1 进行中`
+状态：`M3G-1 已收口，M3G-2 待启动`
 
 建议批次名：`M3G：NAS 侧 MinIO 对象存储接管真实项目文件`
 
-当前子批次：
+已完成子批次：
 
 `M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划`
 
@@ -307,6 +307,20 @@ M3G-1 交付要求：
   - `handoff/main-agent/m3g1-nas-minio-ops-preparation.md`
 - M3G-1 子任务跟踪：
   - `handoff/main-agent/m3g1-task-graph.md`
+
+M3G-1 完成记录：
+
+- 收口记录：
+  - `handoff/main-agent/m3g1-nas-minio-readiness-inventory-closure.md`
+- 专项脚本：
+  - `scripts/dev/check-m3g-nas-minio-readiness-inventory.sh`
+- 复验结果：
+  - readiness：`NAS_SIDE_MINIO / READY`
+  - M3G-1 专项：`PASS=9 FAIL=0`
+  - M3E 回归：`PASS=8 FAIL=0`
+  - M3F 回归：`PASS=11 FAIL=0`
+  - M3C 回归：`PASS=9 FAIL=0`
+  - file-access 回归：`PASS=18 FAIL=0`
 
 ## 9. 阶段 5：documents / chunks 语义契约
 

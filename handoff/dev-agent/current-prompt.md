@@ -1,4 +1,4 @@
-# 开发 Agent 当前任务：M3G-1 NAS 侧 MinIO 就绪检查与对象化盘点
+# 开发 Agent 当前任务：M3G-1 P1 回归修复
 
 你是卓羽智能数据中台 v1 的开发 agent。工作目录：
 
@@ -8,227 +8,118 @@
 
 `codex/m3g-nas-minio-real-project-object-storage`
 
-## 当前运行环境补充
+## 0. 当前结论
 
-2026-05-27 用户已在 Synology NAS 上启动 MinIO：
+M3G-1 核心能力已通过：
 
-- NAS MinIO API：`http://192.168.1.181:9000`
-- MinIO Console：`http://192.168.1.181:9001`
-- 正式 bucket：`zy-datahub-assets-prod`
-- 平台后端已由用户在本机终端临时注入 NAS MinIO 环境变量并重启。
-- 当前健康检查：`http://127.0.0.1:8080/actuator/health` 返回 `UP`。
-- NAS MinIO ready：`http://192.168.1.181:9000/minio/health/ready` 可达。
+- readiness 能识别 `NAS_SIDE_MINIO / READY`。
+- 全项目对象化覆盖率可查。
+- 503 / 105 项目 dry-run 可生成计划。
+- dry-run 未启动真实迁移、未复制文件。
 
-注意：
+但测试 agent 判定 M3G-1 暂不收口，当前有 2 个 P1：
 
-- 不要要求用户把 Access Key / Secret Key 写进 prompt、报告、仓库或聊天。
-- 当前只是本机会话级注入，M3G-1 仍需要实现平台 readiness，让页面 / API 能清楚识别当前是否为 NAS 侧 MinIO。
-- 不能因为 MinIO ready 就执行历史文件真实迁移。
+1. M3E 回归失败：切到 NAS 侧 MinIO 后，既有对象化预览产物通过 file-access 读取失败，返回 `ASSET_FILE_NOT_READABLE`。
+2. M3F 回归脚本失败：脚本仍假设对象存储是本机 Docker MinIO，通过停止本机 MinIO 模拟不可用；当前实际对象存储已切到 NAS 侧 MinIO，因此停止本机 MinIO 不会让对象存储不可用，脚本误判。
 
-## 0. 本批定位
+本轮只修这两个 P1 和一个测试报告记录的 P2：
 
-本批是 M3G 的首个可验收子批次：
-
-`M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划`
-
-M3G 总目标是把真实项目文件从“NAS 文件夹路径管理”升级为“NAS 侧 MinIO 对象存储治理”。
-
-但本批不直接执行全量迁移。本批先回答三个问题：
-
-1. NAS 侧 MinIO 是否已经可被平台作为正式对象存储 endpoint 使用？
-2. 当前所有真实项目对象化覆盖率、容量和风险是什么？
-3. 如果开始历史文件对象化，按项目 / 目录 / 类型 / 大小筛选后会迁移多少文件、多少容量、有哪些风险？
+- 单项目对象化盘点接口 `projectCode / projectName` 返回 `null`，应与全项目盘点保持一致。
 
 ## 1. 必须先阅读
 
-开始前先阅读：
-
-- `handoff/main-agent/m3-storage-evidence-chain-todo.md`
-- `handoff/main-agent/m3g-nas-minio-real-project-object-storage-plan.md`
+- `handoff/test-agent/latest-report.md`
+- `handoff/dev-agent/latest-report.md`
+- `handoff/test-agent/current-prompt.md`
 - `handoff/main-agent/m3g1-task-graph.md`
 - `handoff/main-agent/m3g1-nas-minio-ops-preparation.md`
-- `handoff/main-agent/m3f-object-storage-first-write-closure.md`
-- `handoff/dev-agent/latest-report.md`
-- `handoff/test-agent/latest-report.md`
+- `scripts/dev/check-m3e-preview-artifacts-object-storage.sh`
+- `scripts/dev/check-m3f-object-storage-first-write.sh`
+- `scripts/dev/check-m3g-nas-minio-readiness-inventory.sh`
 - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageService.java`
 - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageMigrationApplicationService.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageMigrationController.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/AssetApplicationService.java`
-- `frontend/src/modules/data-steward/pages/DataStewardFileServicePage.vue`
-- `frontend/src/modules/data-steward/api/dataSteward.ts`
 
 ## 2. 严格边界
 
-本批允许：
+本轮允许：
 
-- 新增或扩展只读 readiness / inventory / dry-run API。
-- 前端展示 NAS 侧 MinIO 就绪状态、对象化覆盖率、dry-run 计划。
-- 必要时追加 Flyway 迁移；不得修改旧迁移。
-- 新增专项脚本。
-- 更新 handoff 报告。
+- 修复 M3E 在 NAS 侧 MinIO 下的预览产物 / file-access 回归。
+- 修复 M3F 脚本对 `LOCAL_DEV_MINIO` 和 `NAS_SIDE_MINIO` 的环境判断。
+- 修复单项目对象化盘点展示字段。
+- 更新专项脚本和 `handoff/dev-agent/latest-report.md`。
 
-本批禁止：
+本轮禁止：
 
-- 不执行真实全量历史文件迁移。
+- 不执行历史文件真实批量迁移。
 - 不移动、删除、重命名、覆盖真实 NAS 原项目文件。
-- 不读取 PDF / Office / DWG / RVT / IFC 正文。
+- 不做 Hermes 正文问答。
 - 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
-- 不新增 Hermes 正文问答。
-- 不让 Hermes 直接访问 NAS 或 MinIO 底层目录。
-- 不把本机 Docker MinIO 说成正式 NAS 侧 MinIO。
-- 不暴露 `/Volumes`、`smb://`、`nas://`、`storage_uri`、bucket、object_key、raw row、SQL、token、secret。
+- 不读取 PDF / Office / DWG / RVT / IFC 正文。
+- 不接入真实 BIM 引擎。
+- 不把 file-access 改成静默绕过对象存储失败后读取 NAS 并伪装成功。
+- 不暴露 `/Volumes`、`smb://`、`nas://`、`storage_uri`、bucket、object key、endpoint 原文、SQL、raw row、token、secret。
 - 不修改 `docs/**`。
 
-## 3. M3G-1 后端目标
+## 3. P1-1：M3E 预览产物在 NAS MinIO 下不可读
 
-### A. NAS 侧 MinIO readiness
+### 问题
 
-提供只读 readiness 能力，用于判断当前对象存储配置是否满足 M3G。
+M3E 脚本选择了一个已对象化原生预览样本 `fileId=993`，但当前平台对象存储 endpoint 已切到 NAS 侧 MinIO。该文件的历史 object metadata 可能指向旧本机 MinIO 对象，NAS MinIO 中没有对应对象本体，所以 file-access 返回：
 
-可复用或扩展现有 provider health，建议提供业务化字段：
+`ASSET_FILE_NOT_READABLE`
 
-- provider code。
-- configured。
-- reachable。
-- readable。
-- writable。
-- endpointType：`LOCAL_DEV_MINIO` / `NAS_SIDE_MINIO` / `UNKNOWN`。
-- readinessStatus：`READY` / `NOT_CONFIGURED` / `UNREACHABLE` / `LOCAL_DEV_ONLY` / `WRITE_UNAVAILABLE`。
-- message。
+### 修复目标
 
-响应不得包含：
+M3E 回归在 NAS 侧 MinIO 下必须通过。
 
-- endpoint 原文。
-- access key。
-- secret key。
-- bucket。
-- object key。
+允许的修复方向：
 
-如果当前仍是本机 Docker MinIO，可以显示“本机开发对象存储可用，但未确认 NAS 侧 MinIO”，不能假装 M3G 已具备正式条件。
+1. `preview-artifacts:prepare` 对 PDF / 图片原生预览样本应保证当前 active object version 在当前对象存储 provider 下可读。
+2. 如果已有 active object version 不可读，不要让 file-access 静默伪装成功；应由 prepare 流程基于受控源文件重新对象化到当前 NAS 侧 MinIO，并创建新的 active object version 或修复预览产物关联。
+3. 如选择脚本修复，脚本必须显式准备一个“当前 provider 可读”的对象化样本，而不是随机拿历史 `OBJECT_STORED` 记录。
 
-### B. 全项目对象化盘点
+不允许：
 
-新增全项目 / 单项目对象化覆盖率查询。
+- 不允许把对象读取失败静默 fallback 到 NAS 并仍称 `OBJECT_STORED`。
+- 不允许暴露对象 bucket / object key。
+- 不允许读取文件正文内容。
+- 不允许批量迁移整个项目。
 
-至少返回项目级聚合：
+## 4. P1-2：M3F 脚本本机 MinIO 停止模拟不适配 NAS MinIO
 
-- projectId。
-- projectCode。
-- projectName。
-- totalFiles。
-- totalBytes。
-- objectStoredFiles。
-- objectStoredBytes。
-- nasOnlyFiles。
-- migrationPendingFiles。
-- migrationFailedFiles。
-- checksumCoveredFiles。
-- checksumCoverageRate。
-- modelFiles。
-- drawingFiles。
-- documentFiles。
-- largeFileCount。
-- objectificationCoverageRate。
-- riskLevel。
-- riskMessages。
+### 问题
 
-只基于 MySQL 台账和对象版本表做统计，不递归扫描真实 NAS。
+`check-m3f-object-storage-first-write.sh` 通过停止 / 暂停本机 `delivery-minio` 容器来模拟对象存储不可用。
 
-### C. 对象化 dry-run 计划
+当前后端实际连接的是 NAS 侧 MinIO，所以本机 MinIO 停止后对象存储仍可用，脚本期望失败但实际上传成功。
 
-新增 dry-run 计划接口，不复制文件。
+### 修复目标
 
-建议接口：
+M3F 回归脚本必须适配两类环境：
 
-- `POST /api/data-steward/projects/{projectId}/storage-objectification-plans:dry-run`
+- `LOCAL_DEV_MINIO`：可以按旧逻辑暂停本机 MinIO 容器验证 fail-closed。
+- `NAS_SIDE_MINIO`：不能停止 NAS MinIO；脚本应跳过本机容器暂停模拟，明确记录“NAS MinIO 环境下不执行本机容器不可用模拟”，并继续验证对象存储优先上传、active object version、file-access、禁出字段。
 
-请求可支持：
+建议实现：
 
-- directoryPath。
-- fileKinds。
-- extensions。
-- minSizeBytes / maxSizeBytes。
-- checksumState：`ANY` / `HAS_CHECKSUM` / `MISSING_CHECKSUM`。
-- storageState：`ANY` / `NAS_ONLY` / `MIGRATION_FAILED`。
-- limit。
-- maxTotalBytes。
+- 脚本先调用 readiness 接口读取 `endpointType / readinessStatus`。
+- 当 `endpointType=LOCAL_DEV_MINIO` 且本机容器存在时，执行旧的 unavailable 模拟。
+- 当 `endpointType=NAS_SIDE_MINIO` 时，不暂停本机 MinIO，不要求上传失败；改为通过 readiness `READY` 和正常上传链路证明当前对象存储可用。
+- 输出中要明确这是环境分支，不是跳过 M3F 主链路。
 
-响应必须包含：
+不允许：
 
-- dryRun=true。
-- migrationStarted=false。
-- projectId。
-- selectedFileCount。
-- selectedTotalBytes。
-- objectStoredSkipCount。
-- missingChecksumCount。
-- oversizedCount。
-- unreadableRiskCount。
-- estimatedBatches。
-- riskMessages。
-- sampleItems，最多 20 条。
+- 不允许为了让脚本通过去关闭 NAS 侧 MinIO。
+- 不允许要求用户提供密钥到脚本、报告或仓库。
+- 不允许把测试环境假设写死为本机 MinIO。
 
-sampleItems 可包含：
+## 5. P2：单项目对象化盘点字段
 
-- fileId。
-- assetUuid。
-- fileName。
-- fileKind。
-- extension。
-- sizeBytes。
-- checksumStatus。
-- storageStatus。
-- reason。
+修复：
 
-不得包含真实 NAS 路径、bucket、object key。
-
-### D. Hermes 副本取用契约只做状态预留
-
-本批可以在 readiness / plan 文案中标明：
-
-- Hermes 后续只能通过平台授权的 `assetUuid / objectVersion` 复制副本。
-- 当前不发放真实 Hermes copy task。
-- 当前不写 semantic evidence。
-
-不要新增真实 Hermes 文件拉取执行能力。
-
-## 4. 前端目标
-
-优先在已有对象存储 / 文件服务 / 迁移任务页面上轻量接入，不要大改 UI。
-
-至少展示：
-
-- 当前对象存储就绪状态。
-- 是否已确认 NAS 侧 MinIO。
-- 项目对象化覆盖率。
-- 已对象化 / 未对象化 / 失败 / pending。
-- checksum 覆盖率。
-- 容量预估。
-- dry-run 计划入口。
-- dry-run 结果说明：不会复制文件、不会修改 NAS、不会启动迁移。
-
-如果当前 endpoint 还是本机 MinIO，页面要明确提示：
-
-`当前对象存储仍是本机开发环境，尚未确认 NAS 侧 MinIO，不能启动真实全项目对象化。`
-
-## 5. 专项脚本
-
-新增：
-
-`scripts/dev/check-m3g-nas-minio-readiness-inventory.sh`
-
-脚本至少验证：
-
-1. 登录管理员。
-2. 调用 NAS MinIO readiness / provider health。
-3. 响应不泄露 endpoint、bucket、object key、secret。
-4. 查询全项目对象化覆盖率。
-5. 至少包含 105 / 503 或真实项目聚合。
-6. 对 105 / 503 做 dry-run。
-7. dry-run 返回 `dryRun=true`、`migrationStarted=false`。
-8. dry-run 不创建迁移任务、不复制文件。
-9. sampleItems 不含真实路径或对象 key。
-10. M3F / M3E / M3C / file-access 回归通过。
+- `/api/data-steward/projects/{projectId}/storage-objectification-inventory`
+- `projectCode / projectName` 不应为 `null`。
+- 应与全项目盘点中的同项目值一致。
 
 ## 6. 自测要求
 
@@ -242,11 +133,12 @@ cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
 bash scripts/dev/check-m3g-nas-minio-readiness-inventory.sh
-bash scripts/dev/check-m3f-object-storage-first-write.sh
 bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
+bash scripts/dev/check-m3f-object-storage-first-write.sh
 bash scripts/dev/check-m3c-storage-migration-task-center.sh
 bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
+git diff --cached --check
 ```
 
 ## 7. 报告要求
@@ -255,28 +147,26 @@ git diff --check
 
 `handoff/dev-agent/latest-report.md`
 
-报告必须包含：
+报告必须说明：
 
-- 改动文件清单。
-- 是否新增迁移。
-- NAS 侧 MinIO readiness 如何判断。
-- 当前环境是否仍是本机 MinIO。
-- 全项目对象化盘点能力。
-- dry-run 计划能力。
-- 是否执行了真实迁移，必须为否。
-- 是否触碰真实 NAS 文件，必须为否。
-- 禁出字段扫描结果。
-- 自测命令结果。
-- 未完成事项和风险。
+1. M3E file-access 失败根因。
+2. 采用的修复方式。
+3. M3F 脚本如何区分 `LOCAL_DEV_MINIO` 与 `NAS_SIDE_MINIO`。
+4. 单项目盘点字段是否修复。
+5. 是否执行真实历史文件迁移，必须明确回答“否”。
+6. 是否触碰真实 NAS 文件，必须明确回答“否”。
+7. 自测结果。
+8. 未完成事项。
 
 ## 8. 完成定义
 
-只有同时满足以下条件，才可交给测试 agent：
+只有同时满足以下条件，才能标记完成：
 
-1. 平台能业务化展示 NAS 侧 MinIO readiness。
-2. 当前对象存储是本机还是 NAS 侧不会被混淆。
-3. 全项目对象化覆盖率可查。
-4. 单项目 dry-run 可生成计划。
-5. dry-run 不启动真实迁移。
-6. 响应不泄露真实路径、bucket、object key、secret。
-7. 前后端构建、专项脚本、回归脚本和 `git diff --check` 通过。
+- M3E 回归通过。
+- M3F 回归通过。
+- M3G-1 专项通过。
+- file-access 回归通过。
+- 单项目盘点字段不再为 null。
+- 未发生真实历史文件迁移。
+- 未触碰真实 NAS 原项目文件。
+- 未修改 `docs/**`。

@@ -19,8 +19,148 @@
       description="NAS 原文件保留；任务中心不会生成语义证据，不代表 Hermes 已理解文件正文，也不会展示底层路径、bucket 或 object key。"
     />
 
+    <section class="m3g-readiness">
+      <article class="readiness-card">
+        <span>对象存储就绪</span>
+        <strong>{{ readinessStatusLabel(readiness?.readinessStatus) }}</strong>
+        <el-tag :type="readinessTagType(readiness?.readinessStatus)" effect="plain">
+          {{ endpointTypeLabel(readiness?.endpointType) }}
+        </el-tag>
+        <p>{{ readiness?.message || '正在读取对象存储 readiness。' }}</p>
+      </article>
+      <article class="readiness-card">
+        <span>读写探测</span>
+        <strong>{{ readiness?.readable && readiness?.writable ? '可读写' : '未完全通过' }}</strong>
+        <p>只做专用 smoke 探测，不返回 endpoint、bucket、object key 或密钥。</p>
+      </article>
+      <article class="readiness-card readiness-card--wide">
+        <span>全项目对象化覆盖率</span>
+        <strong>{{ formatPercent(inventory?.objectificationCoverageRate) }}%</strong>
+        <p>
+          {{ formatCount(inventory?.totalProjects) }} 个项目，
+          {{ formatCount(inventory?.totalFiles) }} 个文件，
+          仍在 NAS {{ formatCount(inventory?.nasOnlyFiles) }} 个。
+        </p>
+      </article>
+    </section>
+
+    <el-alert
+      v-if="readiness?.readinessStatus === 'LOCAL_DEV_ONLY'"
+      type="warning"
+      :closable="false"
+      show-icon
+      class="service-notice"
+      title="当前对象存储仍是本机开发环境"
+      description="尚未确认 NAS 侧 MinIO，不能启动真实全项目对象化；本页 dry-run 只生成计划，不复制文件。"
+    />
+
     <el-tabs v-model="activeTab" class="service-tabs">
       <el-tab-pane label="对象存储迁移" name="migration">
+        <section class="service-section">
+          <div class="service-section__header">
+            <div>
+              <h2>项目对象化盘点</h2>
+              <span>只基于 MySQL 台账和对象版本统计，不递归扫描真实 NAS。</span>
+            </div>
+            <el-tag type="info" effect="plain">M3G-1 dry-run</el-tag>
+          </div>
+
+          <el-table :data="inventoryRows" row-key="projectId" empty-text="暂无项目对象化盘点">
+            <el-table-column label="项目" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.projectCode }} {{ row.projectName }}</template>
+            </el-table-column>
+            <el-table-column label="文件" width="110" align="right">
+              <template #default="{ row }">{{ formatCount(row.totalFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="已对象化" width="110" align="right">
+              <template #default="{ row }">{{ formatCount(row.objectStoredFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="仍在 NAS" width="110" align="right">
+              <template #default="{ row }">{{ formatCount(row.nasOnlyFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="覆盖率" width="150">
+              <template #default="{ row }">
+                <el-progress :percentage="Number(row.objectificationCoverageRate || 0)" :stroke-width="8" />
+              </template>
+            </el-table-column>
+            <el-table-column label="checksum" width="130">
+              <template #default="{ row }">{{ formatPercent(row.checksumCoverageRate) }}%</template>
+            </el-table-column>
+            <el-table-column label="风险" width="90">
+              <template #default="{ row }">
+                <el-tag :type="riskTagType(row.riskLevel)" size="small">{{ riskLabel(row.riskLevel) }}</el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </section>
+
+        <section class="service-section">
+          <div class="service-section__header">
+            <div>
+              <h2>单项目对象化 dry-run</h2>
+              <span>生成筛选计划，不创建迁移任务、不复制文件、不修改 NAS。</span>
+            </div>
+            <el-button type="primary" :loading="dryRunLoading" @click="runDryRun">生成 dry-run 计划</el-button>
+          </div>
+
+          <div class="dry-run-form">
+            <el-input v-model="dryRunForm.directoryPath" clearable placeholder="逻辑目录，可留空，例如 01_文件收发" />
+            <el-select v-model="dryRunForm.storageState" placeholder="存储状态">
+              <el-option label="全部" value="ANY" />
+              <el-option label="仅 NAS" value="NAS_ONLY" />
+              <el-option label="迁移失败" value="MIGRATION_FAILED" />
+            </el-select>
+            <el-select v-model="dryRunForm.checksumState" placeholder="checksum">
+              <el-option label="全部" value="ANY" />
+              <el-option label="已有 checksum" value="HAS_CHECKSUM" />
+              <el-option label="缺少 checksum" value="MISSING_CHECKSUM" />
+            </el-select>
+            <el-input v-model="dryRunForm.extensionsText" clearable placeholder="扩展名：pdf,dwg,rvt，可留空" />
+            <el-input-number v-model="dryRunForm.limit" :min="1" :max="5000" controls-position="right" />
+          </div>
+
+          <template v-if="dryRunResult">
+            <div class="dry-run-summary">
+              <div>
+                <span>选中文件</span>
+                <strong>{{ formatCount(dryRunResult.selectedFileCount) }}</strong>
+              </div>
+              <div>
+                <span>预估容量</span>
+                <strong>{{ formatBytes(dryRunResult.selectedTotalBytes) }}</strong>
+              </div>
+              <div>
+                <span>预估批次</span>
+                <strong>{{ formatCount(dryRunResult.estimatedBatches) }}</strong>
+              </div>
+              <div>
+                <span>已对象化跳过</span>
+                <strong>{{ formatCount(dryRunResult.objectStoredSkipCount) }}</strong>
+              </div>
+            </div>
+            <el-alert
+              type="info"
+              :closable="false"
+              show-icon
+              class="service-notice"
+              :title="dryRunResult.dryRun && !dryRunResult.migrationStarted ? 'dry-run 已生成，未启动迁移' : '请检查 dry-run 状态'"
+              :description="dryRunResult.riskMessages.join(' ')"
+            />
+            <el-table :data="dryRunResult.sampleItems" row-key="fileId" empty-text="暂无样本文件">
+              <el-table-column prop="assetUuid" label="平台资产ID" min-width="230" show-overflow-tooltip />
+              <el-table-column prop="fileName" label="文件名" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="fileKind" label="类型" width="90" />
+              <el-table-column prop="extension" label="扩展名" width="90" />
+              <el-table-column label="大小" width="110" align="right">
+                <template #default="{ row }">{{ formatBytes(row.sizeBytes) }}</template>
+              </el-table-column>
+              <el-table-column prop="checksumStatus" label="checksum" width="150" />
+              <el-table-column prop="storageStatus" label="存储状态" width="150" />
+              <el-table-column prop="reason" label="计划原因" min-width="180" show-overflow-tooltip />
+            </el-table>
+          </template>
+        </section>
+
         <section class="migration-summary">
           <div class="migration-metric">
             <span>文件总数</span>
@@ -262,15 +402,22 @@ import { Plus, Refresh, Search } from '@element-plus/icons-vue';
 
 import {
   createStorageMigrationTask,
+  dryRunStorageObjectificationPlan,
   fetchCatalogFiles,
+  fetchStorageObjectificationInventory,
   fetchStorageMigrationSummary,
   fetchStorageMigrationTask,
   fetchStorageMigrationTasks,
+  fetchStorageProviderReadiness,
   retryStorageMigrationTask,
   type CatalogFile,
+  type ProjectStorageObjectificationInventory,
+  type StorageObjectificationDryRun,
+  type StorageObjectificationInventory,
   type StorageMigrationSummary,
   type StorageMigrationTaskDetail,
-  type StorageMigrationTaskListItem
+  type StorageMigrationTaskListItem,
+  type StorageProviderReadiness
 } from '@/modules/data-steward/api/dataSteward';
 import { useAuthStore } from '@/stores/auth';
 
@@ -283,8 +430,12 @@ const loading = ref(false);
 const taskLoading = ref(false);
 const candidateLoading = ref(false);
 const creating = ref(false);
+const dryRunLoading = ref(false);
 const detailVisible = ref(false);
 const summary = ref<StorageMigrationSummary | null>(null);
+const readiness = ref<StorageProviderReadiness | null>(null);
+const inventory = ref<StorageObjectificationInventory | null>(null);
+const dryRunResult = ref<StorageObjectificationDryRun | null>(null);
 const tasks = ref<StorageMigrationTaskListItem[]>([]);
 const selectedTask = ref<StorageMigrationTaskDetail | null>(null);
 const candidateRows = ref<CatalogFile[]>([]);
@@ -298,6 +449,14 @@ const createForm = reactive({
 const candidateFilters = reactive({
   keyword: '',
   fileKind: ''
+});
+
+const dryRunForm = reactive({
+  directoryPath: '',
+  storageState: 'NAS_ONLY',
+  checksumState: 'ANY',
+  extensionsText: '',
+  limit: 200
 });
 
 const targetProviderOptions = [
@@ -327,6 +486,15 @@ const objectStoredPercent = computed(() => {
   const total = Number(summary.value?.totalFileCount ?? 0);
   if (!total) return 0;
   return Math.round((Number(summary.value?.objectStoredCount ?? 0) / total) * 100);
+});
+
+const inventoryRows = computed<ProjectStorageObjectificationInventory[]>(() => {
+  const rows = inventory.value?.projects ?? [];
+  if (projectId.value) {
+    const current = rows.find((row) => Number(row.projectId) === Number(projectId.value));
+    return current ? [current, ...rows.filter((row) => Number(row.projectId) !== Number(projectId.value)).slice(0, 5)] : rows.slice(0, 6);
+  }
+  return rows.slice(0, 8);
 });
 
 const enabledServices: Array<{ title: string; description: string; target: RouteRecordName }> = [
@@ -367,10 +535,18 @@ async function refresh() {
   if (!projectId.value) return;
   loading.value = true;
   try {
-    await Promise.all([loadSummary(), loadTasks(), loadCandidates()]);
+    await Promise.all([loadReadiness(), loadInventory(), loadSummary(), loadTasks(), loadCandidates()]);
   } finally {
     loading.value = false;
   }
+}
+
+async function loadReadiness() {
+  readiness.value = await fetchStorageProviderReadiness();
+}
+
+async function loadInventory() {
+  inventory.value = await fetchStorageObjectificationInventory();
 }
 
 async function loadSummary() {
@@ -440,6 +616,23 @@ async function createTask() {
   }
 }
 
+async function runDryRun() {
+  if (!projectId.value) return;
+  dryRunLoading.value = true;
+  try {
+    dryRunResult.value = await dryRunStorageObjectificationPlan(projectId.value, {
+      directoryPath: dryRunForm.directoryPath || undefined,
+      storageState: dryRunForm.storageState as 'ANY' | 'NAS_ONLY' | 'MIGRATION_FAILED',
+      checksumState: dryRunForm.checksumState as 'ANY' | 'HAS_CHECKSUM' | 'MISSING_CHECKSUM',
+      extensions: parseExtensions(dryRunForm.extensionsText),
+      limit: dryRunForm.limit
+    });
+    ElMessage.success('dry-run 计划已生成，未启动真实迁移');
+  } finally {
+    dryRunLoading.value = false;
+  }
+}
+
 async function openTask(row: StorageMigrationTaskListItem) {
   selectedTask.value = await fetchStorageMigrationTask(row.taskId);
   detailVisible.value = true;
@@ -484,6 +677,55 @@ function parseFileIds(value: string) {
     .split(/[\s,，;；]+/)
     .map((item) => Number(item.trim()))
     .filter((item) => Number.isFinite(item) && item > 0)));
+}
+
+function parseExtensions(value: string) {
+  if (!value.trim()) return undefined;
+  const items = Array.from(new Set(value
+    .split(/[\s,，;；]+/)
+    .map((item) => item.trim().replace(/^\./, '').toLowerCase())
+    .filter(Boolean)));
+  return items.length ? items : undefined;
+}
+
+function endpointTypeLabel(value: string | null | undefined) {
+  return ({
+    NAS_SIDE_MINIO: 'NAS 侧 MinIO',
+    LOCAL_DEV_MINIO: '本机开发 MinIO',
+    UNKNOWN: '待确认 endpoint'
+  } as Record<string, string>)[value || ''] ?? value ?? '读取中';
+}
+
+function readinessStatusLabel(value: string | null | undefined) {
+  return ({
+    READY: '已就绪',
+    NOT_CONFIGURED: '未配置',
+    UNREACHABLE: '不可达',
+    LOCAL_DEV_ONLY: '仅本机开发',
+    WRITE_UNAVAILABLE: '写入不可用'
+  } as Record<string, string>)[value || ''] ?? value ?? '读取中';
+}
+
+function readinessTagType(value: string | null | undefined) {
+  if (value === 'READY') return 'success';
+  if (value === 'LOCAL_DEV_ONLY' || value === 'WRITE_UNAVAILABLE') return 'warning';
+  if (value === 'NOT_CONFIGURED' || value === 'UNREACHABLE') return 'danger';
+  return 'info';
+}
+
+function riskLabel(value: string) {
+  return ({
+    LOW: '低',
+    MEDIUM: '中',
+    HIGH: '高'
+  } as Record<string, string>)[value] ?? value;
+}
+
+function riskTagType(value: string) {
+  if (value === 'LOW') return 'success';
+  if (value === 'MEDIUM') return 'warning';
+  if (value === 'HIGH') return 'danger';
+  return 'info';
 }
 
 function statusType(status: string) {
@@ -540,6 +782,12 @@ function formatBytes(value: number | null | undefined) {
   return `${current >= 10 || index === 0 ? current.toFixed(0) : current.toFixed(1)} ${units[index]}`;
 }
 
+function formatPercent(value: number | null | undefined) {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return '0.00';
+  return numeric.toFixed(2);
+}
+
 function formatDate(value: string | null | undefined) {
   if (!value) return '-';
   return new Date(value).toLocaleString('zh-CN', { hour12: false });
@@ -555,6 +803,36 @@ function formatDate(value: string | null | undefined) {
 .service-tabs,
 .service-section {
   margin-top: 14px;
+}
+
+.m3g-readiness {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(260px, 1.4fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.readiness-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-surface);
+}
+
+.readiness-card strong {
+  color: var(--zy-ink);
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.readiness-card span,
+.readiness-card p {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 13px;
 }
 
 .migration-summary {
@@ -628,6 +906,40 @@ function formatDate(value: string | null | undefined) {
   margin-bottom: 12px;
 }
 
+.dry-run-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 150px 160px minmax(180px, 1fr) 130px;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.dry-run-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.dry-run-summary > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-soft);
+}
+
+.dry-run-summary span {
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.dry-run-summary strong {
+  color: var(--zy-ink);
+  font-size: 20px;
+}
+
 .service-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -695,7 +1007,9 @@ function formatDate(value: string | null | undefined) {
 @media (max-width: 1180px) {
   .migration-summary,
   .service-grid,
-  .disabled-action-grid {
+  .disabled-action-grid,
+  .m3g-readiness,
+  .dry-run-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -708,6 +1022,9 @@ function formatDate(value: string | null | undefined) {
   .migration-summary,
   .migration-create,
   .candidate-toolbar,
+  .m3g-readiness,
+  .dry-run-form,
+  .dry-run-summary,
   .service-grid,
   .disabled-action-grid {
     grid-template-columns: 1fr;

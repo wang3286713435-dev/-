@@ -8,7 +8,7 @@
 
 当前 active 批次：
 
-`M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划`
+`待用户确认`
 
 主线健康度：
 
@@ -23,12 +23,12 @@
 - 9A 客户交付准备不启动。
 - M3A / M3B / M3C-0 / M3C-1 / M3C / M3D / M3E 已收口。
 - M3F 已收口，新增上传文件已优先进入对象存储。
-- NAS 侧 MinIO 接管真实项目文件已进入 M3G-1 准备阶段。
-- 当前探测显示 `192.168.1.181:9000/9001` 尚无 MinIO 响应，因此本批必须先完成 NAS 侧 MinIO 配置和 readiness 识别。
+- M3G-1 已收口，NAS 侧 MinIO readiness、全项目对象化盘点和 dry-run 已可用。
+- 下一步候选为 `M3G-2：历史文件对象化执行与读取链路切换灰度`，需要用户单独确认。
 
 ## 当前最新裁决
 
-当前进入 `M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划`。
+`M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划` 已正式收口。
 
 M3G-1 只做：
 
@@ -44,12 +44,12 @@ M3G-1 不做：
 - 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
 - 不读取文件正文。
 
-M3G-1 当前阻塞 / 前置：
+M3G-1 收口依据：
 
-- `192.168.1.181:9000/9001` 暂无 MinIO 响应。
-- 需要 NAS 侧先部署 MinIO、创建正式 bucket、创建平台 service account，并通过安全方式把 endpoint 与凭据注入平台后端。
-- 配置交接见：
-  - `handoff/main-agent/m3g1-nas-minio-ops-preparation.md`
+- 收口记录：`handoff/main-agent/m3g1-nas-minio-readiness-inventory-closure.md`
+- 开发报告：`handoff/dev-agent/latest-report.md`
+- 测试报告：`handoff/test-agent/latest-report.md`
+- 配置交接：`handoff/main-agent/m3g1-nas-minio-ops-preparation.md`
 
 以下为历史收口记录：
 

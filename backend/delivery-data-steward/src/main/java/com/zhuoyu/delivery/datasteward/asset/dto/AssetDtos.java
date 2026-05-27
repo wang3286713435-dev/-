@@ -1441,6 +1441,103 @@ public final class AssetDtos {
     ) {
     }
 
+    // ===== M3G-1: NAS-side MinIO readiness and objectification planning =====
+
+    public record StorageProviderReadinessResponse(
+        String providerCode,
+        Boolean configured,
+        Boolean reachable,
+        Boolean readable,
+        Boolean writable,
+        String endpointType,
+        String readinessStatus,
+        String message
+    ) {
+    }
+
+    public record StorageObjectificationInventoryResponse(
+        Boolean allProjects,
+        Long projectId,
+        String projectCode,
+        String projectName,
+        Long totalProjects,
+        Long totalFiles,
+        Long totalBytes,
+        Long objectStoredFiles,
+        Long objectStoredBytes,
+        Long nasOnlyFiles,
+        Long migrationPendingFiles,
+        Long migrationFailedFiles,
+        BigDecimal objectificationCoverageRate,
+        List<ProjectStorageObjectificationInventoryResponse> projects
+    ) {
+    }
+
+    public record ProjectStorageObjectificationInventoryResponse(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        Long totalFiles,
+        Long totalBytes,
+        Long objectStoredFiles,
+        Long objectStoredBytes,
+        Long nasOnlyFiles,
+        Long migrationPendingFiles,
+        Long migrationFailedFiles,
+        Long checksumCoveredFiles,
+        BigDecimal checksumCoverageRate,
+        Long modelFiles,
+        Long drawingFiles,
+        Long documentFiles,
+        Long largeFileCount,
+        BigDecimal objectificationCoverageRate,
+        String riskLevel,
+        List<String> riskMessages
+    ) {
+    }
+
+    public record StorageObjectificationPlanDryRunRequest(
+        String directoryPath,
+        List<String> fileKinds,
+        List<String> extensions,
+        Long minSizeBytes,
+        Long maxSizeBytes,
+        String checksumState,
+        String storageState,
+        Integer limit,
+        Long maxTotalBytes
+    ) {
+    }
+
+    public record StorageObjectificationPlanDryRunResponse(
+        Boolean dryRun,
+        Boolean migrationStarted,
+        Long projectId,
+        Long selectedFileCount,
+        Long selectedTotalBytes,
+        Long objectStoredSkipCount,
+        Long missingChecksumCount,
+        Long oversizedCount,
+        Long unreadableRiskCount,
+        Long estimatedBatches,
+        List<String> riskMessages,
+        List<StorageObjectificationPlanSampleItem> sampleItems
+    ) {
+    }
+
+    public record StorageObjectificationPlanSampleItem(
+        Long fileId,
+        String assetUuid,
+        String fileName,
+        String fileKind,
+        String extension,
+        Long sizeBytes,
+        String checksumStatus,
+        String storageStatus,
+        String reason
+    ) {
+    }
+
     public record StorageMigrationTaskRowResponse(
         Long rowId,
         Long fileId,

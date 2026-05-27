@@ -373,6 +373,95 @@ export interface StorageMigrationSummary {
   policyMessage: string;
 }
 
+export interface StorageProviderReadiness {
+  providerCode: string;
+  configured: boolean;
+  reachable: boolean;
+  readable: boolean;
+  writable: boolean;
+  endpointType: 'LOCAL_DEV_MINIO' | 'NAS_SIDE_MINIO' | 'UNKNOWN' | string;
+  readinessStatus: 'READY' | 'NOT_CONFIGURED' | 'UNREACHABLE' | 'LOCAL_DEV_ONLY' | 'WRITE_UNAVAILABLE' | string;
+  message: string;
+}
+
+export interface ProjectStorageObjectificationInventory {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  totalFiles: number;
+  totalBytes: number;
+  objectStoredFiles: number;
+  objectStoredBytes: number;
+  nasOnlyFiles: number;
+  migrationPendingFiles: number;
+  migrationFailedFiles: number;
+  checksumCoveredFiles: number;
+  checksumCoverageRate: number;
+  modelFiles: number;
+  drawingFiles: number;
+  documentFiles: number;
+  largeFileCount: number;
+  objectificationCoverageRate: number;
+  riskLevel: string;
+  riskMessages: string[];
+}
+
+export interface StorageObjectificationInventory {
+  allProjects: boolean;
+  projectId: number | null;
+  projectCode: string | null;
+  projectName: string | null;
+  totalProjects: number;
+  totalFiles: number;
+  totalBytes: number;
+  objectStoredFiles: number;
+  objectStoredBytes: number;
+  nasOnlyFiles: number;
+  migrationPendingFiles: number;
+  migrationFailedFiles: number;
+  objectificationCoverageRate: number;
+  projects: ProjectStorageObjectificationInventory[];
+}
+
+export interface StorageObjectificationDryRunPayload {
+  directoryPath?: string;
+  fileKinds?: string[];
+  extensions?: string[];
+  minSizeBytes?: number;
+  maxSizeBytes?: number;
+  checksumState?: 'ANY' | 'HAS_CHECKSUM' | 'MISSING_CHECKSUM';
+  storageState?: 'ANY' | 'NAS_ONLY' | 'MIGRATION_FAILED';
+  limit?: number;
+  maxTotalBytes?: number;
+}
+
+export interface StorageObjectificationPlanSampleItem {
+  fileId: number;
+  assetUuid: string | null;
+  fileName: string;
+  fileKind: string;
+  extension: string;
+  sizeBytes: number;
+  checksumStatus: string;
+  storageStatus: string;
+  reason: string;
+}
+
+export interface StorageObjectificationDryRun {
+  dryRun: boolean;
+  migrationStarted: boolean;
+  projectId: number;
+  selectedFileCount: number;
+  selectedTotalBytes: number;
+  objectStoredSkipCount: number;
+  missingChecksumCount: number;
+  oversizedCount: number;
+  unreadableRiskCount: number;
+  estimatedBatches: number;
+  riskMessages: string[];
+  sampleItems: StorageObjectificationPlanSampleItem[];
+}
+
 export interface StorageMigrationTaskPayload {
   fileIds: number[];
   targetProvider?: string;
@@ -801,6 +890,32 @@ export async function createFileAccessTicket(fileId: number, action: 'PREVIEW' |
 export async function fetchStorageMigrationSummary(projectId: number) {
   const { data } = await http.get<ApiResponse<StorageMigrationSummary>>(
     `/api/data-steward/projects/${projectId}/storage-migration-summary`
+  );
+  return data.data;
+}
+
+export async function fetchStorageProviderReadiness() {
+  const { data } = await http.get<ApiResponse<StorageProviderReadiness>>(
+    '/api/data-steward/storage-provider-readiness'
+  );
+  return data.data;
+}
+
+export async function fetchStorageObjectificationInventory(projectId?: number) {
+  const url = projectId
+    ? `/api/data-steward/projects/${projectId}/storage-objectification-inventory`
+    : '/api/data-steward/storage-objectification-inventory';
+  const { data } = await http.get<ApiResponse<StorageObjectificationInventory>>(url);
+  return data.data;
+}
+
+export async function dryRunStorageObjectificationPlan(
+  projectId: number,
+  payload: StorageObjectificationDryRunPayload
+) {
+  const { data } = await http.post<ApiResponse<StorageObjectificationDryRun>>(
+    `/api/data-steward/projects/${projectId}/storage-objectification-plans:dry-run`,
+    payload
   );
   return data.data;
 }

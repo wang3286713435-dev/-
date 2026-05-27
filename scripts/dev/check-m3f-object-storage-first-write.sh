@@ -27,6 +27,8 @@ PROJECT_ID=""
 ADMIN_ID=""
 FILE_ID=""
 OBJECT_ROWS=""
+OBJECT_ENDPOINT_TYPE=""
+OBJECT_READINESS_STATUS=""
 MINIO_PAUSED=0
 TMP_DIR="$(mktemp -d /tmp/delivery-m3f.XXXXXX)"
 
@@ -244,6 +246,17 @@ assert_ok "${trial_response}"
 assert_no_forbidden "trial response" "${trial_response}"
 pass "管理员登录、切换项目并开启安全目录写入灰度"
 
+readiness_response="$(get_json "/api/data-steward/storage-provider-readiness")"
+assert_ok "${readiness_response}"
+assert_no_forbidden "storage readiness" "${readiness_response}"
+OBJECT_ENDPOINT_TYPE="$(json_expr "${readiness_response}" "data['data']['endpointType']")"
+OBJECT_READINESS_STATUS="$(json_expr "${readiness_response}" "data['data']['readinessStatus']")"
+if [[ -n "${OBJECT_ENDPOINT_TYPE}" && -n "${OBJECT_READINESS_STATUS}" ]]; then
+  pass "对象存储 readiness 已识别：${OBJECT_ENDPOINT_TYPE}/${OBJECT_READINESS_STATUS}"
+else
+  fail "对象存储 readiness 缺少 endpointType/readinessStatus：${readiness_response}"
+fi
+
 echo ""
 echo "--- 2. Upload file through legacy NAS-compatible endpoint ---"
 upload_response="$(upload_file "${TMP_DIR}/${UPLOAD_FILE_NAME}")"
@@ -311,7 +324,7 @@ fi
 
 echo ""
 echo "--- 4. Object storage unavailable is fail-closed ---"
-if docker ps --format '{{.Names}}' | grep -qx "${MINIO_CONTAINER}"; then
+if [[ "${OBJECT_ENDPOINT_TYPE}" == "LOCAL_DEV_MINIO" ]] && docker ps --format '{{.Names}}' | grep -qx "${MINIO_CONTAINER}"; then
   docker pause "${MINIO_CONTAINER}" >/dev/null
   MINIO_PAUSED=1
   set +e
@@ -331,8 +344,10 @@ if docker ps --format '{{.Names}}' | grep -qx "${MINIO_CONTAINER}"; then
   else
     fail "对象存储不可用时未返回业务化 JSON 响应"
   fi
+elif [[ "${OBJECT_ENDPOINT_TYPE}" == "NAS_SIDE_MINIO" ]]; then
+  pass "NAS 侧 MinIO 环境下不暂停本机容器；已通过 ${OBJECT_ENDPOINT_TYPE}/${OBJECT_READINESS_STATUS} 和对象优先上传链路验证"
 else
-  pass "对象存储不可用场景跳过：未发现 ${MINIO_CONTAINER} 容器"
+  pass "对象存储不可用场景跳过：当前 endpointType=${OBJECT_ENDPOINT_TYPE:-UNKNOWN}，不执行本机容器暂停模拟"
 fi
 
 echo ""

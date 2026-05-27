@@ -764,6 +764,9 @@ public class AssetApplicationService {
         validateFileLifecycle(file);
         PreviewDecision decision = decidePreview(normalizePreviewExt(file.fileExt(), file.fileName()), file.fileKind());
         ActiveObjectVersion activeObject = findActiveObjectVersion(file.fileId());
+        if ("BROWSER_NATIVE_PREVIEW".equals(artifactType(decision))) {
+            activeObject = ensureReadableNativePreviewObject(file, activeObject, userId);
+        }
         PreparedPreviewArtifact prepared = preparePreviewArtifactRecord(file, decision, activeObject, userId);
         auditLogApplicationService.record(file.projectId(), MODULE_CODE, "asset.file.preview_artifact.prepare",
             "FILE_RESOURCE", String.valueOf(file.fileId()), userId,
@@ -944,6 +947,132 @@ public class AssetApplicationService {
             previewStatus, storageState, null, userId);
         return new PreparedPreviewArtifact(artifactType, previewStatus, generationStatus, storageState,
             null, null, null, previewArtifactMessage(artifactType, previewStatus, storageState, generationStatus, decision));
+    }
+
+    private ActiveObjectVersion ensureReadableNativePreviewObject(
+        FileAssetResponse file,
+        ActiveObjectVersion activeObject,
+        Long userId
+    ) {
+        if (activeObject != null) {
+            try {
+                storageService.ensureReadable(file);
+                return activeObject;
+            } catch (BusinessException exception) {
+                if (!"ASSET_FILE_NOT_READABLE".equals(exception.getCode())) {
+                    throw exception;
+                }
+            }
+        }
+        StorageService.ObjectMirrorResult mirror = storageService.mirrorNasFileToObject(file, "MINIO");
+        Long objectId = upsertStorageObject(mirror, userId);
+        upsertFileObjectVersion(file, objectId, mirror, userId);
+        updateFileChecksum(file.fileId(), mirror.checksum(), userId);
+        auditLogApplicationService.record(file.projectId(), MODULE_CODE, "asset.file.preview_artifact.object_repaired",
+            "FILE_RESOURCE", String.valueOf(file.fileId()), userId,
+            Map.of("fileId", file.fileId(), "reason", activeObject == null ? "NO_ACTIVE_OBJECT" : "ACTIVE_OBJECT_NOT_READABLE"));
+        ActiveObjectVersion repaired = findActiveObjectVersion(file.fileId());
+        if (repaired == null) {
+            throw new BusinessException("ASSET_PREVIEW_OBJECT_REPAIR_FAILED",
+                "预览对象化准备失败，请检查受控文件状态", HttpStatus.PRECONDITION_FAILED);
+        }
+        return repaired;
+    }
+
+    private Long upsertStorageObject(StorageService.ObjectMirrorResult mirror, Long userId) {
+        jdbcTemplate.update("""
+            INSERT INTO data_storage_objects (
+                provider, bucket, object_key, etag, checksum, content_type, size_bytes,
+                source_provider, source_uri_digest, source_path_digest,
+                storage_state, migration_status, last_verified_at, created_by, updated_by
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?,
+                'OBJECT_STORED', 'COMPLETED', ?, ?, ?
+            )
+            ON DUPLICATE KEY UPDATE
+                etag = VALUES(etag),
+                checksum = VALUES(checksum),
+                content_type = VALUES(content_type),
+                size_bytes = VALUES(size_bytes),
+                source_provider = VALUES(source_provider),
+                source_uri_digest = VALUES(source_uri_digest),
+                source_path_digest = VALUES(source_path_digest),
+                storage_state = 'OBJECT_STORED',
+                migration_status = 'COMPLETED',
+                last_verified_at = VALUES(last_verified_at),
+                updated_by = VALUES(updated_by),
+                deleted = 0,
+                delete_token = 0
+            """,
+            mirror.provider(), mirror.bucket(), mirror.objectKey(), mirror.etag(), mirror.checksum(),
+            mirror.contentType(), mirror.sizeBytes(), mirror.sourceProvider(), mirror.sourceUriDigest(),
+            mirror.sourcePathDigest(), timestamp(mirror.verifiedAt()), userId, userId);
+        List<Long> rows = jdbcTemplate.query("""
+            SELECT id
+            FROM data_storage_objects
+            WHERE provider = ?
+              AND bucket = ?
+              AND object_key = ?
+              AND deleted = 0
+            ORDER BY id DESC
+            LIMIT 1
+            """, (rs, rowNum) -> rs.getLong("id"), mirror.provider(), mirror.bucket(), mirror.objectKey());
+        if (rows.isEmpty()) {
+            throw new BusinessException("ASSET_PREVIEW_OBJECT_RECORD_FAILED",
+                "预览对象存储记录写入失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        return rows.getFirst();
+    }
+
+    private void upsertFileObjectVersion(
+        FileAssetResponse file,
+        Long objectId,
+        StorageService.ObjectMirrorResult mirror,
+        Long userId
+    ) {
+        Integer existing = jdbcTemplate.queryForObject("""
+            SELECT COUNT(1)
+            FROM data_file_object_versions
+            WHERE file_id = ?
+              AND storage_object_id = ?
+              AND active = 1
+              AND deleted = 0
+            """, Integer.class, file.fileId(), objectId);
+        if (existing != null && existing > 0) {
+            return;
+        }
+        jdbcTemplate.update("""
+            UPDATE data_file_object_versions
+            SET active = 0,
+                updated_by = ?
+            WHERE file_id = ?
+              AND active = 1
+              AND deleted = 0
+            """, userId, file.fileId());
+        jdbcTemplate.update("""
+            INSERT INTO data_file_object_versions (
+                file_id, storage_object_id, version_no, active,
+                storage_state, migration_status, checksum, content_type, size_bytes,
+                last_verified_at, created_by, updated_by
+            ) VALUES (
+                ?, ?, ?, 1,
+                'OBJECT_STORED', 'COMPLETED', ?, ?, ?,
+                ?, ?, ?
+            )
+            """, file.fileId(), objectId, file.versionNo(), mirror.checksum(), mirror.contentType(),
+            mirror.sizeBytes(), timestamp(mirror.verifiedAt()), userId, userId);
+    }
+
+    private void updateFileChecksum(Long fileId, String checksum, Long userId) {
+        jdbcTemplate.update("""
+            UPDATE data_file_resources
+            SET checksum = COALESCE(checksum, ?),
+                last_verified_at = CURRENT_TIMESTAMP,
+                updated_by = ?
+            WHERE id = ?
+              AND deleted = 0
+            """, checksum, userId, fileId);
     }
 
     private Long upsertPreviewDerivative(
