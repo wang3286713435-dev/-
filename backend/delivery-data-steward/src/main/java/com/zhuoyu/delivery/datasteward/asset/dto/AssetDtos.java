@@ -1477,11 +1477,17 @@ public final class AssetDtos {
         Long projectId,
         String projectCode,
         String projectName,
+        String projectStage,
+        String assetSource,
+        String projectCategory,
+        Boolean realNasProject,
         Long totalFiles,
         Long totalBytes,
         Long objectStoredFiles,
         Long objectStoredBytes,
         Long nasOnlyFiles,
+        Long nasOnlyBytes,
+        Long estimatedObjectificationBytes,
         Long migrationPendingFiles,
         Long migrationFailedFiles,
         Long checksumCoveredFiles,
@@ -1490,9 +1496,19 @@ public final class AssetDtos {
         Long drawingFiles,
         Long documentFiles,
         Long largeFileCount,
+        Long unreadablePathFiles,
         BigDecimal objectificationCoverageRate,
         String riskLevel,
-        List<String> riskMessages
+        List<String> riskMessages,
+        List<StorageObjectificationDistributionItem> fileKindDistribution,
+        List<StorageObjectificationDistributionItem> extensionDistribution
+    ) {
+    }
+
+    public record StorageObjectificationDistributionItem(
+        String code,
+        Long fileCount,
+        Long totalBytes
     ) {
     }
 
@@ -1513,6 +1529,69 @@ public final class AssetDtos {
         Boolean dryRun,
         Boolean migrationStarted,
         Long projectId,
+        Long selectedFileCount,
+        Long selectedTotalBytes,
+        Long objectStoredSkipCount,
+        Long missingChecksumCount,
+        Long oversizedCount,
+        Long unreadableRiskCount,
+        Long estimatedBatches,
+        List<String> riskMessages,
+        List<StorageObjectificationPlanSampleItem> sampleItems
+    ) {
+    }
+
+    public record MultiProjectStorageObjectificationPlanDryRunRequest(
+        List<Long> projectIds,
+        Boolean realProjectsOnly,
+        String directoryPath,
+        List<String> fileKinds,
+        List<String> extensions,
+        Long minSizeBytes,
+        Long maxSizeBytes,
+        String checksumState,
+        String storageState,
+        Integer limit,
+        Long maxTotalBytes,
+        Integer maxFilesPerProject,
+        Long maxBytesPerProject,
+        Integer concurrencyLimit,
+        Long rateLimitBytesPerMinute
+    ) {
+    }
+
+    public record MultiProjectStorageObjectificationPlanDryRunResponse(
+        Boolean dryRun,
+        Boolean migrationStarted,
+        String taskSource,
+        Integer requestedProjectCount,
+        Integer plannedProjectCount,
+        Long selectedFileCount,
+        Long selectedTotalBytes,
+        Long objectStoredSkipCount,
+        Long missingChecksumCount,
+        Long oversizedCount,
+        Long unreadableRiskCount,
+        Long estimatedBatches,
+        Integer maxFilesPerTask,
+        Long maxFileSizeBytes,
+        Long maxTotalBytes,
+        Integer maxFilesPerProject,
+        Long maxBytesPerProject,
+        Integer concurrencyLimit,
+        Long rateLimitBytesPerMinute,
+        List<String> riskMessages,
+        List<MultiProjectStorageObjectificationPlanProject> projects
+    ) {
+    }
+
+    public record MultiProjectStorageObjectificationPlanProject(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        String assetSource,
+        String projectCategory,
+        Boolean realNasProject,
         Long selectedFileCount,
         Long selectedTotalBytes,
         Long objectStoredSkipCount,

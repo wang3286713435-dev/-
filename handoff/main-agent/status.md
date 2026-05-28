@@ -2086,6 +2086,30 @@
   - `handoff/dev-agent/current-prompt.md`
   - `handoff/test-agent/current-prompt.md`
 
+## 2026-05-28 M3G-3 正式收口：多真实项目分批对象化策略与任务中心增强
+
+- 测试 agent 已完成 `M3G-3：多真实项目分批对象化策略与任务中心增强` 正式验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- P2：
+  - 既有 Vite chunk size warning。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪项继续排除。
+- 已确认：
+  - readiness 为 `NAS_SIDE_MINIO / READY`。
+  - 全项目对象化盘点可查，并能区分真实项目与测试 / 样例项目。
+  - 多项目 dry-run 可生成按项目分组的计划。
+  - dry-run 支持项目范围、真实项目过滤、总量、单项目、并发和限速策略字段。
+  - dry-run 未创建迁移任务、未复制文件、未触碰真实 NAS 原文件。
+  - M3G-1 / M3E / M3F / M3C / file-access 回归通过。
+  - 未新增 Hermes 正文问答、documents / chunks、Qdrant、OpenSearch、parser、BIM 引擎或文件正文读取。
+- 主 agent 裁决：
+  - `M3G-3：多真实项目分批对象化策略与任务中心增强` 正式收口。
+  - 当前 active 批次：`待用户确认`。
+- 下一步候选：
+  - `M3G-4：受控多项目小批对象化执行`。
+  - 或先启动 `M4A：documents / chunks 语义证据契约`。
+
 ## 跨机器交接入口
 
 ## 2026-05-26 M3E 启动

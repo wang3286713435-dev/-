@@ -4,7 +4,11 @@ import com.zhuoyu.delivery.core.audit.application.AuditLogApplicationService;
 import com.zhuoyu.delivery.datasteward.asset.application.AssetApplicationService;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileAssetResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileStorageStatusResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageObjectificationPlanDryRunRequest;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageObjectificationPlanDryRunResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageObjectificationPlanProject;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ProjectStorageObjectificationInventoryResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationDistributionItem;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationInventoryResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationPlanDryRunRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationPlanDryRunResponse;
@@ -21,6 +25,8 @@ import java.math.RoundingMode;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -196,18 +202,25 @@ public class StorageMigrationApplicationService {
                 p.id AS project_id,
                 p.code AS project_code,
                 p.name AS project_name,
+                p.project_stage,
+                p.asset_source,
                 COUNT(f.id) AS total_files,
                 COALESCE(SUM(COALESCE(f.size_bytes, 0)), 0) AS total_bytes,
                 COALESCE(SUM(CASE WHEN obj.file_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS object_stored_files,
                 COALESCE(SUM(CASE WHEN obj.file_id IS NOT NULL THEN COALESCE(obj.size_bytes, f.size_bytes, 0) ELSE 0 END), 0) AS object_stored_bytes,
                 COALESCE(SUM(CASE WHEN f.id IS NOT NULL AND obj.file_id IS NULL THEN 1 ELSE 0 END), 0) AS nas_only_files,
+                COALESCE(SUM(CASE WHEN f.id IS NOT NULL AND obj.file_id IS NULL THEN COALESCE(f.size_bytes, 0) ELSE 0 END), 0) AS nas_only_bytes,
                 COALESCE(SUM(CASE WHEN f.id IS NOT NULL AND obj.file_id IS NULL AND mig.pending = 1 THEN 1 ELSE 0 END), 0) AS migration_pending_files,
                 COALESCE(SUM(CASE WHEN f.id IS NOT NULL AND obj.file_id IS NULL AND mig.failed = 1 THEN 1 ELSE 0 END), 0) AS migration_failed_files,
                 COALESCE(SUM(CASE WHEN f.checksum IS NOT NULL AND f.checksum <> '' THEN 1 ELSE 0 END), 0) AS checksum_covered_files,
                 COALESCE(SUM(CASE WHEN f.file_kind = 'MODEL' THEN 1 ELSE 0 END), 0) AS model_files,
                 COALESCE(SUM(CASE WHEN f.file_kind = 'DRAWING' THEN 1 ELSE 0 END), 0) AS drawing_files,
                 COALESCE(SUM(CASE WHEN f.file_kind = 'DOCUMENT' THEN 1 ELSE 0 END), 0) AS document_files,
-                COALESCE(SUM(CASE WHEN COALESCE(f.size_bytes, 0) >= :largeFileBytes THEN 1 ELSE 0 END), 0) AS large_file_count
+                COALESCE(SUM(CASE WHEN COALESCE(f.size_bytes, 0) >= :largeFileBytes THEN 1 ELSE 0 END), 0) AS large_file_count,
+                COALESCE(SUM(CASE WHEN f.id IS NOT NULL AND obj.file_id IS NULL
+                    AND (f.storage_uri IS NULL OR f.storage_uri = ''
+                         OR (UPPER(COALESCE(f.storage_provider, '')) NOT IN ('NAS', 'METADATA') AND f.storage_uri NOT LIKE 'nas://%' AND f.storage_uri NOT LIKE '/%'))
+                    THEN 1 ELSE 0 END), 0) AS unreadable_path_files
             FROM core_projects p
             JOIN (
                 SELECT DISTINCT project_id
@@ -234,7 +247,7 @@ public class StorageMigrationApplicationService {
             ) mig ON mig.file_id = f.id
             WHERE p.deleted = 0
             """ + projectFilter + """
-            GROUP BY p.id, p.code, p.name
+            GROUP BY p.id, p.code, p.name, p.project_stage, p.asset_source
             ORDER BY total_files DESC, p.id DESC
             """, params.addValue("largeFileBytes", LARGE_FILE_RISK_BYTES), (rs, rowNum) -> {
             long totalFiles = rs.getLong("total_files");
@@ -242,6 +255,7 @@ public class StorageMigrationApplicationService {
             long checksumCoveredFiles = rs.getLong("checksum_covered_files");
             long largeFileCount = rs.getLong("large_file_count");
             long failedFiles = rs.getLong("migration_failed_files");
+            long unreadablePathFiles = rs.getLong("unreadable_path_files");
             BigDecimal objectCoverage = percentage(objectStoredFiles, totalFiles);
             BigDecimal checksumCoverage = percentage(checksumCoveredFiles, totalFiles);
             List<String> riskMessages = inventoryRiskMessages(
@@ -249,17 +263,26 @@ public class StorageMigrationApplicationService {
                 objectCoverage,
                 checksumCoverage,
                 largeFileCount,
-                failedFiles
+                failedFiles,
+                unreadablePathFiles
             );
+            String assetSource = rs.getString("asset_source");
+            String projectCategory = projectCategory(assetSource, rs.getString("project_code"), rs.getString("project_stage"));
             return new ProjectStorageObjectificationInventoryResponse(
                 rs.getLong("project_id"),
                 rs.getString("project_code"),
                 rs.getString("project_name"),
+                rs.getString("project_stage"),
+                assetSource,
+                projectCategory,
+                Boolean.valueOf("REAL_NAS".equals(projectCategory)),
                 totalFiles,
                 rs.getLong("total_bytes"),
                 objectStoredFiles,
                 rs.getLong("object_stored_bytes"),
                 rs.getLong("nas_only_files"),
+                rs.getLong("nas_only_bytes"),
+                rs.getLong("nas_only_bytes"),
                 rs.getLong("migration_pending_files"),
                 failedFiles,
                 checksumCoveredFiles,
@@ -268,11 +291,25 @@ public class StorageMigrationApplicationService {
                 rs.getLong("drawing_files"),
                 rs.getLong("document_files"),
                 largeFileCount,
+                unreadablePathFiles,
                 objectCoverage,
-                riskLevel(totalFiles, objectCoverage, checksumCoverage, largeFileCount, failedFiles),
-                riskMessages
+                riskLevel(totalFiles, objectCoverage, checksumCoverage, largeFileCount, failedFiles, unreadablePathFiles),
+                riskMessages,
+                List.of(),
+                List.of()
             );
         });
+        if (!projects.isEmpty()) {
+            List<Long> projectIds = projects.stream().map(ProjectStorageObjectificationInventoryResponse::projectId).toList();
+            Map<Long, List<StorageObjectificationDistributionItem>> fileKindDistributions =
+                distributionBy(projectIds, "file_kind");
+            Map<Long, List<StorageObjectificationDistributionItem>> extensionDistributions =
+                distributionBy(projectIds, "LOWER(SUBSTRING_INDEX(original_name, '.', -1))");
+            projects = projects.stream()
+                .map(row -> withDistributions(row, fileKindDistributions.get(row.projectId()),
+                    extensionDistributions.get(row.projectId())))
+                .toList();
+        }
         long totalProjects = projects.size();
         long totalFiles = projects.stream().mapToLong(ProjectStorageObjectificationInventoryResponse::totalFiles).sum();
         long totalBytes = projects.stream().mapToLong(ProjectStorageObjectificationInventoryResponse::totalBytes).sum();
@@ -476,6 +513,247 @@ public class StorageMigrationApplicationService {
             estimatedBatches,
             riskMessages,
             sampleItems
+        );
+    }
+
+    public MultiProjectStorageObjectificationPlanDryRunResponse dryRunMultiProjectObjectificationPlan(
+        Long userId,
+        MultiProjectStorageObjectificationPlanDryRunRequest request
+    ) {
+        ensureAnyProjectAccess(userId);
+        DryRunFilters filters = normalizeDryRunFilters(new StorageObjectificationPlanDryRunRequest(
+            request == null ? null : request.directoryPath(),
+            request == null ? null : request.fileKinds(),
+            request == null ? null : request.extensions(),
+            request == null ? null : request.minSizeBytes(),
+            request == null ? null : request.maxSizeBytes(),
+            request == null ? null : request.checksumState(),
+            request == null ? null : request.storageState(),
+            request == null ? null : request.limit(),
+            request == null ? null : request.maxTotalBytes()
+        ));
+        List<Long> scopedProjectIds = accessibleProjectIds(userId, request == null ? null : request.projectIds(),
+            Boolean.TRUE.equals(request == null ? null : request.realProjectsOnly()));
+        if (scopedProjectIds.isEmpty()) {
+            throw new BusinessException("STORAGE_MULTI_PLAN_PROJECTS_REQUIRED",
+                "没有可规划的项目范围", HttpStatus.BAD_REQUEST);
+        }
+        int maxFilesPerProject = normalizePositiveInt(request == null ? null : request.maxFilesPerProject(),
+            DEFAULT_MAX_FILES, MAX_DRY_RUN_LIMIT, "STORAGE_MULTI_PLAN_PROJECT_FILE_LIMIT_INVALID");
+        long maxBytesPerProject = normalizePositiveLong(request == null ? null : request.maxBytesPerProject(),
+            Long.MAX_VALUE, "STORAGE_MULTI_PLAN_PROJECT_BYTES_LIMIT_INVALID");
+        int concurrencyLimit = normalizePositiveInt(request == null ? null : request.concurrencyLimit(),
+            1, 8, "STORAGE_MULTI_PLAN_CONCURRENCY_INVALID");
+        Long rateLimitBytesPerMinute = request == null ? null : request.rateLimitBytesPerMinute();
+        if (rateLimitBytesPerMinute != null && rateLimitBytesPerMinute < 0) {
+            throw new BusinessException("STORAGE_MULTI_PLAN_RATE_LIMIT_INVALID",
+                "速率限制不能小于 0", HttpStatus.BAD_REQUEST);
+        }
+
+        MapSqlParameterSource params = new MapSqlParameterSource()
+            .addValue("projectIds", scopedProjectIds)
+            .addValue("limit", Math.min(filters.limit(), MAX_DRY_RUN_LIMIT));
+        StringBuilder where = new StringBuilder("""
+            WHERE f.project_id IN (:projectIds)
+              AND f.deleted = 0
+              AND p.deleted = 0
+            """);
+        appendDryRunFilters(where, params, filters);
+        List<MultiProjectDryRunCandidate> rows = jdbcTemplate.query("""
+            SELECT
+                p.id AS project_id,
+                p.code AS project_code,
+                p.name AS project_name,
+                p.asset_source,
+                p.project_stage,
+                f.id AS file_id,
+                f.asset_uuid,
+                f.original_name,
+                f.file_kind,
+                LOWER(SUBSTRING_INDEX(f.original_name, '.', -1)) AS extension,
+                COALESCE(f.size_bytes, 0) AS size_bytes,
+                f.checksum,
+                f.storage_provider,
+                CASE WHEN f.storage_uri IS NULL OR f.storage_uri = '' THEN 1 ELSE 0 END AS storage_reference_missing,
+                CASE WHEN obj.file_id IS NOT NULL THEN 1 ELSE 0 END AS object_stored,
+                COALESCE(mig.pending, 0) AS migration_pending,
+                COALESCE(mig.failed, 0) AS migration_failed
+            FROM core_projects p
+            JOIN (
+                SELECT DISTINCT project_id
+                FROM core_user_project_roles
+                WHERE user_id = :userId
+                  AND deleted = 0
+            ) upr ON upr.project_id = p.id
+            JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0
+            LEFT JOIN (
+                SELECT DISTINCT file_id
+                FROM data_file_object_versions
+                WHERE active = 1
+                  AND deleted = 0
+                  AND storage_state = 'OBJECT_STORED'
+            ) obj ON obj.file_id = f.id
+            LEFT JOIN (
+                SELECT file_id,
+                       MAX(CASE WHEN migration_status IN ('PENDING', 'RUNNING') THEN 1 ELSE 0 END) AS pending,
+                       MAX(CASE WHEN migration_status = 'FAILED' THEN 1 ELSE 0 END) AS failed
+                FROM data_object_migration_tasks
+                WHERE deleted = 0
+                GROUP BY file_id
+            ) mig ON mig.file_id = f.id
+            """ + where + "\n" + """
+            ORDER BY p.id, f.id
+            LIMIT :limit
+            """, params.addValue("userId", userId), (rs, rowNum) -> {
+            String assetSource = rs.getString("asset_source");
+            String category = projectCategory(assetSource, rs.getString("project_code"), rs.getString("project_stage"));
+            return new MultiProjectDryRunCandidate(
+                rs.getLong("project_id"),
+                rs.getString("project_code"),
+                rs.getString("project_name"),
+                assetSource,
+                category,
+                "REAL_NAS".equals(category),
+                rs.getLong("file_id"),
+                rs.getString("asset_uuid"),
+                rs.getString("original_name"),
+                rs.getString("file_kind"),
+                normalizeExtension(rs.getString("extension")),
+                rs.getLong("size_bytes"),
+                rs.getString("checksum"),
+                rs.getString("storage_provider"),
+                rs.getInt("storage_reference_missing") == 1,
+                rs.getInt("object_stored") == 1,
+                rs.getInt("migration_pending") == 1,
+                rs.getInt("migration_failed") == 1
+            );
+        });
+
+        LinkedHashMap<Long, MultiProjectPlanAccumulator> projectPlans = new LinkedHashMap<>();
+        long selectedFileCount = 0L;
+        long selectedTotalBytes = 0L;
+        long objectStoredSkipCount = 0L;
+        long missingChecksumCount = 0L;
+        long oversizedCount = 0L;
+        long unreadableRiskCount = 0L;
+        boolean totalFileCapped = false;
+        boolean totalBytesCapped = false;
+        boolean projectFileCapped = false;
+        boolean projectBytesCapped = false;
+
+        for (MultiProjectDryRunCandidate row : rows) {
+            MultiProjectPlanAccumulator project = projectPlans.computeIfAbsent(row.projectId(),
+                ignored -> new MultiProjectPlanAccumulator(row));
+            String storageStatus = storageStatus(row);
+            boolean missingChecksum = !hasText(row.checksum());
+            boolean oversized = row.sizeBytes() >= LARGE_FILE_RISK_BYTES;
+            boolean unreadableRisk = unreadableRisk(row);
+            if (row.objectStored()) {
+                objectStoredSkipCount++;
+                project.objectStoredSkipCount++;
+            }
+            if (missingChecksum && !row.objectStored()) {
+                missingChecksumCount++;
+                project.missingChecksumCount++;
+            }
+            if (oversized && !row.objectStored()) {
+                oversizedCount++;
+                project.oversizedCount++;
+            }
+            if (unreadableRisk && !row.objectStored()) {
+                unreadableRiskCount++;
+                project.unreadableRiskCount++;
+            }
+            String reason = dryRunReason(row, missingChecksum, oversized, unreadableRisk);
+            boolean eligible = !row.objectStored() && !unreadableRisk;
+            if (eligible && selectedFileCount >= filters.limit()) {
+                eligible = false;
+                totalFileCapped = true;
+                reason = "TOTAL_FILE_LIMIT_EXCEEDED";
+            }
+            if (eligible && filters.maxTotalBytes() != null
+                && selectedTotalBytes + row.sizeBytes() > filters.maxTotalBytes()) {
+                eligible = false;
+                totalBytesCapped = true;
+                reason = "TOTAL_BYTES_CAP_EXCEEDED";
+            }
+            if (eligible && project.selectedFileCount >= maxFilesPerProject) {
+                eligible = false;
+                projectFileCapped = true;
+                reason = "PROJECT_FILE_LIMIT_EXCEEDED";
+            }
+            if (eligible && project.selectedTotalBytes + row.sizeBytes() > maxBytesPerProject) {
+                eligible = false;
+                projectBytesCapped = true;
+                reason = "PROJECT_BYTES_CAP_EXCEEDED";
+            }
+            if (eligible) {
+                selectedFileCount++;
+                selectedTotalBytes += row.sizeBytes();
+                project.selectedFileCount++;
+                project.selectedTotalBytes += row.sizeBytes();
+            }
+            if (project.sampleItems.size() < 20) {
+                project.sampleItems.add(new StorageObjectificationPlanSampleItem(
+                    row.fileId(),
+                    row.assetUuid(),
+                    row.fileName(),
+                    row.fileKind(),
+                    row.extension(),
+                    row.sizeBytes(),
+                    missingChecksum ? "MISSING_CHECKSUM" : "HAS_CHECKSUM",
+                    storageStatus,
+                    reason
+                ));
+            }
+        }
+
+        List<String> riskMessages = new ArrayList<>();
+        riskMessages.add("多项目 dry-run 仅生成计划，不复制文件、不修改 NAS、不创建迁移任务。");
+        if (totalFileCapped) {
+            riskMessages.add("已按总文件数上限截断计划。");
+        }
+        if (totalBytesCapped) {
+            riskMessages.add("已按总容量上限截断计划。");
+        }
+        if (projectFileCapped) {
+            riskMessages.add("部分项目已按单项目文件数上限截断。");
+        }
+        if (projectBytesCapped) {
+            riskMessages.add("部分项目已按单项目容量上限截断。");
+        }
+        if (unreadableRiskCount > 0) {
+            riskMessages.add("存在缺少受控存储引用或非 NAS 源链路的风险文件。");
+        }
+        if (riskMessages.size() == 1) {
+            riskMessages.add("当前多项目计划未发现阻塞级风险。");
+        }
+
+        List<MultiProjectStorageObjectificationPlanProject> projectResponses = projectPlans.values().stream()
+            .map(MultiProjectPlanAccumulator::toResponse)
+            .toList();
+        return new MultiProjectStorageObjectificationPlanDryRunResponse(
+            true,
+            false,
+            "MULTI_PROJECT_DRY_RUN",
+            scopedProjectIds.size(),
+            projectResponses.size(),
+            selectedFileCount,
+            selectedTotalBytes,
+            objectStoredSkipCount,
+            missingChecksumCount,
+            oversizedCount,
+            unreadableRiskCount,
+            selectedFileCount == 0 ? 0 : (long) Math.ceil(selectedFileCount / (double) DEFAULT_MAX_FILES),
+            DEFAULT_MAX_FILES,
+            DEFAULT_MAX_FILE_SIZE_BYTES,
+            filters.maxTotalBytes(),
+            maxFilesPerProject,
+            maxBytesPerProject == Long.MAX_VALUE ? null : maxBytesPerProject,
+            concurrencyLimit,
+            rateLimitBytesPerMinute,
+            riskMessages,
+            projectResponses
         );
     }
 
@@ -1085,12 +1363,13 @@ public class StorageMigrationApplicationService {
         BigDecimal objectCoverage,
         BigDecimal checksumCoverage,
         long largeFileCount,
-        long failedFiles
+        long failedFiles,
+        long unreadablePathFiles
     ) {
         if (totalFiles == 0) {
             return "LOW";
         }
-        if (failedFiles > 0 || largeFileCount > 0
+        if (failedFiles > 0 || largeFileCount > 0 || unreadablePathFiles > 0
             || objectCoverage.compareTo(BigDecimal.valueOf(20)) < 0
             || checksumCoverage.compareTo(BigDecimal.valueOf(60)) < 0) {
             return "HIGH";
@@ -1107,7 +1386,8 @@ public class StorageMigrationApplicationService {
         BigDecimal objectCoverage,
         BigDecimal checksumCoverage,
         long largeFileCount,
-        long failedFiles
+        long failedFiles,
+        long unreadablePathFiles
     ) {
         List<String> messages = new ArrayList<>();
         if (totalFiles == 0) {
@@ -1126,13 +1406,215 @@ public class StorageMigrationApplicationService {
         if (failedFiles > 0) {
             messages.add("存在历史迁移失败记录，需先查看失败原因。");
         }
+        if (unreadablePathFiles > 0) {
+            messages.add("存在缺少受控存储引用或非 NAS 源链路的文件，需人工核查。");
+        }
         if (messages.isEmpty()) {
             messages.add("当前未发现阻塞级风险。");
         }
         return messages;
     }
 
+    private void appendDryRunFilters(StringBuilder where, MapSqlParameterSource params, DryRunFilters filters) {
+        if (filters.directoryPath() != null) {
+            where.append("\n AND (f.logical_path = :directoryPath OR f.logical_path LIKE :directoryPrefix)");
+            params.addValue("directoryPath", filters.directoryPath());
+            params.addValue("directoryPrefix", filters.directoryPath() + "/%");
+        }
+        if (!filters.fileKinds().isEmpty()) {
+            where.append("\n AND f.file_kind IN (:fileKinds)");
+            params.addValue("fileKinds", filters.fileKinds());
+        }
+        if (!filters.extensions().isEmpty()) {
+            where.append("\n AND LOWER(SUBSTRING_INDEX(f.original_name, '.', -1)) IN (:extensions)");
+            params.addValue("extensions", filters.extensions());
+        }
+        if (filters.minSizeBytes() != null) {
+            where.append("\n AND COALESCE(f.size_bytes, 0) >= :minSizeBytes");
+            params.addValue("minSizeBytes", filters.minSizeBytes());
+        }
+        if (filters.maxSizeBytes() != null) {
+            where.append("\n AND COALESCE(f.size_bytes, 0) <= :maxSizeBytes");
+            params.addValue("maxSizeBytes", filters.maxSizeBytes());
+        }
+        if ("HAS_CHECKSUM".equals(filters.checksumState())) {
+            where.append("\n AND f.checksum IS NOT NULL AND f.checksum <> ''");
+        } else if ("MISSING_CHECKSUM".equals(filters.checksumState())) {
+            where.append("\n AND (f.checksum IS NULL OR f.checksum = '')");
+        }
+        if ("NAS_ONLY".equals(filters.storageState())) {
+            where.append("\n AND obj.file_id IS NULL AND COALESCE(mig.failed, 0) = 0");
+        } else if ("MIGRATION_FAILED".equals(filters.storageState())) {
+            where.append("\n AND obj.file_id IS NULL AND COALESCE(mig.failed, 0) = 1");
+        }
+    }
+
+    private List<Long> accessibleProjectIds(Long userId, List<Long> requestedProjectIds, boolean realProjectsOnly) {
+        MapSqlParameterSource params = new MapSqlParameterSource("userId", userId);
+        String filter = "";
+        List<Long> normalized = normalizeOptionalProjectIds(requestedProjectIds);
+        if (!normalized.isEmpty()) {
+            filter = "\n AND p.id IN (:projectIds)";
+            params.addValue("projectIds", normalized);
+        }
+        List<ProjectScopeRow> rows = jdbcTemplate.query("""
+            SELECT p.id, p.code, p.project_stage, p.asset_source
+            FROM core_projects p
+            JOIN core_user_project_roles upr ON upr.project_id = p.id AND upr.deleted = 0
+            WHERE upr.user_id = :userId
+              AND p.deleted = 0
+            """ + filter + """
+            GROUP BY p.id, p.code, p.project_stage, p.asset_source
+            ORDER BY p.id
+            LIMIT 50
+            """, params, (rs, rowNum) -> new ProjectScopeRow(
+            rs.getLong("id"),
+            rs.getString("code"),
+            rs.getString("project_stage"),
+            rs.getString("asset_source")
+        ));
+        return rows.stream()
+            .filter(row -> !realProjectsOnly || "REAL_NAS".equals(projectCategory(row.assetSource(), row.code(), row.projectStage())))
+            .map(ProjectScopeRow::projectId)
+            .toList();
+    }
+
+    private List<Long> normalizeOptionalProjectIds(List<Long> projectIds) {
+        if (projectIds == null || projectIds.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<Long> normalized = new LinkedHashSet<>();
+        for (Long projectId : projectIds) {
+            if (projectId == null || projectId <= 0) {
+                throw new BusinessException("STORAGE_MULTI_PLAN_PROJECT_ID_INVALID",
+                    "项目ID不合法", HttpStatus.BAD_REQUEST);
+            }
+            normalized.add(projectId);
+        }
+        if (normalized.size() > 20) {
+            throw new BusinessException("STORAGE_MULTI_PLAN_PROJECT_LIMIT_EXCEEDED",
+                "单次 dry-run 最多允许 20 个项目", HttpStatus.BAD_REQUEST);
+        }
+        return new ArrayList<>(normalized);
+    }
+
+    private int normalizePositiveInt(Integer value, int fallback, int max, String errorCode) {
+        if (value == null) {
+            return fallback;
+        }
+        if (value <= 0 || value > max) {
+            throw new BusinessException(errorCode, "数值超出允许范围", HttpStatus.BAD_REQUEST);
+        }
+        return value;
+    }
+
+    private long normalizePositiveLong(Long value, long fallback, String errorCode) {
+        if (value == null) {
+            return fallback;
+        }
+        if (value <= 0) {
+            throw new BusinessException(errorCode, "容量上限必须大于 0", HttpStatus.BAD_REQUEST);
+        }
+        return value;
+    }
+
+    private String projectCategory(String assetSource, String projectCode, String projectStage) {
+        String source = assetSource == null ? "" : assetSource.toUpperCase(Locale.ROOT);
+        String code = projectCode == null ? "" : projectCode.toUpperCase(Locale.ROOT);
+        String stage = projectStage == null ? "" : projectStage.toUpperCase(Locale.ROOT);
+        if (source.contains("TEST") || source.contains("SAMPLE") || source.contains("DEMO")
+            || source.contains("AGENT") || code.contains("TEST") || code.contains("DEMO")) {
+            return "TEST_OR_SAMPLE";
+        }
+        if (source.contains("ARCHIVE") || stage.contains("ARCHIVE")) {
+            return "ARCHIVED";
+        }
+        if (source.contains("REAL") || source.contains("NAS") || code.matches("\\d{2,}")) {
+            return "REAL_NAS";
+        }
+        return "UNKNOWN";
+    }
+
+    private Map<Long, List<StorageObjectificationDistributionItem>> distributionBy(List<Long> projectIds, String expression) {
+        if (projectIds == null || projectIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<StorageObjectificationDistributionItem>> result = new HashMap<>();
+        jdbcTemplate.query("""
+            SELECT project_id,
+                   COALESCE(NULLIF(""" + expression + """
+                   , ''), 'UNKNOWN') AS item_code,
+                   COUNT(1) AS file_count,
+                   COALESCE(SUM(COALESCE(size_bytes, 0)), 0) AS total_bytes
+            FROM data_file_resources
+            WHERE project_id IN (:projectIds)
+              AND deleted = 0
+            GROUP BY project_id, item_code
+            ORDER BY project_id, file_count DESC
+            """, new MapSqlParameterSource("projectIds", projectIds), rs -> {
+            Long projectId = rs.getLong("project_id");
+            result.computeIfAbsent(projectId, ignored -> new ArrayList<>())
+                .add(new StorageObjectificationDistributionItem(
+                    rs.getString("item_code"),
+                    rs.getLong("file_count"),
+                    rs.getLong("total_bytes")
+                ));
+        });
+        result.replaceAll((projectId, rows) -> rows.stream().limit(8).toList());
+        return result;
+    }
+
+    private ProjectStorageObjectificationInventoryResponse withDistributions(
+        ProjectStorageObjectificationInventoryResponse row,
+        List<StorageObjectificationDistributionItem> fileKindDistribution,
+        List<StorageObjectificationDistributionItem> extensionDistribution
+    ) {
+        return new ProjectStorageObjectificationInventoryResponse(
+            row.projectId(),
+            row.projectCode(),
+            row.projectName(),
+            row.projectStage(),
+            row.assetSource(),
+            row.projectCategory(),
+            row.realNasProject(),
+            row.totalFiles(),
+            row.totalBytes(),
+            row.objectStoredFiles(),
+            row.objectStoredBytes(),
+            row.nasOnlyFiles(),
+            row.nasOnlyBytes(),
+            row.estimatedObjectificationBytes(),
+            row.migrationPendingFiles(),
+            row.migrationFailedFiles(),
+            row.checksumCoveredFiles(),
+            row.checksumCoverageRate(),
+            row.modelFiles(),
+            row.drawingFiles(),
+            row.documentFiles(),
+            row.largeFileCount(),
+            row.unreadablePathFiles(),
+            row.objectificationCoverageRate(),
+            row.riskLevel(),
+            row.riskMessages(),
+            fileKindDistribution == null ? List.of() : fileKindDistribution,
+            extensionDistribution == null ? List.of() : extensionDistribution
+        );
+    }
+
     private String storageStatus(DryRunCandidate row) {
+        if (row.objectStored()) {
+            return "OBJECT_STORED";
+        }
+        if (row.migrationFailed()) {
+            return "MIGRATION_FAILED";
+        }
+        if (row.migrationPending()) {
+            return "MIGRATION_PENDING";
+        }
+        return "NAS_ONLY";
+    }
+
+    private String storageStatus(MultiProjectDryRunCandidate row) {
         if (row.objectStored()) {
             return "OBJECT_STORED";
         }
@@ -1151,8 +1633,38 @@ public class StorageMigrationApplicationService {
             || (!row.objectStored() && hasText(provider) && !List.of("NAS", "METADATA").contains(provider));
     }
 
+    private boolean unreadableRisk(MultiProjectDryRunCandidate row) {
+        String provider = row.storageProvider() == null ? "" : row.storageProvider().toUpperCase(Locale.ROOT);
+        return row.storageReferenceMissing()
+            || (!row.objectStored() && hasText(provider) && !List.of("NAS", "METADATA").contains(provider));
+    }
+
     private String dryRunReason(
         DryRunCandidate row,
+        boolean missingChecksum,
+        boolean oversized,
+        boolean unreadableRisk
+    ) {
+        if (row.objectStored()) {
+            return "ALREADY_OBJECT_STORED";
+        }
+        if (unreadableRisk) {
+            return "SOURCE_REFERENCE_REVIEW_REQUIRED";
+        }
+        if (row.migrationFailed()) {
+            return "RETRY_AFTER_FAILURE_REVIEW";
+        }
+        if (oversized) {
+            return "LARGE_FILE_RISK";
+        }
+        if (missingChecksum) {
+            return "MISSING_CHECKSUM";
+        }
+        return "ELIGIBLE_DRY_RUN";
+    }
+
+    private String dryRunReason(
+        MultiProjectDryRunCandidate row,
         boolean missingChecksum,
         boolean oversized,
         boolean unreadableRisk
@@ -1331,6 +1843,100 @@ public class StorageMigrationApplicationService {
         boolean migrationPending,
         boolean migrationFailed
     ) {
+    }
+
+    private record ProjectScopeRow(
+        Long projectId,
+        String code,
+        String projectStage,
+        String assetSource
+    ) {
+    }
+
+    private record MultiProjectDryRunCandidate(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        String assetSource,
+        String projectCategory,
+        Boolean realNasProject,
+        Long fileId,
+        String assetUuid,
+        String fileName,
+        String fileKind,
+        String extension,
+        Long sizeBytes,
+        String checksum,
+        String storageProvider,
+        boolean storageReferenceMissing,
+        boolean objectStored,
+        boolean migrationPending,
+        boolean migrationFailed
+    ) {
+    }
+
+    private static final class MultiProjectPlanAccumulator {
+        private final Long projectId;
+        private final String projectCode;
+        private final String projectName;
+        private final String assetSource;
+        private final String projectCategory;
+        private final Boolean realNasProject;
+        private long selectedFileCount;
+        private long selectedTotalBytes;
+        private long objectStoredSkipCount;
+        private long missingChecksumCount;
+        private long oversizedCount;
+        private long unreadableRiskCount;
+        private final List<StorageObjectificationPlanSampleItem> sampleItems = new ArrayList<>();
+
+        private MultiProjectPlanAccumulator(MultiProjectDryRunCandidate row) {
+            this.projectId = row.projectId();
+            this.projectCode = row.projectCode();
+            this.projectName = row.projectName();
+            this.assetSource = row.assetSource();
+            this.projectCategory = row.projectCategory();
+            this.realNasProject = row.realNasProject();
+        }
+
+        private MultiProjectStorageObjectificationPlanProject toResponse() {
+            List<String> riskMessages = new ArrayList<>();
+            if (selectedFileCount == 0) {
+                riskMessages.add("当前项目在本次筛选和上限下没有选中可迁移文件。");
+            }
+            if (objectStoredSkipCount > 0) {
+                riskMessages.add("已有对象版本的文件会跳过。");
+            }
+            if (missingChecksumCount > 0) {
+                riskMessages.add("存在缺少 checksum 的文件，真实执行会在对象化时计算校验值。");
+            }
+            if (oversizedCount > 0) {
+                riskMessages.add("存在大文件，后续应拆批观察。");
+            }
+            if (unreadableRiskCount > 0) {
+                riskMessages.add("存在存储引用风险文件，需人工核查。");
+            }
+            if (riskMessages.isEmpty()) {
+                riskMessages.add("当前项目 dry-run 未发现阻塞级风险。");
+            }
+            return new MultiProjectStorageObjectificationPlanProject(
+                projectId,
+                projectCode,
+                projectName,
+                assetSource,
+                projectCategory,
+                realNasProject,
+                selectedFileCount,
+                selectedTotalBytes,
+                objectStoredSkipCount,
+                missingChecksumCount,
+                oversizedCount,
+                unreadableRiskCount,
+                selectedFileCount == 0 ? 0 : (long) Math.ceil(selectedFileCount / (double) DEFAULT_MAX_FILES),
+                riskMessages,
+                sampleItems
+            );
+        }
     }
 
     private record BatchRow(

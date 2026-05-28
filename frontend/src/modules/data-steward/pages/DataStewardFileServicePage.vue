@@ -69,6 +69,13 @@
             <el-table-column label="项目" min-width="220" show-overflow-tooltip>
               <template #default="{ row }">{{ row.projectCode }} {{ row.projectName }}</template>
             </el-table-column>
+            <el-table-column label="分类" width="120">
+              <template #default="{ row }">
+                <el-tag :type="projectCategoryTagType(row.projectCategory)" size="small">
+                  {{ projectCategoryLabel(row.projectCategory) }}
+                </el-tag>
+              </template>
+            </el-table-column>
             <el-table-column label="文件" width="110" align="right">
               <template #default="{ row }">{{ formatCount(row.totalFiles) }}</template>
             </el-table-column>
@@ -77,6 +84,12 @@
             </el-table-column>
             <el-table-column label="仍在 NAS" width="110" align="right">
               <template #default="{ row }">{{ formatCount(row.nasOnlyFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="待对象化容量" width="140" align="right">
+              <template #default="{ row }">{{ formatBytes(row.estimatedObjectificationBytes) }}</template>
+            </el-table-column>
+            <el-table-column label="路径风险" width="100" align="right">
+              <template #default="{ row }">{{ formatCount(row.unreadablePathFiles) }}</template>
             </el-table-column>
             <el-table-column label="覆盖率" width="150">
               <template #default="{ row }">
@@ -92,6 +105,109 @@
               </template>
             </el-table-column>
           </el-table>
+        </section>
+
+        <section class="service-section">
+          <div class="service-section__header">
+            <div>
+              <h2>多项目对象化规划</h2>
+              <span>默认只做 dry-run，不创建任务、不复制文件；用于比较真实项目风险、容量和分批策略。</span>
+            </div>
+            <el-button type="primary" :loading="multiPlanLoading" @click="runMultiProjectDryRun">生成多项目计划</el-button>
+          </div>
+
+          <div class="multi-plan-form">
+            <el-input
+              v-model="multiPlanForm.projectIdsText"
+              clearable
+              placeholder="项目ID，可留空使用可访问项目；例如 503,506"
+            />
+            <el-switch
+              v-model="multiPlanForm.realProjectsOnly"
+              active-text="仅真实项目"
+              inactive-text="全部可访问"
+            />
+            <el-select v-model="multiPlanForm.storageState" placeholder="存储状态">
+              <el-option label="仅 NAS" value="NAS_ONLY" />
+              <el-option label="全部" value="ANY" />
+              <el-option label="迁移失败" value="MIGRATION_FAILED" />
+            </el-select>
+            <el-input v-model="multiPlanForm.extensionsText" clearable placeholder="扩展名：pdf,dwg,docx" />
+            <el-input-number v-model="multiPlanForm.limit" :min="1" :max="5000" controls-position="right" />
+            <el-input-number v-model="multiPlanForm.maxFilesPerProject" :min="1" :max="500" controls-position="right" />
+          </div>
+
+          <div class="m3g-policy-grid">
+            <article>
+              <span>总容量上限</span>
+              <strong>{{ formatBytes(multiPlanMaxTotalBytes) }}</strong>
+            </article>
+            <article>
+              <span>单项目容量上限</span>
+              <strong>{{ formatBytes(multiPlanMaxBytesPerProject) }}</strong>
+            </article>
+            <article>
+              <span>并发上限预留</span>
+              <strong>{{ multiPlanForm.concurrencyLimit }}</strong>
+            </article>
+            <article>
+              <span>暂停 / 继续</span>
+              <strong>字段预留</strong>
+            </article>
+          </div>
+
+          <template v-if="multiPlanResult">
+            <div class="dry-run-summary">
+              <div>
+                <span>规划项目</span>
+                <strong>{{ formatCount(multiPlanResult.plannedProjectCount) }}</strong>
+              </div>
+              <div>
+                <span>选中文件</span>
+                <strong>{{ formatCount(multiPlanResult.selectedFileCount) }}</strong>
+              </div>
+              <div>
+                <span>预估容量</span>
+                <strong>{{ formatBytes(multiPlanResult.selectedTotalBytes) }}</strong>
+              </div>
+              <div>
+                <span>预估批次</span>
+                <strong>{{ formatCount(multiPlanResult.estimatedBatches) }}</strong>
+              </div>
+            </div>
+            <el-alert
+              type="info"
+              :closable="false"
+              show-icon
+              class="service-notice"
+              title="多项目 dry-run 已生成，未创建迁移任务"
+              :description="multiPlanResult.riskMessages.join(' ')"
+            />
+            <el-table :data="multiPlanResult.projects" row-key="projectId" empty-text="暂无多项目规划结果">
+              <el-table-column label="项目" min-width="220" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.projectCode }} {{ row.projectName }}</template>
+              </el-table-column>
+              <el-table-column label="分类" width="120">
+                <template #default="{ row }">
+                  <el-tag :type="projectCategoryTagType(row.projectCategory)" size="small">
+                    {{ projectCategoryLabel(row.projectCategory) }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="选中文件" width="100" align="right">
+                <template #default="{ row }">{{ formatCount(row.selectedFileCount) }}</template>
+              </el-table-column>
+              <el-table-column label="容量" width="120" align="right">
+                <template #default="{ row }">{{ formatBytes(row.selectedTotalBytes) }}</template>
+              </el-table-column>
+              <el-table-column label="跳过" width="80" align="right">
+                <template #default="{ row }">{{ formatCount(row.objectStoredSkipCount) }}</template>
+              </el-table-column>
+              <el-table-column label="风险" min-width="240" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.riskMessages.join(' ') }}</template>
+              </el-table-column>
+            </el-table>
+          </template>
         </section>
 
         <section class="service-section">
@@ -421,6 +537,7 @@ import { Plus, Refresh, Search } from '@element-plus/icons-vue';
 
 import {
   createStorageMigrationTask,
+  dryRunMultiProjectStorageObjectificationPlan,
   dryRunStorageObjectificationPlan,
   fetchCatalogFiles,
   fetchStorageObjectificationInventory,
@@ -430,6 +547,7 @@ import {
   fetchStorageProviderReadiness,
   retryStorageMigrationTask,
   type CatalogFile,
+  type MultiProjectStorageObjectificationDryRun,
   type ProjectStorageObjectificationInventory,
   type StorageObjectificationDryRun,
   type StorageObjectificationInventory,
@@ -450,11 +568,13 @@ const taskLoading = ref(false);
 const candidateLoading = ref(false);
 const creating = ref(false);
 const dryRunLoading = ref(false);
+const multiPlanLoading = ref(false);
 const detailVisible = ref(false);
 const summary = ref<StorageMigrationSummary | null>(null);
 const readiness = ref<StorageProviderReadiness | null>(null);
 const inventory = ref<StorageObjectificationInventory | null>(null);
 const dryRunResult = ref<StorageObjectificationDryRun | null>(null);
+const multiPlanResult = ref<MultiProjectStorageObjectificationDryRun | null>(null);
 const tasks = ref<StorageMigrationTaskListItem[]>([]);
 const selectedTask = ref<StorageMigrationTaskDetail | null>(null);
 const candidateRows = ref<CatalogFile[]>([]);
@@ -476,6 +596,19 @@ const dryRunForm = reactive({
   checksumState: 'ANY',
   extensionsText: '',
   limit: 200
+});
+
+const multiPlanForm = reactive({
+  projectIdsText: '',
+  realProjectsOnly: true,
+  storageState: 'NAS_ONLY',
+  checksumState: 'ANY',
+  extensionsText: 'pdf,dwg,docx,xlsx,pptx',
+  limit: 50,
+  maxFilesPerProject: 10,
+  maxTotalMb: 80,
+  maxBytesPerProjectMb: 30,
+  concurrencyLimit: 1
 });
 
 const targetProviderOptions = [
@@ -548,6 +681,9 @@ const inventoryRows = computed<ProjectStorageObjectificationInventory[]>(() => {
   }
   return rows.slice(0, 8);
 });
+
+const multiPlanMaxTotalBytes = computed(() => Math.max(1, Number(multiPlanForm.maxTotalMb || 80)) * 1024 * 1024);
+const multiPlanMaxBytesPerProject = computed(() => Math.max(1, Number(multiPlanForm.maxBytesPerProjectMb || 30)) * 1024 * 1024);
 
 const enabledServices: Array<{ title: string; description: string; target: RouteRecordName }> = [
   { title: '文件预览', description: '查看预览状态，并通过短时票据打开可预览文件。', target: 'data-steward-asset-detail' },
@@ -707,6 +843,27 @@ async function runDryRun() {
   }
 }
 
+async function runMultiProjectDryRun() {
+  multiPlanLoading.value = true;
+  try {
+    multiPlanResult.value = await dryRunMultiProjectStorageObjectificationPlan({
+      projectIds: parseFileIds(multiPlanForm.projectIdsText),
+      realProjectsOnly: multiPlanForm.realProjectsOnly,
+      storageState: multiPlanForm.storageState as 'ANY' | 'NAS_ONLY' | 'MIGRATION_FAILED',
+      checksumState: multiPlanForm.checksumState as 'ANY' | 'HAS_CHECKSUM' | 'MISSING_CHECKSUM',
+      extensions: parseExtensions(multiPlanForm.extensionsText),
+      limit: multiPlanForm.limit,
+      maxTotalBytes: multiPlanMaxTotalBytes.value,
+      maxFilesPerProject: multiPlanForm.maxFilesPerProject,
+      maxBytesPerProject: multiPlanMaxBytesPerProject.value,
+      concurrencyLimit: multiPlanForm.concurrencyLimit
+    });
+    ElMessage.success('多项目 dry-run 已生成，未创建迁移任务');
+  } finally {
+    multiPlanLoading.value = false;
+  }
+}
+
 async function openTask(row: StorageMigrationTaskListItem) {
   selectedTask.value = await fetchStorageMigrationTask(row.taskId);
   detailVisible.value = true;
@@ -799,6 +956,22 @@ function riskTagType(value: string) {
   if (value === 'LOW') return 'success';
   if (value === 'MEDIUM') return 'warning';
   if (value === 'HIGH') return 'danger';
+  return 'info';
+}
+
+function projectCategoryLabel(value: string) {
+  return ({
+    REAL_NAS: '真实 NAS',
+    TEST_OR_SAMPLE: '测试/样例',
+    ARCHIVED: '归档',
+    UNKNOWN: '待确认'
+  } as Record<string, string>)[value] ?? value;
+}
+
+function projectCategoryTagType(value: string) {
+  if (value === 'REAL_NAS') return 'success';
+  if (value === 'TEST_OR_SAMPLE') return 'warning';
+  if (value === 'ARCHIVED') return 'info';
   return 'info';
 }
 

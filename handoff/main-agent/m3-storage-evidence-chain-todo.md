@@ -35,7 +35,7 @@ NAS 原始文件保留
 - [x] 3. 真实 NAS 小范围灰度镜像（M3D 已收口）
 - [x] 4. 预览与转换产物对象化（M3E 已收口）
 - [x] 4.5 新文件对象存储优先写入（M3F 已收口）
-- [ ] 4.6 NAS 侧 MinIO 对象存储接管真实项目文件（M3G-1 已收口，M3G-2 当前进行）
+- [ ] 4.6 NAS 侧 MinIO 对象存储接管真实项目文件（M3G-1 / M3G-2 / M3G-3 已收口，M3G-4 待启动）
 - [ ] 5. documents / chunks 语义契约
 - [ ] 6. 向量库与关键词索引试点
 - [ ] 7. Hermes 受控 Evidence API
@@ -252,13 +252,17 @@ NAS 原始文件保留
 
 ## 8. 阶段 4.6：NAS 侧 MinIO 对象存储接管真实项目文件
 
-状态：`M3G-1 已收口，M3G-2 当前进行`
+状态：`M3G-1 / M3G-2 / M3G-3 已收口，M3G-4 待启动`
 
 建议批次名：`M3G：NAS 侧 MinIO 对象存储接管真实项目文件`
 
 已完成子批次：
 
 `M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划`
+
+`M3G-2：105 项目历史文件对象化上传灰度`
+
+`M3G-3：多真实项目分批对象化策略与任务中心增强`
 
 交付要求：
 
@@ -321,6 +325,30 @@ M3G-1 完成记录：
   - M3F 回归：`PASS=11 FAIL=0`
   - M3C 回归：`PASS=9 FAIL=0`
   - file-access 回归：`PASS=18 FAIL=0`
+
+M3G-2 完成记录：
+
+- 收口记录：
+  - `handoff/main-agent/m3g2-105-objectification-gray-closure.md`
+- 专项脚本：
+  - `scripts/dev/check-m3g2-105-objectification-gray.sh`
+- 完成内容：
+  - 对 105 / `projectId=503` 做受控小批历史文件对象化。
+  - 已对象化文件默认从 NAS 侧 MinIO 读取。
+  - NAS_ONLY 文件继续按 NAS 台账链路可用。
+  - 未移动、删除、重命名真实 NAS 原文件。
+
+M3G-3 完成记录：
+
+- 收口记录：
+  - `handoff/main-agent/m3g3-multi-project-objectification-task-center-closure.md`
+- 专项脚本：
+  - `scripts/dev/check-m3g3-multi-project-objectification-planning.sh`
+- 完成内容：
+  - 全项目对象化盘点增强，区分真实项目与测试 / 样例项目。
+  - 新增多项目对象化 dry-run 计划接口。
+  - dry-run 支持项目范围、真实项目过滤、总量限制、单项目限制、并发和限速策略字段。
+  - dry-run 不创建真实迁移任务、不复制文件、不修改 NAS。
 
 ## 9. 阶段 5：documents / chunks 语义契约
 
@@ -456,10 +484,7 @@ M3G-1 完成记录：
 已完成并收口：
 
 - [x] M3G-2：105 项目历史文件对象化上传灰度
-
-当前进行：
-
-- [ ] M3G-3：多真实项目分批对象化策略与任务中心增强
+- [x] M3G-3：多真实项目分批对象化策略与任务中心增强
 
 下一步候选：
 

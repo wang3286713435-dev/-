@@ -388,11 +388,17 @@ export interface ProjectStorageObjectificationInventory {
   projectId: number;
   projectCode: string;
   projectName: string;
+  projectStage: string | null;
+  assetSource: string | null;
+  projectCategory: string;
+  realNasProject: boolean;
   totalFiles: number;
   totalBytes: number;
   objectStoredFiles: number;
   objectStoredBytes: number;
   nasOnlyFiles: number;
+  nasOnlyBytes: number;
+  estimatedObjectificationBytes: number;
   migrationPendingFiles: number;
   migrationFailedFiles: number;
   checksumCoveredFiles: number;
@@ -401,9 +407,18 @@ export interface ProjectStorageObjectificationInventory {
   drawingFiles: number;
   documentFiles: number;
   largeFileCount: number;
+  unreadablePathFiles: number;
   objectificationCoverageRate: number;
   riskLevel: string;
   riskMessages: string[];
+  fileKindDistribution: StorageObjectificationDistributionItem[];
+  extensionDistribution: StorageObjectificationDistributionItem[];
+}
+
+export interface StorageObjectificationDistributionItem {
+  code: string;
+  fileCount: number;
+  totalBytes: number;
 }
 
 export interface StorageObjectificationInventory {
@@ -460,6 +475,57 @@ export interface StorageObjectificationDryRun {
   estimatedBatches: number;
   riskMessages: string[];
   sampleItems: StorageObjectificationPlanSampleItem[];
+}
+
+export interface MultiProjectStorageObjectificationDryRunPayload extends StorageObjectificationDryRunPayload {
+  projectIds?: number[];
+  realProjectsOnly?: boolean;
+  maxFilesPerProject?: number;
+  maxBytesPerProject?: number;
+  concurrencyLimit?: number;
+  rateLimitBytesPerMinute?: number;
+}
+
+export interface MultiProjectStorageObjectificationPlanProject {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  assetSource: string | null;
+  projectCategory: string;
+  realNasProject: boolean;
+  selectedFileCount: number;
+  selectedTotalBytes: number;
+  objectStoredSkipCount: number;
+  missingChecksumCount: number;
+  oversizedCount: number;
+  unreadableRiskCount: number;
+  estimatedBatches: number;
+  riskMessages: string[];
+  sampleItems: StorageObjectificationPlanSampleItem[];
+}
+
+export interface MultiProjectStorageObjectificationDryRun {
+  dryRun: boolean;
+  migrationStarted: boolean;
+  taskSource: string;
+  requestedProjectCount: number;
+  plannedProjectCount: number;
+  selectedFileCount: number;
+  selectedTotalBytes: number;
+  objectStoredSkipCount: number;
+  missingChecksumCount: number;
+  oversizedCount: number;
+  unreadableRiskCount: number;
+  estimatedBatches: number;
+  maxFilesPerTask: number;
+  maxFileSizeBytes: number;
+  maxTotalBytes: number | null;
+  maxFilesPerProject: number;
+  maxBytesPerProject: number | null;
+  concurrencyLimit: number;
+  rateLimitBytesPerMinute: number | null;
+  riskMessages: string[];
+  projects: MultiProjectStorageObjectificationPlanProject[];
 }
 
 export interface StorageMigrationTaskPayload {
@@ -915,6 +981,16 @@ export async function dryRunStorageObjectificationPlan(
 ) {
   const { data } = await http.post<ApiResponse<StorageObjectificationDryRun>>(
     `/api/data-steward/projects/${projectId}/storage-objectification-plans:dry-run`,
+    payload
+  );
+  return data.data;
+}
+
+export async function dryRunMultiProjectStorageObjectificationPlan(
+  payload: MultiProjectStorageObjectificationDryRunPayload
+) {
+  const { data } = await http.post<ApiResponse<MultiProjectStorageObjectificationDryRun>>(
+    '/api/data-steward/storage-objectification-plans:dry-run',
     payload
   );
   return data.data;
