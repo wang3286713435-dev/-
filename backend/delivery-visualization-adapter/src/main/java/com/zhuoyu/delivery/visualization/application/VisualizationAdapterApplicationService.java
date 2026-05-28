@@ -32,8 +32,11 @@ import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LinkageRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LinkageResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightJobCreateResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightJobResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightPlanResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightStatusResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightViewerTicketResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LocateResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ManagedObjectContextItem;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ModelSceneItem;
@@ -50,12 +53,14 @@ import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.SpaceSummaryItem;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.SystemSummaryItem;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.VisualizationContextResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.WorkItemSummary;
+import com.zhuoyu.delivery.visualization.engine.GlandarEngineSettings;
 import com.zhuoyu.delivery.workcenter.delivery.DeliveryApplicationService;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCompletenessResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.RectificationResponse;
 import com.zhuoyu.delivery.workcenter.rectification.RectificationApplicationService;
 import com.zhuoyu.delivery.shared.preview.FilePreviewPolicy;
 import com.zhuoyu.delivery.shared.preview.PreviewDecision;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -77,6 +82,7 @@ public class VisualizationAdapterApplicationService {
     );
     private static final List<String> LIGHTWEIGHT_FORBIDDEN_OPERATIONS = List.of(
         "CREATE_REAL_CONVERSION_TASK",
+        "CALL_STATION_SPLIT_UPLOAD",
         "READ_MODEL_BODY",
         "TOUCH_NAS_FILE",
         "WRITE_LIGHTWEIGHT_CACHE",
@@ -94,6 +100,7 @@ public class VisualizationAdapterApplicationService {
     private final RectificationApplicationService rectificationApplicationService;
     private final AuditLogApplicationService auditLogApplicationService;
     private final SectionNodeApplicationService sectionNodeApplicationService;
+    private final GlandarEngineSettings glandarEngineSettings;
 
     public VisualizationAdapterApplicationService(
         ModelIntegrationApplicationService modelIntegrationApplicationService,
@@ -105,7 +112,8 @@ public class VisualizationAdapterApplicationService {
         DeliveryApplicationService deliveryApplicationService,
         RectificationApplicationService rectificationApplicationService,
         AuditLogApplicationService auditLogApplicationService,
-        SectionNodeApplicationService sectionNodeApplicationService
+        SectionNodeApplicationService sectionNodeApplicationService,
+        GlandarEngineSettings glandarEngineSettings
     ) {
         this.modelIntegrationApplicationService = modelIntegrationApplicationService;
         this.managedObjectApplicationService = managedObjectApplicationService;
@@ -117,6 +125,7 @@ public class VisualizationAdapterApplicationService {
         this.rectificationApplicationService = rectificationApplicationService;
         this.auditLogApplicationService = auditLogApplicationService;
         this.sectionNodeApplicationService = sectionNodeApplicationService;
+        this.glandarEngineSettings = glandarEngineSettings;
     }
 
     public VisualizationContextResponse context(Long projectId) {
@@ -172,6 +181,7 @@ public class VisualizationAdapterApplicationService {
         ModelIntegrationResponse integration = modelIntegrationApplicationService.requireIntegration(projectId, integrationId);
         FileResourceResponse modelFile = fileResourceApplicationService.requireFile(projectId, integration.modelFileId());
         String format = modelFormat(modelFile.originalName());
+        String engineMode = engineMode();
         return new LightweightStatusResponse(
             projectId,
             integrationId,
@@ -179,17 +189,17 @@ public class VisualizationAdapterApplicationService {
             modelFile.originalName(),
             format,
             integration.status(),
-            "METADATA_ADAPTER",
+            engineMode,
             false,
-            "NOT_CONNECTED",
+            lightweightStatusCode(engineMode),
             false,
             "NOT_CREATED",
             true,
             "NOT_STARTED",
             "BIM_LIGHTWEIGHT",
-            "元数据适配",
-            "当前为元数据适配，未执行真实轻量化转换；接入真实 BIM 引擎后才能打开 3D 预览。",
-            "未配置真实 BIM 轻量化引擎适配器",
+            lightweightStatusLabel(engineMode),
+            lightweightActionHint(engineMode),
+            lightweightBlockedReason(engineMode),
             LIGHTWEIGHT_SUPPORTED_OPERATIONS,
             LIGHTWEIGHT_FORBIDDEN_OPERATIONS
         );
@@ -199,13 +209,14 @@ public class VisualizationAdapterApplicationService {
         ModelIntegrationResponse integration = modelIntegrationApplicationService.requireIntegration(projectId, integrationId);
         FileResourceResponse modelFile = fileResourceApplicationService.requireFile(projectId, integration.modelFileId());
         String format = modelFormat(modelFile.originalName());
+        String engineMode = engineMode();
         return new LightweightPlanResponse(
             projectId,
             integrationId,
             integration.modelFileId(),
             modelFile.originalName(),
             format,
-            "METADATA_ADAPTER",
+            engineMode,
             true,
             false,
             true,
@@ -214,13 +225,15 @@ public class VisualizationAdapterApplicationService {
             false,
             List.of(
                 "配置真实 BIM 引擎适配器和租户级连接参数",
+                "配置葛兰岱尔 Station API、Station Web 和安全凭据",
                 "确认模型格式支持矩阵和版本兼容规则",
-                "定义轻量化输出存储策略与权限隔离",
-                "建立转换任务、重试、超时和失败回滚策略",
+                "定义平台到葛兰岱尔的分片上传、查询和 Viewer 会话契约",
+                "定义轻量化输出存储策略、viewer ticket 和权限隔离",
+                "建立转换任务、重试、超时、失败回滚和审计策略",
                 "补齐权限审计、路径脱敏和预览授权校验"
             ),
             List.of(
-                "引擎适配器连通性校验",
+                "葛兰岱尔适配器连通性校验",
                 "模型格式白名单与风险提示",
                 "轻量化产物登记与访问票据联动",
                 "转换任务状态流转和失败告警",
@@ -231,6 +244,75 @@ public class VisualizationAdapterApplicationService {
                 "本接口不读取模型正文，不解析构件，不生成轻量化产物",
                 "未接入真实引擎前，禁止把适配状态包装为可预览"
             ),
+            LIGHTWEIGHT_SUPPORTED_OPERATIONS,
+            LIGHTWEIGHT_FORBIDDEN_OPERATIONS
+        );
+    }
+
+    public LightweightJobCreateResponse createLightweightJob(Long userId, Long projectId, Long integrationId) {
+        ModelIntegrationResponse integration = modelIntegrationApplicationService.requireIntegration(projectId, integrationId);
+        FileResourceResponse modelFile = fileResourceApplicationService.requireFile(projectId, integration.modelFileId());
+        String format = modelFormat(modelFile.originalName());
+        String engineMode = engineMode();
+        String jobId = safeJobId(engineMode, projectId, integrationId);
+        String status = glandarEngineSettings.readyForHandshake() ? "READY_FOR_GD2" : "BLOCKED";
+        auditLogApplicationService.record(projectId, MODULE_CODE, "visualization.lightweight.job.prepare", "MODEL_INTEGRATION",
+            String.valueOf(integrationId), userId, Map.of("engineMode", engineMode, "taskCreated", false));
+        return new LightweightJobCreateResponse(
+            projectId,
+            integrationId,
+            integration.modelFileId(),
+            modelFile.originalName(),
+            format,
+            jobId,
+            engineMode,
+            false,
+            status,
+            lightweightJobStatusLabel(engineMode),
+            lightweightJobActionHint(engineMode),
+            lightweightBlockedReason(engineMode),
+            false,
+            false,
+            false,
+            false,
+            false,
+            LIGHTWEIGHT_SUPPORTED_OPERATIONS,
+            LIGHTWEIGHT_FORBIDDEN_OPERATIONS
+        );
+    }
+
+    public LightweightJobResponse lightweightJob(Long projectId, String jobId) {
+        String engineMode = engineMode();
+        return new LightweightJobResponse(
+            projectId,
+            defaultText(jobId, safeJobId(engineMode, projectId, 0L)),
+            engineMode,
+            glandarEngineSettings.readyForHandshake() ? "READY_FOR_GD2" : "NOT_CREATED",
+            0,
+            lightweightJobStatusLabel(engineMode),
+            lightweightBlockedReason(engineMode),
+            false,
+            false,
+            false,
+            Instant.now()
+        );
+    }
+
+    public LightweightViewerTicketResponse lightweightViewerTicket(Long userId, Long projectId, String jobId) {
+        String engineMode = engineMode();
+        auditLogApplicationService.record(projectId, MODULE_CODE, "visualization.lightweight.viewer-ticket.prepare", "PROJECT",
+            String.valueOf(projectId), userId, Map.of("engineMode", engineMode, "ticketIssued", false));
+        return new LightweightViewerTicketResponse(
+            projectId,
+            defaultText(jobId, safeJobId(engineMode, projectId, 0L)),
+            engineMode,
+            false,
+            false,
+            null,
+            null,
+            null,
+            "Viewer 未开放",
+            "8B-GD1 仅提供平台接口骨架；真实葛兰岱尔 Viewer ticket 留到 8B-GD2/8C-GD。",
             LIGHTWEIGHT_SUPPORTED_OPERATIONS,
             LIGHTWEIGHT_FORBIDDEN_OPERATIONS
         );
@@ -278,6 +360,62 @@ public class VisualizationAdapterApplicationService {
         auditLogApplicationService.record(projectId, MODULE_CODE, "visualization.context.inject", "PROJECT",
             String.valueOf(projectId), userId, Map.of("source", source));
         return new ContextInjectResponse(projectId, sectionNodeId, managedObjectId, source, "inject-project-context", "READY");
+    }
+
+    private String engineMode() {
+        return glandarEngineSettings.provider();
+    }
+
+    private String lightweightStatusCode(String engineMode) {
+        return "GLANDAR".equals(engineMode) && glandarEngineSettings.readyForHandshake()
+            ? "ADAPTER_READY"
+            : "NOT_CONNECTED";
+    }
+
+    private String lightweightStatusLabel(String engineMode) {
+        if ("GLANDAR".equals(engineMode)) {
+            return glandarEngineSettings.readyForHandshake() ? "葛兰岱尔适配骨架已就绪" : "葛兰岱尔配置不完整";
+        }
+        return "Mock 轻量化适配";
+    }
+
+    private String lightweightActionHint(String engineMode) {
+        if ("GLANDAR".equals(engineMode)) {
+            if (glandarEngineSettings.readyForHandshake()) {
+                return "葛兰岱尔 HTTP API 配置已具备握手条件；8B-GD1 不上传模型，真实分片上传和转换留到 8B-GD2。";
+            }
+            return "葛兰岱尔适配器未完整配置，当前仅返回平台侧安全骨架；不会调用 Station 上传或转换接口。";
+        }
+        return "当前为 Mock 适配，未执行真实轻量化转换；接入葛兰岱尔引擎后才能打开 3D 预览。";
+    }
+
+    private String lightweightBlockedReason(String engineMode) {
+        if (!"GLANDAR".equals(engineMode)) {
+            return "BIM_ENGINE_PROVIDER 未启用 GLANDAR，当前保持 Mock 安全模式";
+        }
+        List<String> missing = glandarEngineSettings.missingConfiguration();
+        return missing.isEmpty() ? "8B-GD1 禁止执行真实上传和转换" : String.join("；", missing);
+    }
+
+    private String lightweightJobStatusLabel(String engineMode) {
+        if ("GLANDAR".equals(engineMode) && glandarEngineSettings.readyForHandshake()) {
+            return "葛兰岱尔任务骨架可创建，真实转换未执行";
+        }
+        if ("GLANDAR".equals(engineMode)) {
+            return "葛兰岱尔任务被配置拦截";
+        }
+        return "Mock 模式未创建真实任务";
+    }
+
+    private String lightweightJobActionHint(String engineMode) {
+        if ("GLANDAR".equals(engineMode) && glandarEngineSettings.readyForHandshake()) {
+            return "下一批次会把平台受控模型流分片上传到 Station；本批只验证平台接口、权限和禁区。";
+        }
+        return lightweightActionHint(engineMode);
+    }
+
+    private String safeJobId(String engineMode, Long projectId, Long integrationId) {
+        return "%s-%s-%s".formatted(engineMode.toLowerCase(Locale.ROOT), projectId, integrationId);
     }
 
     private String modelFormat(String originalName) {

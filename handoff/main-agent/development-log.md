@@ -4185,3 +4185,64 @@ handoff/main-agent/8b-gd1-glandar-adapter-skeleton-plan.md
 - 默认 provider 必须为 `MOCK`。
 - `GLANDAR` 仅在显式配置时启用，未配置时必须业务化降级。
 - 8B-GD1 不新增 Flyway 迁移，避免与 M3G 主线迁移号冲突。
+
+## 2026-05-27 8B-GD1 兜底开发完成
+
+- CMUX Claude Code 已尝试启动，但因模型 API 报错中断：
+
+```text
+API Error: 400 The content[].thinking in the thinking mode must be passed back to the API.
+```
+
+- 已由主 agent 在独立 worktree 兜底完成 8B-GD1 代码骨架。
+- 新增 `GlandarEngineSettings`，默认 provider 为 `MOCK`，显式配置才进入 `GLANDAR`。
+- 新增平台侧 lightweight job / viewer ticket 接口骨架：
+
+```text
+POST /api/visualization-adapter/projects/{projectId}/model-integrations/{integrationId}/lightweight-jobs
+GET  /api/visualization-adapter/projects/{projectId}/lightweight-jobs/{jobId}
+POST /api/visualization-adapter/projects/{projectId}/lightweight-jobs/{jobId}:viewer-ticket
+```
+
+- 本批不调用 Station `SplitUploadFile`，不读取模型正文，不上传 RVT，不签发真实 Viewer ticket。
+- 新增专项脚本：
+
+```text
+scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh
+```
+
+- 自测结果：
+  - 后端构建通过。
+  - 8B-GD1 专项脚本通过，`PASS=16 FAIL=0`。
+  - 8A Mock 轻量化回归通过，`PASS=11 FAIL=0`。
+  - Phase2 batch4 文件访问安全回归通过，`PASS=18 FAIL=0`。
+  - 前端构建通过，仅既有 chunk size warning。
+  - `git diff --check` 通过。
+- 当前 8B-GD1 等待测试 agent 复核，不应进入 8B-GD2 真实转换。
+
+## 2026-05-28 8B-GD1 正式收口
+
+- 测试 agent 已完成 8B-GD1 完整验收与 P1 极短复验。
+- 完整验收结果：
+  - 后端构建通过。
+  - `18088` 健康检查通过。
+  - 8B-GD1 专项脚本通过，`PASS=16 FAIL=0`。
+  - 8A Mock 回归通过，`PASS=11 FAIL=0`。
+  - file-access 回归通过，`PASS=18 FAIL=0`。
+  - 前端构建通过。
+  - `git diff --check` 通过。
+  - `BIM_ENGINE_PROVIDER=GLANDAR` 且未配置时返回业务化阻断，不是 500。
+- P1 极短复验结果：
+  - `GlandarEngineSettings.java` 已纳入 Git 跟踪。
+  - `scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh` 已纳入 Git 跟踪。
+  - `git diff --check` 与 `git diff --cached --check` 均通过。
+  - `git ls-files --others --exclude-standard` 无输出。
+- 主 agent 裁决：
+  - `8B-GD1：平台侧葛兰岱尔适配骨架` 正式收口。
+  - 不自动进入 `8B-GD2`。
+  - 8B-GD2 启动前必须确认 Station Token 安全注入、105 RVT 样本、Station 上传/查询/Viewer 规则。
+- 收口记录：
+
+```text
+handoff/main-agent/8b-gd1-glandar-adapter-skeleton-closure.md
+```

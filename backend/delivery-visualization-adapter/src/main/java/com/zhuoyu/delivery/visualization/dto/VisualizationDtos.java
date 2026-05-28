@@ -72,6 +72,60 @@ public final class VisualizationDtos {
     ) {
     }
 
+    public record LightweightJobCreateResponse(
+        Long projectId,
+        Long integrationId,
+        Long modelFileId,
+        String modelName,
+        String modelFormat,
+        String jobId,
+        String engineMode,
+        Boolean taskCreated,
+        String taskStatus,
+        String statusLabel,
+        String actionHint,
+        String blockedReason,
+        Boolean realUploadExecuted,
+        Boolean realConversionExecuted,
+        Boolean modelBodyRead,
+        Boolean nasFileTouched,
+        Boolean viewerAvailable,
+        List<String> supportedOperations,
+        List<String> forbiddenOperations
+    ) {
+    }
+
+    public record LightweightJobResponse(
+        Long projectId,
+        String jobId,
+        String engineMode,
+        String taskStatus,
+        Integer progressPercent,
+        String statusLabel,
+        String blockedReason,
+        Boolean viewerAvailable,
+        Boolean realUploadExecuted,
+        Boolean realConversionExecuted,
+        Instant updatedAt
+    ) {
+    }
+
+    public record LightweightViewerTicketResponse(
+        Long projectId,
+        String jobId,
+        String engineMode,
+        Boolean viewerAvailable,
+        Boolean ticketIssued,
+        String viewerTicket,
+        Instant expiresAt,
+        String launchUrl,
+        String statusLabel,
+        String blockedReason,
+        List<String> supportedOperations,
+        List<String> forbiddenOperations
+    ) {
+    }
+
     public record ManagedObjectContextItem(
         Long id,
         String code,

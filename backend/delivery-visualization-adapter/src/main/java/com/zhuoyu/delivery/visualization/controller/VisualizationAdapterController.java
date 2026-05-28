@@ -12,8 +12,11 @@ import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LinkageRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LinkageResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightJobCreateResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightJobResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightPlanResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightStatusResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightViewerTicketResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LocateResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.VisualizationContextResponse;
 import jakarta.validation.Valid;
@@ -84,6 +87,38 @@ public class VisualizationAdapterController {
         var principal = securityPrincipalAccessor.requireCurrentPrincipal();
         projectContextApplicationService.requireCurrentProject(principal, projectId);
         return ApiResponse.success(visualizationAdapterApplicationService.lightweightPlan(projectId, integrationId));
+    }
+
+    @PostMapping("/model-integrations/{integrationId}/lightweight-jobs")
+    public ApiResponse<LightweightJobCreateResponse> createLightweightJob(
+        @PathVariable Long projectId,
+        @PathVariable Long integrationId
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(visualizationAdapterApplicationService.createLightweightJob(
+            principal.userId(), projectId, integrationId));
+    }
+
+    @GetMapping("/lightweight-jobs/{jobId}")
+    public ApiResponse<LightweightJobResponse> lightweightJob(
+        @PathVariable Long projectId,
+        @PathVariable String jobId
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(visualizationAdapterApplicationService.lightweightJob(projectId, jobId));
+    }
+
+    @PostMapping("/lightweight-jobs/{jobId}:viewer-ticket")
+    public ApiResponse<LightweightViewerTicketResponse> lightweightViewerTicket(
+        @PathVariable Long projectId,
+        @PathVariable String jobId
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(visualizationAdapterApplicationService.lightweightViewerTicket(
+            principal.userId(), projectId, jobId));
     }
 
     @PostMapping("/managed-objects/{objectId}:locate")

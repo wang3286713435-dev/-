@@ -9,14 +9,14 @@
     [x] 明确首轮链路：平台后端分片上传 Station API
     [x] 明确安全边界：Station 不直连 NAS / MinIO 底层目录
 
-[ ] 8B-GD1：平台侧葛兰岱尔适配骨架
-    [ ] 默认 MOCK，不影响现有 8A
-    [ ] 配置项与 GLANDAR provider 开关
-    [ ] Station API client 骨架，不执行真实上传
-    [ ] lightweight job / viewer ticket 平台接口骨架
-    [ ] GLANDAR 未配置或 token 缺失时返回业务化不可用，不 500
-    [ ] 响应禁出字段扫描
-    [ ] 8A / file-access 回归
+[x] 8B-GD1：平台侧葛兰岱尔适配骨架
+    [x] 默认 MOCK，不影响现有 8A
+    [x] 配置项与 GLANDAR provider 开关
+    [x] Station API client 骨架，不执行真实上传
+    [x] lightweight job / viewer ticket 平台接口骨架
+    [x] GLANDAR 未配置或凭据缺失时返回业务化不可用，不 500
+    [x] 响应禁出字段扫描
+    [x] 8A / file-access 回归
 
 [ ] 8B-GD2：105 RVT PoC 转换闭环
     [ ] 选定 105 项目 1-3 个 RVT 样本
@@ -36,9 +36,17 @@
     [ ] 后续构件定位 / 高亮 / 图模联动排期
 ```
 
-## 当前 active
+## 当前状态
 
-`8B-GD1：平台侧葛兰岱尔适配骨架`
+`8B-GD1：平台侧葛兰岱尔适配骨架` 已正式收口。
+
+收口记录：
+
+```text
+handoff/main-agent/8b-gd1-glandar-adapter-skeleton-closure.md
+```
+
+下一批候选：`8B-GD2：105 RVT PoC 转换闭环`。启动前需等待主 agent 新裁决，不自动进入。
 
 ## 当前关键裁决
 
@@ -46,4 +54,3 @@
 - 8B-GD1 不做真实转换，只补平台侧接口骨架和配置边界。
 - 不新增数据库迁移，避免与 M3G 主线迁移号冲突；持久化任务表放到 8B-GD2 或等 M3G 收口后再裁决。
 - Station Token 不进入前端、handoff、Git、日志。
-
