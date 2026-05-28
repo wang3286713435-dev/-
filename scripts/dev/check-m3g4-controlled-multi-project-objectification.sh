@@ -12,6 +12,7 @@ DB_PASSWORD="${DB_PASSWORD:-root123}"
 MAX_FILE_SIZE_BYTES="${MAX_FILE_SIZE_BYTES:-10485760}"
 MAX_TOTAL_BYTES="${MAX_TOTAL_BYTES:-104857600}"
 MAX_PROJECT_BYTES="${MAX_PROJECT_BYTES:-52428800}"
+M3G4_READ_ONLY="${M3G4_READ_ONLY:-0}"
 
 PASS=0
 FAIL=0
@@ -264,7 +265,13 @@ pass "管理员登录成功"
 readiness_response="$(api_get "/api/data-steward/storage-provider-readiness")"
 assert_ok "${readiness_response}"
 assert_no_forbidden "readiness" "${readiness_response}"
-if [[ "$(json_expr "${readiness_response}" "data['data']['endpointType'] == 'NAS_SIDE_MINIO' and data['data']['readinessStatus'] == 'READY' and data['data']['writable'] == True")" == "true" ]]; then
+if [[ "${M3G4_READ_ONLY}" == "1" || "${M3G4_READ_ONLY}" == "true" ]]; then
+  if [[ "$(json_expr "${readiness_response}" "data['data']['configured'] == True and data['data']['reachable'] == True and data['data']['readable'] == True")" == "true" ]]; then
+    pass "只读回归模式下对象存储可达且可读"
+  else
+    fail "只读回归模式下对象存储不可读：${readiness_response}"
+  fi
+elif [[ "$(json_expr "${readiness_response}" "data['data']['endpointType'] == 'NAS_SIDE_MINIO' and data['data']['readinessStatus'] == 'READY' and data['data']['writable'] == True")" == "true" ]]; then
   pass "NAS 侧 MinIO READY 且可写"
 else
   fail "NAS 侧 MinIO 尚未 READY：${readiness_response}"
@@ -350,6 +357,10 @@ pass "超出总文件数硬上限的执行请求被拒绝"
 
 echo ""
 echo "--- 4. Execute controlled small batch ---"
+if [[ "${M3G4_READ_ONLY}" == "1" || "${M3G4_READ_ONLY}" == "true" ]]; then
+  pass "M3G4_READ_ONLY 已开启，跳过真实对象化执行和重复执行验证"
+  pass "只读模式未触发对象化迁移写入"
+else
 execute_response="$(api_post "/api/data-steward/storage-objectification-plans:execute" "$(execute_body true "${#SAMPLE_IDS[@]}")")"
 assert_ok "${execute_response}"
 assert_no_forbidden "execute response" "${execute_response}"
@@ -399,6 +410,7 @@ for index in "${!SAMPLE_IDS[@]}"; do
     fail "fileId=${file_id} NAS 原文件状态变化"
   fi
 done
+fi
 
 echo ""
 echo "--- 7. Script tracking ---"

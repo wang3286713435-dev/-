@@ -87,6 +87,14 @@
             @clear="reloadFiles"
           />
           <el-button :icon="Search" @click="reloadFiles">查询</el-button>
+          <el-checkbox
+            v-if="hasKeyword"
+            v-model="filters.searchCurrentFolderOnly"
+            class="file-browser__search-scope-toggle"
+            @change="reloadFiles"
+          >
+            仅当前文件夹及子目录
+          </el-checkbox>
           <el-button text @click="advancedSearchVisible = !advancedSearchVisible">
             高级搜索
             <el-icon class="file-browser__chevron" :class="{ 'is-open': advancedSearchVisible }">
@@ -122,6 +130,15 @@
           <el-tag v-if="currentProjectMismatch" type="info" effect="plain">按本页面项目执行</el-tag>
         </div>
       </section>
+
+      <el-alert
+        v-if="hasKeyword"
+        class="file-browser__search-alert"
+        type="info"
+        show-icon
+        :closable="false"
+        :title="searchScopeHint"
+      />
 
       <div class="file-browser__continuity" data-m1e-continuity-bar>
         <div>
@@ -222,7 +239,7 @@
           :row-key="entryRowKey"
           :row-class-name="entryRowClassName"
           class="master-table file-browser__entry-table"
-          empty-text="当前文件夹暂无文件或直接子文件夹"
+          :empty-text="fileTableEmptyText"
           @row-click="handleEntryClick"
           @row-dblclick="handleEntryDblClick"
           @row-contextmenu="handleEntryContextMenu"
@@ -236,8 +253,15 @@
                 <div>
                   <strong>{{ row.name }}</strong>
                   <span v-if="row.kind === 'DIRECTORY'">{{ row.path || '项目根目录' }}</span>
+                  <span v-else-if="hasKeyword">所在位置：{{ fileLocationLabel(row.file) }}</span>
                 </div>
               </div>
+            </template>
+          </el-table-column>
+          <el-table-column v-if="hasKeyword" label="所在位置" min-width="220" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span v-if="row.kind === 'FILE'">{{ fileLocationLabel(row.file) }}</span>
+              <span v-else>{{ row.path || '项目根目录' }}</span>
             </template>
           </el-table-column>
           <el-table-column label="类型" width="110">
@@ -291,13 +315,23 @@
                 <el-tag v-if="!isRegisteredFile(row.file)" type="warning" size="small">未登记</el-tag>
                 <el-tag v-else-if="!row.file.qualityFlags || row.file.qualityFlags.length === 0" type="success" size="small">正常</el-tag>
                 <el-tag v-else type="warning" size="small">{{ row.file.qualityFlags.length }} 项待处理</el-tag>
-                <el-tag v-if="isObjectStoredFile(row.file)" type="success" size="small">对象存储</el-tag>
                 <span>{{ isRegisteredFile(row.file) ? (row.file.confidenceLevel === 'HIGH' ? '高置信度' : '需复核') : '需扫描入库后治理' }}</span>
               </div>
               <div v-else class="file-browser__status-cell">
                 <el-tag type="info" size="small">目录</el-tag>
                 <span>{{ row.fileCount }} 个登记文件</span>
               </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="存储" width="170">
+            <template #default="{ row }">
+              <div v-if="row.kind === 'FILE'" class="file-browser__storage-cell">
+                <el-tag :type="storageStateTagType(row.file)" size="small">
+                  {{ storageStateLabel(row.file) }}
+                </el-tag>
+                <span>{{ accessSourceLabel(row.file) }}</span>
+              </div>
+              <span v-else class="file-browser__muted">-</span>
             </template>
           </el-table-column>
           <el-table-column label="预览产物" width="190">
@@ -532,6 +566,7 @@ import {
   createNasDirectory,
   fetchCatalogDirectories,
   fetchCatalogDirectoryChildren,
+  fetchCatalogFiles,
   fetchNasWriteTrialStatus,
   fetchNasOperations,
   fetchNasQuarantine,
@@ -593,6 +628,7 @@ const QUERY_KEYS = [
   'tab',
   'fileDir',
   'fileKeyword',
+  'fileSearchScope',
   'fileKind',
   'discipline',
   'fileExt',
@@ -665,6 +701,7 @@ let stateReady = false;
 
 const filters = reactive({
   keyword: '',
+  searchCurrentFolderOnly: false,
   fileKind: 'ALL',
   disciplineCode: '',
   fileExt: '',
@@ -709,6 +746,7 @@ const ownershipStatusOptions = [
 type FileBrowserState = {
   activeDir?: string;
   keyword?: string;
+  searchCurrentFolderOnly?: boolean;
   fileKind?: string;
   disciplineCode?: string;
   fileExt?: string;
@@ -856,6 +894,18 @@ const nasTrialSummary = computed(() => {
 });
 
 const activeDirectoryLabel = computed(() => activeDir.value || '项目根目录');
+const hasKeyword = computed(() => filters.keyword.trim().length > 0);
+const searchScopeHint = computed(() => {
+  if (!hasKeyword.value) return '';
+  if (filters.searchCurrentFolderOnly) {
+    return `正在“${activeDirectoryLabel.value}”及其子目录中搜索，结果不会包含其他项目目录。`;
+  }
+  return '正在整个项目中搜索，结果会显示所在位置；不会暴露真实 NAS 路径。';
+});
+const fileTableEmptyText = computed(() => {
+  if (!hasKeyword.value) return '当前文件夹暂无文件或直接子文件夹';
+  return filters.searchCurrentFolderOnly ? '当前文件夹及子目录没有匹配文件' : '整个项目没有匹配文件';
+});
 const activeDirectoryHelper = computed(() => {
   if (nasTrialLoadFailed.value) return '暂时无法确认灰度状态，页面已停用真实写按钮。';
   if (!hasRouteProjectAccess.value) return '当前账号没有本项目权限，不能查看或操作这个项目的文件。';
@@ -957,6 +1007,10 @@ const selectedDirectoryEntries = computed(() =>
 
 const selectionSummary = computed(() => {
   if (!selectedEntries.value.length) {
+    if (hasKeyword.value) {
+      const scope = filters.searchCurrentFolderOnly ? '当前文件夹及子目录' : '整个项目';
+      return `搜索结果：${scope}内 ${pagination.total} 个文件`;
+    }
     return `当前文件夹：${directoryEntries.value.length} 个文件夹 / ${pagination.total} 个文件`;
   }
   return `已选 ${selectedEntries.value.length} 项：文件 ${selectedFileEntries.value.length} 个，文件夹 ${selectedDirectoryEntries.value.length} 个`;
@@ -1023,6 +1077,7 @@ watch(
   () => [
     activeDir.value,
     filters.keyword,
+    filters.searchCurrentFolderOnly,
     filters.fileKind,
     filters.disciplineCode,
     filters.fileExt,
@@ -1075,6 +1130,7 @@ function initializeBrowserState() {
   const fallbackQualityIssue = props.initialQualityIssue || 'ALL';
   activeDir.value = normalizeProjectDirectoryPath(state.activeDir ?? '');
   filters.keyword = state.keyword ?? '';
+  filters.searchCurrentFolderOnly = state.searchCurrentFolderOnly === true;
   filters.fileKind = normalizeFileKind(state.fileKind);
   filters.disciplineCode = state.disciplineCode ?? '';
   filters.fileExt = state.fileExt ?? '';
@@ -1098,6 +1154,7 @@ function readQueryState(): FileBrowserState | null {
   return {
     activeDir: queryString(route.query.fileDir) ?? '',
     keyword: queryString(route.query.fileKeyword) ?? '',
+    searchCurrentFolderOnly: queryString(route.query.fileSearchScope) === 'current',
     fileKind: queryString(route.query.fileKind) ?? 'ALL',
     disciplineCode: queryString(route.query.discipline) ?? '',
     fileExt: queryString(route.query.fileExt) ?? '',
@@ -1133,11 +1190,12 @@ function currentBrowserState(): FileBrowserState {
   return {
     activeDir: activeDir.value,
     keyword: filters.keyword.trim(),
+    searchCurrentFolderOnly: filters.searchCurrentFolderOnly,
     fileKind: filters.fileKind,
     disciplineCode: filters.disciplineCode,
-      fileExt: filters.fileExt.trim(),
-      qualityIssue: filters.qualityIssue,
-      ownershipStatus: filters.ownershipStatus,
+    fileExt: filters.fileExt.trim(),
+    qualityIssue: filters.qualityIssue,
+    ownershipStatus: filters.ownershipStatus,
     page: pagination.page,
     pageSize: pagination.pageSize,
     expandedDirs: expandedDirs.value,
@@ -1157,6 +1215,7 @@ function syncBrowserStateToRoute(state: FileBrowserState) {
   nextQuery.tab = 'files';
   assignQuery(nextQuery, 'fileDir', state.activeDir);
   assignQuery(nextQuery, 'fileKeyword', state.keyword);
+  assignQuery(nextQuery, 'fileSearchScope', state.searchCurrentFolderOnly ? 'current' : '');
   assignQuery(nextQuery, 'fileKind', state.fileKind === 'ALL' ? '' : state.fileKind);
   assignQuery(nextQuery, 'discipline', state.disciplineCode);
   assignQuery(nextQuery, 'fileExt', state.fileExt);
@@ -1173,6 +1232,7 @@ function syncBrowserStateToRoute(state: FileBrowserState) {
 function resetViewState() {
   activeDir.value = '';
   filters.keyword = '';
+  filters.searchCurrentFolderOnly = false;
   filters.fileKind = 'ALL';
   filters.disciplineCode = '';
   filters.fileExt = '';
@@ -1418,10 +1478,10 @@ async function loadFiles() {
   const requestId = ++fileRequestId;
   fileLoading.value = true;
   try {
-    const result = await fetchCatalogDirectoryChildren({
+    const keyword = filters.keyword.trim();
+    const commonParams = {
       projectId: props.projectId,
-      directoryPath: activeDir.value || undefined,
-      keyword: filters.keyword.trim() || undefined,
+      keyword: keyword || undefined,
       fileKind: filters.fileKind === 'ALL' ? undefined : filters.fileKind,
       disciplineCode: filters.disciplineCode || undefined,
       fileExt: normalizeExt(filters.fileExt),
@@ -1429,6 +1489,28 @@ async function loadFiles() {
       ownershipStatus: filters.ownershipStatus === 'ALL' ? undefined : filters.ownershipStatus,
       page: pagination.page,
       pageSize: pagination.pageSize
+    };
+
+    if (keyword) {
+      const result = await fetchCatalogFiles({
+        ...commonParams,
+        directoryPath: filters.searchCurrentFolderOnly ? activeDir.value || undefined : undefined,
+        directOnly: false
+      });
+      if (requestId === fileRequestId) {
+        directDirectories.value = [];
+        files.value = result.rows;
+        pagination.page = result.page;
+        pagination.pageSize = result.pageSize;
+        pagination.total = result.total;
+      }
+      return;
+    }
+
+    const result = await fetchCatalogDirectoryChildren({
+      ...commonParams,
+      directoryPath: activeDir.value || undefined,
+      directOnly: true
     });
     if (requestId === fileRequestId) {
       directDirectories.value = result.directories;
@@ -1884,9 +1966,66 @@ function isRegisteredFile(file: CatalogFile) {
   return file.registered !== false && Number.isFinite(Number(file.fileId));
 }
 
-function isObjectStoredFile(file: CatalogFile) {
+function normalizeStorageState(file: CatalogFile) {
+  if (!isRegisteredFile(file)) return 'UNREGISTERED';
+  const state = (file.storageState || '').toUpperCase();
+  if (state) return state;
   const provider = (file.storageProvider || '').toUpperCase();
-  return provider === 'OBJECT_STORAGE' || provider === 'MINIO' || provider === 'S3_COMPATIBLE';
+  return provider === 'OBJECT_STORAGE' || provider === 'MINIO' || provider === 'S3_COMPATIBLE'
+    ? 'OBJECT_STORED'
+    : 'NAS_ONLY';
+}
+
+function storageStateLabel(file: CatalogFile) {
+  switch (normalizeStorageState(file)) {
+    case 'OBJECT_STORED':
+      return '已对象化';
+    case 'MIGRATION_PENDING':
+      return '对象化中';
+    case 'MIGRATION_FAILED':
+      return '对象化失败';
+    case 'UNREGISTERED':
+      return '未登记';
+    default:
+      return '历史 NAS';
+  }
+}
+
+function accessSourceLabel(file: CatalogFile) {
+  if (!isRegisteredFile(file)) return '需扫描入库';
+  switch (normalizeStorageState(file)) {
+    case 'OBJECT_STORED':
+      return 'NAS 侧 MinIO';
+    case 'MIGRATION_PENDING':
+      return '等待平台处理';
+    case 'MIGRATION_FAILED':
+      return '仍按历史 NAS';
+    default:
+      return '尚未对象化';
+  }
+}
+
+function storageStateTagType(file: CatalogFile) {
+  switch (normalizeStorageState(file)) {
+    case 'OBJECT_STORED':
+      return 'success';
+    case 'MIGRATION_PENDING':
+      return 'warning';
+    case 'MIGRATION_FAILED':
+      return 'danger';
+    case 'UNREGISTERED':
+      return 'info';
+    default:
+      return 'info';
+  }
+}
+
+function fileLocationLabel(file: CatalogFile) {
+  const path = normalizeProjectDirectoryPath(file.logicalPath || '');
+  if (!path) return '项目根目录';
+  const parts = splitPath(path);
+  if (parts.length <= 1) return '项目根目录';
+  return joinPath(parts.slice(0, -1), path.startsWith('/')) || '项目根目录';
 }
 
 async function renameEntry(entry: BrowserEntry) {
@@ -2922,6 +3061,11 @@ function formatDate(value: string | null | undefined) {
   width: 240px;
 }
 
+.file-browser__search-scope-toggle {
+  margin-left: 0;
+  white-space: nowrap;
+}
+
 .file-browser__trial-alert {
   margin-bottom: var(--zy-sp-3);
   border-radius: var(--zy-radius-base);
@@ -2995,6 +3139,11 @@ function formatDate(value: string | null | undefined) {
   flex-wrap: wrap;
   gap: var(--zy-sp-2);
   justify-content: flex-end;
+}
+
+.file-browser__search-alert {
+  margin-bottom: var(--zy-sp-3);
+  border-radius: var(--zy-radius-base);
 }
 
 .file-browser__chevron {
@@ -3241,6 +3390,7 @@ function formatDate(value: string | null | undefined) {
 
 .file-browser__status-cell,
 .file-browser__artifact-cell,
+.file-browser__storage-cell,
 .file-browser__diagnostic-cell {
   display: grid;
   gap: 3px;
@@ -3249,6 +3399,7 @@ function formatDate(value: string | null | undefined) {
 
 .file-browser__status-cell span,
 .file-browser__artifact-cell span,
+.file-browser__storage-cell span,
 .file-browser__diagnostic-cell span {
   color: var(--zy-muted);
   font-size: var(--zy-fs-xs);

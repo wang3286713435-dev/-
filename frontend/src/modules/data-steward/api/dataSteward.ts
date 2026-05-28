@@ -1226,6 +1226,8 @@ export interface CatalogFile {
   status: string;
   confidenceLevel: string | null;
   storageProvider: string;
+  storageState?: string | null;
+  accessSource?: string | null;
   logicalPath: string | null;
   storagePathVisible: boolean;
   storagePathVisibilityReason: string;

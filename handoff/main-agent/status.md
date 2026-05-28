@@ -2182,6 +2182,29 @@
   - `handoff/dev-agent/current-prompt.md`
   - `handoff/test-agent/current-prompt.md`
 
+## 2026-05-28 M3G-5 正式收口
+
+- 开发 agent 完成 M3G-5，报告写入 `handoff/dev-agent/latest-report.md`。
+- 测试 agent 完成 M3G-5 正式验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结果：
+  - 当前 P0：无。
+  - 当前 P1：无。
+  - M3G-5 专项脚本通过，`PASS=12 FAIL=0`。
+  - M3G-4 只读回归 / M3G-3 / M3E / file-access 回归全部通过。
+- 主 agent 审计确认：
+  - 关键词搜索默认在整个项目范围内搜索。
+  - “仅当前文件夹及子目录”作为可选收窄范围保留。
+  - 未搜索时仍保持当前目录 direct-only 浏览。
+  - 文件表和详情能区分 `OBJECT_STORED` 与 `NAS_ONLY`。
+  - 未创建对象化迁移任务。
+  - 未触碰真实 NAS 原文件。
+  - 未暴露真实 NAS 路径、bucket、object key、`storage_uri`、SQL、raw row、token、secret。
+  - 未新增 Hermes 正文问答、documents / chunks、Qdrant / OpenSearch、BIM 引擎、parser / indexing。
+- 主 agent 裁决：
+  - `M3G-5：文件管理器项目全局搜索与存储展示修复` 正式收口。
+  - 当前 active 批次切换为 `待用户确认`。
+  - 下一步建议先由用户手工确认文件管理器体验，再决定继续扩大 M3G 对象化覆盖率或进入 M4A 语义证据契约。
+
 ## 跨机器交接入口
 
 ## 2026-05-26 M3E 启动

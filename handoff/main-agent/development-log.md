@@ -4367,3 +4367,16 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - `handoff/test-agent/current-prompt.md`
   - `handoff/main-agent/status.md`
   - `handoff/main-agent/phase2-current-roadmap.md`
+## 2026-05-28 M3G-5 收口：文件管理器项目全局搜索与存储展示修复
+
+- 测试 agent 已完成 M3G-5 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过，当前无 P0 / P1。
+- 已确认：
+  - 文件管理器关键词搜索默认在整个项目范围内搜索。
+  - 可选“仅当前文件夹及子目录”用于收窄范围。
+  - 未搜索时保持当前目录 direct-only 浏览。
+  - 文件表 / 详情区分 `OBJECT_STORED` 与 `NAS_ONLY`。
+  - 禁出字段扫描通过，未泄露真实 NAS 路径、bucket、object key、`storage_uri`、SQL、raw row、token、secret。
+  - 未创建迁移任务，未触碰真实 NAS 原文件。
+- 主 agent 裁决：`M3G-5：文件管理器项目全局搜索与存储展示修复` 正式收口。
+- 收口记录：`handoff/main-agent/m3g5-file-manager-search-storage-display-closure.md`。
