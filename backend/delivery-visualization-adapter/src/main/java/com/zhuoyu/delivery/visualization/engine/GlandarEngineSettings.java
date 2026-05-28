@@ -35,24 +35,44 @@ public class GlandarEngineSettings {
     }
 
     public String stationApiBase() {
-        return trimToNull(firstNonBlank(
+        return stripTrailingSlash(trimToNull(firstNonBlank(
             environment.getProperty("GLANDAR_STATION_API_BASE"),
             environment.getProperty("delivery.bim.engine.glandar.station-api-base")
-        ));
+        )));
     }
 
     public String stationWebBase() {
-        return trimToNull(firstNonBlank(
+        return stripTrailingSlash(trimToNull(firstNonBlank(
             environment.getProperty("GLANDAR_STATION_WEB_BASE"),
             environment.getProperty("delivery.bim.engine.glandar.station-web-base")
-        ));
+        )));
     }
 
-    public boolean tokenConfigured() {
+    public String stationToken() {
         return trimToNull(firstNonBlank(
             environment.getProperty("GLANDAR_TOKEN"),
             environment.getProperty("delivery.bim.engine.glandar.token")
-        )) != null;
+        ));
+    }
+
+    public int uploadChunkSizeBytes() {
+        String value = firstNonBlank(
+            environment.getProperty("GLANDAR_UPLOAD_CHUNK_SIZE_MB"),
+            environment.getProperty("delivery.bim.engine.glandar.upload-chunk-size-mb")
+        );
+        if (value == null) {
+            return 2 * 1024 * 1024;
+        }
+        try {
+            int mb = Integer.parseInt(value.trim());
+            return Math.min(Math.max(mb, 1), 16) * 1024 * 1024;
+        } catch (NumberFormatException ignored) {
+            return 2 * 1024 * 1024;
+        }
+    }
+
+    public boolean tokenConfigured() {
+        return stationToken() != null;
     }
 
     public boolean readyForHandshake() {
@@ -89,5 +109,16 @@ public class GlandarEngineSettings {
             return null;
         }
         return value.trim();
+    }
+
+    private String stripTrailingSlash(String value) {
+        if (value == null) {
+            return null;
+        }
+        String result = value;
+        while (result.endsWith("/")) {
+            result = result.substring(0, result.length() - 1);
+        }
+        return result;
     }
 }

@@ -126,6 +126,12 @@ const router = createRouter({
           meta: { requiresAuth: true }
         },
         {
+          path: 'visualization/glandar-viewer',
+          name: 'glandar-model-preview',
+          component: () => import('@/modules/visualization/pages/GlandarModelPreviewPage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
           path: 'digital-twin',
           redirect: '/bim-collaboration',
           meta: { requiresAuth: true }

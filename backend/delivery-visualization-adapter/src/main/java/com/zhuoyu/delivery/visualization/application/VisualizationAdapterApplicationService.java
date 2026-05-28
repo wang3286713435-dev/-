@@ -11,6 +11,7 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CapacityByDiscipline;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CapacityByFileKind;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CapacityStatisticsResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.EventResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileAssetResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ScanTaskResponse;
 import com.zhuoyu.delivery.datasteward.dto.DataStewardDtos.FileResourceResponse;
 import com.zhuoyu.delivery.datasteward.dto.DataStewardDtos.ManagedObjectResponse;
@@ -18,6 +19,8 @@ import com.zhuoyu.delivery.datasteward.dto.DataStewardDtos.ModelIntegrationRespo
 import com.zhuoyu.delivery.datasteward.file.FileResourceApplicationService;
 import com.zhuoyu.delivery.datasteward.model.ModelIntegrationApplicationService;
 import com.zhuoyu.delivery.datasteward.object.ManagedObjectApplicationService;
+import com.zhuoyu.delivery.datasteward.storage.StorageService;
+import com.zhuoyu.delivery.datasteward.storage.StorageService.StoredResource;
 import com.zhuoyu.delivery.masterdata.section.application.SectionNodeApplicationService;
 import com.zhuoyu.delivery.masterdata.section.dto.SectionNodeResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ActivityItem;
@@ -28,6 +31,7 @@ import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ContextInjectResp
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.DeliverySummary;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.DigitalTwinDashboardResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.DistributionItem;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.GlandarRvtPilotFileResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LinkageRequest;
@@ -54,6 +58,12 @@ import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.SystemSummaryItem
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.VisualizationContextResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.WorkItemSummary;
 import com.zhuoyu.delivery.visualization.engine.GlandarEngineSettings;
+import com.zhuoyu.delivery.visualization.engine.GlandarStationClient;
+import com.zhuoyu.delivery.visualization.engine.GlandarStationClient.QueryResult;
+import com.zhuoyu.delivery.visualization.engine.GlandarStationClient.UploadCommand;
+import com.zhuoyu.delivery.visualization.engine.GlandarStationClient.UploadResult;
+import com.zhuoyu.delivery.visualization.engine.LightweightJobRepository;
+import com.zhuoyu.delivery.visualization.engine.LightweightJobRepository.LightweightJobRecord;
 import com.zhuoyu.delivery.workcenter.delivery.DeliveryApplicationService;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCompletenessResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.RectificationResponse;
@@ -68,8 +78,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.zhuoyu.delivery.shared.exception.BusinessException;
 
 @Service
 public class VisualizationAdapterApplicationService {
@@ -89,6 +101,24 @@ public class VisualizationAdapterApplicationService {
         "OPEN_REAL_3D_VIEWER",
         "WRITE_HERMES_MEMORY"
     );
+    private static final List<String> GLANDAR_SUPPORTED_OPERATIONS = List.of(
+        "CREATE_RVT_CONVERSION_TASK",
+        "CALL_STATION_SPLIT_UPLOAD",
+        "QUERY_STATION_TASK",
+        "ISSUE_CONTROLLED_VIEWER_ENTRY"
+    );
+    private static final List<String> GLANDAR_FORBIDDEN_OPERATIONS = List.of(
+        "TOUCH_NAS_FILE",
+        "EXPOSE_STORAGE_LOCATION",
+        "EXPOSE_OBJECT_LOCATOR",
+        "WRITE_HERMES_MEMORY",
+        "WRITE_DOCUMENT_CHUNKS",
+        "AUTO_APPROVE_DELIVERY"
+    );
+    private static final Long GLANDAR_RVT_PILOT_PROJECT_ID = 503L;
+    private static final List<Long> GLANDAR_RVT_PILOT_FILE_IDS = List.of(
+        1257L, 1261L, 1264L, 3730L, 1258L, 1251L, 1259L, 1262L, 3729L, 1243L
+    );
 
     private final ModelIntegrationApplicationService modelIntegrationApplicationService;
     private final ManagedObjectApplicationService managedObjectApplicationService;
@@ -101,6 +131,9 @@ public class VisualizationAdapterApplicationService {
     private final AuditLogApplicationService auditLogApplicationService;
     private final SectionNodeApplicationService sectionNodeApplicationService;
     private final GlandarEngineSettings glandarEngineSettings;
+    private final GlandarStationClient glandarStationClient;
+    private final LightweightJobRepository lightweightJobRepository;
+    private final StorageService storageService;
 
     public VisualizationAdapterApplicationService(
         ModelIntegrationApplicationService modelIntegrationApplicationService,
@@ -113,7 +146,10 @@ public class VisualizationAdapterApplicationService {
         RectificationApplicationService rectificationApplicationService,
         AuditLogApplicationService auditLogApplicationService,
         SectionNodeApplicationService sectionNodeApplicationService,
-        GlandarEngineSettings glandarEngineSettings
+        GlandarEngineSettings glandarEngineSettings,
+        GlandarStationClient glandarStationClient,
+        LightweightJobRepository lightweightJobRepository,
+        StorageService storageService
     ) {
         this.modelIntegrationApplicationService = modelIntegrationApplicationService;
         this.managedObjectApplicationService = managedObjectApplicationService;
@@ -126,6 +162,9 @@ public class VisualizationAdapterApplicationService {
         this.auditLogApplicationService = auditLogApplicationService;
         this.sectionNodeApplicationService = sectionNodeApplicationService;
         this.glandarEngineSettings = glandarEngineSettings;
+        this.glandarStationClient = glandarStationClient;
+        this.lightweightJobRepository = lightweightJobRepository;
+        this.storageService = storageService;
     }
 
     public VisualizationContextResponse context(Long projectId) {
@@ -252,22 +291,231 @@ public class VisualizationAdapterApplicationService {
     public LightweightJobCreateResponse createLightweightJob(Long userId, Long projectId, Long integrationId) {
         ModelIntegrationResponse integration = modelIntegrationApplicationService.requireIntegration(projectId, integrationId);
         FileResourceResponse modelFile = fileResourceApplicationService.requireFile(projectId, integration.modelFileId());
+        if (!glandarRealModeReady()) {
+            return lightweightJobSkeleton(userId, projectId, integrationId, modelFile);
+        }
+        return submitGlandarJob(userId, projectId, integrationId, modelFile, false);
+    }
+
+    public LightweightJobCreateResponse createLightweightJobForFile(Long userId, Long projectId, Long fileId, Boolean force) {
+        FileResourceResponse modelFile = fileResourceApplicationService.requireFile(projectId, fileId);
+        if (!glandarRealModeReady()) {
+            return lightweightJobSkeleton(userId, projectId, null, modelFile);
+        }
+        requireGlandarRvtPilotFile(projectId, fileId);
+        return submitGlandarJob(userId, projectId, null, modelFile, Boolean.TRUE.equals(force));
+    }
+
+    public List<GlandarRvtPilotFileResponse> glandarRvtPilotFiles(Long projectId) {
+        if (!GLANDAR_RVT_PILOT_PROJECT_ID.equals(projectId)) {
+            return List.of();
+        }
+        List<GlandarRvtPilotFileResponse> rows = new ArrayList<>();
+        for (int index = 0; index < GLANDAR_RVT_PILOT_FILE_IDS.size(); index++) {
+            Long fileId = GLANDAR_RVT_PILOT_FILE_IDS.get(index);
+            FileResourceResponse file = fileResourceApplicationService.requireFile(projectId, fileId);
+            LightweightJobRecord latest = lightweightJobRepository.findLatest(projectId, fileId)
+                .map(this::refreshGlandarJob)
+                .orElse(null);
+            rows.add(toGlandarRvtPilotFileResponse(projectId, file, latest, index + 1));
+        }
+        return rows;
+    }
+
+    public List<GlandarRvtPilotFileResponse> submitGlandarRvtPilotFiles(Long userId, Long projectId, Boolean force) {
+        if (!GLANDAR_RVT_PILOT_PROJECT_ID.equals(projectId)) {
+            throw new BusinessException("GLANDAR_PILOT_PROJECT_NOT_ALLOWED", "当前项目未纳入葛兰岱尔 RVT 试点",
+                HttpStatus.BAD_REQUEST);
+        }
+        for (Long fileId : GLANDAR_RVT_PILOT_FILE_IDS) {
+            createLightweightJobForFile(userId, projectId, fileId, force);
+        }
+        return glandarRvtPilotFiles(projectId);
+    }
+
+    public LightweightJobResponse lightweightJob(Long projectId, String jobId) {
+        String engineMode = engineMode();
+        Long numericJobId = parseJobId(jobId);
+        if (numericJobId != null) {
+            return lightweightJobRepository.findById(projectId, numericJobId)
+                .map(this::refreshGlandarJob)
+                .map(this::toLightweightJobResponse)
+                .orElseThrow(() -> new BusinessException("LIGHTWEIGHT_JOB_NOT_FOUND", "轻量化任务不存在",
+                    HttpStatus.NOT_FOUND));
+        }
+        return new LightweightJobResponse(
+            projectId,
+            defaultText(jobId, safeJobId(engineMode, projectId, 0L)),
+            null,
+            null,
+            null,
+            null,
+            engineMode,
+            glandarEngineSettings.readyForHandshake() ? "READY_FOR_GD2" : "NOT_CREATED",
+            0,
+            lightweightJobStatusLabel(engineMode),
+            lightweightBlockedReason(engineMode),
+            false,
+            false,
+            false,
+            null,
+            null,
+            Instant.now()
+        );
+    }
+
+    public LightweightViewerTicketResponse lightweightViewerTicket(Long userId, Long projectId, String jobId) {
+        String engineMode = engineMode();
+        Long numericJobId = parseJobId(jobId);
+        if (numericJobId != null) {
+            LightweightJobRecord record = lightweightJobRepository.findById(projectId, numericJobId)
+                .orElseThrow(() -> new BusinessException("LIGHTWEIGHT_JOB_NOT_FOUND", "轻量化任务不存在",
+                    HttpStatus.NOT_FOUND));
+            LightweightJobRecord refreshed = refreshGlandarJob(record);
+            boolean ready = "READY".equals(refreshed.status()) && Boolean.TRUE.equals(refreshed.viewerAvailable())
+                && hasText(refreshed.modelAccessAddress());
+            auditLogApplicationService.record(projectId, MODULE_CODE, "visualization.lightweight.viewer-ticket.issue",
+                "LIGHTWEIGHT_JOB", String.valueOf(refreshed.id()), userId, Map.of(
+                    "engineMode", "GLANDAR",
+                    "ticketIssued", ready,
+                    "status", refreshed.status()
+                ));
+            return new LightweightViewerTicketResponse(
+                projectId,
+                String.valueOf(refreshed.id()),
+                "GLANDAR",
+                ready,
+                ready,
+                ready ? "viewer-" + refreshed.id() : null,
+                ready ? Instant.now().plusSeconds(900) : null,
+                ready ? refreshed.modelAccessAddress() : null,
+                refreshed.lightweightName(),
+                ready ? refreshed.modelAccessAddress() : null,
+                glandarEngineStaticBase(),
+                ready ? "Viewer 可打开" : "Viewer 暂不可用",
+                ready ? null : defaultText(refreshed.lastErrorMessage(), "模型仍在转换或引擎尚未返回 Viewer 地址"),
+                GLANDAR_SUPPORTED_OPERATIONS,
+                GLANDAR_FORBIDDEN_OPERATIONS
+            );
+        }
+        auditLogApplicationService.record(projectId, MODULE_CODE, "visualization.lightweight.viewer-ticket.prepare", "PROJECT",
+            String.valueOf(projectId), userId, Map.of("engineMode", engineMode, "ticketIssued", false));
+        return new LightweightViewerTicketResponse(
+            projectId,
+            defaultText(jobId, safeJobId(engineMode, projectId, 0L)),
+            engineMode,
+            false,
+            false,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "Viewer 未开放",
+            "8B-GD1 仅提供平台接口骨架；真实葛兰岱尔 Viewer ticket 留到 8B-GD2/8C-GD。",
+            LIGHTWEIGHT_SUPPORTED_OPERATIONS,
+            LIGHTWEIGHT_FORBIDDEN_OPERATIONS
+        );
+    }
+
+    private GlandarRvtPilotFileResponse toGlandarRvtPilotFileResponse(
+        Long projectId,
+        FileResourceResponse file,
+        LightweightJobRecord latest,
+        int pilotRank
+    ) {
+        String taskStatus = latest == null ? "NOT_STARTED" : latest.status();
+        Integer progress = latest == null ? 0 : latest.progressPercent();
+        Boolean viewerAvailable = latest != null && Boolean.TRUE.equals(latest.viewerAvailable());
+        return new GlandarRvtPilotFileResponse(
+            projectId,
+            file.id(),
+            file.assetUuid(),
+            file.originalName(),
+            modelFormat(file.originalName()),
+            file.sizeBytes(),
+            pilotRank,
+            true,
+            latest == null ? null : String.valueOf(latest.id()),
+            latest == null ? null : latest.lightweightName(),
+            taskStatus,
+            progress,
+            viewerAvailable,
+            glandarPilotStatusLabel(latest),
+            glandarPilotActionHint(latest),
+            latest == null ? null : failedReason(latest),
+            latest == null ? null : latest.updatedAt()
+        );
+    }
+
+    private void requireGlandarRvtPilotFile(Long projectId, Long fileId) {
+        if (!GLANDAR_RVT_PILOT_PROJECT_ID.equals(projectId)
+            || !GLANDAR_RVT_PILOT_FILE_IDS.contains(fileId)) {
+            throw new BusinessException("GLANDAR_PILOT_FILE_NOT_ALLOWED",
+                "当前仅开放 105 项目 10 个 RVT 试点文件的葛兰岱尔轻量化转换", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private String glandarPilotStatusLabel(LightweightJobRecord latest) {
+        if (latest == null) {
+            return "需轻量化";
+        }
+        return lightweightRecordStatusLabel(latest);
+    }
+
+    private String glandarPilotActionHint(LightweightJobRecord latest) {
+        if (latest == null) {
+            return "已纳入 105 RVT 试点，可提交葛兰岱尔轻量化转换。";
+        }
+        return switch (defaultText(latest.status(), "RUNNING")) {
+            case "READY" -> "已轻量化，双击可在平台内 BIM Viewer 打开。";
+            case "FAILED" -> "轻量化失败，可人工检查失败原因后重试。";
+            case "UPLOADED", "SUBMITTED", "RUNNING" -> "轻量化处理中，可刷新状态。";
+            default -> "可继续查看轻量化任务状态。";
+        };
+    }
+
+    private String glandarEngineStaticBase() {
+        String stationWebBase = glandarEngineSettings.stationWebBase();
+        if (!hasText(stationWebBase)) {
+            return null;
+        }
+        String trimmed = stationWebBase.endsWith("/") ? stationWebBase.substring(0, stationWebBase.length() - 1) : stationWebBase;
+        if (trimmed.endsWith("/static/ThreeJsEngine")) {
+            return trimmed;
+        }
+        return trimmed + "/static/ThreeJsEngine";
+    }
+
+    private LightweightJobCreateResponse lightweightJobSkeleton(
+        Long userId,
+        Long projectId,
+        Long integrationId,
+        FileResourceResponse modelFile
+    ) {
         String format = modelFormat(modelFile.originalName());
         String engineMode = engineMode();
-        String jobId = safeJobId(engineMode, projectId, integrationId);
+        String jobId = safeJobId(engineMode, projectId, integrationId == null ? modelFile.id() : integrationId);
         String status = glandarEngineSettings.readyForHandshake() ? "READY_FOR_GD2" : "BLOCKED";
-        auditLogApplicationService.record(projectId, MODULE_CODE, "visualization.lightweight.job.prepare", "MODEL_INTEGRATION",
-            String.valueOf(integrationId), userId, Map.of("engineMode", engineMode, "taskCreated", false));
+        auditLogApplicationService.record(projectId, MODULE_CODE, "visualization.lightweight.job.prepare",
+            integrationId == null ? "FILE_RESOURCE" : "MODEL_INTEGRATION",
+            String.valueOf(integrationId == null ? modelFile.id() : integrationId),
+            userId, Map.of("engineMode", engineMode, "taskCreated", false));
         return new LightweightJobCreateResponse(
             projectId,
             integrationId,
-            integration.modelFileId(),
+            modelFile.id(),
             modelFile.originalName(),
             format,
             jobId,
+            null,
+            null,
+            null,
             engineMode,
             false,
             status,
+            0,
             lightweightJobStatusLabel(engineMode),
             lightweightJobActionHint(engineMode),
             lightweightBlockedReason(engineMode),
@@ -281,41 +529,264 @@ public class VisualizationAdapterApplicationService {
         );
     }
 
-    public LightweightJobResponse lightweightJob(Long projectId, String jobId) {
-        String engineMode = engineMode();
-        return new LightweightJobResponse(
+    private LightweightJobCreateResponse submitGlandarJob(
+        Long userId,
+        Long projectId,
+        Long integrationId,
+        FileResourceResponse modelFile,
+        boolean force
+    ) {
+        String format = modelFormat(modelFile.originalName());
+        requireRvt(format);
+        if (force) {
+            lightweightJobRepository.markSuperseded(projectId, modelFile.id(), userId);
+        }
+        LightweightJobRecord existing = force ? null : lightweightJobRepository.findReusable(projectId, modelFile.id()).orElse(null);
+        if (existing != null) {
+            LightweightJobRecord refreshed = refreshGlandarJob(existing);
+            return toLightweightJobCreateResponse(refreshed, modelFile, "复用已有葛兰岱尔轻量化任务");
+        }
+
+        String lightweightName = lightweightName(modelFile);
+        String uniqueCode = "delivery-file-" + modelFile.id();
+        Long jobId = lightweightJobRepository.insertSubmitting(
             projectId,
-            defaultText(jobId, safeJobId(engineMode, projectId, 0L)),
-            engineMode,
-            glandarEngineSettings.readyForHandshake() ? "READY_FOR_GD2" : "NOT_CREATED",
-            0,
-            lightweightJobStatusLabel(engineMode),
-            lightweightBlockedReason(engineMode),
+            integrationId,
+            modelFile.id(),
+            modelFile.assetUuid(),
+            2,
+            lightweightName,
+            uniqueCode,
+            userId
+        );
+        try {
+            StoredResource resource = storageService.openReadable(toFileAsset(projectId, modelFile, format));
+            UploadResult upload = glandarStationClient.upload(new UploadCommand(
+                stableStationFileName(lightweightName, format),
+                lightweightName,
+                uniqueCode,
+                "projectId=%s;fileId=%s;assetUuid=%s".formatted(projectId, modelFile.id(), defaultText(modelFile.assetUuid(), ""))
+            ), resource.resource().getInputStream(), defaultLong(resource.contentLength(), modelFile.sizeBytes()));
+            lightweightJobRepository.markUploaded(jobId, upload.lightweightName(), upload.stationRecordJson(), userId);
+            LightweightJobRecord uploaded = lightweightJobRepository.findById(projectId, jobId)
+                .orElseThrow(() -> new BusinessException("LIGHTWEIGHT_JOB_NOT_FOUND", "轻量化任务不存在", HttpStatus.NOT_FOUND));
+            LightweightJobRecord refreshed = refreshGlandarJob(uploaded);
+            auditLogApplicationService.record(projectId, MODULE_CODE, "visualization.lightweight.job.submit",
+                "LIGHTWEIGHT_JOB", String.valueOf(jobId), userId, Map.of(
+                    "engineMode", "GLANDAR",
+                    "fileId", modelFile.id(),
+                    "status", refreshed.status()
+                ));
+            return toLightweightJobCreateResponse(refreshed, modelFile, "已提交葛兰岱尔轻量化任务");
+        } catch (BusinessException exception) {
+            lightweightJobRepository.markFailed(jobId, exception.getCode(), exception.getMessage(), userId);
+            auditLogApplicationService.record(projectId, MODULE_CODE, "visualization.lightweight.job.failed",
+                "LIGHTWEIGHT_JOB", String.valueOf(jobId), userId, Map.of(
+                    "engineMode", "GLANDAR",
+                    "fileId", modelFile.id(),
+                    "errorCode", exception.getCode()
+                ));
+            LightweightJobRecord failed = lightweightJobRepository.findById(projectId, jobId)
+                .orElseThrow(() -> exception);
+            return toLightweightJobCreateResponse(failed, modelFile, "葛兰岱尔轻量化任务提交失败");
+        } catch (Exception exception) {
+            lightweightJobRepository.markFailed(jobId, "ENGINE_UPLOAD_FAILED", "轻量化任务提交失败", userId);
+            LightweightJobRecord failed = lightweightJobRepository.findById(projectId, jobId)
+                .orElseThrow(() -> new BusinessException("ENGINE_UPLOAD_FAILED", "轻量化任务提交失败",
+                    HttpStatus.PRECONDITION_FAILED));
+            return toLightweightJobCreateResponse(failed, modelFile, "葛兰岱尔轻量化任务提交失败");
+        }
+    }
+
+    private LightweightJobRecord refreshGlandarJob(LightweightJobRecord record) {
+        if (!"GLANDAR".equals(record.engineProvider()) || !hasText(record.lightweightName())
+            || "FAILED".equals(record.status())) {
+            return record;
+        }
+        try {
+            QueryResult query = glandarStationClient.query(record.lightweightName());
+            lightweightJobRepository.updateStationStatus(
+                record.id(),
+                query.status(),
+                query.progressPercent(),
+                query.modelAccessAddress(),
+                query.viewerAvailable(),
+                query.errorCode(),
+                query.message(),
+                query.stationRecordJson()
+            );
+            return lightweightJobRepository.findById(record.projectId(), record.id()).orElse(record);
+        } catch (BusinessException exception) {
+            if ("ENGINE_API_UNREACHABLE".equals(exception.getCode())) {
+                return record;
+            }
+            lightweightJobRepository.updateStationStatus(
+                record.id(),
+                "FAILED",
+                0,
+                null,
+                false,
+                exception.getCode(),
+                exception.getMessage(),
+                record.stationRecordJson()
+            );
+            return lightweightJobRepository.findById(record.projectId(), record.id()).orElse(record);
+        }
+    }
+
+    private LightweightJobCreateResponse toLightweightJobCreateResponse(
+        LightweightJobRecord record,
+        FileResourceResponse file,
+        String actionHint
+    ) {
+        return new LightweightJobCreateResponse(
+            record.projectId(),
+            record.integrationId(),
+            record.fileId(),
+            file.originalName(),
+            modelFormat(file.originalName()),
+            String.valueOf(record.id()),
+            record.lightweightName(),
+            record.uniqueCode(),
+            safeViewerAddress(record.modelAccessAddress()),
+            "GLANDAR",
+            true,
+            record.status(),
+            record.progressPercent(),
+            lightweightRecordStatusLabel(record),
+            actionHint,
+            failedReason(record),
+            true,
+            true,
+            true,
             false,
-            false,
-            false,
-            Instant.now()
+            Boolean.TRUE.equals(record.viewerAvailable()),
+            GLANDAR_SUPPORTED_OPERATIONS,
+            GLANDAR_FORBIDDEN_OPERATIONS
         );
     }
 
-    public LightweightViewerTicketResponse lightweightViewerTicket(Long userId, Long projectId, String jobId) {
-        String engineMode = engineMode();
-        auditLogApplicationService.record(projectId, MODULE_CODE, "visualization.lightweight.viewer-ticket.prepare", "PROJECT",
-            String.valueOf(projectId), userId, Map.of("engineMode", engineMode, "ticketIssued", false));
-        return new LightweightViewerTicketResponse(
-            projectId,
-            defaultText(jobId, safeJobId(engineMode, projectId, 0L)),
-            engineMode,
-            false,
-            false,
-            null,
-            null,
-            null,
-            "Viewer 未开放",
-            "8B-GD1 仅提供平台接口骨架；真实葛兰岱尔 Viewer ticket 留到 8B-GD2/8C-GD。",
-            LIGHTWEIGHT_SUPPORTED_OPERATIONS,
-            LIGHTWEIGHT_FORBIDDEN_OPERATIONS
+    private LightweightJobResponse toLightweightJobResponse(LightweightJobRecord record) {
+        return new LightweightJobResponse(
+            record.projectId(),
+            String.valueOf(record.id()),
+            record.fileId(),
+            record.lightweightName(),
+            record.uniqueCode(),
+            safeViewerAddress(record.modelAccessAddress()),
+            "GLANDAR",
+            record.status(),
+            record.progressPercent(),
+            lightweightRecordStatusLabel(record),
+            failedReason(record),
+            Boolean.TRUE.equals(record.viewerAvailable()),
+            true,
+            true,
+            record.lastErrorCode(),
+            record.lastErrorMessage(),
+            record.updatedAt()
         );
+    }
+
+    private FileAssetResponse toFileAsset(Long projectId, FileResourceResponse file, String format) {
+        return new FileAssetResponse(
+            file.id(),
+            file.assetUuid(),
+            projectId,
+            null,
+            null,
+            file.originalName(),
+            format,
+            file.fileKind(),
+            null,
+            file.versionNo(),
+            file.sizeBytes(),
+            file.checksum(),
+            null,
+            file.storageUri(),
+            null,
+            "CATALOG",
+            file.processStatus(),
+            null,
+            null,
+            null,
+            file.processedAt(),
+            List.of(),
+            "PROJECT",
+            "INTERNAL",
+            file.processedAt(),
+            "ACTIVE",
+            "CATALOG_ONLY"
+        );
+    }
+
+    private void requireRvt(String format) {
+        if (!"RVT".equals(format)) {
+            throw new BusinessException("UNSUPPORTED_FILE_TYPE", "当前 PoC 只开放 RVT 模型转换",
+                HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private boolean glandarRealModeReady() {
+        return "GLANDAR".equals(engineMode()) && glandarEngineSettings.readyForHandshake();
+    }
+
+    private Long parseJobId(String jobId) {
+        if (!hasText(jobId)) {
+            return null;
+        }
+        try {
+            return Long.valueOf(jobId.trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private String lightweightName(FileResourceResponse file) {
+        String compactUuid = defaultText(file.assetUuid(), "file" + file.id()).replace("-", "");
+        if (compactUuid.length() > 16) {
+            compactUuid = compactUuid.substring(0, 16);
+        }
+        return "gd_file_%s_%s".formatted(file.id(), compactUuid);
+    }
+
+    private String stableStationFileName(String lightweightName, String format) {
+        String extension = defaultText(format, "RVT").toLowerCase(Locale.ROOT);
+        return lightweightName + "." + extension;
+    }
+
+    private String lightweightRecordStatusLabel(LightweightJobRecord record) {
+        return switch (defaultText(record.status(), "RUNNING")) {
+            case "READY" -> "模型轻量化完成";
+            case "FAILED" -> "模型轻量化失败";
+            case "UPLOADED" -> "模型已提交，等待引擎处理";
+            case "RUNNING" -> "模型轻量化处理中";
+            default -> "模型轻量化任务已创建";
+        };
+    }
+
+    private String failedReason(LightweightJobRecord record) {
+        if (!"FAILED".equals(record.status())) {
+            return null;
+        }
+        return defaultText(record.lastErrorMessage(), "葛兰岱尔引擎未返回详细失败原因");
+    }
+
+    private String safeViewerAddress(String address) {
+        if (!hasText(address)) {
+            return null;
+        }
+        if (address.contains("127.0.0.1") || address.contains("localhost")) {
+            return null;
+        }
+        return address;
+    }
+
+    private long defaultLong(Long primary, Long fallback) {
+        if (primary != null && primary >= 0) {
+            return primary;
+        }
+        return fallback == null ? -1L : fallback;
     }
 
     @Transactional
@@ -889,6 +1360,10 @@ public class VisualizationAdapterApplicationService {
 
     private String defaultText(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private int intValue(Integer value) {

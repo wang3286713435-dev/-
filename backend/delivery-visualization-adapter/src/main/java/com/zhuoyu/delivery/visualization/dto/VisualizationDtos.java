@@ -79,9 +79,13 @@ public final class VisualizationDtos {
         String modelName,
         String modelFormat,
         String jobId,
+        String lightweightName,
+        String uniqueCode,
+        String modelAccessAddress,
         String engineMode,
         Boolean taskCreated,
         String taskStatus,
+        Integer progressPercent,
         String statusLabel,
         String actionHint,
         String blockedReason,
@@ -98,6 +102,10 @@ public final class VisualizationDtos {
     public record LightweightJobResponse(
         Long projectId,
         String jobId,
+        Long modelFileId,
+        String lightweightName,
+        String uniqueCode,
+        String modelAccessAddress,
         String engineMode,
         String taskStatus,
         Integer progressPercent,
@@ -106,6 +114,8 @@ public final class VisualizationDtos {
         Boolean viewerAvailable,
         Boolean realUploadExecuted,
         Boolean realConversionExecuted,
+        String lastErrorCode,
+        String lastErrorMessage,
         Instant updatedAt
     ) {
     }
@@ -119,10 +129,34 @@ public final class VisualizationDtos {
         String viewerTicket,
         Instant expiresAt,
         String launchUrl,
+        String lightweightName,
+        String modelAccessAddress,
+        String engineStaticBase,
         String statusLabel,
         String blockedReason,
         List<String> supportedOperations,
         List<String> forbiddenOperations
+    ) {
+    }
+
+    public record GlandarRvtPilotFileResponse(
+        Long projectId,
+        Long fileId,
+        String assetUuid,
+        String fileName,
+        String modelFormat,
+        Long sizeBytes,
+        Integer pilotRank,
+        Boolean inPilot,
+        String latestJobId,
+        String lightweightName,
+        String taskStatus,
+        Integer progressPercent,
+        Boolean viewerAvailable,
+        String statusLabel,
+        String actionHint,
+        String blockedReason,
+        Instant updatedAt
     ) {
     }
 

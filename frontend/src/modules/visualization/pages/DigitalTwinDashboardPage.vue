@@ -38,6 +38,85 @@
         </article>
       </section>
 
+      <section class="bim-collab-pilot" aria-label="105 RVT 轻量化试点模型">
+        <div class="bim-collab-pilot__head">
+          <div>
+            <span>GLANDAR RVT PILOT</span>
+            <h2>105 项目 10 个 RVT 试点模型</h2>
+            <p>已轻量化的模型可直接进入葛兰岱尔 Viewer；未完成的模型可提交转换或刷新状态。</p>
+          </div>
+          <div>
+            <el-button :loading="pilotLoading" @click="loadPilotFiles">刷新试点状态</el-button>
+            <el-button type="primary" :loading="pilotSubmitting" @click="submitPilotFiles">提交 10 个试点转换</el-button>
+          </div>
+        </div>
+        <div class="bim-collab-pilot__grid">
+          <article v-for="item in pilotFiles" :key="item.fileId" class="bim-collab-pilot__item">
+            <div>
+              <span>#{{ item.pilotRank }} / 文件 {{ item.fileId }}</span>
+              <strong>{{ item.fileName }}</strong>
+              <em>{{ formatBytes(item.sizeBytes) }} · {{ item.actionHint }}</em>
+            </div>
+            <div class="bim-collab-pilot__status">
+              <el-tag :type="pilotStatusTag(item.taskStatus)" effect="plain">{{ item.statusLabel }}</el-tag>
+              <el-progress :percentage="item.progressPercent ?? 0" :show-text="false" />
+            </div>
+            <div class="bim-collab-pilot__actions">
+              <el-button size="small" :disabled="!item.latestJobId" @click="refreshPilotJob(item)">查状态</el-button>
+              <el-button
+                size="small"
+                :type="activePilotFile?.fileId === item.fileId ? 'success' : 'default'"
+                :disabled="!item.viewerAvailable || !item.latestJobId"
+                @click="selectPilotForPreview(item)"
+              >
+                下方预览
+              </el-button>
+              <el-button
+                size="small"
+                type="primary"
+                :disabled="!item.viewerAvailable || !item.latestJobId"
+                @click="openPilotViewer(item)"
+              >
+                大窗口
+              </el-button>
+            </div>
+          </article>
+          <el-empty v-if="!pilotLoading && pilotFiles.length === 0" description="当前项目没有 RVT 试点模型" :image-size="64" />
+        </div>
+
+        <section class="bim-collab-inline-viewer" aria-label="葛兰岱尔真实模型预览">
+          <div class="bim-collab-inline-viewer__head">
+            <div>
+              <span>MODEL PREVIEW · GLANDAR</span>
+              <h3>{{ activePilotFile?.fileName || '选择一个已轻量化模型' }}</h3>
+              <p>这里复用平台预留的 Viewer ticket 接口，模型在 BIM 协同管理页内直接展示。</p>
+            </div>
+            <div>
+              <el-tag v-if="activePilotFile" type="success" effect="plain">已轻量化</el-tag>
+              <el-button
+                :disabled="!activePilotFile"
+                @click="activePilotFile && openPilotViewer(activePilotFile)"
+              >
+                打开大窗口
+              </el-button>
+            </div>
+          </div>
+          <GlandarViewerCanvas
+            v-if="projectId && activePilotFile?.latestJobId"
+            :key="`${projectId}-${activePilotFile.latestJobId}`"
+            embedded
+            :project-id="projectId"
+            :job-id="activePilotFile.latestJobId"
+            :file-name="activePilotFile.fileName"
+          />
+          <el-empty
+            v-else
+            description="请选择上方已轻量化模型后，在这里直接预览。"
+            :image-size="76"
+          />
+        </section>
+      </section>
+
       <main class="bim-collab-window-card" v-loading="loading" aria-label="平台内 BIM 协同窗口">
         <div class="bim-collab-window-card__header">
           <div>
@@ -70,6 +149,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Refresh } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
 import { useRoute } from 'vue-router';
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -79,8 +159,14 @@ import { mapDashboardToBimCollab } from '@/modules/visualization/bim-collab/mapD
 import type { BimThemeMode } from '@/modules/visualization/bim-collab/types';
 import {
   fetchDigitalTwinDashboard,
+  fetchGlandarRvtPilotFiles,
+  fetchLightweightJob,
+  issueLightweightViewerTicket,
+  submitGlandarRvtPilotFiles,
+  type GlandarRvtPilotFile,
   type DigitalTwinDashboard
 } from '@/modules/visualization/api/visualization';
+import GlandarViewerCanvas from '@/modules/visualization/components/GlandarViewerCanvas.vue';
 import { useAuthStore } from '@/stores/auth';
 
 const THEME_STORAGE_KEY = 'delivery:bim-collab-theme';
@@ -89,7 +175,11 @@ const authStore = useAuthStore();
 const route = useRoute();
 const loading = ref(false);
 const dashboard = ref<DigitalTwinDashboard | null>(null);
+const pilotFiles = ref<GlandarRvtPilotFile[]>([]);
+const activePilotFileId = ref<number | null>(null);
 const errorMessage = ref('');
+const pilotLoading = ref(false);
+const pilotSubmitting = ref(false);
 const bimHostRef = ref<HTMLElement | null>(null);
 const darkThemeEnabled = ref(readInitialTheme() === 'dark');
 let bimRoot: Root | null = null;
@@ -104,6 +194,11 @@ const projectId = computed(() => {
 const themeMode = computed<BimThemeMode>(() => (darkThemeEnabled.value ? 'dark' : 'light'));
 const projectLabel = computed(() => authStore.currentUser?.currentProject?.name ?? '等待项目上下文');
 const bimData = computed(() => (dashboard.value ? mapDashboardToBimCollab(dashboard.value) : null));
+const activePilotFile = computed(() => {
+  const currentId = activePilotFileId.value;
+  const selected = currentId ? pilotFiles.value.find((item) => item.fileId === currentId) : null;
+  return selected || pilotFiles.value.find((item) => item.viewerAvailable && item.latestJobId) || null;
+});
 
 const kpiCards = computed(() => {
   const item = dashboard.value;
@@ -137,12 +232,91 @@ async function loadPage() {
   errorMessage.value = '';
   try {
     dashboard.value = await fetchDigitalTwinDashboard(projectId.value);
+    await loadPilotFiles();
   } catch (error) {
     dashboard.value = null;
     errorMessage.value = error instanceof Error ? error.message : 'BIM 协同窗口数据加载失败';
   } finally {
     loading.value = false;
   }
+}
+
+async function loadPilotFiles() {
+  if (!projectId.value) {
+    pilotFiles.value = [];
+    return;
+  }
+  pilotLoading.value = true;
+  try {
+    pilotFiles.value = await fetchGlandarRvtPilotFiles(projectId.value);
+    if (!activePilotFile.value) {
+      activePilotFileId.value = pilotFiles.value.find((item) => item.viewerAvailable && item.latestJobId)?.fileId ?? null;
+    }
+  } catch {
+    pilotFiles.value = [];
+  } finally {
+    pilotLoading.value = false;
+  }
+}
+
+function selectPilotForPreview(item: GlandarRvtPilotFile) {
+  if (!item.viewerAvailable || !item.latestJobId) return;
+  activePilotFileId.value = item.fileId;
+}
+
+async function submitPilotFiles() {
+  if (!projectId.value || pilotSubmitting.value) return;
+  pilotSubmitting.value = true;
+  try {
+    pilotFiles.value = await submitGlandarRvtPilotFiles(projectId.value, false);
+    ElMessage.success('已提交或复用 10 个 RVT 试点轻量化任务');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '试点轻量化任务提交失败');
+  } finally {
+    pilotSubmitting.value = false;
+  }
+}
+
+async function refreshPilotJob(item: GlandarRvtPilotFile) {
+  if (!projectId.value || !item.latestJobId) return;
+  try {
+    const job = await fetchLightweightJob(projectId.value, item.latestJobId);
+    pilotFiles.value = pilotFiles.value.map((row) => row.fileId === item.fileId
+      ? {
+          ...row,
+          taskStatus: job.taskStatus,
+          progressPercent: job.progressPercent,
+          viewerAvailable: job.viewerAvailable,
+          statusLabel: job.statusLabel,
+          blockedReason: job.blockedReason,
+          updatedAt: job.updatedAt
+        }
+      : row);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '轻量化状态刷新失败');
+  }
+}
+
+async function openPilotViewer(item: GlandarRvtPilotFile) {
+  if (!projectId.value || !item.latestJobId) return;
+  try {
+    const ticket = await issueLightweightViewerTicket(projectId.value, item.latestJobId);
+    if (!ticket.viewerAvailable || !ticket.ticketIssued) {
+      ElMessage.warning(ticket.blockedReason || 'Viewer 暂不可用');
+      return;
+    }
+    const href = `/visualization/glandar-viewer?projectId=${projectId.value}&jobId=${encodeURIComponent(item.latestJobId)}&fileName=${encodeURIComponent(item.fileName)}`;
+    window.open(href, '_blank', 'noopener,noreferrer');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '打开 Viewer 失败');
+  }
+}
+
+function pilotStatusTag(status: string | null | undefined) {
+  if (status === 'READY') return 'success';
+  if (status === 'FAILED') return 'danger';
+  if (status === 'RUNNING' || status === 'UPLOADED' || status === 'SUBMITTED') return 'warning';
+  return 'info';
 }
 
 function renderBimWindow() {
@@ -269,6 +443,7 @@ function engineModeLabel(value: string | null | undefined) {
 
 .bim-collab-summary article,
 .bim-collab-window-card,
+.bim-collab-pilot,
 .bim-collab-footnote {
   background: var(--bim-panel);
   border: 1px solid var(--bim-line);
@@ -298,6 +473,144 @@ function engineModeLabel(value: string | null | undefined) {
   font-size: var(--zy-fs-2xl);
   font-variant-numeric: tabular-nums;
   line-height: 1;
+}
+
+.bim-collab-pilot {
+  display: grid;
+  gap: var(--zy-sp-3);
+  min-width: 0;
+  padding: var(--zy-sp-4);
+}
+
+.bim-collab-pilot__head {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--zy-sp-3);
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.bim-collab-pilot__head > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bim-collab-pilot__head span,
+.bim-collab-pilot__item span {
+  color: var(--bim-accent);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-semi);
+}
+
+.bim-collab-pilot__head h2 {
+  color: var(--bim-text);
+  font-size: var(--zy-fs-xl);
+  margin: 0;
+}
+
+.bim-collab-pilot__head p,
+.bim-collab-pilot__item em {
+  color: var(--bim-muted);
+  font-size: var(--zy-fs-xs);
+  font-style: normal;
+  margin: 0;
+}
+
+.bim-collab-pilot__head > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zy-sp-2);
+  justify-content: flex-end;
+}
+
+.bim-collab-pilot__grid {
+  display: grid;
+  gap: var(--zy-sp-2);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.bim-collab-pilot__item {
+  border: 1px solid var(--bim-line);
+  border-radius: 10px;
+  display: grid;
+  gap: var(--zy-sp-2);
+  grid-template-columns: minmax(0, 1fr) 150px auto;
+  min-width: 0;
+  padding: var(--zy-sp-3);
+}
+
+.bim-collab-pilot__item > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bim-collab-pilot__item strong {
+  color: var(--bim-text);
+  font-size: var(--zy-fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bim-collab-pilot__status,
+.bim-collab-pilot__actions {
+  align-content: center;
+  display: grid;
+  gap: 6px;
+}
+
+.bim-collab-inline-viewer {
+  border: 1px solid var(--bim-line);
+  border-radius: 12px;
+  display: grid;
+  gap: var(--zy-sp-3);
+  min-width: 0;
+  padding: var(--zy-sp-3);
+}
+
+.bim-collab-inline-viewer__head {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--zy-sp-3);
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.bim-collab-inline-viewer__head > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bim-collab-inline-viewer__head span {
+  color: var(--bim-accent);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-semi);
+}
+
+.bim-collab-inline-viewer__head h3 {
+  color: var(--bim-text);
+  font-size: var(--zy-fs-lg);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bim-collab-inline-viewer__head p {
+  color: var(--bim-muted);
+  font-size: var(--zy-fs-xs);
+  margin: 0;
+}
+
+.bim-collab-inline-viewer__head > div:last-child {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zy-sp-2);
+  justify-content: flex-end;
 }
 
 .bim-collab-window-card {
@@ -375,6 +688,11 @@ function engineModeLabel(value: string | null | undefined) {
 @media (max-width: 1280px) {
   .bim-collab-summary {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .bim-collab-pilot__grid,
+  .bim-collab-pilot__item {
+    grid-template-columns: 1fr;
   }
 
   .bim-collab-window-card {
