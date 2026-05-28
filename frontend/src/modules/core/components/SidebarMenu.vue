@@ -1,5 +1,5 @@
 <template>
-  <el-menu :default-active="route.path" router class="sidebar-menu">
+  <el-menu :default-active="route.path" :default-openeds="defaultOpeneds" router class="sidebar-menu">
     <template v-for="item in menus" :key="item.key">
       <el-sub-menu v-if="item.children?.length" :index="item.path">
         <template #title>
@@ -20,6 +20,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import {
   Box,
   Connection,
@@ -40,11 +41,17 @@ import { useRoute } from 'vue-router';
 
 import type { MenuItem } from '@/modules/core/api/types';
 
-defineProps<{
+const props = defineProps<{
   menus: MenuItem[];
 }>();
 
 const route = useRoute();
+
+const defaultOpeneds = computed(() => props.menus
+  .filter((item) => item.children?.some((child) => (
+    route.path === child.path || route.path.startsWith(`${child.path}/`)
+  )))
+  .map((item) => item.path));
 
 const icons = {
   Box,

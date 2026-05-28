@@ -5,8 +5,18 @@ import { fileURLToPath, URL } from 'node:url';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const apiProxyTarget = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8080';
-  const frontendPort = Number(env.VITE_FRONTEND_PORT || 5173);
+  const apiTarget = env.VITE_API_TARGET || env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:18080';
+  const frontendPort = Number(env.VITE_DEV_PORT || env.VITE_FRONTEND_PORT || 5174);
+  const backendEnabled = env.VITE_C_TOWER_BACKEND_ENABLED === 'true'
+    || env.VITE_BIM_SUBMISSION_BACKEND === 'true';
+  const apiProxy = backendEnabled
+    ? {
+        '/api': {
+          target: apiTarget,
+          changeOrigin: true
+        }
+      }
+    : undefined;
 
   return {
     plugins: [vue(), react()],
@@ -16,14 +26,9 @@ export default defineConfig(({ mode }) => {
       }
     },
     server: {
-      port: Number.isFinite(frontendPort) ? frontendPort : 5173,
+      port: Number.isFinite(frontendPort) ? frontendPort : 5174,
       strictPort: true,
-      proxy: {
-        '/api': {
-          target: apiProxyTarget,
-          changeOrigin: true
-        }
-      }
+      ...(apiProxy ? { proxy: apiProxy } : {})
     }
   };
 });

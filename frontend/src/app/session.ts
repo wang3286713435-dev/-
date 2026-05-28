@@ -4,9 +4,11 @@ export interface SessionTokens {
   currentProjectId: number | null;
 }
 
-const SESSION_KEY = 'delivery-platform/session';
+const SESSION_KEY = 'ctower-digital-delivery/session';
+const LEGACY_SESSION_KEYS = ['delivery-platform/session'];
 
 export function readSession(): SessionTokens | null {
+  LEGACY_SESSION_KEYS.forEach((key) => window.localStorage.removeItem(key));
   const raw = window.localStorage.getItem(SESSION_KEY);
   if (!raw) {
     return null;
