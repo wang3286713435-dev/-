@@ -1,237 +1,235 @@
-# 开发 Agent 当前任务：8B-GD1 平台侧葛兰岱尔适配骨架
+# 开发 Agent 当前任务：8B-GD2 葛兰岱尔 RVT PoC 转换闭环
 
-你是卓羽智能数据中台 v1 的开发 agent。当前任务由 Codex 主 agent 监控和验收。
+你是数字化交付平台 3D 引擎接入开发 agent。本轮只在独立 8B-GD worktree 开发，不碰 M 系列对象存储主线。
 
 工作目录：
 
 `/Users/vc/Documents/数字化交付平台-8b-gd`
 
-当前分支：
+当前分支必须是：
 
-`codex/8b-gd-lightweight-engine-adapter`
+`codex/8b-gd2-rvt-poc`
 
-## 0. 必须使用 Ralph Loop
+如果不是该分支，先停止并报告。
 
-开始后请先使用 `Ralph Loop` skill / 工作流：
+## 0. 本轮目标
 
-1. 先阅读上下文。
-2. 列出最小实现计划。
-3. 执行一小步。
-4. 自检。
-5. 继续下一小步。
-6. 最后输出报告。
+实现 `8B-GD2：105 RVT PoC 转换闭环`。
 
-不要创建子 agent。不要修改 main。不要合并分支。
+目标链路：
 
-## 1. 本批定位
+```text
+平台校验权限
+-> 读取 105 项目 RVT 样本受控文件流
+-> 按葛兰岱尔 Station SplitUploadFile 协议分片上传
+-> 保存 lightweightName / uniqueCode / 状态映射
+-> 查询 query-model-info
+-> status=100 后返回平台受控 viewer 状态
+```
 
-本批是：
+本批只做 105 项目 1-3 个 RVT 小样本 PoC，不做全量模型转换。
 
-`8B-GD1：平台侧葛兰岱尔适配骨架`
-
-目标是给葛兰岱尔 Station Management 接入建立平台侧骨架：
-
-- `GLANDAR` provider 配置开关。
-- Station API client / adapter 骨架。
-- 创建轻量化任务、查询任务、获取 viewer ticket 的平台语义接口。
-- 默认 `MOCK` 不回归。
-- `GLANDAR` 未配置时返回业务化不可用原因，不 500。
-
-本批不做真实 RVT 转换，不调用 `SplitUploadFile` 上传真实文件。
-
-## 2. 必读文件
+## 1. 必读文件
 
 开始前先阅读：
 
 - `handoff/main-agent/8b-gd-task-graph.md`
-- `handoff/main-agent/8b-gd-roadmap.md`
 - `handoff/main-agent/8b-gd0-glandar-api-review.md`
-- `handoff/main-agent/8b-gd1-glandar-adapter-skeleton-plan.md`
-- `handoff/main-agent/phase2-batch8a-bim-lightweight-adapter-plan.md`
-- `handoff/main-agent/lightweight-test-strategy.md`
+- `handoff/main-agent/8b-gd1-glandar-adapter-skeleton-closure.md`
+- `handoff/main-agent/8b-gd2-glandar-rvt-poc-plan.md`
+- `handoff/dev-agent/latest-report.md`
+- `/Users/vc/Downloads/葛兰岱尔StationManagement平台接入API文档.md`
 - `backend/delivery-visualization-adapter/src/main/java/com/zhuoyu/delivery/visualization/application/VisualizationAdapterApplicationService.java`
+- `backend/delivery-visualization-adapter/src/main/java/com/zhuoyu/delivery/visualization/engine/GlandarEngineSettings.java`
 - `backend/delivery-visualization-adapter/src/main/java/com/zhuoyu/delivery/visualization/controller/VisualizationAdapterController.java`
 - `backend/delivery-visualization-adapter/src/main/java/com/zhuoyu/delivery/visualization/dto/VisualizationDtos.java`
-- `frontend/src/modules/data-steward/pages/ModelIntegrationsPage.vue`
-- `scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageService.java`
 
-## 3. 允许修改
+## 2. 当前事实
 
-允许修改：
+- Station API：`http://192.168.1.37:18086`
+- Station Web / static：`http://192.168.1.37:18087`
+- 成功状态：`status == 100`
+- 查询接口：`POST /api/app/model/query-model-info?LightweightName=...`
+- 大文件上传接口：`POST /api/app/model/SplitUploadFile`
+- BIM `engineType=2`
+- 当前 105 项目本地 ID：`503`
+- 优先样本：`fileId=1257`，RVT，约 10MB，已有 active object version。
 
-- `backend/delivery-visualization-adapter/**`
-- `frontend/src/modules/data-steward/pages/ModelIntegrationsPage.vue`
-- `frontend/src/modules/data-steward/api/dataSteward.ts`
-- `frontend/src/modules/visualization/**`
-- `scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh`
-- `handoff/dev-agent/latest-report.md`
+## 3. 安全配置要求
 
-如果确实需要修改其他前端 API 文件，请在报告里说明原因。
+真实转换只能在以下环境变量全部存在时执行：
 
-## 4. 禁止修改 / 禁止事项
-
-禁止：
-
-- 禁止修改 `docs/**`。
-- 禁止新增 Flyway 迁移。
-- 禁止修改 `backend/delivery-data-steward/**` 对象存储迁移主线。
-- 禁止真实调用 `SplitUploadFile`。
-- 禁止上传真实 RVT。
-- 禁止读取 RVT / IFC / DWG / PDF / Office 正文。
-- 禁止移动、删除、重命名 NAS 文件。
-- 禁止访问 MinIO 底层目录。
-- 禁止写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
-- 禁止把 Station token、secret、password 写入文件、日志、报告或前端响应。
-- 禁止把 Mock 状态包装成真实可预览。
-
-## 5. 后端实现要求
-
-### A. Provider 配置
-
-默认必须是：
-
-```text
-BIM_ENGINE_PROVIDER=MOCK
-```
-
-支持未来配置：
-
-```text
+```bash
 BIM_ENGINE_PROVIDER=GLANDAR
 GLANDAR_STATION_API_BASE=http://192.168.1.37:18086
 GLANDAR_STATION_WEB_BASE=http://192.168.1.37:18087
 GLANDAR_TOKEN=<secure-injection-only>
-GLANDAR_DEFAULT_ACCURACY=5
-GLANDAR_DEFAULT_STYLE=1
-GLANDAR_UPLOAD_CHUNK_SIZE_MB=2
 ```
 
-真实 token 只能从环境或安全配置读取，不能返回前端。
+不要把 token 写入：
 
-### B. 现有 8A 接口兼容
+- 聊天
+- Git
+- handoff
+- 脚本
+- 日志
+- 前端
+- API 响应
 
-保留：
+缺配置时接口必须业务化阻断，不 500。
 
-```http
-GET /api/visualization-adapter/projects/{projectId}/model-integrations/{integrationId}/lightweight-status
-GET /api/visualization-adapter/projects/{projectId}/model-integrations/{integrationId}/lightweight-plan
-```
+## 4. 允许改动范围
 
-默认 MOCK 下应返回：
+允许：
 
-- `engineMode=MOCK`
-- `engineConnected=false`
-- `viewerAvailable=false`
-- `lightweightStatus=NOT_CONNECTED` 或 `NOT_STARTED`
-- `taskStatus=NOT_CREATED`
-- 不执行真实转换。
+- `backend/delivery-visualization-adapter/**`
+- 必要的 `backend/delivery-app/src/main/resources/db/migration/**`，但新增迁移前必须确认当前最新版本号，避免与 M 系列冲突。
+- `scripts/dev/check-8b-gd2-glandar-rvt-poc.sh`
+- `handoff/dev-agent/latest-report.md`
 
-如果当前代码仍返回 `METADATA_ADAPTER`，请修正为 `MOCK`，并确保 8A 回归脚本通过。
+谨慎允许：
 
-### C. 新增最小任务接口
+- 如果必须读取对象存储 active version，可只读调用已有 data-steward/storage service，不改其语义。
 
-新增：
+禁止：
 
-```http
+- 不修改 `docs/**`
+- 不修改 M 系列对象存储主线 worktree
+- 不写 Hermes memory / documents / chunks / Qdrant / OpenSearch
+- 不做 DWG/IFC/NWD 全量支持
+- 不做全量模型转换
+- 不移动、删除、重命名 NAS 文件
+- 不让前端直连 Station API
+
+## 5. 实现要求
+
+### A. 任务表 / 映射
+
+新增或复用平台侧轻量化任务映射，至少保存：
+
+- projectId
+- integrationId
+- fileId
+- assetUuid
+- engineProvider = GLANDAR
+- engineType = 2
+- lightweightName
+- uniqueCode
+- status
+- progressPercent
+- modelAccessAddress
+- viewerAvailable
+- lastErrorCode
+- lastErrorMessage
+- stationRecordJson
+- createdBy / createdAt / updatedAt
+
+不得保存 token。
+
+### B. Station 客户端
+
+实现最小 Station client：
+
+- `SplitUploadFile`
+- `query-model-info`
+
+要求：
+
+- Header `Token` 从后端安全配置读取。
+- 分片大小可配置，默认 2MB。
+- 失败时保留业务化失败原因。
+- 不把 Station 原始响应直接透给前端。
+
+### C. 平台接口
+
+沿用 8B-GD1 接口：
+
+```text
 POST /api/visualization-adapter/projects/{projectId}/model-integrations/{integrationId}/lightweight-jobs
 GET  /api/visualization-adapter/projects/{projectId}/lightweight-jobs/{jobId}
 POST /api/visualization-adapter/projects/{projectId}/lightweight-jobs/{jobId}:viewer-ticket
 ```
 
-GD1 行为：
+行为：
 
-- `MOCK` 模式：不创建真实任务，返回业务化状态，例如 `taskCreated=false`、`blockedReason=ENGINE_PROVIDER_MOCK`。
-- `GLANDAR` 但 base URL / token 缺失：返回业务化不可用原因，例如 `ENGINE_TOKEN_MISSING` 或 `ENGINE_CONFIG_INCOMPLETE`，不 500。
-- `GLANDAR` 配置完整：只返回“具备提交条件 / 待 GD2 实现真实上传”，不得调用 `SplitUploadFile`。
+- POST 创建真实 Station 上传任务。
+- GET 查询平台任务 + Station 状态。
+- viewer-ticket 在 `READY` 时返回受控 viewer 状态；本批可以先返回平台 launch 信息，不必完成完整前端 viewer。
 
-### D. Station client / adapter 骨架
+### D. 权限与安全
 
-可新增内部类：
+必须先校验：
 
-- `GlandarEngineProperties`
-- `GlandarEngineClient`
-- `GlandarEngineAdapter`
+- 当前用户项目权限。
+- integration 属于当前项目。
+- model file 属于当前项目。
 
-GD1 只允许做：
+响应不得包含：
 
-- 配置读取。
-- 参数校验。
-- health 轻量探测可选。
-- 构造请求模型。
-- 不发送真实分片上传。
+- `/Volumes`
+- `smb://`
+- `nas://`
+- `storage_uri`
+- bucket
+- object_key
+- Token
+- secret
+- raw row
+- SQL
 
-## 6. 前端实现要求
-
-最小更新即可，不要重构 UI：
-
-- 模型集成页能展示 `Mock / 葛兰岱尔 / 未配置` 状态。
-- 行操作可出现“创建轻量化任务”或“查看任务状态”的安全入口。
-- MOCK / 未配置时展示友好提示，不误导为可预览。
-- viewer ticket 未 ready 时显示不可用原因。
-- 不展示 Station token、真实存储路径、真实 bucket、真实 object key。
-
-如果前端改动风险高，可以先只补 API helper 与状态文案。
-
-## 7. 专项脚本
+## 6. 验收脚本
 
 新增：
 
-```text
-scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh
-```
+`scripts/dev/check-8b-gd2-glandar-rvt-poc.sh`
 
-至少覆盖：
+脚本至少验证：
 
-1. 管理员登录。
-2. 创建或复用安全模型集成元数据。
-3. `lightweight-status` 默认 `engineMode=MOCK`。
-4. `lightweight-plan` 仍 dry-run。
-5. `POST lightweight-jobs` 在 MOCK 下不创建真实任务、不 500。
-6. `viewer-ticket` 未 ready 时返回不可用原因。
-7. OpenAPI 包含新增接口。
-8. 响应不包含 `/Volumes`、`smb://`、`nas://`、`storage_uri`、真实 bucket、真实 object key、vendor token、raw row、SQL。
-9. `check-phase2-batch8a-bim-lightweight-adapter.sh` 继续通过。
+1. 当前配置缺失时接口业务化阻断，不 500。
+2. 配置完整时可对 105 RVT 样本提交任务。
+3. 平台保存任务记录。
+4. 查询任务状态不 500。
+5. 成功/失败都能返回明确状态。
+6. 禁出字段扫描通过。
+7. 8B-GD1 / 8A / file-access 回归通过。
 
-## 8. 必跑验证
+脚本不得打印 token。
 
-完成后至少执行：
+## 7. 自测要求
+
+至少执行：
 
 ```bash
 cd /Users/vc/Documents/数字化交付平台-8b-gd/backend
 ./mvnw -pl delivery-app -am -DskipTests package
 
 cd /Users/vc/Documents/数字化交付平台-8b-gd
+# 后端建议用 18088，避免影响主线 8080
+SERVER_PORT=18088 java -jar backend/delivery-app/target/delivery-app-1.0.0-SNAPSHOT.jar
+
+BASE_URL=http://127.0.0.1:18088 bash scripts/dev/check-8b-gd2-glandar-rvt-poc.sh
+BASE_URL=http://127.0.0.1:18088 bash scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh
+BASE_URL=http://127.0.0.1:18088 bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh
+BASE_URL=http://127.0.0.1:18088 bash scripts/dev/check-phase2-batch4-file-access.sh
 corepack pnpm --dir frontend build
-curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh
-bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh
-bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
 
-如后端未运行，请按项目已有方式启动；不要改主 M 系列分支。
-
-## 9. 报告要求
+## 8. 报告要求
 
 完成后写入：
 
-```text
-handoff/dev-agent/latest-report.md
-```
+`handoff/dev-agent/latest-report.md`
 
 报告必须包含：
 
-- 改动文件清单。
-- 后端实现点。
-- 前端实现点。
-- 为什么没有真实调用 Station。
-- GLANDAR 未配置时如何降级。
-- 验证命令结果。
+- 是否真实调用 Station。
+- 使用了哪些样本 fileId。
+- 是否成功拿到 lightweightName。
+- Station 查询结果如何映射。
+- 是否生成 viewer 可用状态。
 - 禁出字段扫描结果。
-- 是否触碰 `docs/**`、迁移、M3G 对象存储主线。
-
-最后输出：
-
-```text
-READY_FOR_CODEX_MONITOR 8B-GD1
-```
+- 是否有 token / raw path 泄露风险。
+- 自测命令结果。
+- 未完成事项。

@@ -4246,3 +4246,31 @@ scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh
 ```text
 handoff/main-agent/8b-gd1-glandar-adapter-skeleton-closure.md
 ```
+
+## 2026-05-28 8B-GD2 启动准备
+
+- 已将 `8B-GD1` 推送远端，并从收口点新建分支：
+
+```text
+codex/8b-gd2-rvt-poc
+```
+
+- 已进行真实转换前置检查：
+  - Station API `http://192.168.1.37:18086` 可达。
+  - Station Web / config `http://192.168.1.37:18087/config.json` 可达。
+  - 当前 shell 未注入 `BIM_ENGINE_PROVIDER=GLANDAR`、`GLANDAR_STATION_API_BASE`、`GLANDAR_STATION_WEB_BASE`、安全凭据。
+  - 105 / 503 项目存在 RVT 小样本，优先样本 `fileId=1257`，约 10MB，已有 active object version。
+- 已新增 8B-GD2 计划：
+
+```text
+handoff/main-agent/8b-gd2-glandar-rvt-poc-plan.md
+```
+
+- 已更新开发 / 测试 prompt：
+
+```text
+handoff/dev-agent/current-prompt.md
+handoff/test-agent/current-prompt.md
+```
+
+- 当前裁决：可以进入 8B-GD2 开发，但真实转换必须先通过本机安全 shell 注入 Station 凭据，禁止把 token 写入聊天、Git、handoff、日志或前端。

@@ -118,6 +118,36 @@ handoff/main-agent/8b-gd1-glandar-adapter-skeleton-closure.md
   - 不自动进入 `8B-GD2`。
   - 8B-GD2 启动前必须重新确认引擎安全凭据、105 RVT 样本和 Station API 实测规则。
 
+
+## 2026-05-28 8B-GD2 启动准备
+
+- 已从 `codex/8b-gd-lightweight-engine-adapter` 新建真实转换 PoC 分支：
+
+```text
+codex/8b-gd2-rvt-poc
+```
+
+- 当前目标：`8B-GD2：105 RVT PoC 转换闭环`。
+- 前置检查：
+  - 葛兰岱尔 Station API 可达。
+  - 葛兰岱尔 Web / config 可达。
+  - 当前 shell 尚未注入 GLANDAR 安全配置。
+  - 105 项目存在 RVT 小样本，优先 `fileId=1257`。
+- 已写入：
+  - `handoff/main-agent/8b-gd2-glandar-rvt-poc-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+- 真实转换执行前必须安全注入：
+
+```text
+BIM_ENGINE_PROVIDER=GLANDAR
+GLANDAR_STATION_API_BASE=http://192.168.1.37:18086
+GLANDAR_STATION_WEB_BASE=http://192.168.1.37:18087
+GLANDAR_TOKEN=<secure-injection-only>
+```
+
+- `GLANDAR_TOKEN` 不得进入聊天、handoff、Git、日志、前端或 API 响应。
+
 ## 2026-05-27 M3F 启动：新文件对象存储优先写入
 
 - 用户确认：先做 `M3F`，后续再做 `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`。
