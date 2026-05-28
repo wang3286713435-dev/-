@@ -145,6 +145,8 @@ const globalHermesHint = computed(() => globalHermesPageTitle.value);
 const shellEyebrow = computed(() => {
   if (routeProjectId.value) return '当前项目工作台';
   if (String(route.name ?? '').startsWith('admin-')) return '管理中心';
+  if (String(route.name ?? '').startsWith('c-tower-')) return 'C塔定制化演示';
+  if (String(route.name ?? '').startsWith('bim-submission')) return 'BIM报建';
   return '平台主入口';
 });
 
@@ -153,6 +155,16 @@ const shellTitle = computed(() => {
     return globalHermesProject.value?.name ?? `项目 ${routeProjectId.value}`;
   }
   const labels: Record<string, string> = {
+    'c-tower-demo': 'C塔数据中台能力验证',
+    'bim-submission': 'BIM报建总览',
+    'bim-submission-overview': 'BIM报建总览',
+    'bim-submission-code-center': 'BIM报建编码标准中心',
+    'bim-submission-plugin-contract': 'BIM报建插件契约中心',
+    'bim-submission-data-center': 'BIM报建数据中心',
+    'bim-submission-quality': 'BIM报建质量校验',
+    'bim-submission-batches': 'BIM报建批次闭环',
+    'bim-submission-work-orders': 'BIM报建整改工单',
+    'bim-submission-archives': 'BIM报建归档摘要',
     'data-steward-assets': '项目资产总览',
     'data-steward-scans': '扫描任务',
     'data-steward-quality': '数据质量',
@@ -169,6 +181,12 @@ const shellSubtitle = computed(() => {
   }
   if (String(route.name ?? '') === 'data-steward-assets') {
     return '从真实 NAS 项目进入工作台，按项目推进数字化交付。';
+  }
+  if (String(route.name ?? '') === 'c-tower-demo') {
+    return '展示当前能力验证范围、对应文件需求和仍需专项建设的缺口。';
+  }
+  if (String(route.name ?? '').startsWith('bim-submission')) {
+    return '平台管理上传编码记录，智能化标准包当前为草案，真实数据等待插件回传。';
   }
   if (String(route.name ?? '').startsWith('admin-')) {
     return '管理员工账号、项目授权和试运行访问范围。';
