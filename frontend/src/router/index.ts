@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
-import { frontendMockOnly } from '@/app/runtime';
 import { useAuthStore } from '@/stores/auth';
 
 const legacyProjectRouteMap: Record<string, string> = {
@@ -40,7 +39,7 @@ const router = createRouter({
       children: [
         {
           path: '',
-          redirect: '/bim-submission'
+          redirect: '/data-steward/assets'
         },
         {
           path: 'home',
@@ -59,66 +58,6 @@ const router = createRouter({
           name: 'admin-employees',
           component: () => import('@/modules/core/pages/AdminEmployeesPage.vue'),
           meta: { requiresAuth: true, adminOnly: true }
-        },
-        {
-          path: 'c-tower/demo',
-          name: 'c-tower-demo',
-          redirect: '/bim-submission/overview',
-          meta: { requiresAuth: true }
-        },
-        {
-          path: 'bim-submission',
-          name: 'bim-submission',
-          redirect: '/bim-submission/overview',
-          meta: { requiresAuth: true }
-        },
-        {
-          path: 'bim-submission/overview',
-          name: 'bim-submission-overview',
-          component: () => import('@/modules/bim-submission/pages/BimSubmissionPage.vue'),
-          meta: { requiresAuth: true }
-        },
-        {
-          path: 'bim-submission/code-center',
-          name: 'bim-submission-code-center',
-          component: () => import('@/modules/bim-submission/pages/BimSubmissionPage.vue'),
-          meta: { requiresAuth: true }
-        },
-        {
-          path: 'bim-submission/plugin-contract',
-          name: 'bim-submission-plugin-contract',
-          component: () => import('@/modules/bim-submission/pages/BimSubmissionPage.vue'),
-          meta: { requiresAuth: true }
-        },
-        {
-          path: 'bim-submission/data-center',
-          name: 'bim-submission-data-center',
-          component: () => import('@/modules/bim-submission/pages/BimSubmissionPage.vue'),
-          meta: { requiresAuth: true }
-        },
-        {
-          path: 'bim-submission/quality',
-          name: 'bim-submission-quality',
-          component: () => import('@/modules/bim-submission/pages/BimSubmissionPage.vue'),
-          meta: { requiresAuth: true }
-        },
-        {
-          path: 'bim-submission/batches',
-          name: 'bim-submission-batches',
-          component: () => import('@/modules/bim-submission/pages/BimSubmissionPage.vue'),
-          meta: { requiresAuth: true }
-        },
-        {
-          path: 'bim-submission/work-orders',
-          name: 'bim-submission-work-orders',
-          component: () => import('@/modules/bim-submission/pages/BimSubmissionPage.vue'),
-          meta: { requiresAuth: true }
-        },
-        {
-          path: 'bim-submission/archives',
-          name: 'bim-submission-archives',
-          component: () => import('@/modules/bim-submission/pages/BimSubmissionPage.vue'),
-          meta: { requiresAuth: true }
         },
         {
           path: 'master-data/sections',
@@ -366,7 +305,7 @@ const router = createRouter({
     },
     {
       path: '/:pathMatch(.*)*',
-      redirect: '/bim-submission'
+      redirect: '/data-steward/assets'
     }
   ]
 });
@@ -374,13 +313,6 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const authStore = useAuthStore();
   authStore.hydrate();
-
-  if (frontendMockOnly) {
-    if (to.meta.guestOnly || to.name === 'access-pending') {
-      return { name: 'bim-submission' };
-    }
-    return true;
-  }
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return { name: 'login' };
@@ -398,7 +330,7 @@ router.beforeEach(async (to) => {
   const noProjectUser = authStore.isAuthenticated && authStore.currentUser?.projects.length === 0;
 
   if (to.meta.guestOnly && authStore.isAuthenticated) {
-    return { name: noProjectUser ? 'access-pending' : 'bim-submission' };
+    return { name: noProjectUser ? 'access-pending' : 'data-steward-assets' };
   }
 
   if (to.meta.requiresAuth && noProjectUser && to.name !== 'access-pending') {
@@ -406,11 +338,11 @@ router.beforeEach(async (to) => {
   }
 
   if (to.name === 'access-pending' && authStore.isAuthenticated && !noProjectUser) {
-    return { name: 'bim-submission' };
+    return { name: 'data-steward-assets' };
   }
 
   if (to.meta.adminOnly && !hasEmployeeManagementPermission()) {
-    return { name: 'bim-submission' };
+    return { name: 'data-steward-assets' };
   }
 
   const legacyTargetName = legacyProjectRouteMap[String(to.name ?? '')];
@@ -419,7 +351,7 @@ router.beforeEach(async (to) => {
     if (projectId) {
       return { name: legacyTargetName, params: { projectId } };
     }
-    return { name: 'bim-submission' };
+    return { name: 'data-steward-assets' };
   }
 
   const routeProjectId = Number(to.params.projectId);
@@ -433,7 +365,7 @@ router.beforeEach(async (to) => {
     try {
       await authStore.changeProject(routeProjectId);
     } catch {
-      return { name: 'bim-submission' };
+      return { name: 'data-steward-assets' };
     }
   }
 

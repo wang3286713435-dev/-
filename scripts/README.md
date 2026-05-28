@@ -24,25 +24,7 @@
 
 ## 本地启动顺序
 
-当前 C塔数字化交付平台以前端定制化为主，BIM报建默认可只启动前端 `5174`，使用本地 Mock 数据完成页面和流程验证。后端 `18080`、基础设施和链路检查保留为后续按前端方案定制开发与联调时使用。
-
-### 1. 启动前端
-
-macOS / Linux:
-
-```bash
-bash scripts/dev/start-frontend.sh
-```
-
-Windows PowerShell:
-
-```powershell
-.\scripts\dev\start-frontend.ps1
-```
-
-脚本使用 `corepack pnpm install` 安装依赖，并通过 Vite 在 `5174` 端口启动 C塔数字化交付平台前端。默认不代理 `/api`，因此不会依赖后端登录、权限或 BIM 报建接口。
-
-### 2. 后续联调时启动基础设施
+### 1. 启动基础设施
 
 macOS / Linux:
 
@@ -58,7 +40,7 @@ Windows PowerShell:
 
 该脚本会使用 `infra/.env.example` 拉起 MySQL 8、Redis 7 和 MinIO。
 
-### 3. 后续联调时启动后端
+### 2. 启动后端
 
 macOS / Linux:
 
@@ -74,27 +56,25 @@ Windows PowerShell:
 
 优先使用仓库内的 `backend/mvnw` / `backend/mvnw.cmd` 构建并启动 `delivery-app`。如果本机缺少 Java 21，但已经安装 Docker Desktop，脚本会回退到 `maven:3.9-eclipse-temurin-21` Docker 镜像，并连接 `infra_default` 网络内的 MySQL。
 
-后续联调默认建议使用 `SERVER_PORT=18080` 启动后端，避免和平台主线本地 `8080` 冲突。需要改端口时可提前设置 `SERVER_PORT`。
+Hermes 分支默认使用 `SERVER_PORT=18080` 启动后端，避免和平台主线本地 `8080` 冲突。需要改端口时可提前设置 `SERVER_PORT`。
 
-### 4. 后续联调时让前端接入后端
+### 3. 启动前端
 
 macOS / Linux:
 
 ```bash
-VITE_C_TOWER_BACKEND_ENABLED=true VITE_API_TARGET=http://127.0.0.1:18080 bash scripts/dev/start-frontend.sh
+bash scripts/dev/start-frontend.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-$env:VITE_C_TOWER_BACKEND_ENABLED = "true"
-$env:VITE_API_TARGET = "http://127.0.0.1:18080"
 .\scripts\dev\start-frontend.ps1
 ```
 
-后端脚本默认可使用 `18080`；`5173`、`8080` 和主线库 `delivery_platform` 保留给原卓羽智能数据中台主线环境。需要覆盖前端代理目标时，可设置 `VITE_API_TARGET` 或 `VITE_API_PROXY_TARGET`。
+脚本使用 `corepack pnpm install` 安装依赖，并通过 Vite 在 `5174` 端口启动前端。Hermes 分支默认将 `/api` 代理到 `http://localhost:18080`，可用 `VITE_API_PROXY_TARGET` 覆盖；如需临时改前端端口，可设置 `VITE_FRONTEND_PORT`。
 
-### 5. 执行最小链路检查
+### 4. 执行最小链路检查
 
 macOS / Linux:
 
@@ -110,7 +90,7 @@ Windows PowerShell:
 
 该脚本会依次验证登录、刷新 token、当前用户、项目切换和工作中心首页概览接口。
 
-### 6. 执行 master-data 最小链路检查
+### 5. 执行 master-data 最小链路检查
 
 macOS / Linux:
 
@@ -126,7 +106,7 @@ Windows PowerShell:
 
 该脚本会依次验证登录、项目切换、标准前置条件状态、创建部位节点、查询部位树、创建节点类型、锁定节点类型和查询锁定状态。
 
-### 7. 执行交付标准链路检查
+### 6. 执行交付标准链路检查
 
 macOS / Linux:
 
@@ -140,7 +120,7 @@ Windows PowerShell:
 .\scripts\dev\check-deliverable-standard-chain.ps1 http://localhost:8080 platform.admin Admin@123 2
 ```
 
-### 8. 执行 MVP 全链路检查
+### 7. 执行 MVP 全链路检查
 
 macOS / Linux:
 
@@ -154,7 +134,7 @@ Windows PowerShell:
 .\scripts\dev\check-mvp-chain.ps1 http://localhost:8080 platform.admin Admin@123 2
 ```
 
-### 9. 执行企业 Agent DB-2 只读合同检查
+### 8. 执行企业 Agent DB-2 只读合同检查
 
 macOS / Linux:
 
@@ -177,7 +157,7 @@ account: hermes_agent_ro
 READONLY_PASSWORD='***' bash scripts/dev/check-agent-db2-contract.sh
 ```
 
-### 10. 执行一期数据质量体检检查
+### 9. 执行一期数据质量体检检查
 
 macOS / Linux:
 

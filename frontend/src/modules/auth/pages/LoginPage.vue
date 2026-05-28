@@ -62,7 +62,6 @@ import { reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useRouter } from 'vue-router';
 
-import { frontendMockOnly } from '@/app/runtime';
 import ParticleField from '@/modules/core/components/ParticleField.vue';
 import { useSpotlight } from '@/modules/core/composables/useSpotlight';
 import { useAuthStore } from '@/stores/auth';
@@ -89,9 +88,7 @@ async function handleSubmit() {
   try {
     await authStore.signIn(form.username, form.password);
     ElMessage.success('登录成功');
-    const target = frontendMockOnly
-      ? 'bim-submission'
-      : authStore.currentUser?.projects.length === 0 ? 'access-pending' : 'bim-submission';
+    const target = authStore.currentUser?.projects.length === 0 ? 'access-pending' : 'data-steward-assets';
     router.push({ name: target });
   } catch (error) {
     const message = error instanceof Error ? error.message : '登录失败';
