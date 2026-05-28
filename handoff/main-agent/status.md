@@ -2110,6 +2110,32 @@
   - `M3G-4：受控多项目小批对象化执行`。
   - 或先启动 `M4A：documents / chunks 语义证据契约`。
 
+## 2026-05-28 M3G-4 启动：受控多项目小批对象化执行
+
+- 用户确认进入下一步。
+- 主 agent 裁决当前 active 批次：
+  - `M3G-4：受控多项目小批对象化执行`
+- 本批定位：
+  - 从 M3G-3 dry-run 规划进入真实小批执行。
+  - 仅允许少量真实项目、少量文件、有限容量、人工确认、后端硬上限。
+  - 目标是验证多项目对象化真实执行闭环，不是全量迁移。
+- 本批默认硬上限：
+  - 单次最多 `3` 个真实项目。
+  - 单项目最多 `3` 个文件。
+  - 总文件数最多 `9` 个。
+  - 单项目容量最多 `50MB`。
+  - 总容量最多 `100MB`。
+  - 必须 `confirmed=true`。
+- 本批边界：
+  - NAS 原文件保留，不移动、不删除、不改名、不覆盖。
+  - 不迁移测试 / 样例 / 归档项目。
+  - 不读正文、不写语义索引、不做 Hermes 正文问答。
+  - 不修改 `docs/**`。
+- 已写入：
+  - `handoff/main-agent/m3g4-controlled-multi-project-objectification-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+
 ## 跨机器交接入口
 
 ## 2026-05-26 M3E 启动

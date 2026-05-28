@@ -4294,3 +4294,28 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - `M3G-3：多真实项目分批对象化策略与任务中心增强` 正式收口。
   - 当前 active 批次切换为 `待用户确认`。
   - 下一步候选为 `M3G-4：受控多项目小批对象化执行` 或 `M4A：documents / chunks 语义证据契约`。
+
+## 2026-05-28 M3G-4 启动
+
+- 用户确认进入下一步。
+- 主 agent 裁决当前 active 批次：
+  - `M3G-4：受控多项目小批对象化执行`
+- 本批目标：
+  - 基于 M3G-3 dry-run 计划，进入真实小批对象化执行。
+  - 执行范围必须很小，默认不超过 3 个真实项目、每项目 3 个文件、总文件数 9 个、总容量 100MB。
+  - 必须人工确认，后端必须强制上限。
+- 本批不做：
+  - 全量迁移所有项目。
+  - 迁移 NAS 根目录。
+  - 迁移测试 / 样例 / 归档项目。
+  - 文件正文读取。
+  - Hermes 正文问答。
+  - 语义索引。
+  - 真实 BIM 引擎。
+- 已新增 / 更新：
+  - `handoff/main-agent/m3g4-controlled-multi-project-objectification-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+  - `handoff/main-agent/status.md`
+  - `handoff/main-agent/phase2-current-roadmap.md`
+  - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
