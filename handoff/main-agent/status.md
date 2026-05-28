@@ -2162,6 +2162,26 @@
   - 优先修复文件管理器搜索与路径展示体验问题。
   - 后续再决定是否继续扩大对象化执行范围，或进入 `M4A：documents / chunks 语义证据契约`。
 
+## 2026-05-28 M3G-5 启动：文件管理器项目全局搜索与存储展示修复
+
+- 用户确认可以开始修复文件管理器体验问题。
+- 主 agent 裁决当前 active 批次：
+  - `M3G-5：文件管理器项目全局搜索与存储展示修复`
+- 本批定位：
+  - 修复文件管理器搜索默认只在当前目录的问题。
+  - 明确展示 `OBJECT_STORED` 与 `NAS_ONLY`，避免用户误以为 105 已全量对象化。
+  - 主界面改用项目内路径、存储状态、访问来源，不直观暴露真实 NAS 路径。
+- 本批不做：
+  - 不执行对象化迁移。
+  - 不扩大对象化范围。
+  - 不移动、删除、重命名、覆盖真实 NAS 文件。
+  - 不读取正文、不写语义索引、不做 Hermes 正文问答。
+  - 不修改 `docs/**`。
+- 已写入：
+  - `handoff/main-agent/m3g5-file-manager-search-storage-display-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+
 ## 跨机器交接入口
 
 ## 2026-05-26 M3E 启动

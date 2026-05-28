@@ -4342,3 +4342,28 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - `M3G-4：受控多项目小批对象化执行` 正式收口。
   - 当前 active 批次切换为 `待用户确认`。
   - 下一步优先处理文件管理器搜索与路径展示体验问题，再评估扩大对象化或进入 M4A。
+
+## 2026-05-28 M3G-5 启动
+
+- 用户确认可以先修复文件管理器搜索和路径展示问题。
+- 主 agent 裁决当前 active 批次：
+  - `M3G-5：文件管理器项目全局搜索与存储展示修复`
+- 本批目标：
+  - 输入关键词时默认在整个项目内搜索。
+  - 保留可选“仅当前文件夹及子目录”范围。
+  - 未搜索时保持当前目录直接子项浏览。
+  - 文件表 / 详情清晰展示项目内路径、存储状态和访问来源。
+  - 主界面不直观暴露真实 NAS 路径。
+- 本批不做：
+  - 对象化迁移。
+  - 真实 NAS 文件移动 / 删除 / 重命名 / 覆盖。
+  - 文件正文读取。
+  - Hermes 正文问答。
+  - 语义索引。
+  - 真实 BIM 引擎。
+- 已新增 / 更新：
+  - `handoff/main-agent/m3g5-file-manager-search-storage-display-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+  - `handoff/main-agent/status.md`
+  - `handoff/main-agent/phase2-current-roadmap.md`
