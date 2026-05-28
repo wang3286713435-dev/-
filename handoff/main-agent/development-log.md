@@ -4223,3 +4223,28 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - 移动、删除、改名真实 NAS 原项目文件。
   - Hermes 正文问答、语义索引、文件正文读取。
   - 暴露真实路径、bucket、object key、storage URI、SQL、raw row、token、secret。
+
+## 2026-05-28 M3G-2 正式收口
+
+- 开发 agent 已完成 `M3G-2：105 项目历史文件对象化上传灰度`。
+- 测试 agent 已完成只读验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：通过。
+- 当前无 P0 / P1。
+- 已完成：
+  - 105 首批对象化 `fileId=936/937/938`，`success=3 / skipped=0 / failure=0`。
+  - 重复任务 `taskId=144` 幂等跳过。
+  - 主 agent 复验追加对象化 `fileId=939/940/941`。
+  - 当前 105 约为 `OBJECT_STORED=9 / NAS_ONLY=2919 / coverage=0.31%`。
+  - 已对象化文件通过受控 `file-access` 读取。
+  - 未对象化文件仍为 `NAS_ONLY` 并继续可读。
+- 已确认：
+  - NAS 原文件未移动、未删除、未改名、未覆盖。
+  - 未读取正文。
+  - 未写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
+  - 未触发 Hermes。
+  - 未接入 BIM 引擎。
+  - 未修改 `docs/**`。
+- 主 agent 裁决：
+  - M3G-2 正式收口。
+  - 下一步如继续 M3G，应进入 `M3G-3：多真实项目分批对象化策略与任务中心增强`。
+  - M4A 语义证据契约继续后置。

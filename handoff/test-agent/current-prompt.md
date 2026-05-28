@@ -12,6 +12,13 @@
 
 本轮只验收 105 / `projectId=503` 的小批量历史文件对象化上传灰度。
 
+重要安全提醒：
+
+- `scripts/dev/check-m3g2-105-objectification-gray.sh` 是执行型脚本，不是只读脚本。
+- 每次运行可能继续从 105 的 `NAS_ONLY` 文件中选择一批新文件并复制副本到 NAS 侧 MinIO。
+- 如果开发 agent 和主 agent 已经运行过该脚本，测试 agent 默认不要再次运行它，除非用户或主 agent 明确允许“再追加一批对象化”。
+- 默认验收方式改为：先基于报告、API、数据库状态、任务详情和 read-only 回归确认本轮结果。
+
 验收重点：
 
 - NAS 侧 MinIO readiness。
@@ -39,7 +46,6 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-m3g2-105-objectification-gray.sh
 bash scripts/dev/check-m3g-nas-minio-readiness-inventory.sh
 bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
 bash scripts/dev/check-m3f-object-storage-first-write.sh
@@ -48,14 +54,20 @@ bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
 
+除非明确允许追加对象化，否则不要运行：
+
+```bash
+bash scripts/dev/check-m3g2-105-objectification-gray.sh
+```
+
 ## 3. 重点断言
 
 必须确认：
 
 1. readiness 为 `NAS_SIDE_MINIO / READY`。
-2. M3G-2 专项脚本通过。
+2. M3G-2 专项脚本已纳入 Git，且开发 / 主 agent 最近运行记录通过。
 3. 105 dry-run 能生成计划。
-4. 105 小批量迁移任务能创建、执行、记录结果。
+4. 105 小批量迁移任务已创建、执行、记录结果。
 5. 已对象化文件显示 `OBJECT_STORED`。
 6. 已对象化文件通过受控 `file-access` 可读取。
 7. 未对象化文件仍显示 / 解释为 `NAS_ONLY`，并可继续通过 NAS 链路访问。

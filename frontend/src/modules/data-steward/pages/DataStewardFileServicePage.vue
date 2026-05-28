@@ -138,6 +138,25 @@
                 <strong>{{ formatCount(dryRunResult.objectStoredSkipCount) }}</strong>
               </div>
             </div>
+            <div class="dry-run-actions">
+              <div>
+                <strong>105 小批灰度对象化</strong>
+                <span>{{ dryRunGrayHint }}</span>
+              </div>
+              <div class="dry-run-actions__buttons">
+                <el-button :disabled="dryRunExecutableFileIds.length === 0" @click="appendDryRunSelection">
+                  加入小批清单
+                </el-button>
+                <el-button
+                  type="primary"
+                  :loading="creating"
+                  :disabled="!canRunDryRunGrayTask"
+                  @click="createTaskFromDryRun"
+                >
+                  执行小批灰度
+                </el-button>
+              </div>
+            </div>
             <el-alert
               type="info"
               :closable="false"
@@ -488,6 +507,39 @@ const objectStoredPercent = computed(() => {
   return Math.round((Number(summary.value?.objectStoredCount ?? 0) / total) * 100);
 });
 
+const readinessReady = computed(() => (
+  readiness.value?.endpointType === 'NAS_SIDE_MINIO'
+  && readiness.value?.readinessStatus === 'READY'
+  && readiness.value?.writable === true
+));
+
+const dryRunExecutableItems = computed(() => {
+  const maxFiles = Number(summary.value?.maxFilesPerTask ?? 10);
+  const maxSize = Number(summary.value?.maxFileSizeBytes ?? 10 * 1024 * 1024);
+  return (dryRunResult.value?.sampleItems ?? [])
+    .filter((item) => item.storageStatus === 'NAS_ONLY')
+    .filter((item) => ['ELIGIBLE_DRY_RUN', 'MISSING_CHECKSUM'].includes(item.reason))
+    .filter((item) => Number(item.sizeBytes ?? 0) <= maxSize)
+    .slice(0, maxFiles);
+});
+
+const dryRunExecutableFileIds = computed(() => dryRunExecutableItems.value.map((item) => item.fileId));
+
+const canRunDryRunGrayTask = computed(() => readinessReady.value && dryRunExecutableFileIds.value.length > 0);
+
+const dryRunGrayHint = computed(() => {
+  if (!readinessReady.value) {
+    return '需要 NAS 侧 MinIO READY 后才能执行；dry-run 本身仍是只读计划。';
+  }
+  if (!dryRunResult.value) {
+    return '先生成 dry-run 计划，再从其中选择安全小样本。';
+  }
+  if (dryRunExecutableFileIds.value.length === 0) {
+    return '当前 dry-run 样本没有符合小批灰度条件的 NAS_ONLY 文件。';
+  }
+  return `将使用 dry-run 样本中的 ${dryRunExecutableFileIds.value.length} 个文件；NAS 原文件保留，只复制副本到对象存储。`;
+});
+
 const inventoryRows = computed<ProjectStorageObjectificationInventory[]>(() => {
   const rows = inventory.value?.projects ?? [];
   if (projectId.value) {
@@ -591,6 +643,12 @@ function appendCandidateSelection() {
   ElMessage.success(`已加入 ${ids.length} 个文件`);
 }
 
+function appendDryRunSelection() {
+  if (dryRunExecutableFileIds.value.length === 0) return;
+  createForm.fileIdsText = dryRunExecutableFileIds.value.join(', ');
+  ElMessage.success(`已加入 ${dryRunExecutableFileIds.value.length} 个 dry-run 小样本`);
+}
+
 function isCandidateSelectable(row: CatalogFile) {
   return row.registered !== false && Number.isFinite(Number(row.fileId));
 }
@@ -599,10 +657,26 @@ async function createTask() {
   if (!projectId.value || selectedFileIds.value.length === 0) return;
   const confirmed = await confirmAction('将创建对象存储镜像任务。NAS 原文件会保留，平台不会读取文件正文，也不会生成语义证据。');
   if (!confirmed) return;
+  await submitMigrationTask(selectedFileIds.value);
+}
+
+async function createTaskFromDryRun() {
+  if (!projectId.value || dryRunExecutableFileIds.value.length === 0) return;
+  if (!readinessReady.value) {
+    ElMessage.warning('NAS 侧 MinIO 尚未 READY，不能执行真实对象化灰度。');
+    return;
+  }
+  const confirmed = await confirmAction('将按 dry-run 小样本执行 105 对象化灰度。NAS 原文件保留，只复制副本到对象存储；不会读取正文，也不会写语义索引。');
+  if (!confirmed) return;
+  await submitMigrationTask(dryRunExecutableFileIds.value);
+}
+
+async function submitMigrationTask(fileIds: number[]) {
+  if (!projectId.value || fileIds.length === 0) return;
   creating.value = true;
   try {
     const detail = await createStorageMigrationTask(projectId.value, {
-      fileIds: selectedFileIds.value,
+      fileIds,
       targetProvider: createForm.targetProvider
     });
     selectedTask.value = detail;
@@ -610,7 +684,7 @@ async function createTask() {
     createForm.fileIdsText = '';
     candidateSelection.value = [];
     ElMessage.success('迁移任务已创建');
-    await Promise.all([loadSummary(), loadTasks()]);
+    await Promise.all([loadInventory(), loadSummary(), loadTasks()]);
   } finally {
     creating.value = false;
   }
@@ -938,6 +1012,40 @@ function formatDate(value: string | null | undefined) {
 .dry-run-summary strong {
   color: var(--zy-ink);
   font-size: 20px;
+}
+
+.dry-run-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-bg);
+}
+
+.dry-run-actions > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dry-run-actions strong {
+  color: var(--zy-ink);
+  font-size: 14px;
+}
+
+.dry-run-actions span {
+  color: var(--zy-muted);
+  font-size: 13px;
+}
+
+.dry-run-actions__buttons {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
 }
 
 .service-grid {

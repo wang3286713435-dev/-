@@ -317,35 +317,35 @@ public class StorageMigrationApplicationService {
               AND f.deleted = 0
             """);
         if (filters.directoryPath() != null) {
-            where.append(" AND (f.logical_path = :directoryPath OR f.logical_path LIKE :directoryPrefix)");
+            where.append("\n AND (f.logical_path = :directoryPath OR f.logical_path LIKE :directoryPrefix)");
             params.addValue("directoryPath", filters.directoryPath());
             params.addValue("directoryPrefix", filters.directoryPath() + "/%");
         }
         if (!filters.fileKinds().isEmpty()) {
-            where.append(" AND f.file_kind IN (:fileKinds)");
+            where.append("\n AND f.file_kind IN (:fileKinds)");
             params.addValue("fileKinds", filters.fileKinds());
         }
         if (!filters.extensions().isEmpty()) {
-            where.append(" AND LOWER(SUBSTRING_INDEX(f.original_name, '.', -1)) IN (:extensions)");
+            where.append("\n AND LOWER(SUBSTRING_INDEX(f.original_name, '.', -1)) IN (:extensions)");
             params.addValue("extensions", filters.extensions());
         }
         if (filters.minSizeBytes() != null) {
-            where.append(" AND COALESCE(f.size_bytes, 0) >= :minSizeBytes");
+            where.append("\n AND COALESCE(f.size_bytes, 0) >= :minSizeBytes");
             params.addValue("minSizeBytes", filters.minSizeBytes());
         }
         if (filters.maxSizeBytes() != null) {
-            where.append(" AND COALESCE(f.size_bytes, 0) <= :maxSizeBytes");
+            where.append("\n AND COALESCE(f.size_bytes, 0) <= :maxSizeBytes");
             params.addValue("maxSizeBytes", filters.maxSizeBytes());
         }
         if ("HAS_CHECKSUM".equals(filters.checksumState())) {
-            where.append(" AND f.checksum IS NOT NULL AND f.checksum <> ''");
+            where.append("\n AND f.checksum IS NOT NULL AND f.checksum <> ''");
         } else if ("MISSING_CHECKSUM".equals(filters.checksumState())) {
-            where.append(" AND (f.checksum IS NULL OR f.checksum = '')");
+            where.append("\n AND (f.checksum IS NULL OR f.checksum = '')");
         }
         if ("NAS_ONLY".equals(filters.storageState())) {
-            where.append(" AND obj.file_id IS NULL AND COALESCE(mig.failed, 0) = 0");
+            where.append("\n AND obj.file_id IS NULL AND COALESCE(mig.failed, 0) = 0");
         } else if ("MIGRATION_FAILED".equals(filters.storageState())) {
-            where.append(" AND obj.file_id IS NULL AND COALESCE(mig.failed, 0) = 1");
+            where.append("\n AND obj.file_id IS NULL AND COALESCE(mig.failed, 0) = 1");
         }
         List<DryRunCandidate> rows = jdbcTemplate.query("""
             SELECT
@@ -377,7 +377,7 @@ public class StorageMigrationApplicationService {
                 WHERE deleted = 0
                 GROUP BY file_id
             ) mig ON mig.file_id = f.id
-            """ + where + """
+            """ + where + "\n" + """
             ORDER BY f.id
             LIMIT :limit
             """, params, (rs, rowNum) -> new DryRunCandidate(
