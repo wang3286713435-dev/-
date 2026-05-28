@@ -2068,6 +2068,24 @@
 - 当前 active 批次：`待用户确认`。
 - 下一步候选：`M3G-3：多真实项目分批对象化策略与任务中心增强`。
 
+## 2026-05-28 M3G-3 启动：多真实项目分批对象化策略与任务中心增强
+
+- 用户确认进入下一步。
+- 主 agent 裁决当前 active 批次：
+  - `M3G-3：多真实项目分批对象化策略与任务中心增强`
+- 本批定位：
+  - 不做全量迁移。
+  - 不默认执行多项目真实对象化。
+  - 先增强多项目盘点、dry-run、容量估算、限制条件和任务中心。
+- 本批边界：
+  - NAS 原文件保留，不移动、不删除、不改名。
+  - 不读正文、不写语义索引、不做 Hermes 正文问答。
+  - 不修改 `docs/**`。
+- 已写入：
+  - `handoff/main-agent/m3g3-multi-project-objectification-task-center-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+
 ## 跨机器交接入口
 
 ## 2026-05-26 M3E 启动

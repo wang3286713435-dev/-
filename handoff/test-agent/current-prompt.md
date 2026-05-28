@@ -1,4 +1,4 @@
-# 测试 Agent 当前任务：M3G-2 105 项目历史文件对象化上传灰度验收
+# 测试 Agent 当前任务：M3G-3 多真实项目分批对象化策略与任务中心增强验收
 
 你是卓羽智能数据中台的测试 agent。工作目录：
 
@@ -6,36 +6,31 @@
 
 当前验收目标：
 
-`M3G-2：105 项目历史文件对象化上传灰度`
+`M3G-3：多真实项目分批对象化策略与任务中心增强`
 
 ## 0. 本轮只验收什么
 
-本轮只验收 105 / `projectId=503` 的小批量历史文件对象化上传灰度。
+本轮只验收多项目对象化的规划、dry-run 和任务中心增强能力。
 
-重要安全提醒：
+默认不执行真实多项目对象化。
 
-- `scripts/dev/check-m3g2-105-objectification-gray.sh` 是执行型脚本，不是只读脚本。
-- 每次运行可能继续从 105 的 `NAS_ONLY` 文件中选择一批新文件并复制副本到 NAS 侧 MinIO。
-- 如果开发 agent 和主 agent 已经运行过该脚本，测试 agent 默认不要再次运行它，除非用户或主 agent 明确允许“再追加一批对象化”。
-- 默认验收方式改为：先基于报告、API、数据库状态、任务详情和 read-only 回归确认本轮结果。
-
-验收重点：
+重点：
 
 - NAS 侧 MinIO readiness。
-- 105 dry-run 计划。
-- 小批量对象化迁移任务真实执行。
-- 已对象化文件走受控 `file-access`。
-- 未对象化文件仍走 NAS_ONLY 链路。
-- 真实 NAS 原文件未被移动、删除、改名。
+- 全项目对象化盘点增强。
+- 多项目 dry-run 只读计划。
+- 文件数 / 容量 / 项目范围限制。
+- 任务中心展示增强。
+- 不泄露敏感字段。
+- 不触碰真实 NAS 原文件。
 
 ## 1. 必读文件
 
 - `handoff/dev-agent/latest-report.md`
 - `handoff/test-agent/latest-report.md`
 - `handoff/dev-agent/current-prompt.md`
-- `handoff/main-agent/m3g2-105-objectification-gray-plan.md`
-- `scripts/dev/check-m3g2-105-objectification-gray.sh`
-- `scripts/dev/check-m3g-nas-minio-readiness-inventory.sh`
+- `handoff/main-agent/m3g3-multi-project-objectification-task-center-plan.md`
+- `scripts/dev/check-m3g3-multi-project-objectification-planning.sh`
 
 ## 2. 必跑命令
 
@@ -46,6 +41,7 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-m3g3-multi-project-objectification-planning.sh
 bash scripts/dev/check-m3g-nas-minio-readiness-inventory.sh
 bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
 bash scripts/dev/check-m3f-object-storage-first-write.sh
@@ -54,52 +50,54 @@ bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
 
-除非明确允许追加对象化，否则不要运行：
-
-```bash
-bash scripts/dev/check-m3g2-105-objectification-gray.sh
-```
+除非主 agent 明确允许，不要运行执行型 `check-m3g2-105-objectification-gray.sh`。
 
 ## 3. 重点断言
 
 必须确认：
 
 1. readiness 为 `NAS_SIDE_MINIO / READY`。
-2. M3G-2 专项脚本已纳入 Git，且开发 / 主 agent 最近运行记录通过。
-3. 105 dry-run 能生成计划。
-4. 105 小批量迁移任务已创建、执行、记录结果。
-5. 已对象化文件显示 `OBJECT_STORED`。
-6. 已对象化文件通过受控 `file-access` 可读取。
-7. 未对象化文件仍显示 / 解释为 `NAS_ONLY`，并可继续通过 NAS 链路访问。
-8. 重复执行同一批次不会产生重复 active object version 污染。
-9. 真实 NAS 原项目文件未被复制以外的方式改动：未移动、未删除、未改名、未覆盖。
-10. 响应不泄露真实 NAS 路径、endpoint 原文、bucket、object key、storage URI、SQL、raw row、token、secret。
+2. M3G-3 专项脚本通过。
+3. 全项目对象化盘点可查。
+4. 真实项目和样例 / 测试 / 归档项目不会混成不可区分的一类。
+5. 多项目 dry-run 能生成按项目分组的计划。
+6. dry-run 不创建迁移任务。
+7. 文件数 / 容量上限生效。
+8. 响应不泄露真实 NAS 路径、endpoint 原文、bucket、object key、storage URI、SQL、raw row、token、secret。
+9. M3G-1 / M3E / M3F / M3C / file-access 回归通过。
+
+如开发 agent 实现了受控执行入口，额外确认：
+
+- 默认不执行。
+- 只对明确指定项目执行。
+- 不越过上限。
+- NAS 原文件未被移动、删除、改名、覆盖。
+- 重复执行幂等。
 
 ## 4. P0 / P1 判定
 
 P0：
 
 - 真实 NAS 文件被移动、删除、覆盖或改名。
-- 迁移范围越过 105 项目。
+- 迁移范围越过明确项目范围。
+- dry-run 实际创建迁移任务。
 - 真实路径、bucket、object key、secret、token 泄露。
 - file-access 权限链路回归失败。
-- 对象副本失败后平台静默 fallback 到 NAS 并仍声称 `OBJECT_STORED`。
 
 P1：
 
 - readiness 不是 `NAS_SIDE_MINIO / READY`。
-- M3G-2 专项失败。
-- 105 无法创建小批量对象化任务。
-- `OBJECT_STORED` 文件无法通过受控 file-access 读取。
-- NAS_ONLY 文件不可用。
-- 重复执行污染 active object version。
-- M3G-1 / M3E / M3F 关键回归失败。
-- M3C / file-access 关键回归失败。
+- M3G-3 专项失败。
+- 多项目 dry-run 不可用。
+- dry-run 结果不能按项目分组。
+- 文件数 / 容量限制不生效。
+- M3G-1 / M3E / M3F / M3C / file-access 关键回归失败。
 
 P2：
 
 - 既有 Vite chunk warning。
 - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪项。
+- 前端页面只做轻量展示但不影响规划链路。
 
 ## 5. 报告要求
 
@@ -112,10 +110,8 @@ P2：
 - 测试结论。
 - P0 / P1 / P2。
 - 必跑命令结果。
-- 105 实际对象化数量、跳过数量、失败数量。
-- 105 覆盖率变化。
-- 已对象化文件读取路径是否通过受控 `file-access`。
-- 未对象化文件 NAS_ONLY 链路是否保留。
+- 多项目 dry-run 计划结果摘要。
+- 是否创建真实迁移任务。
 - 是否触碰真实 NAS 原文件。
 - 是否出现禁出字段。
-- 是否建议主 agent 收口 M3G-2。
+- 是否建议主 agent 收口 M3G-3。

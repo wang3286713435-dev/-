@@ -1,4 +1,4 @@
-# 开发 Agent 当前任务：M3G-2 105 项目历史文件对象化上传灰度
+# 开发 Agent 当前任务：M3G-3 多真实项目分批对象化策略与任务中心增强
 
 你是卓羽智能数据中台 v1 的开发 agent。工作目录：
 
@@ -10,137 +10,142 @@
 
 ## 0. 当前结论与目标
 
-M3G-1 已正式收口：
+M3G-2 已正式收口：
 
-- 平台能识别 NAS 侧 MinIO：`NAS_SIDE_MINIO / READY`。
-- 全项目对象化覆盖率可查。
-- 503 / 105 项目 dry-run 可生成计划。
-- M3E / M3F / M3C / file-access 回归均已通过。
+- 105 / `projectId=503` 已完成小批历史文件对象化。
+- 已对象化文件可通过受控 `file-access` 读取。
+- 未对象化文件仍保持 `NAS_ONLY` 并继续可用。
+- NAS 原文件未移动、未删除、未改名。
 
 当前进入：
 
-`M3G-2：105 项目历史文件对象化上传灰度`
+`M3G-3：多真实项目分批对象化策略与任务中心增强`
 
-本批目标是让 105 项目少量历史 NAS 文件真实上传到 NAS 侧 MinIO，并验证读取链路切换。
-
-重要：这里的“上传 MinIO”是复制副本到对象存储，不是移动、删除或改名 NAS 原文件。
+本批不是全量迁移。本批目标是让平台具备多真实项目对象化的规划、容量评估、筛选、限额、任务中心增强能力，为后续扩大对象化范围做准备。
 
 ## 1. 必须先阅读
 
+- `handoff/main-agent/m3g3-multi-project-objectification-task-center-plan.md`
+- `handoff/main-agent/m3g2-105-objectification-gray-closure.md`
 - `handoff/dev-agent/latest-report.md`
 - `handoff/test-agent/latest-report.md`
-- `handoff/main-agent/m3g1-task-graph.md`
-- `handoff/main-agent/m3g1-nas-minio-readiness-inventory-closure.md`
-- `handoff/main-agent/m3g2-105-objectification-gray-plan.md`
-- `scripts/dev/check-m3e-preview-artifacts-object-storage.sh`
-- `scripts/dev/check-m3f-object-storage-first-write.sh`
-- `scripts/dev/check-m3g-nas-minio-readiness-inventory.sh`
-- `scripts/dev/check-m3c-storage-migration-task-center.sh`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageService.java`
 - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageMigrationApplicationService.java`
 - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageMigrationController.java`
-- `frontend/src/modules/data-steward/pages/FileServicePage.vue`
+- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageService.java`
+- `frontend/src/modules/data-steward/pages/DataStewardFileServicePage.vue`
 - `frontend/src/modules/data-steward/api/dataSteward.ts`
+- `scripts/dev/check-m3g-nas-minio-readiness-inventory.sh`
+- `scripts/dev/check-m3g2-105-objectification-gray.sh`
 
 ## 2. 严格边界
 
 本轮允许：
 
-- 只针对 105 项目，即本地 `projectId=503`，执行小批量对象化上传灰度。
-- 复用或扩展已有对象迁移任务中心。
-- 从 dry-run 结果生成受控迁移任务。
-- 让 105 覆盖率页面展示对象化前后变化。
-- 增加 M3G-2 专项脚本。
+- 增强多真实项目对象化盘点。
+- 增强 dry-run 计划能力。
+- 增强迁移任务中心展示和接口契约。
+- 增加文件数 / 容量 / 项目范围限制。
+- 预留速率限制、并发上限、暂停 / 继续字段。
+- 增加前端多项目对象化规划与任务中心视图。
+- 新增 M3G-3 专项脚本。
 - 更新 `handoff/dev-agent/latest-report.md`。
 
 本轮禁止：
 
-- 不全量迁移全部项目。
+- 不全量迁移所有项目。
 - 不一键迁移 NAS 根目录。
+- 不默认真实执行多项目对象化。
 - 不移动、删除、重命名、覆盖真实 NAS 原项目文件。
+- 不读取 PDF / Office / DWG / RVT / IFC 正文。
 - 不做 Hermes 正文问答。
 - 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
-- 不读取 PDF / Office / DWG / RVT / IFC 正文。
 - 不接入真实 BIM 引擎。
-- 不把 `OBJECT_STORED` 但对象读取失败的文件静默 fallback 到 NAS 并伪装成功。
 - 不暴露 `/Volumes`、`smb://`、`nas://`、`storage_uri`、bucket、object key、endpoint 原文、SQL、raw row、token、secret。
 - 不修改 `docs/**`。
 
-## 3. 必须明确当前降级策略
+## 3. 本轮必须完成
 
-当前平台读取策略应保持：
+### A. 多项目对象化盘点增强
 
-1. 文件有 active object version 且状态 `OBJECT_STORED`：优先读取对象存储。
-2. 文件没有 active object version：读取原 NAS 台账路径。
-3. 文件标记 `OBJECT_STORED` 但对象副本不可读：fail-closed，提示对象副本异常；不得偷偷读 NAS。
+在现有全项目对象化盘点基础上，补齐或确认可返回：
 
-第 3 条不能改。这是对象存储治理的可信边界。
+- 项目 ID / 编码 / 名称。
+- 项目来源或项目类型，能区分真实 NAS 项目与样例 / 测试 / 归档项目。
+- 总文件数。
+- 已对象化数。
+- NAS_ONLY 数。
+- MIGRATION_FAILED 数。
+- checksum 覆盖率。
+- 总容量。
+- 已对象化容量。
+- 预计待对象化容量。
+- 文件类型分布或扩展名分布。
+- 超大文件数。
+- 路径不可读数。
 
-## 4. 本轮必须完成
+响应不得返回真实路径、bucket、object key。
 
-### A. 105 小批量对象化执行
+### B. 多项目 dry-run 计划
 
-请基于已有 dry-run / migration task 能力完成：
+实现或扩展一个多项目 dry-run 能力。
 
-- 确认 readiness 是 `NAS_SIDE_MINIO / READY`。
-- 对 105 / `projectId=503` 生成 dry-run 计划。
-- 从 dry-run 计划选择一批文件创建对象化迁移任务。
-- 每批保持小批量，建议沿用现有后端安全上限，不要为了本轮放大到全项目。
-- 任务执行后写入 `data_storage_objects` 和 active `data_file_object_versions`。
-- 任务失败时必须保留失败原因。
-- 重复执行必须幂等，不能污染 active object version。
+要求：
 
-如果当前接口已经支持明确 `fileIds` 创建任务，可以优先复用；如前端缺少“从 dry-run 执行”的入口，可在前端补一个最小受控入口。
+- 支持多个 projectId。
+- 支持 storageState、checksumState、extensions、minSizeBytes、maxSizeBytes、maxTotalBytes、limit 等筛选。
+- 支持总文件数上限和总容量上限。
+- 结果按项目分组。
+- 返回 selected / skipped / risk / reason。
+- dry-run 必须只读，不能创建迁移任务。
 
-### B. 读取链路验证
+如果你判断复用现有单项目 dry-run 更稳，可以先实现“前端聚合多个单项目 dry-run”的方案；但专项脚本必须能验证多项目计划口径。
 
-必须证明：
+### C. 任务中心增强
 
-- 已对象化文件 `storage-status=OBJECT_STORED`。
-- 已对象化文件通过受控 `file-access` 可读取。
-- 未对象化文件仍显示 `NAS_ONLY`，并通过原 NAS 链路可用。
-- 对象副本异常时不静默 fallback。
+增强文件服务 / 对象存储页面：
 
-### C. 前端可见性
+- 展示多项目对象化规划入口。
+- 展示项目风险和覆盖率。
+- 展示 dry-run 分组结果。
+- 展示任务来源：手动 fileIds / dry-run / 多项目计划。
+- 展示策略字段：项目范围、筛选条件、文件数上限、容量上限。
+- 预留并发上限 / 速率限制 / 暂停继续字段。
 
-文件服务 / 对象存储页面至少能让用户看懂：
+本批不要求真的实现复杂 worker 暂停；如只预留字段和展示，请在报告里说明。
 
-- 当前是 NAS 侧 MinIO。
-- 105 当前对象化覆盖率。
-- dry-run 将选择多少文件、多少容量。
-- 执行灰度后成功 / 跳过 / 失败数量。
-- 对象化完成后，哪些文件已是 `OBJECT_STORED`。
+### D. 受控执行边界
 
-文案要清楚说明：NAS 原文件保留，平台只是复制副本到对象存储。
+默认不要执行多项目真实迁移。
 
-### D. 新增专项脚本
+如需要创建任务来验证接口，只能：
+
+- 明确指定小范围项目。
+- 使用小上限。
+- 不超过现有安全上限。
+- 不触碰 NAS 原文件。
+- 保持幂等。
+
+### E. 新增专项脚本
 
 新增：
 
-`scripts/dev/check-m3g2-105-objectification-gray.sh`
+`scripts/dev/check-m3g3-multi-project-objectification-planning.sh`
+
+默认必须是只读脚本，不执行真实对象化。
 
 脚本至少验证：
 
-1. readiness 是 `NAS_SIDE_MINIO / READY`。
-2. 105 对象化盘点可查。
-3. dry-run 可生成计划。
-4. 小批量迁移任务可创建并完成。
-5. `OBJECT_STORED` 数量增加或重复运行幂等跳过。
-6. 已对象化文件可通过受控 `file-access` 读取。
-7. 未对象化文件仍可用，并仍解释为 `NAS_ONLY`。
-8. NAS 原项目文件未被移动、删除、改名。
-9. 响应禁出字段扫描通过。
+1. readiness 为 `NAS_SIDE_MINIO / READY`。
+2. 全项目对象化盘点可查。
+3. 真实项目和样例 / 测试 / 归档项目可区分或过滤。
+4. 多项目 dry-run 可生成计划。
+5. dry-run 未创建迁移任务。
+6. 结果按项目分组。
+7. 文件数 / 容量上限生效。
+8. 禁出字段扫描通过。
+9. 脚本已纳入 Git。
 
-## 5. 推荐灰度范围
-
-默认只选 105 项目安全小批：
-
-- 优先 PDF / 图片 / 小型 Office / 小型 DWG。
-- 第一批不要包含超大文件。
-- 第一批不要超过现有迁移任务安全上限。
-- 如果 dry-run 没有合适样本，脚本应明确失败原因，不要扩大到其他项目。
-
-## 6. 自测要求
+## 4. 自测要求
 
 完成后至少执行：
 
@@ -151,7 +156,7 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-m3g2-105-objectification-gray.sh
+bash scripts/dev/check-m3g3-multi-project-objectification-planning.sh
 bash scripts/dev/check-m3g-nas-minio-readiness-inventory.sh
 bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
 bash scripts/dev/check-m3f-object-storage-first-write.sh
@@ -161,7 +166,9 @@ git diff --check
 git diff --cached --check
 ```
 
-## 7. 报告要求
+注意：不要默认运行 M3G-2 执行型脚本，避免继续对象化 105 文件。
+
+## 5. 报告要求
 
 完成后写入：
 
@@ -169,24 +176,22 @@ git diff --cached --check
 
 报告必须说明：
 
-1. 本轮实际对象化了多少个 105 文件。
-2. 成功 / 跳过 / 失败数量。
-3. 105 覆盖率变化。
-4. 已对象化文件是否经由 `file-access` 从对象存储读取。
-5. 未对象化文件是否仍按 NAS_ONLY 可用。
-6. NAS 原文件是否被移动、删除、改名，必须明确回答“否”。
-7. 是否读取正文、写语义索引、触发 Hermes，必须明确回答“否”。
-8. 自测结果。
-9. 未完成事项。
+1. 多项目盘点增强了哪些字段。
+2. 多项目 dry-run 如何工作。
+3. 是否创建真实迁移任务；如有，必须说明范围、数量和原因。
+4. 是否触碰真实 NAS 原文件，必须明确回答“否”。
+5. 是否读取正文、写语义索引、触发 Hermes，必须明确回答“否”。
+6. 前端任务中心增强点。
+7. 自测结果。
+8. 未完成事项和后续扩展。
 
-## 8. 完成定义
+## 6. 完成定义
 
 只有同时满足以下条件，才能标记完成：
 
-- M3G-2 专项通过。
-- 105 至少一批真实历史文件对象化成功，或已对象化样本幂等跳过且脚本能证明读取链路。
-- 已对象化文件显示 `OBJECT_STORED`。
-- 未对象化文件仍显示 / 解释为 `NAS_ONLY`。
-- file-access 回归通过。
-- 未触碰真实 NAS 原项目文件。
+- M3G-3 专项通过。
+- 多项目对象化规划能力可用。
+- dry-run 默认只读且不创建迁移任务。
+- 任务中心能展示项目范围、筛选条件、上限和状态。
+- 真实 NAS 原文件未被破坏。
 - 未修改 `docs/**`。
