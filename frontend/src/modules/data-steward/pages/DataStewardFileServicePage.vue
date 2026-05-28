@@ -183,6 +183,74 @@
               title="多项目 dry-run 已生成，未创建迁移任务"
               :description="multiPlanResult.riskMessages.join(' ')"
             />
+            <div class="dry-run-actions">
+              <div>
+                <strong>受控多项目小批对象化</strong>
+                <span>{{ multiExecutionHint }}</span>
+              </div>
+              <div class="dry-run-actions__buttons">
+                <el-button
+                  type="danger"
+                  plain
+                  :loading="multiExecutionLoading"
+                  :disabled="!canExecuteMultiPlan"
+                  @click="executeMultiProjectPlan"
+                >
+                  确认执行小批对象化
+                </el-button>
+              </div>
+            </div>
+            <template v-if="multiExecutionResult">
+              <div class="dry-run-summary">
+                <div>
+                  <span>执行项目</span>
+                  <strong>{{ formatCount(multiExecutionResult.selectedProjectCount) }}</strong>
+                </div>
+                <div>
+                  <span>执行文件</span>
+                  <strong>{{ formatCount(multiExecutionResult.selectedFileCount) }}</strong>
+                </div>
+                <div>
+                  <span>成功</span>
+                  <strong>{{ formatCount(multiExecutionResult.createdCount) }}</strong>
+                </div>
+                <div>
+                  <span>跳过 / 失败</span>
+                  <strong>{{ formatCount(multiExecutionResult.skippedCount) }} / {{ formatCount(multiExecutionResult.failedCount) }}</strong>
+                </div>
+              </div>
+              <el-alert
+                type="success"
+                :closable="false"
+                show-icon
+                class="service-notice"
+                title="小批对象化执行已返回"
+                :description="multiExecutionResult.warnings.join(' ')"
+              />
+              <el-table :data="multiExecutionResult.projectResults" row-key="taskId" empty-text="暂无执行结果">
+                <el-table-column label="项目" min-width="220" show-overflow-tooltip>
+                  <template #default="{ row }">{{ row.projectCode }} {{ row.projectName }}</template>
+                </el-table-column>
+                <el-table-column prop="taskId" label="任务ID" width="90" />
+                <el-table-column label="文件" width="80" align="right">
+                  <template #default="{ row }">{{ formatCount(row.selectedFileCount) }}</template>
+                </el-table-column>
+                <el-table-column label="成功" width="80" align="right">
+                  <template #default="{ row }">{{ formatCount(row.successCount) }}</template>
+                </el-table-column>
+                <el-table-column label="跳过" width="80" align="right">
+                  <template #default="{ row }">{{ formatCount(row.skippedCount) }}</template>
+                </el-table-column>
+                <el-table-column label="失败" width="80" align="right">
+                  <template #default="{ row }">{{ formatCount(row.failureCount) }}</template>
+                </el-table-column>
+                <el-table-column label="状态" width="120">
+                  <template #default="{ row }">
+                    <el-tag :type="statusType(row.taskStatus)" size="small">{{ taskStatusLabel(row.taskStatus) }}</el-tag>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </template>
             <el-table :data="multiPlanResult.projects" row-key="projectId" empty-text="暂无多项目规划结果">
               <el-table-column label="项目" min-width="220" show-overflow-tooltip>
                 <template #default="{ row }">{{ row.projectCode }} {{ row.projectName }}</template>
@@ -539,6 +607,7 @@ import {
   createStorageMigrationTask,
   dryRunMultiProjectStorageObjectificationPlan,
   dryRunStorageObjectificationPlan,
+  executeMultiProjectStorageObjectificationPlan,
   fetchCatalogFiles,
   fetchStorageObjectificationInventory,
   fetchStorageMigrationSummary,
@@ -548,6 +617,7 @@ import {
   retryStorageMigrationTask,
   type CatalogFile,
   type MultiProjectStorageObjectificationDryRun,
+  type MultiProjectStorageObjectificationExecuteResult,
   type ProjectStorageObjectificationInventory,
   type StorageObjectificationDryRun,
   type StorageObjectificationInventory,
@@ -569,12 +639,14 @@ const candidateLoading = ref(false);
 const creating = ref(false);
 const dryRunLoading = ref(false);
 const multiPlanLoading = ref(false);
+const multiExecutionLoading = ref(false);
 const detailVisible = ref(false);
 const summary = ref<StorageMigrationSummary | null>(null);
 const readiness = ref<StorageProviderReadiness | null>(null);
 const inventory = ref<StorageObjectificationInventory | null>(null);
 const dryRunResult = ref<StorageObjectificationDryRun | null>(null);
 const multiPlanResult = ref<MultiProjectStorageObjectificationDryRun | null>(null);
+const multiExecutionResult = ref<MultiProjectStorageObjectificationExecuteResult | null>(null);
 const tasks = ref<StorageMigrationTaskListItem[]>([]);
 const selectedTask = ref<StorageMigrationTaskDetail | null>(null);
 const candidateRows = ref<CatalogFile[]>([]);
@@ -684,6 +756,54 @@ const inventoryRows = computed<ProjectStorageObjectificationInventory[]>(() => {
 
 const multiPlanMaxTotalBytes = computed(() => Math.max(1, Number(multiPlanForm.maxTotalMb || 80)) * 1024 * 1024);
 const multiPlanMaxBytesPerProject = computed(() => Math.max(1, Number(multiPlanForm.maxBytesPerProjectMb || 30)) * 1024 * 1024);
+
+const multiPlanExecutableItems = computed(() => {
+  const maxFilesPerProject = Math.min(Number(multiPlanForm.maxFilesPerProject || 3), 3);
+  const maxTotalBytes = Math.min(multiPlanMaxTotalBytes.value, 100 * 1024 * 1024);
+  const maxProjectBytes = Math.min(multiPlanMaxBytesPerProject.value, 50 * 1024 * 1024);
+  const maxFileBytes = Number(summary.value?.maxFileSizeBytes ?? 10 * 1024 * 1024);
+  const selected: Array<{ projectId: number; fileId: number; sizeBytes: number }> = [];
+  let selectedTotalBytes = 0;
+  for (const project of multiPlanResult.value?.projects ?? []) {
+    if (!project.realNasProject) continue;
+    let projectFileCount = 0;
+    let projectTotalBytes = 0;
+    for (const item of project.sampleItems ?? []) {
+      const fileId = Number(item.fileId);
+      const sizeBytes = Number(item.sizeBytes ?? 0);
+      if (!Number.isFinite(fileId) || fileId <= 0) continue;
+      if (item.storageStatus !== 'NAS_ONLY') continue;
+      if (!['ELIGIBLE_DRY_RUN', 'MISSING_CHECKSUM'].includes(item.reason)) continue;
+      if (sizeBytes > maxFileBytes) continue;
+      if (projectFileCount + 1 > maxFilesPerProject) continue;
+      if (projectTotalBytes + sizeBytes > maxProjectBytes) continue;
+      if (selected.length + 1 > 9) continue;
+      if (selectedTotalBytes + sizeBytes > maxTotalBytes) continue;
+      selected.push({ projectId: project.projectId, fileId, sizeBytes });
+      projectFileCount += 1;
+      projectTotalBytes += sizeBytes;
+      selectedTotalBytes += sizeBytes;
+    }
+  }
+  return selected;
+});
+
+const multiPlanExecutableFileIds = computed(() => multiPlanExecutableItems.value.map((item) => item.fileId));
+const multiPlanExecutableProjectIds = computed(() => Array.from(new Set(multiPlanExecutableItems.value.map((item) => item.projectId))));
+const canExecuteMultiPlan = computed(() => readinessReady.value && multiPlanExecutableFileIds.value.length > 0);
+
+const multiExecutionHint = computed(() => {
+  if (!readinessReady.value) {
+    return '需要 NAS 侧 MinIO READY 后才能执行；规划本身仍可只读生成。';
+  }
+  if (!multiPlanResult.value) {
+    return '先生成多项目 dry-run 计划，再确认执行受控小批。';
+  }
+  if (multiPlanExecutableFileIds.value.length === 0) {
+    return '当前计划没有符合 M3G-4 小批条件的 NAS_ONLY 文件。';
+  }
+  return `将执行 ${multiPlanExecutableProjectIds.value.length} 个真实项目、${multiPlanExecutableFileIds.value.length} 个文件；只复制副本，不改动 NAS 原文件。`;
+});
 
 const enabledServices: Array<{ title: string; description: string; target: RouteRecordName }> = [
   { title: '文件预览', description: '查看预览状态，并通过短时票据打开可预览文件。', target: 'data-steward-asset-detail' },
@@ -846,6 +966,7 @@ async function runDryRun() {
 async function runMultiProjectDryRun() {
   multiPlanLoading.value = true;
   try {
+    multiExecutionResult.value = null;
     multiPlanResult.value = await dryRunMultiProjectStorageObjectificationPlan({
       projectIds: parseFileIds(multiPlanForm.projectIdsText),
       realProjectsOnly: multiPlanForm.realProjectsOnly,
@@ -861,6 +982,34 @@ async function runMultiProjectDryRun() {
     ElMessage.success('多项目 dry-run 已生成，未创建迁移任务');
   } finally {
     multiPlanLoading.value = false;
+  }
+}
+
+async function executeMultiProjectPlan() {
+  if (!canExecuteMultiPlan.value) return;
+  const confirmed = await confirmAction('将对 dry-run 选中的真实项目执行 M3G-4 小批对象化：只复制文件副本到 NAS 侧 MinIO，不移动、不删除、不改名 NAS 原文件；不会读取正文或写语义索引。');
+  if (!confirmed) return;
+  multiExecutionLoading.value = true;
+  try {
+    multiExecutionResult.value = await executeMultiProjectStorageObjectificationPlan({
+      projectIds: multiPlanExecutableProjectIds.value,
+      fileIds: multiPlanExecutableFileIds.value,
+      realProjectsOnly: true,
+      storageState: 'NAS_ONLY',
+      checksumState: multiPlanForm.checksumState as 'ANY' | 'HAS_CHECKSUM' | 'MISSING_CHECKSUM',
+      extensions: parseExtensions(multiPlanForm.extensionsText),
+      limit: multiPlanExecutableFileIds.value.length,
+      maxTotalBytes: Math.min(multiPlanMaxTotalBytes.value, 100 * 1024 * 1024),
+      maxFilesPerProject: Math.min(Number(multiPlanForm.maxFilesPerProject || 3), 3),
+      maxBytesPerProject: Math.min(multiPlanMaxBytesPerProject.value, 50 * 1024 * 1024),
+      concurrencyLimit: 1,
+      confirmed: true,
+      targetProvider: 'MINIO'
+    });
+    ElMessage.success('M3G-4 小批对象化执行已返回');
+    await Promise.all([loadInventory(), loadSummary(), loadTasks()]);
+  } finally {
+    multiExecutionLoading.value = false;
   }
 }
 

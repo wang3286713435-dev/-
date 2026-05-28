@@ -4,6 +4,9 @@ import com.zhuoyu.delivery.core.audit.application.AuditLogApplicationService;
 import com.zhuoyu.delivery.datasteward.asset.application.AssetApplicationService;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileAssetResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileStorageStatusResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageObjectificationExecuteRequest;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageObjectificationExecuteResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageObjectificationExecutionProject;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageObjectificationPlanDryRunRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageObjectificationPlanDryRunResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageObjectificationPlanProject;
@@ -48,6 +51,12 @@ public class StorageMigrationApplicationService {
     private static final long LARGE_FILE_RISK_BYTES = 500L * 1024L * 1024L;
     private static final int DEFAULT_DRY_RUN_LIMIT = 500;
     private static final int MAX_DRY_RUN_LIMIT = 5000;
+    private static final int M3G4_MAX_PROJECTS = 3;
+    private static final int M3G4_MAX_FILES_TOTAL = 9;
+    private static final int M3G4_MAX_FILES_PER_PROJECT = 3;
+    private static final long M3G4_MAX_BYTES_PER_PROJECT = 50L * 1024L * 1024L;
+    private static final long M3G4_MAX_BYTES_TOTAL = 100L * 1024L * 1024L;
+    private static final String M3G4_TASK_SOURCE = "MULTI_PROJECT_CONTROLLED_EXECUTION";
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final AssetApplicationService assetApplicationService;
@@ -757,6 +766,160 @@ public class StorageMigrationApplicationService {
         );
     }
 
+    public MultiProjectStorageObjectificationExecuteResponse executeMultiProjectObjectificationPlan(
+        Long userId,
+        MultiProjectStorageObjectificationExecuteRequest request
+    ) {
+        ensureAnyProjectAccess(userId);
+        if (!Boolean.TRUE.equals(request == null ? null : request.confirmed())) {
+            throw new BusinessException("STORAGE_MULTI_EXECUTION_CONFIRM_REQUIRED",
+                "受控多项目对象化执行必须 confirmed=true", HttpStatus.BAD_REQUEST);
+        }
+        StorageProviderReadinessResponse readiness = storageService.minioReadiness();
+        if (!Boolean.TRUE.equals(readiness.writable()) || !"READY".equals(readiness.readinessStatus())) {
+            throw new BusinessException("STORAGE_MULTI_EXECUTION_OBJECT_STORE_NOT_READY",
+                "NAS 侧 MinIO 尚未就绪，不能执行真实对象化。", HttpStatus.PRECONDITION_FAILED);
+        }
+
+        List<Long> requestedProjectIds = normalizeExecutionProjectIds(request == null ? null : request.projectIds());
+        List<Long> scopedProjectIds = accessibleProjectIds(userId, requestedProjectIds, true);
+        if (scopedProjectIds.size() != requestedProjectIds.size()) {
+            throw new BusinessException("STORAGE_MULTI_EXECUTION_PROJECT_SCOPE_INVALID",
+                "只能对当前账号可访问的真实 NAS 项目执行小批对象化。", HttpStatus.BAD_REQUEST);
+        }
+        List<Long> explicitFileIds = normalizeExecutionFileIds(request == null ? null : request.fileIds());
+        int limit = normalizeExecutionLimit(request == null ? null : request.limit());
+        int maxFilesPerProject = normalizeExecutionMaxFilesPerProject(request == null ? null : request.maxFilesPerProject());
+        long maxBytesPerProject = normalizeExecutionMaxBytesPerProject(request == null ? null : request.maxBytesPerProject());
+        long maxTotalBytes = normalizeExecutionMaxTotalBytes(request == null ? null : request.maxTotalBytes());
+        String targetProvider = normalizeTargetProvider(request == null ? null : request.targetProvider());
+
+        List<MultiProjectDryRunCandidate> candidates = queryMultiProjectCandidates(
+            userId,
+            scopedProjectIds,
+            explicitFileIds,
+            null,
+            explicitFileIds.size()
+        );
+        if (candidates.size() != explicitFileIds.size()) {
+            throw new BusinessException("STORAGE_MULTI_EXECUTION_FILE_SCOPE_INVALID",
+                "存在不属于本次真实项目范围或不可访问的文件。", HttpStatus.BAD_REQUEST);
+        }
+
+        LinkedHashMap<Long, ExecutionProjectSelection> selections = new LinkedHashMap<>();
+        long selectedFileCount = 0L;
+        long selectedTotalBytes = 0L;
+        for (MultiProjectDryRunCandidate candidate : candidates) {
+            if (!Boolean.TRUE.equals(candidate.realNasProject())) {
+                throw new BusinessException("STORAGE_MULTI_EXECUTION_REAL_PROJECT_REQUIRED",
+                    "受控执行只允许真实 NAS 项目。", HttpStatus.BAD_REQUEST);
+            }
+            boolean alreadyStored = candidate.objectStored();
+            if (!alreadyStored && unreadableRisk(candidate)) {
+                throw new BusinessException("STORAGE_MULTI_EXECUTION_SOURCE_REVIEW_REQUIRED",
+                    "存在缺少受控存储引用的文件，不能执行真实对象化。", HttpStatus.PRECONDITION_FAILED);
+            }
+            if (!alreadyStored && candidate.sizeBytes() > DEFAULT_MAX_FILE_SIZE_BYTES) {
+                throw new BusinessException("STORAGE_MULTI_EXECUTION_FILE_TOO_LARGE",
+                    "单文件超过本轮小批对象化大小限制。", HttpStatus.PRECONDITION_FAILED);
+            }
+            ExecutionProjectSelection selection = selections.computeIfAbsent(candidate.projectId(),
+                ignored -> new ExecutionProjectSelection(candidate));
+            if (selection.fileIds.size() >= maxFilesPerProject) {
+                throw new BusinessException("STORAGE_MULTI_EXECUTION_PROJECT_FILE_LIMIT_EXCEEDED",
+                    "单项目文件数超过本轮执行上限。", HttpStatus.BAD_REQUEST);
+            }
+            if (selection.selectedTotalBytes + candidate.sizeBytes() > maxBytesPerProject) {
+                throw new BusinessException("STORAGE_MULTI_EXECUTION_PROJECT_BYTES_LIMIT_EXCEEDED",
+                    "单项目容量超过本轮执行上限。", HttpStatus.BAD_REQUEST);
+            }
+            if (selectedFileCount + 1 > limit || selectedFileCount + 1 > M3G4_MAX_FILES_TOTAL) {
+                throw new BusinessException("STORAGE_MULTI_EXECUTION_TOTAL_FILE_LIMIT_EXCEEDED",
+                    "总文件数超过本轮执行上限。", HttpStatus.BAD_REQUEST);
+            }
+            if (selectedTotalBytes + candidate.sizeBytes() > maxTotalBytes) {
+                throw new BusinessException("STORAGE_MULTI_EXECUTION_TOTAL_BYTES_LIMIT_EXCEEDED",
+                    "总容量超过本轮执行上限。", HttpStatus.BAD_REQUEST);
+            }
+            selection.fileIds.add(candidate.fileId());
+            selection.selectedTotalBytes += candidate.sizeBytes();
+            selectedFileCount++;
+            selectedTotalBytes += candidate.sizeBytes();
+        }
+        if (selectedFileCount == 0) {
+            throw new BusinessException("STORAGE_MULTI_EXECUTION_FILES_REQUIRED",
+                "请先从 dry-run 计划中选择要执行的小批文件。", HttpStatus.BAD_REQUEST);
+        }
+
+        List<Long> createdTaskIds = new ArrayList<>();
+        List<MultiProjectStorageObjectificationExecutionProject> projectResults = new ArrayList<>();
+        List<String> failureReasons = new ArrayList<>();
+        int createdCount = 0;
+        int skippedCount = 0;
+        int failedCount = 0;
+
+        for (ExecutionProjectSelection selection : selections.values()) {
+            StorageMigrationTaskDetailResponse detail = createTask(userId, selection.projectId,
+                new StorageMigrationTaskCreateRequest(selection.fileIds, targetProvider));
+            createdTaskIds.add(detail.taskId());
+            createdCount += nullToZero(detail.successCount());
+            skippedCount += nullToZero(detail.skippedCount());
+            failedCount += nullToZero(detail.failureCount());
+            if (nullToZero(detail.failureCount()) > 0 && hasText(detail.message())) {
+                failureReasons.add(detail.message());
+            }
+            projectResults.add(new MultiProjectStorageObjectificationExecutionProject(
+                selection.projectId,
+                selection.projectCode,
+                selection.projectName,
+                (long) selection.fileIds.size(),
+                selection.selectedTotalBytes,
+                detail.taskId(),
+                detail.taskStatus(),
+                detail.successCount(),
+                detail.skippedCount(),
+                detail.failureCount(),
+                detail.message(),
+                List.copyOf(selection.fileIds)
+            ));
+            auditLogApplicationService.record(selection.projectId, MODULE_CODE, "storage.objectification.multi.execute",
+                "STORAGE_MIGRATION_TASK", String.valueOf(detail.taskId()), userId,
+                Map.of(
+                    "taskSource", M3G4_TASK_SOURCE,
+                    "taskId", detail.taskId(),
+                    "fileCount", selection.fileIds.size(),
+                    "selectedTotalBytes", selection.selectedTotalBytes,
+                    "targetProvider", targetProvider
+                ));
+        }
+
+        List<String> warnings = new ArrayList<>();
+        warnings.add("本次为受控小批对象化执行：只复制文件副本到 NAS 侧 MinIO，不移动、不删除、不改名 NAS 原文件。");
+        warnings.add("未读取文件正文，未写语义索引，未触发 Hermes。");
+        if (skippedCount > 0) {
+            warnings.add("重复执行中已有对象版本的文件会按幂等策略跳过。");
+        }
+        return new MultiProjectStorageObjectificationExecuteResponse(
+            false,
+            true,
+            M3G4_TASK_SOURCE,
+            selections.size(),
+            selectedFileCount,
+            selectedTotalBytes,
+            maxTotalBytes,
+            maxFilesPerProject,
+            maxBytesPerProject,
+            createdTaskIds.size(),
+            createdTaskIds,
+            createdCount,
+            skippedCount,
+            failedCount,
+            failureReasons,
+            warnings,
+            projectResults
+        );
+    }
+
     public StorageMigrationTaskDetailResponse getTask(Long userId, Long taskId) {
         BatchRow batch = findBatch(taskId);
         ensureProjectAccess(userId, batch.projectId());
@@ -1449,6 +1612,99 @@ public class StorageMigrationApplicationService {
         }
     }
 
+    private List<MultiProjectDryRunCandidate> queryMultiProjectCandidates(
+        Long userId,
+        List<Long> projectIds,
+        List<Long> fileIds,
+        DryRunFilters filters,
+        int limit
+    ) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+            .addValue("userId", userId)
+            .addValue("projectIds", projectIds)
+            .addValue("limit", Math.min(Math.max(limit, 1), MAX_DRY_RUN_LIMIT));
+        StringBuilder where = new StringBuilder("""
+            WHERE f.project_id IN (:projectIds)
+              AND f.deleted = 0
+              AND p.deleted = 0
+            """);
+        if (fileIds != null && !fileIds.isEmpty()) {
+            where.append("\n AND f.id IN (:fileIds)");
+            params.addValue("fileIds", fileIds);
+        } else if (filters != null) {
+            appendDryRunFilters(where, params, filters);
+        }
+        return jdbcTemplate.query("""
+            SELECT
+                p.id AS project_id,
+                p.code AS project_code,
+                p.name AS project_name,
+                p.asset_source,
+                p.project_stage,
+                f.id AS file_id,
+                f.asset_uuid,
+                f.original_name,
+                f.file_kind,
+                LOWER(SUBSTRING_INDEX(f.original_name, '.', -1)) AS extension,
+                COALESCE(f.size_bytes, 0) AS size_bytes,
+                f.checksum,
+                f.storage_provider,
+                CASE WHEN f.storage_uri IS NULL OR f.storage_uri = '' THEN 1 ELSE 0 END AS storage_reference_missing,
+                CASE WHEN obj.file_id IS NOT NULL THEN 1 ELSE 0 END AS object_stored,
+                COALESCE(mig.pending, 0) AS migration_pending,
+                COALESCE(mig.failed, 0) AS migration_failed
+            FROM core_projects p
+            JOIN (
+                SELECT DISTINCT project_id
+                FROM core_user_project_roles
+                WHERE user_id = :userId
+                  AND deleted = 0
+            ) upr ON upr.project_id = p.id
+            JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0
+            LEFT JOIN (
+                SELECT DISTINCT file_id
+                FROM data_file_object_versions
+                WHERE active = 1
+                  AND deleted = 0
+                  AND storage_state = 'OBJECT_STORED'
+            ) obj ON obj.file_id = f.id
+            LEFT JOIN (
+                SELECT file_id,
+                       MAX(CASE WHEN migration_status IN ('PENDING', 'RUNNING') THEN 1 ELSE 0 END) AS pending,
+                       MAX(CASE WHEN migration_status = 'FAILED' THEN 1 ELSE 0 END) AS failed
+                FROM data_object_migration_tasks
+                WHERE deleted = 0
+                GROUP BY file_id
+            ) mig ON mig.file_id = f.id
+            """ + where + "\n" + """
+            ORDER BY p.id, f.id
+            LIMIT :limit
+            """, params, (rs, rowNum) -> {
+            String assetSource = rs.getString("asset_source");
+            String category = projectCategory(assetSource, rs.getString("project_code"), rs.getString("project_stage"));
+            return new MultiProjectDryRunCandidate(
+                rs.getLong("project_id"),
+                rs.getString("project_code"),
+                rs.getString("project_name"),
+                assetSource,
+                category,
+                "REAL_NAS".equals(category),
+                rs.getLong("file_id"),
+                rs.getString("asset_uuid"),
+                rs.getString("original_name"),
+                rs.getString("file_kind"),
+                normalizeExtension(rs.getString("extension")),
+                rs.getLong("size_bytes"),
+                rs.getString("checksum"),
+                rs.getString("storage_provider"),
+                rs.getInt("storage_reference_missing") == 1,
+                rs.getInt("object_stored") == 1,
+                rs.getInt("migration_pending") == 1,
+                rs.getInt("migration_failed") == 1
+            );
+        });
+    }
+
     private List<Long> accessibleProjectIds(Long userId, List<Long> requestedProjectIds, boolean realProjectsOnly) {
         MapSqlParameterSource params = new MapSqlParameterSource("userId", userId);
         String filter = "";
@@ -1477,6 +1733,94 @@ public class StorageMigrationApplicationService {
             .filter(row -> !realProjectsOnly || "REAL_NAS".equals(projectCategory(row.assetSource(), row.code(), row.projectStage())))
             .map(ProjectScopeRow::projectId)
             .toList();
+    }
+
+    private List<Long> normalizeExecutionProjectIds(List<Long> projectIds) {
+        if (projectIds == null || projectIds.isEmpty()) {
+            throw new BusinessException("STORAGE_MULTI_EXECUTION_PROJECTS_REQUIRED",
+                "受控执行必须明确选择真实项目。", HttpStatus.BAD_REQUEST);
+        }
+        LinkedHashSet<Long> normalized = new LinkedHashSet<>();
+        for (Long projectId : projectIds) {
+            if (projectId == null || projectId <= 0) {
+                throw new BusinessException("STORAGE_MULTI_EXECUTION_PROJECT_ID_INVALID",
+                    "项目ID不合法", HttpStatus.BAD_REQUEST);
+            }
+            normalized.add(projectId);
+        }
+        if (normalized.size() > M3G4_MAX_PROJECTS) {
+            throw new BusinessException("STORAGE_MULTI_EXECUTION_PROJECT_LIMIT_EXCEEDED",
+                "单次最多允许 3 个真实项目。", HttpStatus.BAD_REQUEST);
+        }
+        return new ArrayList<>(normalized);
+    }
+
+    private List<Long> normalizeExecutionFileIds(List<Long> fileIds) {
+        if (fileIds == null || fileIds.isEmpty()) {
+            throw new BusinessException("STORAGE_MULTI_EXECUTION_FILE_IDS_REQUIRED",
+                "受控执行必须显式传入 dry-run 选中的文件ID。", HttpStatus.BAD_REQUEST);
+        }
+        LinkedHashSet<Long> normalized = new LinkedHashSet<>();
+        for (Long fileId : fileIds) {
+            if (fileId == null || fileId <= 0) {
+                throw new BusinessException("STORAGE_MULTI_EXECUTION_FILE_ID_INVALID",
+                    "文件ID不合法", HttpStatus.BAD_REQUEST);
+            }
+            normalized.add(fileId);
+        }
+        if (normalized.size() != fileIds.size()) {
+            throw new BusinessException("STORAGE_MULTI_EXECUTION_FILE_IDS_DUPLICATED",
+                "执行文件列表存在重复项。", HttpStatus.BAD_REQUEST);
+        }
+        if (normalized.size() > M3G4_MAX_FILES_TOTAL) {
+            throw new BusinessException("STORAGE_MULTI_EXECUTION_TOTAL_FILE_LIMIT_EXCEEDED",
+                "总文件数超过本轮执行上限。", HttpStatus.BAD_REQUEST);
+        }
+        return new ArrayList<>(normalized);
+    }
+
+    private int normalizeExecutionLimit(Integer value) {
+        if (value == null) {
+            return M3G4_MAX_FILES_TOTAL;
+        }
+        if (value <= 0 || value > M3G4_MAX_FILES_TOTAL) {
+            throw new BusinessException("STORAGE_MULTI_EXECUTION_TOTAL_FILE_LIMIT_EXCEEDED",
+                "总文件数超过本轮执行上限。", HttpStatus.BAD_REQUEST);
+        }
+        return value;
+    }
+
+    private int normalizeExecutionMaxFilesPerProject(Integer value) {
+        if (value == null) {
+            return M3G4_MAX_FILES_PER_PROJECT;
+        }
+        if (value <= 0 || value > M3G4_MAX_FILES_PER_PROJECT) {
+            throw new BusinessException("STORAGE_MULTI_EXECUTION_PROJECT_FILE_LIMIT_EXCEEDED",
+                "单项目文件数超过本轮执行上限。", HttpStatus.BAD_REQUEST);
+        }
+        return value;
+    }
+
+    private long normalizeExecutionMaxBytesPerProject(Long value) {
+        if (value == null) {
+            return M3G4_MAX_BYTES_PER_PROJECT;
+        }
+        if (value <= 0 || value > M3G4_MAX_BYTES_PER_PROJECT) {
+            throw new BusinessException("STORAGE_MULTI_EXECUTION_PROJECT_BYTES_LIMIT_EXCEEDED",
+                "单项目容量超过本轮执行上限。", HttpStatus.BAD_REQUEST);
+        }
+        return value;
+    }
+
+    private long normalizeExecutionMaxTotalBytes(Long value) {
+        if (value == null) {
+            return M3G4_MAX_BYTES_TOTAL;
+        }
+        if (value <= 0 || value > M3G4_MAX_BYTES_TOTAL) {
+            throw new BusinessException("STORAGE_MULTI_EXECUTION_TOTAL_BYTES_LIMIT_EXCEEDED",
+                "总容量超过本轮执行上限。", HttpStatus.BAD_REQUEST);
+        }
+        return value;
     }
 
     private List<Long> normalizeOptionalProjectIds(List<Long> projectIds) {
@@ -1696,6 +2040,10 @@ public class StorageMigrationApplicationService {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private int nullToZero(Integer value) {
+        return value == null ? 0 : value;
     }
 
     private List<Long> normalizeFileIds(List<Long> fileIds) {
@@ -1936,6 +2284,20 @@ public class StorageMigrationApplicationService {
                 riskMessages,
                 sampleItems
             );
+        }
+    }
+
+    private static final class ExecutionProjectSelection {
+        private final Long projectId;
+        private final String projectCode;
+        private final String projectName;
+        private long selectedTotalBytes;
+        private final List<Long> fileIds = new ArrayList<>();
+
+        private ExecutionProjectSelection(MultiProjectDryRunCandidate row) {
+            this.projectId = row.projectId();
+            this.projectCode = row.projectCode();
+            this.projectName = row.projectName();
         }
     }
 

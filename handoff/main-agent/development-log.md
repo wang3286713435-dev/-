@@ -4319,3 +4319,26 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - `handoff/main-agent/status.md`
   - `handoff/main-agent/phase2-current-roadmap.md`
   - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
+
+## 2026-05-28 M3G-4 正式收口
+
+- 开发 agent 完成 M3G-4，报告写入 `handoff/dev-agent/latest-report.md`。
+- 测试 agent 完成 M3G-4 正式验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结果：
+  - 当前 P0：无。
+  - 当前 P1：无。
+  - M3G-4 专项脚本通过，`PASS=21 FAIL=0`。
+  - M3G-3 / M3G-1 / M3F / M3E / M3C / file-access 回归全部通过。
+- 主 agent 审计确认：
+  - `confirmed=false` 被拒绝。
+  - 超限执行被拒绝。
+  - 小批真实对象化成功。
+  - 重复执行幂等，不污染 active object version。
+  - 已对象化文件可通过受控 `file-access` 读取。
+  - NAS 原文件 `size/mtime` 未变化。
+  - 未暴露真实 NAS 路径、bucket、object key、`storage_uri`、SQL、raw row、token、secret。
+  - 未新增 Hermes 正文问答、documents / chunks、Qdrant / OpenSearch、BIM 引擎、parser / indexing。
+- 主 agent 裁决：
+  - `M3G-4：受控多项目小批对象化执行` 正式收口。
+  - 当前 active 批次切换为 `待用户确认`。
+  - 下一步优先处理文件管理器搜索与路径展示体验问题，再评估扩大对象化或进入 M4A。

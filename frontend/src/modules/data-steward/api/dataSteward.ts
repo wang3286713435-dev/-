@@ -479,11 +479,17 @@ export interface StorageObjectificationDryRun {
 
 export interface MultiProjectStorageObjectificationDryRunPayload extends StorageObjectificationDryRunPayload {
   projectIds?: number[];
+  fileIds?: number[];
   realProjectsOnly?: boolean;
   maxFilesPerProject?: number;
   maxBytesPerProject?: number;
   concurrencyLimit?: number;
   rateLimitBytesPerMinute?: number;
+}
+
+export interface MultiProjectStorageObjectificationExecutePayload extends MultiProjectStorageObjectificationDryRunPayload {
+  confirmed: boolean;
+  targetProvider?: string;
 }
 
 export interface MultiProjectStorageObjectificationPlanProject {
@@ -526,6 +532,41 @@ export interface MultiProjectStorageObjectificationDryRun {
   rateLimitBytesPerMinute: number | null;
   riskMessages: string[];
   projects: MultiProjectStorageObjectificationPlanProject[];
+}
+
+export interface MultiProjectStorageObjectificationExecutionProject {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  selectedFileCount: number;
+  selectedTotalBytes: number;
+  taskId: number;
+  taskStatus: string;
+  successCount: number;
+  skippedCount: number;
+  failureCount: number;
+  failureReason: string | null;
+  fileIds: number[];
+}
+
+export interface MultiProjectStorageObjectificationExecuteResult {
+  dryRun: boolean;
+  executionStarted: boolean;
+  taskSource: string;
+  selectedProjectCount: number;
+  selectedFileCount: number;
+  selectedTotalBytes: number;
+  maxTotalBytes: number;
+  maxFilesPerProject: number;
+  maxBytesPerProject: number;
+  createdTaskCount: number;
+  createdTaskIds: number[];
+  createdCount: number;
+  skippedCount: number;
+  failedCount: number;
+  failureReasons: string[];
+  warnings: string[];
+  projectResults: MultiProjectStorageObjectificationExecutionProject[];
 }
 
 export interface StorageMigrationTaskPayload {
@@ -991,6 +1032,16 @@ export async function dryRunMultiProjectStorageObjectificationPlan(
 ) {
   const { data } = await http.post<ApiResponse<MultiProjectStorageObjectificationDryRun>>(
     '/api/data-steward/storage-objectification-plans:dry-run',
+    payload
+  );
+  return data.data;
+}
+
+export async function executeMultiProjectStorageObjectificationPlan(
+  payload: MultiProjectStorageObjectificationExecutePayload
+) {
+  const { data } = await http.post<ApiResponse<MultiProjectStorageObjectificationExecuteResult>>(
+    '/api/data-steward/storage-objectification-plans:execute',
     payload
   );
   return data.data;

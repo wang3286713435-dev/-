@@ -1,123 +1,194 @@
-# 开发 Agent 报告：M3G-3 多真实项目分批对象化策略与任务中心增强
+# 开发 Agent 报告：M3G-4 受控多项目小批对象化执行
 
 时间：2026-05-28 CST
 
 ## 1. 本轮目标
 
-本轮执行 `M3G-3：多真实项目分批对象化策略与任务中心增强`。
+本轮执行 `M3G-4：受控多项目小批对象化执行`。
 
-目标是在 `NAS_SIDE_MINIO / READY` 已识别、105 小批灰度已完成的前提下，补齐多真实项目对象化前的只读盘点和 dry-run 规划能力：
+目标是在 M3G-3 多项目 dry-run 已收口后，新增一个必须人工确认、受后端硬上限约束、可审计且可幂等的真实小批对象化执行闭环。
 
-- 平台能区分真实 NAS 项目、测试/样例项目、归档/待确认项目。
-- 全项目对象化盘点能展示待对象化容量、路径风险、文件类型/扩展名分布。
-- 新增多项目对象化 dry-run 计划接口，支持总量、单项目、并发、限速字段。
-- 前端文件服务页增加“多项目对象化规划”视图。
-- 不执行真实历史文件迁移，不创建迁移任务。
+本批允许真实复制小批 NAS 文件副本到 NAS 侧 MinIO，但不做全量迁移、不迁移 NAS 根目录、不读取正文、不改动 NAS 原文件。
 
-## 2. 读取材料
-
-已读取：
-
-- `handoff/dev-agent/current-prompt.md`
-- `handoff/main-agent/m3g3-multi-project-objectification-task-center-plan.md`
-- `handoff/main-agent/m3g2-105-objectification-gray-closure.md`
-- `handoff/dev-agent/latest-report.md`
-- `handoff/test-agent/latest-report.md`
-- M3G / M3E / M3F / M3C 相关脚本和存储服务代码
-
-## 3. 改动文件清单
+## 2. 改动文件清单
 
 - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/dto/AssetDtos.java`
 - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageMigrationController.java`
 - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageMigrationApplicationService.java`
 - `frontend/src/modules/data-steward/api/dataSteward.ts`
 - `frontend/src/modules/data-steward/pages/DataStewardFileServicePage.vue`
-- `scripts/dev/check-m3g3-multi-project-objectification-planning.sh`
+- `scripts/dev/check-m3g4-controlled-multi-project-objectification.sh`
 - `handoff/dev-agent/latest-report.md`
 
 未修改 `docs/**`，未新增数据库迁移。
 
-## 4. 后端改动
+## 3. 新增 / 修改接口
 
-增强 `storage-objectification-inventory`：
-
-- 项目级盘点新增 `projectStage`、`assetSource`、`projectCategory`、`realNasProject`。
-- 新增 `nasOnlyBytes`、`estimatedObjectificationBytes`、`unreadablePathFiles`。
-- 新增 `fileKindDistribution`、`extensionDistribution`。
-- 风险等级计算纳入 unreadable/path risk。
-
-新增只读接口：
+新增接口：
 
 ```http
-POST /api/data-steward/storage-objectification-plans:dry-run
+POST /api/data-steward/storage-objectification-plans:execute
 ```
 
-能力：
+请求新增 DTO：
 
-- 支持 `projectIds`、`realProjectsOnly`、`storageState`、`checksumState`、`extensions` 等筛选。
-- 支持 `maxTotalBytes`、`maxFilesPerProject`、`maxBytesPerProject`。
-- 回显 `concurrencyLimit`、`rateLimitBytesPerMinute`，为后续任务中心调度策略预留。
-- 按项目分组返回计划结果、风险说明和样本文件。
-- 固定 `dryRun=true`、`migrationStarted=false`、`taskSource=MULTI_PROJECT_DRY_RUN`。
+- `MultiProjectStorageObjectificationExecuteRequest`
+- 支持 `projectIds`、`fileIds`、`confirmed`、`targetProvider`
+- 复用 M3G-3 dry-run 的筛选和策略字段
 
-## 5. 前端改动
+响应新增 DTO：
 
-文件服务 / 对象存储页面新增：
+- `MultiProjectStorageObjectificationExecuteResponse`
+- `taskSource=MULTI_PROJECT_CONTROLLED_EXECUTION`
+- 返回项目数、文件数、容量、任务 ID、成功 / 跳过 / 失败数、项目级执行结果和安全提示
 
-- 全项目盘点表增加“分类”“待对象化容量”“路径风险”。
-- 新增“多项目对象化规划”区块。
-- 支持输入项目 ID，或默认按当前可访问项目生成计划。
-- 支持“仅真实项目”开关。
-- 支持总量上限、单项目文件数、单项目容量、并发预留字段。
-- 结果展示规划项目数、选中文件数、预估容量、预估批次和项目级风险。
+现有 M3G-3 dry-run request 兼容新增 `fileIds` 字段，但 dry-run 语义仍保持只读。
 
-页面文案明确：本区块只生成 dry-run 计划，不创建迁移任务、不复制文件。
+## 4. 后端硬上限
 
-## 6. 新增专项脚本
+后端强制实现：
+
+- `confirmed=true` 缺失或为 false：拒绝。
+- 必须显式传入 `projectIds` 和 dry-run 选中的 `fileIds`。
+- 单次最多 3 个真实项目。
+- 总文件数最多 9 个。
+- 单项目最多 3 个文件。
+- 单项目容量最多 50MB。
+- 总容量最多 100MB。
+- 只允许当前账号可访问且 `realNasProject=true` 的项目。
+- 非受控存储引用、不可读风险、超出小样本单文件大小限制的文件会被拒绝。
+
+执行内部复用现有对象迁移任务中心和 `StorageService.mirrorNasFileToObject` 流程，因此继续保留：
+
+- 权限校验。
+- 生命周期校验。
+- NAS 文件可读性校验。
+- checksum / size / etag 校验。
+- `data_storage_objects` 写入。
+- active `data_file_object_versions` 写入。
+- 重复执行幂等跳过。
+- 审计记录。
+
+## 5. 前端入口
+
+文件服务页“多项目对象化规划”区域新增：
+
+- “确认执行小批对象化”按钮。
+- 执行前确认提示。
+- 执行结果摘要。
+- 项目级任务结果表。
+
+前端只从 dry-run 样本中选择：
+
+- 真实 NAS 项目。
+- `NAS_ONLY` 文件。
+- `ELIGIBLE_DRY_RUN` / `MISSING_CHECKSUM` 原因。
+- 单文件不超过当前小样本限制。
+- 总数、单项目数、总容量、单项目容量均在 M3G-4 上限内。
+
+页面文案明确：只复制副本到 NAS 侧 MinIO，不移动、不删除、不改名 NAS 原文件，不读取正文，不写语义索引。
+
+## 6. 本轮真实执行结果
+
+M3G-4 专项脚本实际选择并执行：
+
+```text
+projectId=512 / code=108 / 福城南产业片区11-20-02宗地
+fileId=33475
+fileName=ZS-000 图纸目录.dwg
+size=232970
+
+projectId=506 / code=93 / 中建八局国交酒店项目
+fileId=18652
+fileName=卓羽智能-BIM智慧建造服务.pdf
+size=6325776
+
+projectId=505 / code=101 / C塔
+fileId=13196
+fileName=消水施_X-C-A001_V3.0_B座消火栓系统原理图(一).pdf
+size=1152819
+```
+
+总计：
+
+```text
+真实项目数：3
+文件数：3
+总容量：7,711,565 bytes
+```
+
+首次执行任务：
+
+```text
+taskId=171 projectId=505 fileId=13196 COMPLETED OBJECT_STORED
+taskId=172 projectId=506 fileId=18652 COMPLETED OBJECT_STORED
+taskId=173 projectId=512 fileId=33475 COMPLETED OBJECT_STORED
+```
+
+重复执行幂等验证：
+
+```text
+taskId=174 projectId=505 fileId=13196 SKIPPED OBJECT_STORED
+taskId=175 projectId=506 fileId=18652 SKIPPED OBJECT_STORED
+taskId=176 projectId=512 fileId=33475 SKIPPED OBJECT_STORED
+```
+
+## 7. NAS 与安全边界
+
+明确回答：
+
+- 是否移动真实 NAS 原文件：否。
+- 是否删除真实 NAS 原文件：否。
+- 是否重命名真实 NAS 原文件：否。
+- 是否覆盖真实 NAS 原文件：否。
+- 是否读取 PDF / Office / DWG / RVT / IFC 正文：否。
+- 是否写 documents / chunks / Qdrant / OpenSearch / Hermes memory：否。
+- 是否触发 Hermes：否。
+- 是否接入 BIM / parser / indexing：否。
+- 是否暴露 raw NAS path、`storage_uri`、bucket、object key、SQL、raw row、token / secret：否。
+
+专项脚本对 3 个样本记录对象化前后 NAS 原文件 `size/mtime`，结果均未变化。
+
+## 8. 新增专项脚本
 
 新增：
 
-`scripts/dev/check-m3g3-multi-project-objectification-planning.sh`
+`scripts/dev/check-m3g4-controlled-multi-project-objectification.sh`
 
-脚本覆盖：
+覆盖：
 
 1. 管理员登录。
-2. `storage-provider-readiness` 识别 `NAS_SIDE_MINIO` 且不泄露底层配置。
-3. 全项目对象化盘点包含真实/测试分类、容量、风险和分布字段。
-4. 自动挑选真实项目做多项目 dry-run。
-5. dry-run 返回分项目计划并遵守总量/单项目限额。
-6. dry-run 回显并发、限速、总量和单项目限制策略字段。
-7. dry-run 未创建迁移任务。
-8. `realProjectsOnly=true` 只返回真实项目计划。
-9. forbidden-field scan 通过。
-10. 脚本已纳入 Git 跟踪。
+2. `NAS_SIDE_MINIO / READY` 且 writable。
+3. 自动选择最多 3 个真实项目、每项目最多 1 个可读 `NAS_ONLY` 小样本。
+4. `confirmed=false` 被拒绝。
+5. 超出总文件数硬上限被拒绝。
+6. `confirmed=true` 小批真实对象化成功。
+7. 重复执行同一批文件幂等跳过。
+8. 已对象化文件 `storage-status=OBJECT_STORED`。
+9. 已对象化文件可通过受控 `file-access` 下载读取。
+10. NAS 原文件仍存在且 `size/mtime` 未变化。
+11. forbidden-field scan 通过。
+12. 脚本已纳入 Git 跟踪。
 
-## 7. 安全边界
+结果：
 
-已确认：
+```text
+M3G-4 专项 PASS=21 FAIL=0
+```
 
-- 未执行真实历史文件迁移。
-- 未运行 M3G-2 灰度执行脚本。
-- 未创建对象化迁移任务。
-- 未移动、删除、重命名、覆盖真实 NAS 文件。
-- 未读取 PDF / Office / DWG / RVT / IFC 正文。
-- 未写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
-- 未改 Hermes、BIM、parser、indexing。
-- 响应未暴露 raw NAS path、`storage_path`、`storage_uri`、bucket、object key、SQL、token / secret / password。
-
-## 8. 自测结果
+## 9. 自测结果
 
 ```text
 后端构建                                                     PASS
 前端构建                                                     PASS（仅既有 Vite chunk size warning）
 后端健康检查                                                 PASS {"status":"UP"}
-M3G-3 多项目对象化规划专项                                   PASS=11 FAIL=0
+M3G-4 受控多项目小批对象化专项                               PASS=21 FAIL=0
+M3G-3 多项目对象化规划回归                                   PASS=11 FAIL=0
 M3G-1 readiness / inventory / dry-run 回归                    PASS=9 FAIL=0
-M3E 预览与转换产物对象化回归                                  PASS=8 FAIL=0
 M3F 新文件对象存储优先写入回归                                PASS=11 FAIL=0
+M3E 预览与转换产物对象化回归                                  PASS=8 FAIL=0
 M3C 对象存储迁移任务中心回归                                  PASS=9 FAIL=0
 Phase2 batch4 文件访问安全回归                                PASS=18 FAIL=0
-git diff --check                                             PASS
 ```
 
 已执行命令：
@@ -129,24 +200,25 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-m3g4-controlled-multi-project-objectification.sh
 bash scripts/dev/check-m3g3-multi-project-objectification-planning.sh
 bash scripts/dev/check-m3g-nas-minio-readiness-inventory.sh
-bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
 bash scripts/dev/check-m3f-object-storage-first-write.sh
+bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
 bash scripts/dev/check-m3c-storage-migration-task-center.sh
 bash scripts/dev/check-phase2-batch4-file-access.sh
-git diff --check
 ```
 
-## 9. 服务状态
+## 10. 服务状态
 
 - 后端保持运行：`http://127.0.0.1:8080`
 - 前端 dev server 保持运行：`http://127.0.0.1:5173`
 
 按用户要求，本轮完成后不关闭项目服务。
 
-## 10. 未完成事项和风险
+## 11. 未完成事项和后续风险
 
-- M3G-3 只做规划和任务中心增强，不包含从多项目计划直接执行对象化迁移。
-- 并发、限速、暂停/继续当前为策略字段和前端展示预留，未接入后台 worker 调度。
-- 后续如进入真实多项目迁移，仍需单独确认项目范围、批量上限、执行窗口、失败回滚和运维观察策略。
+- M3G-4 只证明多项目小批真实对象化可控执行，不代表全量迁移完成。
+- 当前执行入口要求显式 fileIds，避免基于宽泛筛选条件重复执行时继续选中新文件。
+- 并发、限速字段仍是策略回显和前端约束，后台 worker 级调度仍未开放。
+- 后续如扩大批量，需要单独确认项目范围、批量上限、执行窗口、失败处理和运维观察策略。

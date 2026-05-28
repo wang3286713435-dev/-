@@ -1,6 +1,8 @@
 package com.zhuoyu.delivery.datasteward.storage;
 
 import com.zhuoyu.delivery.core.auth.application.SecurityPrincipalAccessor;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageObjectificationExecuteRequest;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageObjectificationExecuteResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageObjectificationPlanDryRunRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageObjectificationPlanDryRunResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationInventoryResponse;
@@ -83,6 +85,14 @@ public class StorageMigrationController {
         @RequestBody(required = false) MultiProjectStorageObjectificationPlanDryRunRequest request
     ) {
         return ApiResponse.success(storageMigrationApplicationService.dryRunMultiProjectObjectificationPlan(
+            currentUserId(), request));
+    }
+
+    @PostMapping("/storage-objectification-plans:execute")
+    public ApiResponse<MultiProjectStorageObjectificationExecuteResponse> executeMultiProjectObjectificationPlan(
+        @RequestBody MultiProjectStorageObjectificationExecuteRequest request
+    ) {
+        return ApiResponse.success(storageMigrationApplicationService.executeMultiProjectObjectificationPlan(
             currentUserId(), request));
     }
 

@@ -2136,6 +2136,32 @@
   - `handoff/dev-agent/current-prompt.md`
   - `handoff/test-agent/current-prompt.md`
 
+## 2026-05-28 M3G-4 正式收口：受控多项目小批对象化执行
+
+- 测试 agent 已完成 `M3G-4：受控多项目小批对象化执行` 正式验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- P2：
+  - 既有 Vite chunk size warning。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪项继续排除。
+- 已确认：
+  - `confirmed=false` 被拒绝。
+  - 超限执行被拒绝。
+  - 小批真实对象化成功。
+  - 重复执行幂等。
+  - 已对象化文件 `storage-status=OBJECT_STORED`，并可通过受控 `file-access` 读取。
+  - NAS 原文件 `size/mtime` 未变化。
+  - M3G-3 / M3G-1 / M3F / M3E / M3C / file-access 回归通过。
+  - 响应未泄露真实 NAS 路径、bucket、object key、`storage_uri`、SQL、raw row、token、secret。
+  - 未新增 Hermes 正文问答、documents / chunks、Qdrant、OpenSearch、parser、BIM 引擎或文件正文读取。
+- 主 agent 裁决：
+  - `M3G-4：受控多项目小批对象化执行` 正式收口。
+  - 当前 active 批次：`待用户确认`。
+- 下一步建议：
+  - 优先修复文件管理器搜索与路径展示体验问题。
+  - 后续再决定是否继续扩大对象化执行范围，或进入 `M4A：documents / chunks 语义证据契约`。
+
 ## 跨机器交接入口
 
 ## 2026-05-26 M3E 启动

@@ -1543,6 +1543,7 @@ public final class AssetDtos {
 
     public record MultiProjectStorageObjectificationPlanDryRunRequest(
         List<Long> projectIds,
+        List<Long> fileIds,
         Boolean realProjectsOnly,
         String directoryPath,
         List<String> fileKinds,
@@ -1557,6 +1558,28 @@ public final class AssetDtos {
         Long maxBytesPerProject,
         Integer concurrencyLimit,
         Long rateLimitBytesPerMinute
+    ) {
+    }
+
+    public record MultiProjectStorageObjectificationExecuteRequest(
+        List<Long> projectIds,
+        List<Long> fileIds,
+        Boolean realProjectsOnly,
+        String directoryPath,
+        List<String> fileKinds,
+        List<String> extensions,
+        Long minSizeBytes,
+        Long maxSizeBytes,
+        String checksumState,
+        String storageState,
+        Integer limit,
+        Long maxTotalBytes,
+        Integer maxFilesPerProject,
+        Long maxBytesPerProject,
+        Integer concurrencyLimit,
+        Long rateLimitBytesPerMinute,
+        Boolean confirmed,
+        String targetProvider
     ) {
     }
 
@@ -1582,6 +1605,43 @@ public final class AssetDtos {
         Long rateLimitBytesPerMinute,
         List<String> riskMessages,
         List<MultiProjectStorageObjectificationPlanProject> projects
+    ) {
+    }
+
+    public record MultiProjectStorageObjectificationExecuteResponse(
+        Boolean dryRun,
+        Boolean executionStarted,
+        String taskSource,
+        Integer selectedProjectCount,
+        Long selectedFileCount,
+        Long selectedTotalBytes,
+        Long maxTotalBytes,
+        Integer maxFilesPerProject,
+        Long maxBytesPerProject,
+        Integer createdTaskCount,
+        List<Long> createdTaskIds,
+        Integer createdCount,
+        Integer skippedCount,
+        Integer failedCount,
+        List<String> failureReasons,
+        List<String> warnings,
+        List<MultiProjectStorageObjectificationExecutionProject> projectResults
+    ) {
+    }
+
+    public record MultiProjectStorageObjectificationExecutionProject(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        Long selectedFileCount,
+        Long selectedTotalBytes,
+        Long taskId,
+        String taskStatus,
+        Integer successCount,
+        Integer skippedCount,
+        Integer failureCount,
+        String failureReason,
+        List<Long> fileIds
     ) {
     }
 
