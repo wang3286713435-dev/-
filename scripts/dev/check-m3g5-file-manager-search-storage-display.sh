@@ -278,7 +278,19 @@ else
 fi
 
 echo ""
-echo "--- 5. Storage display fields are business-level and sanitized ---"
+echo "--- 5. Frontend search-mode contract is explicit ---"
+FRONTEND_FILE="frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue"
+python3 - <<'PY'
+from pathlib import Path
+source = Path("frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue").read_text()
+assert "if (hasKeyword.value) return fileEntries.value;" in source, "search mode must exclude directory entries"
+assert "route.query.fileKeyword" in source, "fileKeyword query must be watched"
+assert "applyBrowserState(state, true)" in source, "query changes must re-apply browser state"
+PY
+pass "前端搜索模式只渲染文件行，且 fileKeyword query 可驱动状态刷新"
+
+echo ""
+echo "--- 6. Storage display fields are business-level and sanitized ---"
 object_row="$(mysql_exec "
   SELECT f.id, HEX(f.original_name)
   FROM data_file_resources f
@@ -344,7 +356,7 @@ else
 fi
 
 echo ""
-echo "--- 6. No migration tasks and no NAS original mutation ---"
+echo "--- 7. No migration tasks and no NAS original mutation ---"
 NAS_PATH="$(nas_path_from_uri "${NAS_STORAGE_URI}")"
 if [[ -f "${NAS_PATH}" ]]; then
   NAS_STAT_BEFORE="$(file_stat_signature "${NAS_PATH}")"
@@ -364,7 +376,7 @@ else
 fi
 
 echo ""
-echo "--- 7. Script tracking ---"
+echo "--- 8. Script tracking ---"
 if git ls-files --error-unmatch scripts/dev/check-m3g5-file-manager-search-storage-display.sh >/dev/null 2>&1; then
   pass "M3G-5 专项脚本已纳入 Git 跟踪"
 else

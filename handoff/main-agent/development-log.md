@@ -4380,3 +4380,32 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - 未创建迁移任务，未触碰真实 NAS 原文件。
 - 主 agent 裁决：`M3G-5：文件管理器项目全局搜索与存储展示修复` 正式收口。
 - 收口记录：`handoff/main-agent/m3g5-file-manager-search-storage-display-closure.md`。
+
+## 2026-05-28 M3G-5-F1 启动：搜索模式仍显示文件夹返工
+
+- 用户在实际页面发现 M3G-5 漏修：
+  - 打开 `/data-steward/assets/503?tab=files&fileKeyword=宝安`。
+  - 搜索框显示 `宝安`，但右侧仍展示项目根目录文件夹。
+- 主 agent 现场复核后确认：
+  - URL query 已带 `fileKeyword`。
+  - 右侧仍是 direct-only 目录浏览结果。
+  - 页面没有进入“整个项目中搜索”的视觉状态。
+- 裁决：
+  - 作为 `M3G-5-F1` 返工修复。
+  - 交给开发 agent 修复，不由主 agent 直接改业务代码。
+- 已更新：
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+
+## 2026-05-29 M3G-5-F1 收口：fileKeyword 搜索模式修复
+
+- 测试 agent 已完成极短验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过，当前无 P0 / P1。
+- 已确认：
+  - `/data-steward/assets/503?tab=files&fileKeyword=宝安` 会自动进入搜索模式。
+  - 右侧只显示匹配文件，不再混入根目录文件夹。
+  - 清空关键词后目录浏览恢复。
+  - `OBJECT_STORED` / `NAS_ONLY` 存储状态展示不回归。
+  - 未创建迁移任务，未触碰真实 NAS 原文件。
+- 主 agent 裁决：`M3G-5-F1：文件管理器搜索模式仍显示文件夹返工` 正式收口。
+- 收口记录：`handoff/main-agent/m3g5-f1-file-manager-search-query-fix-closure.md`。

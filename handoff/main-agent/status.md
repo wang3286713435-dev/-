@@ -2205,6 +2205,51 @@
   - 当前 active 批次切换为 `待用户确认`。
   - 下一步建议先由用户手工确认文件管理器体验，再决定继续扩大 M3G 对象化覆盖率或进入 M4A 语义证据契约。
 
+## 2026-05-28 M3G-5-F1 启动：搜索模式仍显示文件夹返工
+
+- 用户在 105 / `projectId=503` 文件管理器中反馈：
+  - URL 为 `/data-steward/assets/503?tab=files&fileKeyword=宝安`。
+  - 搜索框显示 `宝安`。
+  - 右侧仍显示项目根目录文件夹，没有进入项目全局文件搜索结果。
+- 主 agent 定位为 M3G-5 返工问题，不作为新功能批次。
+- 当前 active 批次：
+  - `M3G-5-F1：文件管理器搜索模式仍显示文件夹返工`
+- 本批只修：
+  - 带 `fileKeyword` 的 URL 进入页面必须自动进入搜索模式。
+  - 搜索模式右侧只展示匹配文件，不展示目录直达子项。
+  - 清空关键词后恢复当前目录 direct-only 浏览。
+- 本批不做：
+  - 不执行对象化迁移。
+  - 不移动、删除、重命名、覆盖真实 NAS 文件。
+  - 不读取正文、不写语义索引、不做 Hermes 正文问答。
+  - 不修改 `docs/**`。
+- 已写入：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-05-29 M3G-5-F1 正式收口
+
+- 开发 agent 完成 M3G-5-F1，报告写入 `handoff/dev-agent/latest-report.md`。
+- 测试 agent 完成 M3G-5-F1 极短验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结果：
+  - 当前 P0：无。
+  - 当前 P1：无。
+  - M3G-5 专项脚本通过，`PASS=13 FAIL=0`。
+  - 前端构建、后端健康检查、`git diff --check` 均通过。
+- 主 agent 审计确认：
+  - 带 `fileKeyword=宝安` 进入页面会自动进入项目全局搜索模式。
+  - 右侧不再显示根目录文件夹。
+  - 搜索结果展示所在位置和存储状态。
+  - 清空关键词后目录 direct-only 浏览恢复。
+  - 未创建对象化迁移任务。
+  - 未触碰真实 NAS 原文件。
+  - 未暴露真实 NAS 路径、bucket、object key、`storage_uri`、SQL、raw row、token、secret。
+  - 未新增 Hermes 正文问答、documents / chunks、Qdrant / OpenSearch、BIM 引擎、parser / indexing。
+- 主 agent 裁决：
+  - `M3G-5-F1：文件管理器搜索模式仍显示文件夹返工` 正式收口。
+  - 当前 active 批次切换为 `待用户确认`。
+  - 下一步回到 M3G 主线，由用户确认继续扩大对象化覆盖率或进入 M4A 语义证据契约。
+
 ## 跨机器交接入口
 
 ## 2026-05-26 M3E 启动

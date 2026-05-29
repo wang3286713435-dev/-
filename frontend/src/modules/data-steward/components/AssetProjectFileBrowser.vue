@@ -987,10 +987,13 @@ const fileEntries = computed<FileBrowserEntry[]>(() =>
   }))
 );
 
-const browserEntries = computed<BrowserEntry[]>(() => [
-  ...directoryEntries.value,
-  ...fileEntries.value
-]);
+const browserEntries = computed<BrowserEntry[]>(() => {
+  if (hasKeyword.value) return fileEntries.value;
+  return [
+    ...directoryEntries.value,
+    ...fileEntries.value
+  ];
+});
 
 const selectedEntries = computed(() => {
   const keys = selectedEntryKeys.value;
@@ -1075,6 +1078,30 @@ watch(
 
 watch(
   () => [
+    route.query.fileDir,
+    route.query.fileKeyword,
+    route.query.fileSearchScope,
+    route.query.fileKind,
+    route.query.discipline,
+    route.query.fileExt,
+    route.query.qualityIssue,
+    route.query.ownershipStatus,
+    route.query.filePage,
+    route.query.filePageSize
+  ],
+  () => {
+    if (!stateReady || applyingSavedState) return;
+    const state = readQueryState();
+    if (!state || isCurrentBrowserStateEquivalent(state)) return;
+    applyBrowserState(state, true);
+    clearSelection();
+    void loadNasWriteTrialStatus();
+    void loadFiles();
+  }
+);
+
+watch(
+  () => [
     activeDir.value,
     filters.keyword,
     filters.searchCurrentFolderOnly,
@@ -1127,6 +1154,15 @@ function initializeBrowserState() {
   pagination.total = 0;
 
   const state = readQueryState() ?? readStoredBrowserState() ?? {};
+  applyBrowserState(state, true);
+
+  applyingSavedState = false;
+  stateReady = true;
+  persistBrowserState();
+}
+
+function applyBrowserState(state: FileBrowserState, preserveViewMemory = false) {
+  applyingSavedState = true;
   const fallbackQualityIssue = props.initialQualityIssue || 'ALL';
   activeDir.value = normalizeProjectDirectoryPath(state.activeDir ?? '');
   filters.keyword = state.keyword ?? '';
@@ -1138,14 +1174,13 @@ function initializeBrowserState() {
   filters.ownershipStatus = normalizeOwnershipStatus(state.ownershipStatus);
   pagination.page = positiveNumber(state.page, 1);
   pagination.pageSize = normalizePageSize(state.pageSize);
-  expandedDirs.value = Array.isArray(state.expandedDirs) ? state.expandedDirs.filter(Boolean) : [];
+  expandedDirs.value = Array.isArray(state.expandedDirs)
+    ? state.expandedDirs.filter(Boolean)
+    : preserveViewMemory ? expandedDirs.value : [];
   lastFileId.value = state.lastFileId && Number.isFinite(Number(state.lastFileId)) ? Number(state.lastFileId) : null;
-  lastFileName.value = state.lastFileName ?? '';
+  lastFileName.value = state.lastFileName ?? (preserveViewMemory ? lastFileName.value : '');
   advancedSearchVisible.value = hasAdvancedFilters();
-
   applyingSavedState = false;
-  stateReady = true;
-  persistBrowserState();
 }
 
 function readQueryState(): FileBrowserState | null {
@@ -1203,6 +1238,19 @@ function currentBrowserState(): FileBrowserState {
     lastFileName: lastFileName.value,
     updatedAt: new Date().toISOString()
   };
+}
+
+function isCurrentBrowserStateEquivalent(state: FileBrowserState) {
+  return normalizeProjectDirectoryPath(state.activeDir ?? '') === activeDir.value
+    && (state.keyword ?? '') === filters.keyword
+    && (state.searchCurrentFolderOnly === true) === filters.searchCurrentFolderOnly
+    && normalizeFileKind(state.fileKind) === filters.fileKind
+    && (state.disciplineCode ?? '') === filters.disciplineCode
+    && (state.fileExt ?? '') === filters.fileExt
+    && (state.qualityIssue ?? props.initialQualityIssue ?? 'ALL') === filters.qualityIssue
+    && normalizeOwnershipStatus(state.ownershipStatus) === filters.ownershipStatus
+    && positiveNumber(state.page, 1) === pagination.page
+    && normalizePageSize(state.pageSize) === pagination.pageSize;
 }
 
 function syncBrowserStateToRoute(state: FileBrowserState) {

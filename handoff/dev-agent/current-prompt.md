@@ -1,172 +1,168 @@
-# 开发 Agent 当前任务：M3G-5 文件管理器项目全局搜索与存储展示修复
+# 开发 Agent 当前任务：M3G-5-F1 修复文件管理器搜索仍显示文件夹
 
-你是卓羽智能数据中台 v1 的开发 agent。工作目录：
+你是卓羽智能数据中台的开发 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
-当前分支：
+本轮是 `M3G-5` 返工修复，不是新功能批次。
 
-`codex/m3g-nas-minio-real-project-object-storage`
+## 0. 问题现象
 
-## 0. 当前结论与目标
+用户在浏览器访问：
 
-M3G-4 已正式收口：
+`http://127.0.0.1:5173/data-steward/assets/503?tab=files&fileKeyword=宝安`
 
-- 平台具备受控多项目小批对象化执行能力。
-- 但 105 项目尚未整体对象化，大多数文件仍是 `NAS_ONLY`。
+页面搜索框里显示 `宝安`，但右侧文件管理器仍展示项目根目录文件夹，例如：
 
-当前用户反馈两个真实使用问题：
+- `00_工作进度`
+- `01_文件收发`
+- `02_项目资源`
+- `03_过程文件`
 
-1. 文件管理器搜索只在当前视图 / 当前目录下检索，不符合文件管理器预期。用户期望默认搜索整个项目。
-2. 平台主界面仍让用户感觉在看真实 NAS 路径，无法清楚感知哪些文件已对象化、哪些仍在历史 NAS 链路。
+这不符合预期。
 
-当前进入：
+用户理解里的搜索是：输入关键词后，应在整个项目中搜索相关文件，右侧应该列出和关键词相关的文件，并显示所在位置；不应该继续展示当前目录的文件夹直达子项。
 
-`M3G-5：文件管理器项目全局搜索与存储展示修复`
+## 1. 本轮目标
 
-本批不执行任何对象化迁移，不修改真实 NAS 文件，只修检索和展示体验。
+修复文件管理器搜索模式：
 
-## 1. 必须先阅读
+1. 带 `fileKeyword` URL 直接进入页面时，必须立即进入搜索模式。
+2. 在搜索模式下，右侧表格默认只展示匹配文件，不展示当前目录文件夹。
+3. 搜索模式下应显示“正在整个项目中搜索”提示和“所在位置”列。
+4. “仅当前文件夹及子目录”仍作为可选搜索范围。
+5. 清空关键词后，恢复当前目录 direct-only 浏览，即右侧显示当前目录直接文件夹和直接文件。
+6. 不改变后端对象化、NAS 写入、Hermes、语义索引等能力边界。
 
-- `handoff/main-agent/m3g5-file-manager-search-storage-display-plan.md`
-- `handoff/main-agent/m3g4-controlled-multi-project-objectification-closure.md`
+## 2. 必查文件
+
+请先阅读：
+
 - `handoff/dev-agent/latest-report.md`
 - `handoff/test-agent/latest-report.md`
+- `handoff/main-agent/m3g5-file-manager-search-storage-display-closure.md`
 - `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
 - `frontend/src/modules/data-steward/api/dataSteward.ts`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/CatalogApplicationService.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/controller/CatalogController.java`
+- `scripts/dev/check-m3g5-file-manager-search-storage-display.sh`
 
-## 2. 严格边界
+## 3. 已知根因线索
 
-本轮允许：
+重点检查这些点：
 
-- 修改文件管理器搜索交互。
-- 默认把关键词搜索改为项目全局搜索。
-- 增加“仅当前文件夹及子目录”搜索范围开关。
-- 优化文件表和详情中的存储状态、访问来源、项目内路径展示。
-- 最小补充只读脱敏字段。
-- 新增 M3G-5 专项脚本。
-- 更新 `handoff/dev-agent/latest-report.md`。
+1. `AssetProjectFileBrowser.vue` 当前只在 `props.projectId / props.initialQualityIssue` 变化时初始化浏览状态。
+2. 如果同一个项目页面内 URL query 改为 `fileKeyword=宝安`，组件可能不会重新按 query 初始化并触发搜索。
+3. 搜索框值可能已经显示关键词，但右侧仍保留上一次 direct-only 目录浏览结果。
+4. `browserEntries` 当前由 `directoryEntries + fileEntries` 合并而来。搜索模式下如果没有强制排除 `directoryEntries`，右侧就会继续显示文件夹。
+5. 输入关键词时，如果前端已经把关键词同步进 URL，就不能让页面仍停留在“当前目录浏览模式”。
 
-本轮禁止：
+## 4. 推荐修复方向
 
-- 不执行对象化迁移。
-- 不扩大对象化范围。
-- 不移动、删除、重命名、覆盖真实 NAS 原项目文件。
-- 不读取 PDF / Office / DWG / RVT / IFC 正文。
-- 不做 Hermes 正文问答。
-- 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
-- 不接入真实 BIM 引擎。
-- 不暴露 `/Volumes`、`smb://`、`nas://`、`storage_uri`、bucket、object key、endpoint 原文、SQL、raw row、token、secret。
-- 不修改 `docs/**`。
+优先做最小修复：
 
-## 3. 本轮必须完成
+### A. 搜索模式不展示目录项
 
-### A. 默认项目全局搜索
+当 `filters.keyword.trim()` 非空时，右侧表格应该只使用 `fileEntries`。
 
-当前问题：
+未搜索时，仍使用：
 
-- `AssetProjectFileBrowser.vue` 在 `loadFiles()` 中调用目录子项接口时，会同时传 `activeDir` 和 `keyword`。
-- 结果导致搜索被限制在当前目录视图里。
+`directoryEntries + fileEntries`
 
-目标行为：
+也就是说，搜索模式和目录浏览模式要清晰分开。
 
-- 未输入关键词时：保持当前目录直接子项浏览。
-- 输入关键词时：默认在整个项目内搜索文件。
-- 搜索结果不展示当前目录子文件夹，只展示匹配文件。
-- 搜索结果展示“所在位置 / 项目内路径”。
-- 页面提示：“正在整个项目中搜索”。
+### B. URL query 必须驱动状态
 
-推荐实现：
+当路由 query 中出现或变化以下字段时：
 
-- 当 `filters.keyword.trim()` 非空且未启用“仅当前文件夹及子目录”时，使用 `fetchCatalogFiles(...)`：
-  - 传 `projectId`
-  - 传 `keyword`
-  - 不传 `directoryPath`
-  - 不传 `directOnly`
-- 当未输入关键词时，继续使用 `fetchCatalogDirectoryChildren(...)`。
+- `fileKeyword`
+- `fileSearchScope`
+- `fileDir`
+- `fileKind`
+- `discipline`
+- `fileExt`
+- `qualityIssue`
+- `ownershipStatus`
+- `filePage`
+- `filePageSize`
 
-### B. 当前文件夹搜索开关
+同项目内也要能同步到组件状态，并触发正确加载。
 
-增加一个轻量开关：
+注意避免死循环：
 
-`仅当前文件夹及子目录`
+- 内部 `router.replace` 同步状态时不要反复触发重复请求。
+- 可以比较当前状态和 query state，只有变化时才应用。
 
-行为：
+### C. 用户输入行为要一致
 
-- 默认关闭。
-- 只有输入关键词时可见或有效。
-- 开启后搜索才带 `directoryPath=activeDir`。
-- 不做物理 NAS 递归扫描，只查已登记资产。
+当前搜索框 `v-model` 会改变页面状态。只要 URL / 状态已经表现为“有关键词”，结果区就必须进入搜索模式。
 
-### C. 存储状态与访问来源
+你可以选择：
 
-文件表或详情必须让用户看懂：
+- 保持点击“查询”/回车触发加载，但不要提前把未执行搜索的 keyword 写进 URL；或者
+- 输入关键词后 debounce 触发搜索。
 
-- `OBJECT_STORED`：已对象化 / NAS 侧 MinIO。
-- `NAS_ONLY`：历史 NAS / 尚未对象化。
-- `MIGRATION_PENDING`：对象化中。
-- `MIGRATION_FAILED`：对象化失败。
+无论选择哪种，最终用户看到的状态必须一致：
 
-要求：
+- URL 有 `fileKeyword=宝安` 时，右侧就是“宝安”的搜索结果。
+- 搜索框有关键词且页面提示搜索时，右侧不能还显示当前目录文件夹。
 
-- 不把 raw storage path 作为主界面展示。
-- 默认展示项目内路径 / 所在位置。
-- 如果现有详情中显示真实存储地址，必须移除、脱敏或折叠到管理员诊断信息，并确认普通用户不可见。
+### D. 测试脚本补强
 
-### D. 不回退目录浏览
+增强 `scripts/dev/check-m3g5-file-manager-search-storage-display.sh` 或新增极短返工脚本，至少覆盖：
 
-必须保持 M2H-F1 后的文件管理器口径：
+1. 带 `fileKeyword` 的页面/接口场景不返回目录项作为搜索结果。
+2. 搜索模式下 `browserEntries` 或页面 DOM 不应出现“文件夹”行。
+3. 清空关键词后 direct-only 目录浏览恢复。
 
-- 当前目录右侧只显示直接子文件夹和直接文件。
-- 左侧目录树可展开 / 折叠。
-- 双击文件夹进入目录。
-- PDF / 图片受控预览、模型占位不回归。
+如果脚本不方便用浏览器测 DOM，可以在报告中补浏览器短验步骤。
 
-### E. 新增专项脚本
+## 5. 禁止事项
 
-新增：
+本轮严禁：
 
-`scripts/dev/check-m3g5-file-manager-search-storage-display.sh`
+1. 不要执行对象化迁移。
+2. 不要移动、删除、重命名、覆盖真实 NAS 文件。
+3. 不要读取文件正文。
+4. 不要新增 Hermes 能力。
+5. 不要写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
+6. 不要接入真实 BIM 引擎。
+7. 不要修改 `docs/**`。
+8. 不要改数据库迁移。
+9. 除非确认后端接口确实有问题，否则不要改后端。
 
-至少验证：
+## 6. 验收标准
 
-1. 105 / 503 当前对象化覆盖率不是 100%，能区分 `OBJECT_STORED` 与 `NAS_ONLY`。
-2. 根目录 direct children 口径不回归。
-3. 有关键词时默认项目全局搜索，不带当前目录限制。
-4. 当前文件夹搜索开关生效。
-5. 搜索结果包含项目内路径 / 所在位置。
-6. 响应与页面接口不泄露 raw NAS path、bucket、object key、`storage_uri`。
-7. 不创建对象化迁移任务。
-8. 不修改 NAS 原文件。
+必须同时满足：
 
-## 4. 自测要求
+1. 打开 `http://127.0.0.1:5173/data-steward/assets/503?tab=files&fileKeyword=宝安` 后，页面自动进入搜索模式。
+2. 搜索模式右侧表格不显示文件夹行。
+3. 搜索模式显示项目全局搜索提示。
+4. 搜索结果文件能显示所在位置。
+5. 勾选“仅当前文件夹及子目录”后，搜索范围能收窄。
+6. 清空关键词后恢复当前目录 direct-only 浏览。
+7. `OBJECT_STORED` / `NAS_ONLY` 展示不回归。
+8. 禁出字段扫描仍通过。
+9. 不创建迁移任务，不触碰真实 NAS 原文件。
 
-完成后至少执行：
+## 7. 必跑验证
+
+至少执行：
 
 ```bash
-cd /Users/vc/Documents/数字化交付平台/backend
-./mvnw -pl delivery-app -am -DskipTests package
-
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
 bash scripts/dev/check-m3g5-file-manager-search-storage-display.sh
-bash scripts/dev/check-m3g4-controlled-multi-project-objectification.sh
-bash scripts/dev/check-m3g3-multi-project-objectification-planning.sh
-bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
-bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
-git diff --cached --check
 ```
 
-注意：
+浏览器短验：
 
-- 不要运行 M3G-2 执行型脚本。
-- 如 M3G-4 脚本会再次执行小批对象化，请在报告里明确新增对象化数量；如能调整为轻量只读回归更好。
+1. 打开 `/data-steward/assets/503?tab=files&fileKeyword=宝安`。
+2. 确认右侧不出现文件夹行。
+3. 确认页面提示正在整个项目中搜索。
+4. 清空关键词后确认根目录文件夹恢复。
 
-## 5. 报告要求
+## 8. 报告要求
 
 完成后写入：
 
@@ -174,23 +170,10 @@ git diff --cached --check
 
 报告必须说明：
 
-1. 搜索默认范围如何变化。
-2. 当前文件夹搜索开关如何工作。
-3. 105 当前对象化覆盖率是否仍非 100%。
-4. 文件表 / 详情如何展示 `OBJECT_STORED` 与 `NAS_ONLY`。
-5. 是否创建对象化任务，必须明确回答。
-6. 是否触碰真实 NAS 原文件，必须明确回答“否”。
-7. 是否泄露真实路径 / bucket / object key / `storage_uri`，必须明确回答。
-8. 自测结果。
-
-## 6. 完成定义
-
-只有同时满足以下条件，才能标记完成：
-
-- 搜索默认变成项目全局搜索。
-- 当前文件夹搜索可选且有效。
-- 清空搜索后恢复当前目录直接子项浏览。
-- 用户能看懂文件是否已对象化。
-- 主界面不暴露真实 NAS 路径。
-- 未执行对象化迁移。
-- 未修改 `docs/**`。
+- 根因。
+- 修改文件。
+- 搜索模式如何和目录浏览模式分离。
+- URL query 如何驱动页面状态。
+- 验证结果。
+- 是否改动后端。
+- 是否有未完成事项。
