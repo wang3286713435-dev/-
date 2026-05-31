@@ -6,7 +6,7 @@
 
 - 当前分支：`codex/m3g-nas-minio-real-project-object-storage`
 - checkpoint commit：`e82d746 chore: checkpoint M3G before Glandar mainline sync`
-- merge commit：`780616b merge: sync Glandar mainline into M3G`
+- merge commit：`0c9a1ef merge: sync Glandar mainline into M3G`
 - 合并来源：`origin/main`
 - `origin/main` 最新葛兰岱尔提交：`d69cbc2 feat: integrate Glandar RVT lightweight preview pilot...`
 - 合并前已确认：`d69cbc2` 存在于 `origin/main`
