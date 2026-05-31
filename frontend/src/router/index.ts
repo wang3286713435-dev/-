@@ -33,6 +33,12 @@ const router = createRouter({
       meta: { guestOnly: true }
     },
     {
+      path: '/visualization/glandar-viewer-embed',
+      name: 'glandar-model-preview-embed',
+      component: () => import('@/modules/visualization/pages/GlandarModelPreviewPage.vue'),
+      meta: { embeddedViewer: true }
+    },
+    {
       path: '/',
       component: () => import('@/modules/core/layout/AppLayout.vue'),
       meta: { requiresAuth: true },
@@ -319,6 +325,13 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const authStore = useAuthStore();
   authStore.hydrate();
+
+  if (to.name === 'glandar-model-preview' && (to.query.embedded === '1' || to.query.embedded === 'true')) {
+    return {
+      name: 'glandar-model-preview-embed',
+      query: to.query
+    };
+  }
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return { name: 'login' };

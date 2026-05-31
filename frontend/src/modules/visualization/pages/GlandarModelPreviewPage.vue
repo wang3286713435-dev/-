@@ -1,6 +1,6 @@
 <template>
-  <section class="glandar-preview-page">
-    <header class="glandar-preview-page__head">
+  <section class="glandar-preview-page" :class="{ 'is-embedded': embeddedMode }">
+    <header v-if="!embeddedMode" class="glandar-preview-page__head">
       <div>
         <span>GLANDAR VIEWER · BIM LIGHTWEIGHT</span>
         <h1>{{ fileName || '葛兰岱尔模型预览' }}</h1>
@@ -15,50 +15,96 @@
       </div>
     </header>
 
+    <el-alert
+      v-if="contextError"
+      :closable="false"
+      type="error"
+      show-icon
+      :title="contextError"
+    />
+
     <GlandarViewerCanvas
+      v-else-if="contextReady"
       ref="viewerCanvasRef"
       :key="`${projectId}-${jobId}`"
       :project-id="projectId"
       :job-id="jobId"
       :file-name="fileName"
+      :model-file-id="modelFileId"
+      :embedded="embeddedMode"
+      :auto-rotate="autoRotate"
+      :theme="themeMode"
+      :show-info="!embeddedMode"
       @ready-change="viewerReady = $event"
       @ticket-change="ticket = $event"
     />
+
+    <el-skeleton v-else :rows="8" animated />
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import GlandarViewerCanvas from '@/modules/visualization/components/GlandarViewerCanvas.vue';
 import type { LightweightViewerTicketResponse } from '@/modules/visualization/api/visualization';
+import { useAuthStore } from '@/stores/auth';
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
 const viewerReady = ref(false);
 const ticket = ref<LightweightViewerTicketResponse | null>(null);
 const viewerCanvasRef = ref<InstanceType<typeof GlandarViewerCanvas> | null>(null);
+const contextReady = ref(false);
+const contextError = ref('');
 
 const projectId = computed(() => Number(route.query.projectId));
 const jobId = computed(() => String(route.query.jobId || ''));
 const fileName = computed(() => String(route.query.fileName || ''));
+const modelFileId = computed(() => String(route.query.modelFileId || ''));
+const embeddedMode = computed(() => route.query.embedded === '1' || route.query.embedded === 'true');
+const autoRotate = computed(() => route.query.autoRotate === '1' || route.query.autoRotate === 'true');
+const themeMode = computed(() => (route.query.theme === 'light' ? 'light' : 'dark'));
 const statusText = computed(() => {
   if (viewerReady.value) return '模型已在平台内通过葛兰岱尔 Viewer 加载。';
   if (ticket.value?.blockedReason) return ticket.value.blockedReason;
   return '平台只读取轻量化产物入口，不暴露真实 NAS 路径或引擎 token。';
 });
 
+watch(projectId, () => {
+  void ensureProjectContext();
+}, { immediate: true });
+
 function goBack() {
   if (window.history.length > 1) {
     router.back();
     return;
   }
-  router.push({ name: 'bim-collaboration' });
+  router.push({ name: 'bim-collaboration', query: Number.isFinite(projectId.value) ? { projectId: projectId.value } : undefined });
 }
 
 function refreshViewer() {
   void viewerCanvasRef.value?.loadViewer();
+}
+
+async function ensureProjectContext() {
+  contextReady.value = false;
+  contextError.value = '';
+  const targetProjectId = projectId.value;
+  if (!Number.isFinite(targetProjectId) || targetProjectId <= 0) {
+    contextError.value = '缺少有效项目上下文，无法打开模型预览。';
+    return;
+  }
+  try {
+    if (authStore.currentProjectId !== targetProjectId) {
+      await authStore.changeProject(targetProjectId);
+    }
+    contextReady.value = true;
+  } catch {
+    contextError.value = '当前账号无法切换到该项目，请确认项目授权后重试。';
+  }
 }
 </script>
 
@@ -67,6 +113,25 @@ function refreshViewer() {
   display: grid;
   gap: var(--zy-sp-4);
   min-width: 0;
+}
+
+.glandar-preview-page.is-embedded {
+  background: transparent;
+  display: block;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.glandar-preview-page.is-embedded :deep(.glandar-viewer) {
+  height: 100vh;
+  min-height: 100vh;
+}
+
+.glandar-preview-page.is-embedded :deep(.glandar-viewer__canvas-card) {
+  height: 100vh;
+  min-height: 100vh;
 }
 
 .glandar-preview-page__head {

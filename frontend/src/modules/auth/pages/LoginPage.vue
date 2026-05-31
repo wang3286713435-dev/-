@@ -58,20 +58,27 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import ParticleField from '@/modules/core/components/ParticleField.vue';
 import { useSpotlight } from '@/modules/core/composables/useSpotlight';
 import { useAuthStore } from '@/stores/auth';
 
 const authStore = useAuthStore();
+const route = useRoute();
 const router = useRouter();
 const submitting = ref(false);
 const shellRef = ref<HTMLElement | null>(null);
 
 useSpotlight(shellRef);
+
+onMounted(() => {
+  if (route.query.fresh === '1' || route.query.fresh === 'true') {
+    authStore.reset();
+  }
+});
 
 const form = reactive({
   username: 'platform.admin',
@@ -86,6 +93,7 @@ const rules = {
 async function handleSubmit() {
   submitting.value = true;
   try {
+    authStore.reset();
     await authStore.signIn(form.username, form.password);
     ElMessage.success('登录成功');
     const target = authStore.currentUser?.projects.length === 0 ? 'access-pending' : 'data-steward-assets';

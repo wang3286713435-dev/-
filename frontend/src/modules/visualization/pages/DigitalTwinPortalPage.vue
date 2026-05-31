@@ -1,32 +1,5 @@
 <template>
   <section class="digital-twin-portal">
-    <section class="digital-twin-intro" aria-label="BIM协同管理亮点功能">
-      <div>
-        <span>BIM 协同管理</span>
-        <h1>BIM协同管理</h1>
-        <p>以项目为单位串联模型、图纸、设备设施、房屋空间、整改和质量风险，让 BIM 协同成为卓羽智能数据中台的高频入口。</p>
-      </div>
-      <div class="digital-twin-highlights">
-        <button
-          class="digital-twin-highlight digital-twin-highlight--project"
-          type="button"
-          aria-controls="digital-twin-project-panel"
-          :aria-expanded="projectPanelOpen"
-          @click="projectPanelOpen = true"
-        >
-          <span>项目选择</span>
-          <strong>{{ activeProject?.name ?? '请选择项目' }}</strong>
-          <em>{{ activeProject?.code ?? `${filteredProjects.length} 个项目可选` }}</em>
-        </button>
-
-        <article v-for="item in highlights" :key="item.label" class="digital-twin-highlight">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-          <em>{{ item.hint }}</em>
-        </article>
-      </div>
-    </section>
-
     <div
       v-if="projectPanelOpen"
       class="digital-twin-project-overlay"
@@ -98,26 +71,53 @@
         :closable="false"
       />
 
-      <DigitalTwinDashboardPage v-if="activeProjectId" />
+      <section class="digital-twin-project-strip" aria-label="BIM协同项目选择">
+        <button
+          class="digital-twin-project-trigger"
+          type="button"
+          aria-controls="digital-twin-project-panel"
+          :aria-expanded="projectPanelOpen"
+          @click="projectPanelOpen = true"
+        >
+          <span>当前项目</span>
+          <strong>{{ activeProject?.name ?? '请选择项目' }}</strong>
+          <em>{{ activeProject?.code ?? `${filteredProjects.length} 个项目可选` }}</em>
+        </button>
+        <p>选择项目后，下方 BIM 协同大屏会直接读取该项目的模型、图纸、交付和质量数据。</p>
+      </section>
+
+      <DigitalTwinDashboardPage v-if="activeProjectId && portalProjectReady" />
+      <el-skeleton v-else-if="activeProjectId && !switchError" :rows="8" animated />
       <el-empty v-else description="请选择项目后查看 BIM 协同管理" />
     </main>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Close, Search } from '@element-plus/icons-vue';
+import { useRoute } from 'vue-router';
 
 import DigitalTwinDashboardPage from '@/modules/visualization/pages/DigitalTwinDashboardPage.vue';
 import { useAuthStore } from '@/stores/auth';
 
 const authStore = useAuthStore();
+const route = useRoute();
 const keyword = ref('');
 const projectPanelOpen = ref(false);
 const switchingProjectId = ref<number | null>(null);
 const switchError = ref('');
 
-const activeProjectId = computed(() => authStore.currentProjectId);
+const routeProjectId = computed(() => Number(route.query.projectId));
+const requestedProjectId = computed(() => {
+  const id = routeProjectId.value;
+  return Number.isFinite(id) && id > 0 ? id : null;
+});
+const activeProjectId = computed(() => requestedProjectId.value ?? authStore.currentProjectId);
+const portalProjectReady = computed(() => {
+  const requestedId = requestedProjectId.value;
+  return !requestedId || authStore.currentProjectId === requestedId;
+});
 const projects = computed(() => authStore.currentUser?.projects ?? []);
 
 const filteredProjects = computed(() => {
@@ -135,30 +135,31 @@ const activeProject = computed(() => {
   return projects.value.find((project) => project.id === id) ?? null;
 });
 
-const highlights = computed(() => [
-  {
-    label: '能力定位',
-    value: 'BIM协同',
-    hint: '模型、设备、空间、交付联动'
-  },
-  {
-    label: '数据来源',
-    value: '平台真实数据',
-    hint: '不接施工物联演示假数据'
-  }
-]);
+watch(requestedProjectId, (projectId) => {
+  if (!projectId) return;
+  void ensureRouteProjectContext(projectId);
+}, { immediate: true });
 
 async function selectProject(projectId: number) {
-  if (projectId === activeProjectId.value) {
+  if (projectId === authStore.currentProjectId) {
     projectPanelOpen.value = false;
     return;
   }
+  await switchProject(projectId, true);
+}
+
+async function ensureRouteProjectContext(projectId: number) {
+  if (projectId === authStore.currentProjectId || switchingProjectId.value) return;
+  await switchProject(projectId, false);
+}
+
+async function switchProject(projectId: number, closePanel: boolean) {
   if (switchingProjectId.value) return;
   switchingProjectId.value = projectId;
   switchError.value = '';
   try {
     await authStore.changeProject(projectId);
-    projectPanelOpen.value = false;
+    if (closePanel) projectPanelOpen.value = false;
   } catch (error) {
     switchError.value = error instanceof Error ? error.message : '项目切换失败';
   } finally {
@@ -178,7 +179,7 @@ async function selectProject(projectId: number) {
 }
 
 .digital-twin-projects,
-.digital-twin-intro {
+.digital-twin-project-strip {
   background: var(--zy-surface);
   border: 1px solid color-mix(in srgb, var(--zy-line) 72%, transparent);
   border-radius: var(--zy-radius-base);
@@ -230,14 +231,13 @@ async function selectProject(projectId: number) {
 }
 
 .digital-twin-projects__head span,
-.digital-twin-intro > div:first-child span {
+.digital-twin-project-trigger span {
   color: var(--zy-blue-600);
   font-size: var(--zy-fs-xs);
   font-weight: var(--zy-fw-semi);
 }
 
-.digital-twin-projects__head h2,
-.digital-twin-intro h1 {
+.digital-twin-projects__head h2 {
   color: var(--zy-ink);
   line-height: 1.2;
   margin: 0;
@@ -248,10 +248,9 @@ async function selectProject(projectId: number) {
 }
 
 .digital-twin-projects__head p,
-.digital-twin-intro p,
 .digital-twin-project em,
-.digital-twin-highlights em,
-.digital-twin-highlights span {
+.digital-twin-project-strip p,
+.digital-twin-project-trigger em {
   color: var(--zy-muted);
   font-size: var(--zy-fs-xs);
   font-style: normal;
@@ -331,81 +330,64 @@ async function selectProject(projectId: number) {
   min-width: 0;
 }
 
-.digital-twin-intro {
+.digital-twin-project-strip {
   align-items: center;
-  display: grid;
-  gap: var(--zy-sp-4);
-  grid-column: 1 / -1;
-  grid-template-columns: minmax(0, 0.95fr) minmax(420px, 1fr);
-  padding: var(--zy-sp-5);
-}
-
-.digital-twin-intro > div:first-child {
-  display: grid;
-  gap: var(--zy-sp-2);
-  min-width: 0;
-}
-
-.digital-twin-intro h1 {
-  font-size: var(--zy-fs-3xl);
-}
-
-.digital-twin-intro p {
-  font-size: var(--zy-fs-sm);
-  line-height: 1.7;
-  margin: 0;
-}
-
-.digital-twin-highlights {
-  display: grid;
+  display: flex;
   gap: var(--zy-sp-3);
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  justify-content: space-between;
+  padding: var(--zy-sp-2) var(--zy-sp-3);
 }
 
-.digital-twin-highlight {
-  background: var(--zy-surface);
-  border: 1px solid color-mix(in srgb, var(--zy-line) 74%, transparent);
-  border-radius: var(--zy-radius-base);
-  color: var(--zy-ink);
-  display: grid;
-  gap: 5px;
-  min-height: 86px;
+.digital-twin-project-strip p {
+  line-height: 1.5;
+  margin: 0;
   min-width: 0;
-  padding: var(--zy-sp-3);
+  text-align: right;
+}
+
+.digital-twin-project-trigger {
+  align-items: center;
+  background: color-mix(in srgb, var(--zy-blue-50) 44%, var(--zy-surface));
+  border: 1px solid color-mix(in srgb, var(--zy-blue-500) 24%, transparent);
+  border-radius: calc(var(--zy-radius-base) - 2px);
+  color: var(--zy-ink);
+  cursor: pointer;
+  display: grid;
+  gap: 2px 12px;
+  grid-template-columns: auto minmax(160px, auto);
+  min-height: 46px;
+  min-width: min(420px, 100%);
+  padding: 7px 12px;
   text-align: left;
 }
 
-.digital-twin-highlight--project {
-  cursor: pointer;
+.digital-twin-project-trigger span {
+  grid-row: 1 / 3;
+  white-space: nowrap;
 }
 
-.digital-twin-highlight--project:hover,
-.digital-twin-highlight--project:focus-visible {
-  border-color: color-mix(in srgb, var(--zy-blue-500) 48%, transparent);
-  box-shadow: var(--zy-shadow-sm);
-  outline: none;
-}
-
-.digital-twin-highlight--project span {
-  color: var(--zy-blue-600);
-  font-weight: var(--zy-fw-semi);
-}
-
-.digital-twin-highlights strong {
+.digital-twin-project-trigger strong {
   color: var(--zy-ink);
-  font-size: var(--zy-fs-lg);
+  font-size: var(--zy-fs-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-@media (max-width: 1280px) {
-  .digital-twin-intro {
-    grid-template-columns: 1fr;
-  }
+.digital-twin-project-trigger em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-@media (max-width: 820px) {
+.digital-twin-project-trigger:hover,
+.digital-twin-project-trigger:focus-visible {
+  border-color: color-mix(in srgb, var(--zy-blue-500) 48%, transparent);
+  box-shadow: var(--zy-shadow-sm);
+  outline: none;
+}
+
+@media (max-width: 860px) {
   .digital-twin-projects {
     height: min(680px, calc(100dvh - 48px));
     left: var(--zy-content-pad);
@@ -414,8 +396,21 @@ async function selectProject(projectId: number) {
     width: calc(100vw - var(--zy-content-pad) * 2);
   }
 
-  .digital-twin-highlights {
+  .digital-twin-project-strip {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .digital-twin-project-strip p {
+    text-align: left;
+  }
+
+  .digital-twin-project-trigger {
     grid-template-columns: 1fr;
+  }
+
+  .digital-twin-project-trigger span {
+    grid-row: auto;
   }
 }
 </style>
