@@ -818,8 +818,9 @@ public class AssetApplicationService {
             throw new BusinessException("ASSET_FILE_DOWNLOAD_FORBIDDEN", "当前账号没有下载该文件的权限", HttpStatus.FORBIDDEN);
         }
 
+        StorageService.ReadDecision readDecision;
         try {
-            storageService.ensureReadable(file);
+            readDecision = storageService.ensureReadable(file);
         } catch (BusinessException exception) {
             recordFileAccessAudit(file, "asset.file.access.failed", userId, exception.getCode());
             throw exception;
@@ -830,7 +831,7 @@ public class AssetApplicationService {
         Long ticketId = fileAccessTicketRepository.insert(ticket, file.fileId(), file.projectId(), userId, action, expiresAt);
         recordFileAccessAudit(file,
             "PREVIEW".equals(action) ? "asset.file.preview.ticket.create" : "asset.file.download.ticket.create",
-            userId, "ticket=" + ticketId);
+            userId, "ticket=" + ticketId, readDecision);
         return new AccessTicketResponse(
             ticketId,
             ticket,
@@ -841,6 +842,13 @@ public class AssetApplicationService {
             file.fileName(),
             previewable,
             downloadable,
+            readDecision.storageStatus(),
+            readDecision.readSource(),
+            readDecision.fallbackUsed(),
+            readDecision.fallbackReason(),
+            readDecision.storageHealth(),
+            readDecision.objectReadable(),
+            readDecision.userMessage(),
             "PREVIEW".equals(action) ? "预览票据已创建，5分钟内有效。" : "下载票据已创建，5分钟内有效。"
         );
     }
@@ -878,13 +886,19 @@ public class AssetApplicationService {
         }
         fileAccessTicketRepository.markUsed(row.id());
         String actionCode = "PREVIEW".equalsIgnoreCase(row.action()) ? "asset.file.preview.open" : "asset.file.download.open";
-        recordFileAccessAudit(file, actionCode, row.userId(), "ticket=" + row.id());
+        recordFileAccessAudit(file, actionCode, row.userId(), "ticket=" + row.id(), storedResource);
         return new FileAccessResource(
             storedResource.resource(),
             storedResource.contentType(),
             "PREVIEW".equalsIgnoreCase(row.action()) ? "inline" : "attachment",
             file.fileName(),
-            storedResource.contentLength()
+            storedResource.contentLength(),
+            storedResource.storageStatus(),
+            storedResource.readSource(),
+            storedResource.fallbackUsed(),
+            storedResource.fallbackReason(),
+            storedResource.storageHealth(),
+            storedResource.objectReadable()
         );
     }
 
@@ -1506,6 +1520,44 @@ public class AssetApplicationService {
             ));
     }
 
+    private void recordFileAccessAudit(
+        FileAssetResponse file,
+        String actionCode,
+        Long userId,
+        String reason,
+        StorageService.ReadDecision decision
+    ) {
+        auditLogApplicationService.record(file.projectId(), MODULE_CODE, actionCode,
+            "FILE_RESOURCE", String.valueOf(file.fileId()), userId,
+            Map.of(
+                "fileName", valueOrDash(file.fileName()),
+                "reason", valueOrDash(reason),
+                "storageStatus", valueOrDash(decision == null ? null : decision.storageStatus()),
+                "readSource", valueOrDash(decision == null ? null : decision.readSource()),
+                "fallbackUsed", Boolean.TRUE.equals(decision != null && Boolean.TRUE.equals(decision.fallbackUsed())),
+                "fallbackReason", valueOrDash(decision == null ? null : decision.fallbackReason())
+            ));
+    }
+
+    private void recordFileAccessAudit(
+        FileAssetResponse file,
+        String actionCode,
+        Long userId,
+        String reason,
+        StorageService.StoredResource resource
+    ) {
+        auditLogApplicationService.record(file.projectId(), MODULE_CODE, actionCode,
+            "FILE_RESOURCE", String.valueOf(file.fileId()), userId,
+            Map.of(
+                "fileName", valueOrDash(file.fileName()),
+                "reason", valueOrDash(reason),
+                "storageStatus", valueOrDash(resource == null ? null : resource.storageStatus()),
+                "readSource", valueOrDash(resource == null ? null : resource.readSource()),
+                "fallbackUsed", Boolean.TRUE.equals(resource != null && Boolean.TRUE.equals(resource.fallbackUsed())),
+                "fallbackReason", valueOrDash(resource == null ? null : resource.fallbackReason())
+            ));
+    }
+
     private boolean canAccessScan(Long userId, java.util.Set<Long> allowedIds, ScanTaskResponse task) {
         if (task.projectId() != null) {
             return allowedIds.contains(task.projectId());
@@ -1766,7 +1818,13 @@ public class AssetApplicationService {
         String contentType,
         String dispositionType,
         String fileName,
-        Long contentLength
+        Long contentLength,
+        String storageStatus,
+        String readSource,
+        Boolean fallbackUsed,
+        String fallbackReason,
+        String storageHealth,
+        Boolean objectReadable
     ) {
     }
 

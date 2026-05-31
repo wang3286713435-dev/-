@@ -356,6 +356,13 @@ export interface FileAccessTicket {
   fileName: string;
   previewable: boolean;
   downloadable: boolean;
+  storageStatus: string;
+  readSource: string;
+  fallbackUsed: boolean;
+  fallbackReason: string;
+  storageHealth: string;
+  objectReadable: boolean;
+  userMessage: string;
   message: string;
 }
 
@@ -382,6 +389,20 @@ export interface StorageProviderReadiness {
   endpointType: 'LOCAL_DEV_MINIO' | 'NAS_SIDE_MINIO' | 'UNKNOWN' | string;
   readinessStatus: 'READY' | 'NOT_CONFIGURED' | 'UNREACHABLE' | 'LOCAL_DEV_ONLY' | 'WRITE_UNAVAILABLE' | string;
   message: string;
+}
+
+export interface StorageReadPolicy {
+  objectFirstEnabled: boolean;
+  nasFallbackEnabled: boolean;
+  totalFileCount: number;
+  objectStoredCount: number;
+  nasOnlyCount: number;
+  migrationPendingCount: number;
+  migrationFailedCount: number;
+  objectUnreadableCount: number;
+  recentObjectReadFailureCount: number;
+  recentNasFallbackCount: number;
+  policyMessage: string;
 }
 
 export interface ProjectStorageObjectificationInventory {
@@ -477,6 +498,131 @@ export interface StorageObjectificationDryRun {
   sampleItems: StorageObjectificationPlanSampleItem[];
 }
 
+export interface StorageObjectificationFullPlanPayload {
+  directoryPath?: string;
+  fileKinds?: string[];
+  extensions?: string[];
+  minSizeBytes?: number;
+  maxSizeBytes?: number;
+  checksumState?: 'ANY' | 'HAS_CHECKSUM' | 'MISSING_CHECKSUM';
+  batchFileLimit?: number;
+  batchBytesLimit?: number;
+}
+
+export interface StorageObjectificationFailureSummary {
+  reasonCode: string;
+  message: string;
+  fileCount: number;
+}
+
+export interface StorageObjectificationFullPlan {
+  dryRun: boolean;
+  migrationStarted: boolean;
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  totalFileCount: number;
+  totalBytes: number;
+  objectStoredCount: number;
+  objectStoredBytes: number;
+  nasOnlyCount: number;
+  nasOnlyBytes: number;
+  migrationPendingCount: number;
+  migrationFailedCount: number;
+  skippedCount: number;
+  checksumCoveredFiles: number;
+  checksumCoverageRate: number;
+  objectificationCoverageRate: number;
+  eligibleRemainingCount: number;
+  eligibleRemainingBytes: number;
+  maxFilesPerTask: number;
+  maxFileSizeBytes: number;
+  batchFileLimit: number;
+  batchBytesLimit: number;
+  nextBatchFileCount: number;
+  nextBatchTotalBytes: number;
+  hasNextBatch: boolean;
+  estimatedRemainingBatches: number;
+  latestTaskId: number | null;
+  latestTaskStatus: string | null;
+  latestTaskSuccessCount: number | null;
+  latestTaskSkippedCount: number | null;
+  latestTaskFailureCount: number | null;
+  latestTaskUpdatedAt: string | null;
+  failureReasons: StorageObjectificationFailureSummary[];
+  riskMessages: string[];
+  nextBatchSuggestions: string[];
+  nextBatchItems: StorageObjectificationPlanSampleItem[];
+  governanceItems: StorageObjectificationPlanSampleItem[];
+}
+
+export interface StorageObjectificationLongRunPayload {
+  batchFileLimit?: number;
+  batchBytesLimit?: number;
+  maxFileSizeBytes?: number;
+  maxContinuousBatches?: number;
+  continueOnFailure?: boolean;
+  confirmed?: boolean;
+  targetProvider?: string;
+}
+
+export type StorageObjectificationLongRunState =
+  | 'IDLE'
+  | 'RUNNING'
+  | 'PAUSED'
+  | 'COMPLETED'
+  | 'PARTIAL_WITH_FAILURES'
+  | 'FAILED';
+
+export interface StorageObjectificationLongRun {
+  dryRun: boolean;
+  executionStarted: boolean;
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  runState: StorageObjectificationLongRunState;
+  paused: boolean;
+  totalFileCount: number;
+  totalBytes: number;
+  objectStoredCount: number;
+  objectStoredBytes: number;
+  nasOnlyCount: number;
+  nasOnlyBytes: number;
+  migrationFailedCount: number;
+  skippedCount: number;
+  checksumCoveredFiles: number;
+  checksumCoverageRate: number;
+  objectificationCoverageRate: number;
+  eligibleRemainingCount: number;
+  eligibleRemainingBytes: number;
+  governanceItemCount: number;
+  batchFileLimit: number;
+  batchBytesLimit: number;
+  maxFileSizeBytes: number;
+  maxContinuousBatches: number;
+  continueOnFailure: boolean;
+  processedBatchCount: number;
+  processedFileCount: number;
+  createdTaskCount: number;
+  createdTaskIds: number[];
+  createdCount: number;
+  skippedThisRun: number;
+  failedCount: number;
+  lastRunAt: string | null;
+  lastFailureReason: string | null;
+  latestTaskId: number | null;
+  latestTaskStatus: string | null;
+  latestTaskSuccessCount: number | null;
+  latestTaskSkippedCount: number | null;
+  latestTaskFailureCount: number | null;
+  failureReasons: StorageObjectificationFailureSummary[];
+  governanceReasons: StorageObjectificationFailureSummary[];
+  warnings: string[];
+  nextBatchSuggestions: string[];
+  governanceItems: StorageObjectificationPlanSampleItem[];
+  batchResults: MultiProjectStorageObjectificationExecutionProject[];
+}
+
 export interface MultiProjectStorageObjectificationDryRunPayload extends StorageObjectificationDryRunPayload {
   projectIds?: number[];
   fileIds?: number[];
@@ -567,6 +713,153 @@ export interface MultiProjectStorageObjectificationExecuteResult {
   failureReasons: string[];
   warnings: string[];
   projectResults: MultiProjectStorageObjectificationExecutionProject[];
+}
+
+export interface StorageObjectificationWaveProject {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  projectCategory: string;
+  realNasProject: boolean;
+  executable: boolean;
+  waveStatus: string;
+  exclusionReason: string | null;
+  totalFiles: number;
+  totalBytes: number;
+  objectStoredFiles: number;
+  nasOnlyFiles: number;
+  nasOnlyBytes: number;
+  migrationFailedFiles: number;
+  unreadablePathFiles: number;
+  recommendedFileCount: number;
+  recommendedBytes: number;
+  objectificationCoverageRate: number;
+  checksumCoverageRate: number;
+  riskMessages: string[];
+}
+
+export interface StorageObjectificationWaveCandidates {
+  dryRun: boolean;
+  waveCode: string;
+  maxProjectCount: number;
+  maxTotalFiles: number;
+  maxTotalBytes: number;
+  maxFilesPerProject: number;
+  maxBytesPerProject: number;
+  maxFileSizeBytes: number;
+  warnings: string[];
+  candidates: StorageObjectificationWaveProject[];
+  excludedProjects: StorageObjectificationWaveProject[];
+}
+
+export interface StorageObjectificationWaveDryRunPayload {
+  projectIds?: number[];
+  maxProjects?: number;
+  limit?: number;
+  maxTotalBytes?: number;
+  maxFilesPerProject?: number;
+  maxBytesPerProject?: number;
+  extensions?: string[];
+}
+
+export interface StorageObjectificationWaveExecutePayload {
+  projectIds: number[];
+  fileIds: number[];
+  confirmed: boolean;
+  targetProvider?: string;
+  limit?: number;
+  maxTotalBytes?: number;
+  maxFilesPerProject?: number;
+  maxBytesPerProject?: number;
+}
+
+export interface StorageObjectificationWaveReports {
+  allProjects: boolean;
+  waveCode: string;
+  projectCount: number;
+  totalFiles: number;
+  objectStoredFiles: number;
+  nasOnlyFiles: number;
+  migrationFailedFiles: number;
+  objectificationCoverageRate: number;
+  warnings: string[];
+  projects: StorageObjectificationWaveProject[];
+}
+
+export interface StorageObjectificationRunProject {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  projectCategory: string;
+  queueStatus: string;
+  queueReason: string;
+  realNasProject: boolean;
+  executable: boolean;
+  totalFiles: number;
+  totalBytes: number;
+  objectStoredFiles: number;
+  nasOnlyFiles: number;
+  nasOnlyBytes: number;
+  migrationFailedFiles: number;
+  unreadablePathFiles: number;
+  governanceItemCount: number;
+  checksumCoveredFiles: number;
+  objectificationCoverageRate: number;
+  checksumCoverageRate: number;
+  riskMessages: string[];
+}
+
+export interface StorageObjectificationRunOverview {
+  dryRun: boolean;
+  runCode: string;
+  runState: string;
+  paused: boolean;
+  totalFiles: number;
+  objectStoredFiles: number;
+  nasOnlyFiles: number;
+  migrationFailedFiles: number;
+  governanceItemCount: number;
+  checksumCoveredFiles: number;
+  objectificationCoverageRate: number;
+  checksumCoverageRate: number;
+  executableProjectCount: number;
+  governanceProjectCount: number;
+  completedProjectCount: number;
+  skippedProjectCount: number;
+  maxProjectCount: number;
+  maxTotalFiles: number;
+  maxTotalBytes: number;
+  maxFilesPerProject: number;
+  maxBytesPerProject: number;
+  maxFileSizeBytes: number;
+  maxContinuousBatches: number;
+  warnings: string[];
+  projects: StorageObjectificationRunProject[];
+}
+
+export interface StorageObjectificationRunProjects {
+  runCode: string;
+  executableProjectCount: number;
+  governanceProjectCount: number;
+  completedProjectCount: number;
+  skippedProjectCount: number;
+  warnings: string[];
+  projects: StorageObjectificationRunProject[];
+}
+
+export interface StorageObjectificationRunPayload {
+  projectIds?: number[];
+  maxProjects?: number;
+  maxTotalFiles?: number;
+  maxTotalBytes?: number;
+  maxFilesPerProject?: number;
+  maxBytesPerProject?: number;
+  maxFileSizeBytes?: number;
+  maxContinuousBatches?: number;
+  rateLimitBytesPerMinute?: number;
+  continueOnFailure?: boolean;
+  confirmed?: boolean;
+  targetProvider?: string;
 }
 
 export interface StorageMigrationTaskPayload {
@@ -1008,6 +1301,11 @@ export async function fetchStorageProviderReadiness() {
   return data.data;
 }
 
+export async function fetchStorageReadPolicy() {
+  const { data } = await http.get<ApiResponse<StorageReadPolicy>>('/api/data-steward/storage-read-policy');
+  return data.data;
+}
+
 export async function fetchStorageObjectificationInventory(projectId?: number) {
   const url = projectId
     ? `/api/data-steward/projects/${projectId}/storage-objectification-inventory`
@@ -1022,6 +1320,65 @@ export async function dryRunStorageObjectificationPlan(
 ) {
   const { data } = await http.post<ApiResponse<StorageObjectificationDryRun>>(
     `/api/data-steward/projects/${projectId}/storage-objectification-plans:dry-run`,
+    payload
+  );
+  return data.data;
+}
+
+export async function fetchStorageObjectificationFullPlan(
+  projectId: number,
+  payload: StorageObjectificationFullPlanPayload
+) {
+  const { data } = await http.post<ApiResponse<StorageObjectificationFullPlan>>(
+    `/api/data-steward/projects/${projectId}/storage-objectification-full-plan`,
+    payload
+  );
+  return data.data;
+}
+
+export async function fetchStorageObjectificationLongRun(projectId: number) {
+  const { data } = await http.get<ApiResponse<StorageObjectificationLongRun>>(
+    `/api/data-steward/projects/${projectId}/storage-objectification-long-run`
+  );
+  return data.data;
+}
+
+export async function startStorageObjectificationLongRun(
+  projectId: number,
+  payload: StorageObjectificationLongRunPayload
+) {
+  const { data } = await http.post<ApiResponse<StorageObjectificationLongRun>>(
+    `/api/data-steward/projects/${projectId}/storage-objectification-long-run:start`,
+    payload
+  );
+  return data.data;
+}
+
+export async function pauseStorageObjectificationLongRun(projectId: number) {
+  const { data } = await http.post<ApiResponse<StorageObjectificationLongRun>>(
+    `/api/data-steward/projects/${projectId}/storage-objectification-long-run:pause`,
+    {}
+  );
+  return data.data;
+}
+
+export async function resumeStorageObjectificationLongRun(
+  projectId: number,
+  payload: StorageObjectificationLongRunPayload
+) {
+  const { data } = await http.post<ApiResponse<StorageObjectificationLongRun>>(
+    `/api/data-steward/projects/${projectId}/storage-objectification-long-run:resume`,
+    payload
+  );
+  return data.data;
+}
+
+export async function retryStorageObjectificationLongRunFailures(
+  projectId: number,
+  payload: StorageObjectificationLongRunPayload
+) {
+  const { data } = await http.post<ApiResponse<StorageObjectificationLongRun>>(
+    `/api/data-steward/projects/${projectId}/storage-objectification-long-run:retry-failures`,
     payload
   );
   return data.data;
@@ -1042,6 +1399,94 @@ export async function executeMultiProjectStorageObjectificationPlan(
 ) {
   const { data } = await http.post<ApiResponse<MultiProjectStorageObjectificationExecuteResult>>(
     '/api/data-steward/storage-objectification-plans:execute',
+    payload
+  );
+  return data.data;
+}
+
+export async function fetchStorageObjectificationWaveCandidates() {
+  const { data } = await http.get<ApiResponse<StorageObjectificationWaveCandidates>>(
+    '/api/data-steward/storage-objectification-wave/candidates'
+  );
+  return data.data;
+}
+
+export async function dryRunStorageObjectificationWave(
+  payload: StorageObjectificationWaveDryRunPayload
+) {
+  const { data } = await http.post<ApiResponse<MultiProjectStorageObjectificationDryRun>>(
+    '/api/data-steward/storage-objectification-wave:dry-run',
+    payload
+  );
+  return data.data;
+}
+
+export async function executeStorageObjectificationWave(
+  payload: StorageObjectificationWaveExecutePayload
+) {
+  const { data } = await http.post<ApiResponse<MultiProjectStorageObjectificationExecuteResult>>(
+    '/api/data-steward/storage-objectification-wave:execute',
+    payload
+  );
+  return data.data;
+}
+
+export async function fetchStorageObjectificationWaveReports() {
+  const { data } = await http.get<ApiResponse<StorageObjectificationWaveReports>>(
+    '/api/data-steward/storage-objectification-wave/reports'
+  );
+  return data.data;
+}
+
+export async function fetchStorageObjectificationRunOverview() {
+  const { data } = await http.get<ApiResponse<StorageObjectificationRunOverview>>(
+    '/api/data-steward/storage-objectification-run/overview'
+  );
+  return data.data;
+}
+
+export async function fetchStorageObjectificationRunProjects() {
+  const { data } = await http.get<ApiResponse<StorageObjectificationRunProjects>>(
+    '/api/data-steward/storage-objectification-run/projects'
+  );
+  return data.data;
+}
+
+export async function dryRunStorageObjectificationRun(payload: StorageObjectificationRunPayload) {
+  const { data } = await http.post<ApiResponse<MultiProjectStorageObjectificationDryRun>>(
+    '/api/data-steward/storage-objectification-run:dry-run',
+    payload
+  );
+  return data.data;
+}
+
+export async function startStorageObjectificationRun(payload: StorageObjectificationRunPayload) {
+  const { data } = await http.post<ApiResponse<MultiProjectStorageObjectificationExecuteResult>>(
+    '/api/data-steward/storage-objectification-run:start',
+    payload
+  );
+  return data.data;
+}
+
+export async function continueStorageObjectificationRun(payload: StorageObjectificationRunPayload) {
+  const { data } = await http.post<ApiResponse<MultiProjectStorageObjectificationExecuteResult>>(
+    '/api/data-steward/storage-objectification-run:continue',
+    payload
+  );
+  return data.data;
+}
+
+export async function pauseStorageObjectificationRun() {
+  const { data } = await http.post<ApiResponse<StorageObjectificationRunOverview>>(
+    '/api/data-steward/storage-objectification-run:pause',
+    {}
+  );
+  return data.data;
+}
+
+export async function retryFailedStorageObjectificationRun(payload: StorageObjectificationRunPayload) {
+  const { data } = await http.post<ApiResponse<MultiProjectStorageObjectificationExecuteResult>>(
+    '/api/data-steward/storage-objectification-run/retry-failed',
     payload
   );
   return data.data;
@@ -1635,6 +2080,81 @@ export interface FileOwnershipBatchReviewPayload {
   reason?: string;
 }
 
+export interface FileOwnershipTreeDraftNode {
+  nodeKey: string;
+  nodeLabel: string;
+  suggestedNodePath: string;
+  fileCount: number;
+  drawingCount: number;
+  modelCount: number;
+  confirmedOwnershipCount: number;
+  pendingReviewCount: number;
+  formalDeliveryCandidateCount: number;
+  currentMissingDeliverableCount: number;
+  recommendationReason: string;
+  riskHints: string[];
+}
+
+export interface FileOwnershipTreeDraft {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  draftOnly: boolean;
+  formalTreeOverwritten: boolean;
+  evidenceMode: string;
+  analysisBoundary: string;
+  totalFiles: number;
+  nodeCount: number;
+  nodes: FileOwnershipTreeDraftNode[];
+}
+
+export interface FileOwnershipTreeDraftApplyPayload {
+  confirmed: boolean;
+  nodeKeys?: string[];
+}
+
+export interface FileOwnershipTreeDraftApplyResult {
+  projectId: number;
+  confirmed: boolean;
+  formalTreeOverwritten: boolean;
+  requestedNodeCount: number;
+  appliedNodeCount: number;
+  assignmentUpdatedCount: number;
+  message: string;
+}
+
+export interface ModelDrawingGapRow {
+  nodeKey: string;
+  nodeLabel: string;
+  nodePath: string;
+  gapStatus: string;
+  fileCount: number;
+  modelCount: number;
+  drawingCount: number;
+  processCount: number;
+  pendingReviewCount: number;
+  sampleFileIds: number[];
+  sampleFileNames: string[];
+  recommendation: string;
+  evidenceMode: string;
+  missingEvidenceReason: string;
+}
+
+export interface ModelDrawingGap {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  evidenceMode: string;
+  analysisBoundary: string;
+  totalNodeCount: number;
+  hasModelAndDrawingCount: number;
+  drawingMissingModelCount: number;
+  modelMissingDrawingCount: number;
+  processOnlyCount: number;
+  needsReviewCount: number;
+  rows: ModelDrawingGapRow[];
+}
+
 export interface NasOperationResponse {
   operationId: number;
   projectId: number;
@@ -1788,6 +2308,28 @@ export async function fetchFileOwnershipCoverage(projectId: number) {
 export async function fetchFileOwnershipTree(projectId: number) {
   const { data } = await http.get<ApiResponse<FileOwnershipTree>>(
     `/api/data-steward/projects/${projectId}/file-ownership/tree`
+  );
+  return data.data;
+}
+
+export async function fetchFileOwnershipTreeDraft(projectId: number) {
+  const { data } = await http.get<ApiResponse<FileOwnershipTreeDraft>>(
+    `/api/data-steward/projects/${projectId}/file-ownership/tree-draft`
+  );
+  return data.data;
+}
+
+export async function applyFileOwnershipTreeDraft(projectId: number, payload: FileOwnershipTreeDraftApplyPayload) {
+  const { data } = await http.post<ApiResponse<FileOwnershipTreeDraftApplyResult>>(
+    `/api/data-steward/projects/${projectId}/file-ownership/tree-draft:apply`,
+    payload
+  );
+  return data.data;
+}
+
+export async function fetchModelDrawingGap(projectId: number) {
+  const { data } = await http.get<ApiResponse<ModelDrawingGap>>(
+    `/api/data-steward/projects/${projectId}/file-ownership/model-drawing-gap`
   );
   return data.data;
 }

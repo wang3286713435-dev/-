@@ -400,6 +400,8 @@ export interface ExportPrecheckRow {
   fileKind: string;
   versionNo: string | null;
   fileExt: string | null;
+  storageStatus: string | null;
+  readSource: string | null;
   reviewStatus: string | null;
   readinessStatus: string | null;
   previewStatus: string;
@@ -727,6 +729,20 @@ export interface ApplyAgentRecommendationsResponse {
   results: ApplyAgentRecommendationRowResult[];
 }
 
+export interface DeliveryCandidatesResponse {
+  projectId: number;
+  viewType: string;
+  targetType: string;
+  dryRun: boolean;
+  bindingCreated: boolean;
+  evidenceMode: string;
+  analysisBoundary: string;
+  missingCount: number;
+  candidateCount: number;
+  missingItems: AgentGovernanceMissingItem[];
+  rows: AgentBindingRecommendation[];
+}
+
 export async function fetchAgentGovernanceOverview(projectId: number) {
   const { data } = await http.get<ApiResponse<AgentGovernanceOverview>>(
     `/api/work-center/projects/${projectId}/agent-governance/overview`
@@ -763,6 +779,22 @@ export async function applyAgentGovernanceRecommendations(
 ) {
   const { data } = await http.post<ApiResponse<ApplyAgentRecommendationsResponse>>(
     `/api/work-center/projects/${projectId}/agent-governance/recommendations:apply`,
+    payload
+  );
+  return data.data;
+}
+
+export async function fetchDeliveryCandidates(projectId: number, viewType?: string, targetType = 'SECTION') {
+  const { data } = await http.get<ApiResponse<DeliveryCandidatesResponse>>(
+    `/api/work-center/projects/${projectId}/delivery-candidates`,
+    { params: { viewType, targetType } }
+  );
+  return data.data;
+}
+
+export async function applyDeliveryCandidates(projectId: number, payload: ApplyAgentRecommendationsRequest) {
+  const { data } = await http.post<ApiResponse<ApplyAgentRecommendationsResponse>>(
+    `/api/work-center/projects/${projectId}/delivery-candidates:apply`,
     payload
   );
   return data.data;

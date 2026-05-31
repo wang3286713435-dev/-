@@ -49,35 +49,54 @@ public class StorageService {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public void ensureReadable(FileAssetResponse file) {
-        StorageReference reference = referenceFor(file);
+    public ReadDecision ensureReadable(FileAssetResponse file) {
+        StorageReference activeObjectReference = activeObjectReference(file.fileId());
+        if (activeObjectReference != null) {
+            return ensureObjectReadable(activeObjectReference);
+        }
+
+        MigrationStatus migrationStatus = latestMigrationStatus(file.fileId());
+        assertMigrationReadable(migrationStatus);
+
+        StorageReference reference = sourceReferenceForMigration(file);
         if ("NAS".equals(reference.provider())) {
             resolveNasPath(reference);
-            return;
+            return legacyNasDecision();
         }
-        ObjectStorageProvider provider = providerFor(reference.provider());
-        try {
-            provider.client().statObject(StatObjectArgs.builder()
-                .bucket(reference.bucket())
-                .object(reference.objectKey())
-                .build());
-        } catch (Exception exception) {
-            throw new BusinessException("ASSET_FILE_NOT_READABLE",
-                "对象存储文件不存在或不可读取", HttpStatus.PRECONDITION_FAILED);
-        }
+        return ensureObjectReadable(reference);
     }
 
     public StoredResource openReadable(FileAssetResponse file) {
-        StorageReference reference = referenceFor(file);
+        StorageReference activeObjectReference = activeObjectReference(file.fileId());
+        if (activeObjectReference != null) {
+            return openObjectReadable(activeObjectReference, file);
+        }
+
+        MigrationStatus migrationStatus = latestMigrationStatus(file.fileId());
+        assertMigrationReadable(migrationStatus);
+
+        StorageReference reference = sourceReferenceForMigration(file);
         if ("NAS".equals(reference.provider())) {
             Path path = resolveNasPath(reference);
+            ReadDecision decision = legacyNasDecision();
             return new StoredResource(
                 new FileSystemResource(path),
                 detectNasContentType(path, file),
                 readableSize(path),
-                reference.provider()
+                reference.provider(),
+                decision.storageStatus(),
+                decision.readSource(),
+                decision.fallbackUsed(),
+                decision.fallbackReason(),
+                decision.storageHealth(),
+                decision.objectReadable(),
+                decision.userMessage()
             );
         }
+        return openObjectReadable(reference, file);
+    }
+
+    private StoredResource openObjectReadable(StorageReference reference, FileAssetResponse file) {
         ObjectStorageProvider provider = providerFor(reference.provider());
         try {
             StatObjectResponse stat = provider.client().statObject(StatObjectArgs.builder()
@@ -91,11 +110,67 @@ public class StorageService {
                     .build())),
                 contentTypeFrom(stat.contentType(), file),
                 stat.size(),
-                reference.provider()
+                reference.provider(),
+                "OBJECT_STORED",
+                "OBJECT_STORAGE",
+                false,
+                "fallback_disabled",
+                "OBJECT_READABLE",
+                true,
+                "文件已从对象存储读取；未暴露底层对象定位信息或原始路径。"
             );
         } catch (Exception exception) {
-            throw new BusinessException("ASSET_FILE_NOT_READABLE",
-                "对象存储文件不存在或不可读取", HttpStatus.PRECONDITION_FAILED);
+            throw new BusinessException("ASSET_OBJECT_NOT_READABLE",
+                "对象存储副本不存在或不可读取；平台不会静默回退 NAS，请先修复对象副本。", HttpStatus.PRECONDITION_FAILED);
+        }
+    }
+
+    private ReadDecision ensureObjectReadable(StorageReference reference) {
+        ObjectStorageProvider provider = providerFor(reference.provider());
+        try {
+            provider.client().statObject(StatObjectArgs.builder()
+                .bucket(reference.bucket())
+                .object(reference.objectKey())
+                .build());
+            return new ReadDecision(
+                "OBJECT_STORED",
+                "OBJECT_STORAGE",
+                false,
+                "fallback_disabled",
+                "OBJECT_READABLE",
+                true,
+                "文件已准备从对象存储读取；不会返回底层对象定位信息或原始路径。"
+            );
+        } catch (Exception exception) {
+            throw new BusinessException("ASSET_OBJECT_NOT_READABLE",
+                "对象存储副本不存在或不可读取；平台不会静默回退 NAS，请先修复对象副本。", HttpStatus.PRECONDITION_FAILED);
+        }
+    }
+
+    private ReadDecision legacyNasDecision() {
+        return new ReadDecision(
+            "NAS_ONLY",
+            "LEGACY_NAS",
+            false,
+            "not_objectified",
+            "NAS_READABLE",
+            false,
+            "文件尚未对象化，本次按历史 NAS 受控读取；不会暴露原始 NAS 路径。"
+        );
+    }
+
+    private void assertMigrationReadable(MigrationStatus migrationStatus) {
+        if (migrationStatus == null) {
+            return;
+        }
+        String status = safeMigrationStatus(migrationStatus.migrationStatus(), "PENDING");
+        if ("FAILED".equals(status) || "PARTIAL_FAILED".equals(status)) {
+            throw new BusinessException("ASSET_OBJECT_MIGRATION_FAILED",
+                "对象化迁移失败，不能伪装为对象存储读取；请先处理迁移失败记录。", HttpStatus.PRECONDITION_FAILED);
+        }
+        if (List.of("PENDING", "RUNNING", "QUEUED").contains(status)) {
+            throw new BusinessException("ASSET_OBJECT_MIGRATION_PENDING",
+                "对象化迁移尚未完成，请等待任务完成后再访问。", HttpStatus.PRECONDITION_FAILED);
         }
     }
 
@@ -106,7 +181,7 @@ public class StorageService {
         StorageReference sourceReference = sourceReferenceForMigration(file);
         Path sourcePath = resolveNasPath(sourceReference);
         Long sizeBytes = readableSize(sourcePath);
-        String checksum = sha256File(sourcePath);
+        String checksum = hasText(file.checksum()) ? file.checksum() : sha256File(sourcePath);
         String contentType = detectNasContentType(sourcePath, file);
         String objectKey = stableObjectKey(file, checksum);
         try {
@@ -212,20 +287,54 @@ public class StorageService {
         return providerReadiness("MINIO", storageProperties.getMinio());
     }
 
+    public String defaultBucketFor(String providerCode) {
+        return defaultBucket(normalizeProvider(providerCode, null, null));
+    }
+
+    public ObjectProbeResult probeObject(String providerCode, String bucket, String objectKey, Long expectedSizeBytes) {
+        ObjectStorageProvider provider = providerFor(normalizeProvider(providerCode, null, null));
+        try {
+            StatObjectResponse stat = provider.client().statObject(StatObjectArgs.builder()
+                .bucket(bucket)
+                .object(objectKey)
+                .build());
+            if (expectedSizeBytes != null && expectedSizeBytes >= 0 && stat.size() != expectedSizeBytes) {
+                return new ObjectProbeResult(false, true, false, stat.size(), stat.etag(), "SIZE_MISMATCH");
+            }
+            return new ObjectProbeResult(true, true, false, stat.size(), stat.etag(), null);
+        } catch (Exception exception) {
+            return new ObjectProbeResult(false, false, true, null, null, "OBJECT_NOT_READABLE");
+        }
+    }
+
     public FileStorageStatusResponse fileStorageStatus(FileAssetResponse file) {
         StoredObjectStatus objectStatus = activeObjectStatus(file.fileId());
-        if (objectStatus != null) {
+        String objectStorageState = objectStatus == null ? null : safeStorageState(objectStatus.storageState(), "OBJECT_STORED");
+        if (objectStatus != null && "OBJECT_STORED".equals(objectStorageState)) {
+            StorageReference activeReference = activeObjectReference(file.fileId());
+            boolean objectReadable = activeReference != null && isObjectReadable(activeReference, objectStatus.sizeBytes());
+            String storageState = objectReadable ? "OBJECT_STORED" : "OBJECT_UNREADABLE";
+            String storageHealth = objectReadable ? "OBJECT_READABLE" : "OBJECT_UNREADABLE";
+            String userMessage = objectReadable
+                ? "文件已有对象存储版本，默认从对象存储读取；平台不暴露底层对象定位信息。"
+                : "对象存储副本不可读，平台不会静默回退 NAS；请先修复对象副本。";
             return new FileStorageStatusResponse(
                 file.fileId(),
                 file.assetUuid(),
                 file.projectId(),
-                safeStorageState(objectStatus.storageState(), "OBJECT_STORED"),
+                storageState,
                 normalizeProvider(objectStatus.provider(), file.storageProvider(), file.storagePath()),
                 true,
                 hasText(objectStatus.checksum()) || hasText(file.checksum()),
                 objectStatus.lastVerifiedAt(),
                 safeMigrationStatus(objectStatus.migrationStatus(), "COMPLETED"),
-                "文件已有对象存储版本；平台只返回状态，不暴露底层对象定位信息。"
+                "OBJECT_STORAGE",
+                false,
+                "fallback_disabled",
+                storageHealth,
+                objectReadable,
+                userMessage,
+                userMessage
             );
         }
         MigrationStatus migrationStatus = latestMigrationStatus(file.fileId());
@@ -240,6 +349,12 @@ public class StorageService {
                 hasText(file.checksum()),
                 migrationStatus.lastVerifiedAt(),
                 "FAILED",
+                "NONE",
+                false,
+                "migration_failed",
+                "MIGRATION_FAILED",
+                false,
+                "对象存储迁移失败，读取前需要处理失败任务；不会返回底层路径。",
                 "对象存储迁移失败，请查看受控任务记录；不会返回底层路径。"
             );
         }
@@ -254,24 +369,54 @@ public class StorageService {
                 hasText(file.checksum()),
                 migrationStatus.lastVerifiedAt(),
                 safeMigrationStatus(migrationStatus.migrationStatus(), "PENDING"),
+                "NONE",
+                false,
+                "migration_pending",
+                "MIGRATION_PENDING",
+                false,
+                "对象化迁移尚未完成，当前不伪装为对象存储读取。",
                 "对象存储迁移尚未完成；当前仍按受控存储访问策略处理。"
             );
         }
         String activeProvider = normalizeProvider(file.storageProvider(), null, file.storagePath());
         boolean objectStored = isObjectProvider(activeProvider);
+        boolean objectReadable = false;
+        if (objectStored) {
+            try {
+                objectReadable = isObjectReadable(sourceReferenceForMigration(file), file.sizeBytes());
+            } catch (BusinessException ignored) {
+                objectReadable = false;
+            }
+        }
+        String storageState = objectStored
+            ? (objectReadable ? "OBJECT_STORED" : "OBJECT_UNREADABLE")
+            : "NAS_ONLY";
+        String readSource = objectStored ? "OBJECT_STORAGE" : "LEGACY_NAS";
+        String storageHealth = objectStored
+            ? (objectReadable ? "OBJECT_READABLE" : "OBJECT_UNREADABLE")
+            : "NAS_READABLE";
+        String userMessage = objectStored
+            ? (objectReadable
+                ? "文件当前指向对象存储；平台不返回底层对象定位信息。"
+                : "对象存储副本不可读，平台不会静默回退 NAS。")
+            : "文件当前仍为 NAS 源文件，访问时会标记为历史 NAS 读取。";
         return new FileStorageStatusResponse(
             file.fileId(),
             file.assetUuid(),
             file.projectId(),
-            objectStored ? "OBJECT_STORED" : "NAS_ONLY",
+            storageState,
             activeProvider,
             objectStored,
             hasText(file.checksum()),
             file.lastSeenAt(),
             objectStored ? "COMPLETED" : "NOT_STARTED",
-            objectStored
-                ? "文件当前指向对象存储；平台不返回底层对象定位信息。"
-                : "文件当前仍为 NAS 源文件；对象存储镜像尚未建立。"
+            readSource,
+            false,
+            objectStored ? "fallback_disabled" : "not_objectified",
+            storageHealth,
+            objectReadable,
+            userMessage,
+            userMessage
         );
     }
 
@@ -493,9 +638,9 @@ public class StorageService {
             .credentials(config.getAccessKey(), config.getSecretKey())
             .httpClient(new OkHttpClient.Builder()
                 .connectTimeout(Duration.ofSeconds(3))
-                .readTimeout(Duration.ofSeconds(5))
-                .writeTimeout(Duration.ofSeconds(30))
-                .callTimeout(Duration.ofSeconds(45))
+                .readTimeout(Duration.ofMinutes(5))
+                .writeTimeout(Duration.ofMinutes(10))
+                .callTimeout(Duration.ofMinutes(15))
                 .build())
             .build();
     }
@@ -611,6 +756,7 @@ public class StorageService {
         List<StoredObjectStatus> rows = jdbcTemplate.query("""
             SELECT so.provider, fov.storage_state, fov.migration_status,
                    COALESCE(fov.checksum, so.checksum) AS checksum,
+                   COALESCE(fov.size_bytes, so.size_bytes) AS size_bytes,
                    COALESCE(fov.last_verified_at, so.last_verified_at) AS last_verified_at
             FROM data_file_object_versions fov
             JOIN data_storage_objects so ON so.id = fov.storage_object_id AND so.deleted = 0
@@ -626,10 +772,23 @@ public class StorageService {
                 rs.getString("storage_state"),
                 rs.getString("migration_status"),
                 rs.getString("checksum"),
+                rs.getObject("size_bytes") == null ? null : rs.getLong("size_bytes"),
                 verifiedAt == null ? null : verifiedAt.toInstant()
             );
         });
         return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    private boolean isObjectReadable(StorageReference reference, Long expectedSizeBytes) {
+        if (reference == null || "NAS".equals(reference.provider())) {
+            return false;
+        }
+        try {
+            ObjectProbeResult probe = probeObject(reference.provider(), reference.bucket(), reference.objectKey(), expectedSizeBytes);
+            return probe.verified();
+        } catch (BusinessException exception) {
+            return false;
+        }
     }
 
     private MigrationStatus latestMigrationStatus(Long fileId) {
@@ -680,7 +839,7 @@ public class StorageService {
         String normalized = text(value);
         if (normalized == null) return fallback;
         return switch (normalized.toUpperCase(Locale.ROOT)) {
-            case "NAS_ONLY", "MIGRATION_PENDING", "OBJECT_STORED", "MIGRATION_FAILED" -> normalized.toUpperCase(Locale.ROOT);
+            case "NAS_ONLY", "MIGRATION_PENDING", "OBJECT_STORED", "MIGRATION_FAILED", "OBJECT_UNREADABLE" -> normalized.toUpperCase(Locale.ROOT);
             case "MIGRATION_PARTIAL" -> "MIGRATION_PENDING";
             default -> fallback;
         };
@@ -760,7 +919,40 @@ public class StorageService {
         return value != null && !value.isBlank();
     }
 
-    public record StoredResource(Resource resource, String contentType, Long contentLength, String provider) {
+    public boolean objectFirstReadEnabled() {
+        StorageProperties.ReadPolicy policy = storageProperties.getReadPolicy();
+        return policy == null || policy.isObjectFirstEnabled();
+    }
+
+    public boolean nasFallbackEnabled() {
+        StorageProperties.ReadPolicy policy = storageProperties.getReadPolicy();
+        return policy != null && policy.isNasFallbackEnabled();
+    }
+
+    public record ReadDecision(
+        String storageStatus,
+        String readSource,
+        Boolean fallbackUsed,
+        String fallbackReason,
+        String storageHealth,
+        Boolean objectReadable,
+        String userMessage
+    ) {
+    }
+
+    public record StoredResource(
+        Resource resource,
+        String contentType,
+        Long contentLength,
+        String provider,
+        String storageStatus,
+        String readSource,
+        Boolean fallbackUsed,
+        String fallbackReason,
+        String storageHealth,
+        Boolean objectReadable,
+        String userMessage
+    ) {
     }
 
     public record ObjectMirrorResult(
@@ -775,6 +967,16 @@ public class StorageService {
         String sourceUriDigest,
         String sourcePathDigest,
         Instant verifiedAt
+    ) {
+    }
+
+    public record ObjectProbeResult(
+        boolean verified,
+        boolean readable,
+        boolean missing,
+        Long actualSizeBytes,
+        String etag,
+        String failureReason
     ) {
     }
 
@@ -805,6 +1007,7 @@ public class StorageService {
         String storageState,
         String migrationStatus,
         String checksum,
+        Long sizeBytes,
         Instant lastVerifiedAt
     ) {
     }

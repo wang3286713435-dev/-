@@ -309,6 +309,14 @@
               <span v-else class="file-browser__muted">-</span>
             </template>
           </el-table-column>
+          <el-table-column label="资料用途" width="130">
+            <template #default="{ row }">
+              <el-tag v-if="row.kind === 'FILE' && isRegisteredFile(row.file)" effect="plain" size="small">
+                {{ ownershipTypeLabel(row.file.ownershipType) }}
+              </el-tag>
+              <span v-else class="file-browser__muted">-</span>
+            </template>
+          </el-table-column>
           <el-table-column label="状态" width="160">
             <template #default="{ row }">
               <div v-if="row.kind === 'FILE'" class="file-browser__status-cell">
@@ -1884,7 +1892,7 @@ async function openControlledFileAccess(row: CatalogFile, action: 'PREVIEW' | 'D
   try {
     const ticket = await createFileAccessTicket(row.fileId, action);
     if (openAccessTicket(ticket, popup)) {
-      ElMessage.success(action === 'PREVIEW' ? '预览入口已打开' : '下载入口已打开');
+      ElMessage.success(fileAccessTicketMessage(ticket, action));
       return;
     }
     popup = null;
@@ -1897,6 +1905,15 @@ async function openControlledFileAccess(row: CatalogFile, action: 'PREVIEW' | 'D
   } finally {
     fileAccessOpening.value = false;
   }
+}
+
+function fileAccessTicketMessage(ticket: { readSource?: string; fallbackUsed?: boolean; userMessage?: string }, action: 'PREVIEW' | 'DOWNLOAD') {
+  const actionLabel = action === 'PREVIEW' ? '预览入口已打开' : '下载入口已打开';
+  const source = (ticket.readSource || '').toUpperCase();
+  if (ticket.fallbackUsed) return `${actionLabel}，本次使用 NAS fallback，已记录审计。`;
+  if (source === 'OBJECT_STORAGE') return `${actionLabel}，本次从对象存储读取。`;
+  if (source === 'LEGACY_NAS') return `${actionLabel}，本次按历史 NAS 受控读取。`;
+  return ticket.userMessage || actionLabel;
 }
 
 function tryOpenBlankPopup() {
@@ -2032,6 +2049,8 @@ function storageStateLabel(file: CatalogFile) {
       return '对象化中';
     case 'MIGRATION_FAILED':
       return '对象化失败';
+    case 'OBJECT_UNREADABLE':
+      return '对象异常';
     case 'UNREGISTERED':
       return '未登记';
     default:
@@ -2048,6 +2067,8 @@ function accessSourceLabel(file: CatalogFile) {
       return '等待平台处理';
     case 'MIGRATION_FAILED':
       return '仍按历史 NAS';
+    case 'OBJECT_UNREADABLE':
+      return '对象副本不可读';
     default:
       return '尚未对象化';
   }
@@ -2060,6 +2081,7 @@ function storageStateTagType(file: CatalogFile) {
     case 'MIGRATION_PENDING':
       return 'warning';
     case 'MIGRATION_FAILED':
+    case 'OBJECT_UNREADABLE':
       return 'danger';
     case 'UNREGISTERED':
       return 'info';
@@ -2976,6 +2998,19 @@ function ownershipStatusTag(value?: string | null) {
   if (value === 'SUGGESTED') return 'warning';
   if (value === 'REJECTED') return 'danger';
   return 'info';
+}
+
+function ownershipTypeLabel(value?: string | null) {
+  const map: Record<string, string> = {
+    DELIVERY: '正式交付',
+    PROCESS: '过程资料',
+    MODEL: '模型资料',
+    DRAWING_EXCHANGE: '图纸收发',
+    REFERENCE: '参考资料',
+    ARCHIVE: '归档资料',
+    PENDING_REVIEW: '待判定'
+  };
+  return map[value || ''] || '待判定';
 }
 
 function openOwnershipNode(file: CatalogFile) {

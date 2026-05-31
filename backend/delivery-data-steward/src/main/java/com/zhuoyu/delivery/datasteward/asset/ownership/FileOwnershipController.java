@@ -9,7 +9,11 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipFileRow;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipRecommendationRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipRecommendationResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipRecommendationRow;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipTreeDraftApplyRequest;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipTreeDraftApplyResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipTreeDraftResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipTreeResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ModelDrawingGapResponse;
 import com.zhuoyu.delivery.shared.api.ApiResponse;
 import com.zhuoyu.delivery.shared.api.PageResponse;
 import jakarta.validation.Valid;
@@ -45,6 +49,24 @@ public class FileOwnershipController {
     @GetMapping("/tree")
     public ApiResponse<FileOwnershipTreeResponse> tree(@PathVariable Long projectId) {
         return ApiResponse.success(fileOwnershipApplicationService.tree(currentUserId(), projectId));
+    }
+
+    @GetMapping("/tree-draft")
+    public ApiResponse<FileOwnershipTreeDraftResponse> treeDraft(@PathVariable Long projectId) {
+        return ApiResponse.success(fileOwnershipApplicationService.treeDraft(currentUserId(), projectId));
+    }
+
+    @PostMapping("/tree-draft:apply")
+    public ApiResponse<FileOwnershipTreeDraftApplyResponse> applyTreeDraft(
+        @PathVariable Long projectId,
+        @RequestBody(required = false) FileOwnershipTreeDraftApplyRequest request
+    ) {
+        return ApiResponse.success(fileOwnershipApplicationService.applyTreeDraft(currentUserId(), projectId, request));
+    }
+
+    @GetMapping("/model-drawing-gap")
+    public ApiResponse<ModelDrawingGapResponse> modelDrawingGap(@PathVariable Long projectId) {
+        return ApiResponse.success(fileOwnershipApplicationService.modelDrawingGap(currentUserId(), projectId));
     }
 
     @GetMapping("/files")

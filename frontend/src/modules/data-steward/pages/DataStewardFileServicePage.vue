@@ -16,7 +16,7 @@
       show-icon
       class="service-notice"
       title="当前只做对象存储镜像"
-      description="NAS 原文件保留；任务中心不会生成语义证据，不代表 Hermes 已理解文件正文，也不会展示底层路径、bucket 或 object key。"
+      description="NAS 原文件保留；任务中心不会生成语义证据，不代表 Hermes 已理解文件正文，也不会展示底层路径或底层对象定位信息。"
     />
 
     <section class="m3g-readiness">
@@ -31,7 +31,7 @@
       <article class="readiness-card">
         <span>读写探测</span>
         <strong>{{ readiness?.readable && readiness?.writable ? '可读写' : '未完全通过' }}</strong>
-        <p>只做专用 smoke 探测，不返回 endpoint、bucket、object key 或密钥。</p>
+        <p>只做专用 smoke 探测，不返回服务地址、底层对象定位信息或密钥。</p>
       </article>
       <article class="readiness-card readiness-card--wide">
         <span>全项目对象化覆盖率</span>
@@ -42,6 +42,48 @@
           仍在 NAS {{ formatCount(inventory?.nasOnlyFiles) }} 个。
         </p>
       </article>
+    </section>
+
+    <section class="service-section read-policy-section">
+      <div class="service-section__header">
+        <div>
+          <h2>读取策略与 fallback 状态</h2>
+          <span>预览和下载先走对象存储；历史文件仍可按受控 NAS 读取，异常不会被伪装成成功。</span>
+        </div>
+        <el-tag :type="readPolicy?.nasFallbackEnabled ? 'warning' : 'success'" effect="plain">
+          {{ readPolicy?.nasFallbackEnabled ? 'NAS fallback 已开启' : 'NAS fallback 已关闭' }}
+        </el-tag>
+      </div>
+      <div class="m3g-policy-grid">
+        <article>
+          <span>对象优先读取</span>
+          <strong>{{ readPolicy?.objectFirstEnabled ? '已启用' : '未启用' }}</strong>
+          <p>已对象化文件默认从 NAS 侧 MinIO 读取。</p>
+        </article>
+        <article>
+          <span>历史 NAS 文件</span>
+          <strong>{{ formatCount(readPolicy?.nasOnlyCount) }}</strong>
+          <p>访问时标记为 LEGACY_NAS，不显示真实路径。</p>
+        </article>
+        <article>
+          <span>对象异常</span>
+          <strong>{{ formatCount(readPolicy?.objectUnreadableCount) }}</strong>
+          <p>对象副本不可读时返回错误，不静默回退。</p>
+        </article>
+        <article>
+          <span>近 7 天 fallback</span>
+          <strong>{{ formatCount(readPolicy?.recentNasFallbackCount) }}</strong>
+          <p>如开启 fallback，访问票据和审计必须显式标记。</p>
+        </article>
+      </div>
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        class="service-notice"
+        :title="readPolicy?.policyMessage || '正在读取对象优先策略'"
+        :description="`已对象化 ${formatCount(readPolicy?.objectStoredCount)}，迁移中 ${formatCount(readPolicy?.migrationPendingCount)}，迁移失败 ${formatCount(readPolicy?.migrationFailedCount)}，近 7 天对象读取异常 ${formatCount(readPolicy?.recentObjectReadFailureCount)}。`"
+      />
     </section>
 
     <el-alert
@@ -62,7 +104,7 @@
               <h2>项目对象化盘点</h2>
               <span>只基于 MySQL 台账和对象版本统计，不递归扫描真实 NAS。</span>
             </div>
-            <el-tag type="info" effect="plain">M3G-1 dry-run</el-tag>
+            <el-tag type="info" effect="plain">M3G-6 覆盖率盘点</el-tag>
           </div>
 
           <el-table :data="inventoryRows" row-key="projectId" empty-text="暂无项目对象化盘点">
@@ -110,8 +152,833 @@
         <section class="service-section">
           <div class="service-section__header">
             <div>
-              <h2>多项目对象化规划</h2>
-              <span>默认只做 dry-run，不创建任务、不复制文件；用于比较真实项目风险、容量和分批策略。</span>
+              <h2>105 全量对象化试运行</h2>
+              <span>全量计划覆盖当前项目所有登记文件；执行时只取下一批，完成后继续刷新并推进。</span>
+            </div>
+            <div class="dry-run-actions__buttons">
+              <el-button :loading="fullPlanLoading" @click="loadFullPlan">刷新全量计划</el-button>
+              <el-button
+                type="danger"
+                plain
+                :loading="fullPlanExecutionLoading"
+                :disabled="!canExecuteFullPlanNextBatch"
+                @click="executeFullPlanNextBatch"
+              >
+                执行下一批
+              </el-button>
+            </div>
+          </div>
+
+          <template v-if="fullPlan">
+            <div class="dry-run-summary">
+              <div>
+                <span>项目文件</span>
+                <strong>{{ formatCount(fullPlan.totalFileCount) }}</strong>
+              </div>
+              <div>
+                <span>已对象化</span>
+                <strong>{{ formatCount(fullPlan.objectStoredCount) }}</strong>
+              </div>
+              <div>
+                <span>未对象化</span>
+                <strong>{{ formatCount(fullPlan.nasOnlyCount) }}</strong>
+              </div>
+              <div>
+                <span>覆盖率</span>
+                <strong>{{ formatPercent(fullPlan.objectificationCoverageRate) }}%</strong>
+              </div>
+              <div>
+                <span>待对象化容量</span>
+                <strong>{{ formatBytes(fullPlan.nasOnlyBytes) }}</strong>
+              </div>
+              <div>
+                <span>checksum</span>
+                <strong>{{ formatPercent(fullPlan.checksumCoverageRate) }}%</strong>
+              </div>
+              <div>
+                <span>下一批</span>
+                <strong>{{ formatCount(fullPlan.nextBatchFileCount) }}</strong>
+              </div>
+              <div>
+                <span>剩余批次</span>
+                <strong>{{ formatCount(fullPlan.estimatedRemainingBatches) }}</strong>
+              </div>
+            </div>
+            <el-alert
+              type="info"
+              :closable="false"
+              show-icon
+              class="service-notice"
+              title="105 全量计划已生成，当前未一次性迁移全项目"
+              :description="fullPlan.riskMessages.join(' ')"
+            />
+            <el-alert
+              v-if="fullPlanExecutionResult"
+              type="success"
+              :closable="false"
+              show-icon
+              class="service-notice"
+              title="下一批对象化执行已返回"
+              :description="`成功 ${formatCount(fullPlanExecutionResult.createdCount)}，跳过 ${formatCount(fullPlanExecutionResult.skippedCount)}，失败 ${formatCount(fullPlanExecutionResult.failedCount)}。`"
+            />
+            <div class="dry-run-actions">
+              <div>
+                <strong>下一批建议</strong>
+                <span>{{ fullPlan.nextBatchSuggestions.join(' ') }}</span>
+              </div>
+              <el-tag type="info" effect="plain">
+                单批 {{ formatCount(fullPlan.batchFileLimit) }} 个 / {{ formatBytes(fullPlan.batchBytesLimit) }}
+              </el-tag>
+            </div>
+            <el-table :data="fullPlan.nextBatchItems" row-key="fileId" empty-text="暂无可执行下一批文件">
+              <el-table-column prop="assetUuid" label="平台资产ID" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="fileName" label="文件名" min-width="240" show-overflow-tooltip />
+              <el-table-column prop="fileKind" label="类型" width="90" />
+              <el-table-column label="大小" width="110" align="right">
+                <template #default="{ row }">{{ formatBytes(row.sizeBytes) }}</template>
+              </el-table-column>
+              <el-table-column prop="checksumStatus" label="checksum" width="150" />
+              <el-table-column prop="reason" label="计划原因" min-width="180" show-overflow-tooltip />
+            </el-table>
+            <el-table
+              v-if="fullPlan.governanceItems.length > 0"
+              :data="fullPlan.governanceItems"
+              row-key="fileId"
+              class="task-detail__rows"
+              empty-text="暂无治理项"
+            >
+              <el-table-column prop="assetUuid" label="治理资产ID" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="fileName" label="文件名" min-width="240" show-overflow-tooltip />
+              <el-table-column prop="storageStatus" label="状态" width="150" />
+              <el-table-column prop="reason" label="治理原因" min-width="220" show-overflow-tooltip />
+            </el-table>
+          </template>
+        </section>
+
+        <section class="service-section">
+          <div class="service-section__header">
+            <div>
+              <h2>105 对象化长跑控制</h2>
+              <span>按硬上限分批推进，可暂停、继续和重试失败项；不启动无边界后台迁移。</span>
+            </div>
+            <div class="dry-run-actions__buttons">
+              <el-button :loading="longRunLoading" @click="loadLongRunStatus">刷新状态</el-button>
+              <el-button
+                type="danger"
+                plain
+                :loading="longRunActionLoading"
+                :disabled="!canStartLongRun"
+                @click="startLongRun"
+              >
+                开始 / 继续
+              </el-button>
+              <el-button
+                plain
+                :loading="longRunActionLoading"
+                :disabled="!canPauseLongRun"
+                @click="pauseLongRun"
+              >
+                暂停
+              </el-button>
+              <el-button
+                type="primary"
+                plain
+                :loading="longRunActionLoading"
+                :disabled="!canResumeLongRun"
+                @click="resumeLongRun"
+              >
+                继续
+              </el-button>
+              <el-button plain :loading="longRunActionLoading" @click="retryLongRunFailures">
+                重试失败项
+              </el-button>
+            </div>
+          </div>
+
+          <div class="multi-plan-form">
+            <label class="long-run-field">
+              <span>每批文件数</span>
+              <el-input-number v-model="longRunForm.batchFileLimit" :min="1" :max="15" controls-position="right" />
+            </label>
+            <label class="long-run-field">
+              <span>每批容量 MB</span>
+              <el-input-number v-model="longRunForm.batchBytesMb" :min="1" :max="512" controls-position="right" />
+            </label>
+            <label class="long-run-field">
+              <span>单文件上限 MB</span>
+              <el-input-number v-model="longRunForm.maxFileSizeMb" :min="1" :max="500" controls-position="right" />
+            </label>
+            <label class="long-run-field">
+              <span>连续批次数</span>
+              <el-input-number v-model="longRunForm.maxContinuousBatches" :min="1" :max="5" controls-position="right" />
+            </label>
+            <el-switch
+              v-model="longRunForm.continueOnFailure"
+              active-text="失败后继续"
+              inactive-text="失败即停"
+            />
+          </div>
+
+          <template v-if="longRunStatus">
+            <div class="dry-run-summary">
+              <div>
+                <span>长跑状态</span>
+                <strong>{{ longRunStateLabel(longRunStatus.runState) }}</strong>
+              </div>
+              <div>
+                <span>已完成批次</span>
+                <strong>{{ formatCount(longRunStatus.processedBatchCount) }}</strong>
+              </div>
+              <div>
+                <span>已对象化</span>
+                <strong>{{ formatCount(longRunStatus.objectStoredCount) }}</strong>
+              </div>
+              <div>
+                <span>剩余可执行</span>
+                <strong>{{ formatCount(longRunStatus.eligibleRemainingCount) }}</strong>
+              </div>
+              <div>
+                <span>治理项</span>
+                <strong>{{ formatCount(longRunStatus.governanceItemCount) }}</strong>
+              </div>
+              <div>
+                <span>覆盖率</span>
+                <strong>{{ formatPercent(longRunStatus.objectificationCoverageRate) }}%</strong>
+              </div>
+              <div>
+                <span>本次成功</span>
+                <strong>{{ formatCount(longRunStatus.createdCount) }}</strong>
+              </div>
+              <div>
+                <span>本次失败</span>
+                <strong>{{ formatCount(longRunStatus.failedCount) }}</strong>
+              </div>
+            </div>
+            <div class="dry-run-actions">
+              <div>
+                <strong>批次边界</strong>
+                <span>
+                  单批 {{ formatCount(longRunStatus.batchFileLimit) }} 个 /
+                  {{ formatBytes(longRunStatus.batchBytesLimit) }}，连续
+                  {{ formatCount(longRunStatus.maxContinuousBatches) }} 批。
+                </span>
+              </div>
+              <el-tag :type="longRunStateTagType(longRunStatus.runState)" effect="plain">
+                {{ longRunStateLabel(longRunStatus.runState) }}
+              </el-tag>
+            </div>
+            <el-alert
+              type="info"
+              :closable="false"
+              show-icon
+              class="service-notice"
+              title="105 长跑控制已就绪"
+              :description="longRunStatus.warnings.join(' ')"
+            />
+            <el-alert
+              v-if="longRunStatus.lastFailureReason"
+              type="warning"
+              :closable="false"
+              show-icon
+              class="service-notice"
+              title="最近失败原因"
+              :description="longRunStatus.lastFailureReason"
+            />
+            <el-table
+              v-if="longRunStatus.governanceReasons.length > 0"
+              :data="longRunStatus.governanceReasons"
+              row-key="reasonCode"
+              class="task-detail__rows"
+              empty-text="暂无治理原因分组"
+            >
+              <el-table-column prop="reasonCode" label="治理原因" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="message" label="说明" min-width="320" show-overflow-tooltip />
+              <el-table-column label="文件数" width="120" align="right">
+                <template #default="{ row }">{{ formatCount(row.fileCount) }}</template>
+              </el-table-column>
+            </el-table>
+            <el-table
+              v-if="longRunStatus.governanceItems.length > 0"
+              :data="longRunStatus.governanceItems"
+              row-key="fileId"
+              class="task-detail__rows"
+              empty-text="暂无治理项"
+            >
+              <el-table-column prop="assetUuid" label="治理资产ID" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="fileName" label="文件名" min-width="240" show-overflow-tooltip />
+              <el-table-column label="大小" width="110" align="right">
+                <template #default="{ row }">{{ formatBytes(row.sizeBytes) }}</template>
+              </el-table-column>
+              <el-table-column prop="storageStatus" label="状态" width="150" />
+              <el-table-column prop="reason" label="治理原因" min-width="220" show-overflow-tooltip />
+            </el-table>
+          </template>
+        </section>
+
+        <section class="service-section">
+          <div class="service-section__header">
+            <div>
+              <h2>M3G-7R 全项目对象化跑批</h2>
+              <span>按全项目队列持续推进真实项目对象化；执行前必须 dry-run 和人工确认，硬上限防止无边界迁移。</span>
+            </div>
+            <div class="dry-run-actions__buttons">
+              <el-button :loading="runOverviewLoading" @click="loadRunOverview">刷新队列</el-button>
+              <el-button
+                type="primary"
+                :loading="runDryRunLoading"
+                :disabled="!readinessReady"
+                @click="runAllProjectDryRun"
+              >
+                生成 dry-run
+              </el-button>
+            </div>
+          </div>
+
+          <div class="m3g-policy-grid">
+            <article>
+              <span>项目上限</span>
+              <strong>{{ formatCount(runOverview?.maxProjectCount) }}</strong>
+            </article>
+            <article>
+              <span>总文件上限</span>
+              <strong>{{ formatCount(runOverview?.maxTotalFiles) }}</strong>
+            </article>
+            <article>
+              <span>总容量上限</span>
+              <strong>{{ formatBytes(runOverview?.maxTotalBytes) }}</strong>
+            </article>
+            <article>
+              <span>连续批次数</span>
+              <strong>{{ formatCount(runOverview?.maxContinuousBatches) }}</strong>
+            </article>
+          </div>
+
+          <div class="dry-run-summary">
+            <div>
+              <span>全局文件</span>
+              <strong>{{ formatCount(runOverview?.totalFiles) }}</strong>
+            </div>
+            <div>
+              <span>已对象化</span>
+              <strong>{{ formatCount(runOverview?.objectStoredFiles) }}</strong>
+            </div>
+            <div>
+              <span>仍在 NAS</span>
+              <strong>{{ formatCount(runOverview?.nasOnlyFiles) }}</strong>
+            </div>
+            <div>
+              <span>失败 / 治理</span>
+              <strong>{{ formatCount(runOverview?.migrationFailedFiles) }} / {{ formatCount(runOverview?.governanceItemCount) }}</strong>
+            </div>
+            <div>
+              <span>对象化覆盖率</span>
+              <strong>{{ formatPercent(runOverview?.objectificationCoverageRate) }}%</strong>
+            </div>
+            <div>
+              <span>checksum 覆盖率</span>
+              <strong>{{ formatPercent(runOverview?.checksumCoverageRate) }}%</strong>
+            </div>
+            <div>
+              <span>可执行项目</span>
+              <strong>{{ formatCount(runOverview?.executableProjectCount) }}</strong>
+            </div>
+            <div>
+              <span>需治理项目</span>
+              <strong>{{ formatCount(runOverview?.governanceProjectCount) }}</strong>
+            </div>
+          </div>
+
+          <div class="multi-plan-form run-plan-form">
+            <label class="long-run-field">
+              <span>最多项目</span>
+              <el-input-number v-model="runForm.maxProjects" :min="1" :max="5" controls-position="right" />
+            </label>
+            <label class="long-run-field">
+              <span>总文件</span>
+              <el-input-number v-model="runForm.maxTotalFiles" :min="1" :max="200" controls-position="right" />
+            </label>
+            <label class="long-run-field">
+              <span>每项目文件</span>
+              <el-input-number v-model="runForm.maxFilesPerProject" :min="1" :max="50" controls-position="right" />
+            </label>
+            <label class="long-run-field">
+              <span>总容量 MB</span>
+              <el-input-number v-model="runForm.maxTotalMb" :min="1" :max="2048" controls-position="right" />
+            </label>
+            <label class="long-run-field">
+              <span>单项目 MB</span>
+              <el-input-number v-model="runForm.maxBytesPerProjectMb" :min="1" :max="2048" controls-position="right" />
+            </label>
+            <label class="long-run-field">
+              <span>单文件 MB</span>
+              <el-input-number v-model="runForm.maxFileSizeMb" :min="1" :max="500" controls-position="right" />
+            </label>
+            <label class="long-run-field">
+              <span>连续批次</span>
+              <el-input-number v-model="runForm.maxContinuousBatches" :min="1" :max="3" controls-position="right" />
+            </label>
+            <el-switch v-model="runForm.continueOnFailure" active-text="失败后继续" inactive-text="失败即停" />
+          </div>
+
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            class="service-notice"
+            title="全项目跑批安全边界"
+            :description="(runOverview?.warnings ?? ['只复制对象存储副本；不移动、不删除、不重命名、不覆盖 NAS 原文件；不读取文件正文。']).join(' ')"
+          />
+
+          <div class="dry-run-actions">
+            <div>
+              <strong>执行控制</strong>
+              <span>{{ runExecutionHint }}</span>
+            </div>
+            <div class="dry-run-actions__buttons">
+              <el-button
+                type="danger"
+                plain
+                :loading="runExecutionLoading"
+                :disabled="!canExecuteRun"
+                @click="startAllProjectRun"
+              >
+                开始
+              </el-button>
+              <el-button
+                type="primary"
+                plain
+                :loading="runExecutionLoading"
+                :disabled="!readinessReady"
+                @click="continueAllProjectRun"
+              >
+                继续
+              </el-button>
+              <el-button plain :loading="runPauseLoading" @click="pauseAllProjectRun">暂停</el-button>
+              <el-button plain :loading="runRetryLoading" :disabled="!readinessReady" @click="retryFailedAllProjectRun">
+                重试失败项
+              </el-button>
+            </div>
+          </div>
+
+          <template v-if="runPlanResult">
+            <div class="dry-run-summary">
+              <div>
+                <span>规划项目</span>
+                <strong>{{ formatCount(runPlanResult.plannedProjectCount) }}</strong>
+              </div>
+              <div>
+                <span>选中文件</span>
+                <strong>{{ formatCount(runPlanResult.selectedFileCount) }}</strong>
+              </div>
+              <div>
+                <span>预估容量</span>
+                <strong>{{ formatBytes(runPlanResult.selectedTotalBytes) }}</strong>
+              </div>
+              <div>
+                <span>预估批次</span>
+                <strong>{{ formatCount(runPlanResult.estimatedBatches) }}</strong>
+              </div>
+            </div>
+            <el-alert
+              type="info"
+              :closable="false"
+              show-icon
+              class="service-notice"
+              title="全项目 dry-run 已生成，未创建迁移任务"
+              :description="runPlanResult.riskMessages.join(' ')"
+            />
+            <el-table :data="runPlanResult.projects" row-key="projectId" empty-text="暂无 dry-run 项目">
+              <el-table-column label="项目" min-width="220" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.projectCode }} {{ row.projectName }}</template>
+              </el-table-column>
+              <el-table-column label="选中文件" width="100" align="right">
+                <template #default="{ row }">{{ formatCount(row.selectedFileCount) }}</template>
+              </el-table-column>
+              <el-table-column label="容量" width="120" align="right">
+                <template #default="{ row }">{{ formatBytes(row.selectedTotalBytes) }}</template>
+              </el-table-column>
+              <el-table-column label="跳过" width="80" align="right">
+                <template #default="{ row }">{{ formatCount(row.objectStoredSkipCount) }}</template>
+              </el-table-column>
+              <el-table-column label="风险" min-width="260" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.riskMessages.join(' ') }}</template>
+              </el-table-column>
+            </el-table>
+          </template>
+
+          <template v-if="runExecutionResult">
+            <div class="dry-run-summary">
+              <div>
+                <span>执行项目</span>
+                <strong>{{ formatCount(runExecutionResult.selectedProjectCount) }}</strong>
+              </div>
+              <div>
+                <span>执行文件</span>
+                <strong>{{ formatCount(runExecutionResult.selectedFileCount) }}</strong>
+              </div>
+              <div>
+                <span>成功</span>
+                <strong>{{ formatCount(runExecutionResult.createdCount) }}</strong>
+              </div>
+              <div>
+                <span>跳过 / 失败</span>
+                <strong>{{ formatCount(runExecutionResult.skippedCount) }} / {{ formatCount(runExecutionResult.failedCount) }}</strong>
+              </div>
+            </div>
+            <el-alert
+              type="success"
+              :closable="false"
+              show-icon
+              class="service-notice"
+              title="全项目跑批执行已返回"
+              :description="runExecutionResult.warnings.join(' ')"
+            />
+            <el-table :data="runExecutionResult.projectResults" row-key="taskId" empty-text="暂无执行结果">
+              <el-table-column label="项目" min-width="220" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.projectCode }} {{ row.projectName }}</template>
+              </el-table-column>
+              <el-table-column prop="taskId" label="任务ID" width="90" />
+              <el-table-column label="文件" width="90" align="right">
+                <template #default="{ row }">{{ formatCount(row.selectedFileCount) }}</template>
+              </el-table-column>
+              <el-table-column label="成功" width="80" align="right">
+                <template #default="{ row }">{{ formatCount(row.successCount) }}</template>
+              </el-table-column>
+              <el-table-column label="跳过" width="80" align="right">
+                <template #default="{ row }">{{ formatCount(row.skippedCount) }}</template>
+              </el-table-column>
+              <el-table-column label="失败" width="80" align="right">
+                <template #default="{ row }">{{ formatCount(row.failureCount) }}</template>
+              </el-table-column>
+              <el-table-column label="状态" width="120">
+                <template #default="{ row }">
+                  <el-tag :type="statusType(row.taskStatus)" size="small">{{ taskStatusLabel(row.taskStatus) }}</el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+          </template>
+
+          <el-table
+            v-loading="runOverviewLoading"
+            :data="runExecutableRows"
+            row-key="projectId"
+            empty-text="暂无可执行项目"
+          >
+            <el-table-column label="可执行项目" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.projectCode }} {{ row.projectName }}</template>
+            </el-table-column>
+            <el-table-column label="仍在 NAS" width="110" align="right">
+              <template #default="{ row }">{{ formatCount(row.nasOnlyFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="失败" width="90" align="right">
+              <template #default="{ row }">{{ formatCount(row.migrationFailedFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="覆盖率" width="140">
+              <template #default="{ row }">{{ formatPercent(row.objectificationCoverageRate) }}%</template>
+            </el-table-column>
+            <el-table-column label="说明" min-width="260" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.riskMessages.join(' ') }}</template>
+            </el-table-column>
+          </el-table>
+
+          <el-table
+            v-if="runGovernanceRows.length > 0"
+            :data="runGovernanceRows.slice(0, 8)"
+            row-key="projectId"
+            class="task-detail__rows"
+            empty-text="暂无需治理项目"
+          >
+            <el-table-column label="需治理项目" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.projectCode }} {{ row.projectName }}</template>
+            </el-table-column>
+            <el-table-column label="原因" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">{{ runQueueReasonLabel(row.queueReason) }}</template>
+            </el-table-column>
+            <el-table-column label="治理项" width="100" align="right">
+              <template #default="{ row }">{{ formatCount(row.governanceItemCount) }}</template>
+            </el-table-column>
+            <el-table-column label="说明" min-width="260" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.riskMessages.join(' ') }}</template>
+            </el-table-column>
+          </el-table>
+
+          <el-table
+            v-if="runCompletedRows.length > 0"
+            :data="runCompletedRows.slice(0, 6)"
+            row-key="projectId"
+            class="task-detail__rows"
+            empty-text="暂无已完成项目"
+          >
+            <el-table-column label="已完成项目" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.projectCode }} {{ row.projectName }}</template>
+            </el-table-column>
+            <el-table-column label="总文件" width="100" align="right">
+              <template #default="{ row }">{{ formatCount(row.totalFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="覆盖率" width="140">
+              <template #default="{ row }">{{ formatPercent(row.objectificationCoverageRate) }}%</template>
+            </el-table-column>
+            <el-table-column label="状态" width="110">
+              <template #default="{ row }">
+                <el-tag :type="runQueueStatusTagType(row.queueStatus)" size="small">
+                  {{ runQueueStatusLabel(row.queueStatus) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </section>
+
+        <section class="service-section">
+          <div class="service-section__header">
+            <div>
+              <h2>M3G-7 多真实项目对象化 Wave 1</h2>
+              <span>自动筛选非 105 的低风险真实项目；先生成 dry-run，再人工确认执行小批对象化。</span>
+            </div>
+            <div class="dry-run-actions__buttons">
+              <el-button :loading="waveCandidatesLoading || waveReportLoading" @click="refreshWave1">刷新候选</el-button>
+              <el-button
+                type="primary"
+                :loading="waveDryRunLoading"
+                :disabled="!readinessReady || waveDefaultProjectIds.length === 0"
+                @click="runWaveDryRun"
+              >
+                生成 Wave 1 dry-run
+              </el-button>
+            </div>
+          </div>
+
+          <div class="m3g-policy-grid">
+            <article>
+              <span>候选项目上限</span>
+              <strong>{{ formatCount(waveCandidates?.maxProjectCount) }}</strong>
+            </article>
+            <article>
+              <span>总文件上限</span>
+              <strong>{{ formatCount(waveCandidates?.maxTotalFiles) }}</strong>
+            </article>
+            <article>
+              <span>总容量上限</span>
+              <strong>{{ formatBytes(waveCandidates?.maxTotalBytes) }}</strong>
+            </article>
+            <article>
+              <span>单文件上限</span>
+              <strong>{{ formatBytes(waveCandidates?.maxFileSizeBytes) }}</strong>
+            </article>
+          </div>
+
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            class="service-notice"
+            title="Wave 1 受控边界"
+            :description="(waveCandidates?.warnings ?? ['本轮只复制对象存储副本，不移动、不删除、不重命名、不覆盖 NAS 原文件。']).join(' ')"
+          />
+
+          <el-table
+            v-loading="waveCandidatesLoading"
+            :data="waveCandidates?.candidates ?? []"
+            row-key="projectId"
+            empty-text="暂无符合 Wave 1 条件的候选项目"
+          >
+            <el-table-column label="候选项目" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.projectCode }} {{ row.projectName }}</template>
+            </el-table-column>
+            <el-table-column label="总文件" width="100" align="right">
+              <template #default="{ row }">{{ formatCount(row.totalFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="仍在 NAS" width="110" align="right">
+              <template #default="{ row }">{{ formatCount(row.nasOnlyFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="建议小批" width="110" align="right">
+              <template #default="{ row }">{{ formatCount(row.recommendedFileCount) }}</template>
+            </el-table-column>
+            <el-table-column label="建议容量" width="120" align="right">
+              <template #default="{ row }">{{ formatBytes(row.recommendedBytes) }}</template>
+            </el-table-column>
+            <el-table-column label="覆盖率" width="150">
+              <template #default="{ row }">
+                <el-progress :percentage="Number(row.objectificationCoverageRate || 0)" :stroke-width="8" />
+              </template>
+            </el-table-column>
+            <el-table-column label="治理提示" min-width="260" show-overflow-tooltip>
+              <template #default="{ row }">{{ (row.riskMessages ?? []).join(' ') }}</template>
+            </el-table-column>
+          </el-table>
+
+          <el-table
+            v-if="(waveCandidates?.excludedProjects ?? []).length > 0"
+            :data="(waveCandidates?.excludedProjects ?? []).slice(0, 8)"
+            row-key="projectId"
+            class="task-detail__rows"
+            empty-text="暂无排除项目"
+          >
+            <el-table-column label="排除项目" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.projectCode }} {{ row.projectName }}</template>
+            </el-table-column>
+            <el-table-column label="原因" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">{{ waveExclusionReasonLabel(row.exclusionReason) }}</template>
+            </el-table-column>
+            <el-table-column label="仍在 NAS" width="110" align="right">
+              <template #default="{ row }">{{ formatCount(row.nasOnlyFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="治理提示" min-width="260" show-overflow-tooltip>
+              <template #default="{ row }">{{ (row.riskMessages ?? []).join(' ') }}</template>
+            </el-table-column>
+          </el-table>
+
+          <template v-if="wavePlanResult">
+            <div class="dry-run-summary">
+              <div>
+                <span>规划项目</span>
+                <strong>{{ formatCount(wavePlanResult.plannedProjectCount) }}</strong>
+              </div>
+              <div>
+                <span>选中文件</span>
+                <strong>{{ formatCount(wavePlanResult.selectedFileCount) }}</strong>
+              </div>
+              <div>
+                <span>预估容量</span>
+                <strong>{{ formatBytes(wavePlanResult.selectedTotalBytes) }}</strong>
+              </div>
+              <div>
+                <span>预估批次</span>
+                <strong>{{ formatCount(wavePlanResult.estimatedBatches) }}</strong>
+              </div>
+            </div>
+            <el-alert
+              type="info"
+              :closable="false"
+              show-icon
+              class="service-notice"
+              title="Wave 1 dry-run 已生成，未创建迁移任务"
+              :description="wavePlanResult.riskMessages.join(' ')"
+            />
+            <div class="dry-run-actions">
+              <div>
+                <strong>确认执行 Wave 1 小批对象化</strong>
+                <span>{{ waveExecutionHint }}</span>
+              </div>
+              <div class="dry-run-actions__buttons">
+                <el-button
+                  type="danger"
+                  plain
+                  :loading="waveExecutionLoading"
+                  :disabled="!canExecuteWave"
+                  @click="executeWavePlan"
+                >
+                  确认执行 Wave 1
+                </el-button>
+              </div>
+            </div>
+            <template v-if="waveExecutionResult">
+              <div class="dry-run-summary">
+                <div>
+                  <span>执行项目</span>
+                  <strong>{{ formatCount(waveExecutionResult.selectedProjectCount) }}</strong>
+                </div>
+                <div>
+                  <span>执行文件</span>
+                  <strong>{{ formatCount(waveExecutionResult.selectedFileCount) }}</strong>
+                </div>
+                <div>
+                  <span>成功</span>
+                  <strong>{{ formatCount(waveExecutionResult.createdCount) }}</strong>
+                </div>
+                <div>
+                  <span>跳过 / 失败</span>
+                  <strong>{{ formatCount(waveExecutionResult.skippedCount) }} / {{ formatCount(waveExecutionResult.failedCount) }}</strong>
+                </div>
+              </div>
+              <el-alert
+                type="success"
+                :closable="false"
+                show-icon
+                class="service-notice"
+                title="Wave 1 执行已返回"
+                :description="waveExecutionResult.warnings.join(' ')"
+              />
+              <el-table :data="waveExecutionResult.projectResults" row-key="taskId" empty-text="暂无 Wave 1 执行结果">
+                <el-table-column label="项目" min-width="220" show-overflow-tooltip>
+                  <template #default="{ row }">{{ row.projectCode }} {{ row.projectName }}</template>
+                </el-table-column>
+                <el-table-column prop="taskId" label="任务ID" width="90" />
+                <el-table-column label="文件" width="90" align="right">
+                  <template #default="{ row }">{{ formatCount(row.selectedFileCount) }}</template>
+                </el-table-column>
+                <el-table-column label="成功" width="80" align="right">
+                  <template #default="{ row }">{{ formatCount(row.successCount) }}</template>
+                </el-table-column>
+                <el-table-column label="跳过" width="80" align="right">
+                  <template #default="{ row }">{{ formatCount(row.skippedCount) }}</template>
+                </el-table-column>
+                <el-table-column label="失败" width="80" align="right">
+                  <template #default="{ row }">{{ formatCount(row.failureCount) }}</template>
+                </el-table-column>
+                <el-table-column label="状态" width="120">
+                  <template #default="{ row }">
+                    <el-tag :type="statusType(row.taskStatus)" size="small">{{ taskStatusLabel(row.taskStatus) }}</el-tag>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </template>
+            <el-table :data="wavePlanResult.projects" row-key="projectId" empty-text="暂无 Wave 1 dry-run 项目">
+              <el-table-column label="项目" min-width="220" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.projectCode }} {{ row.projectName }}</template>
+              </el-table-column>
+              <el-table-column label="选中文件" width="100" align="right">
+                <template #default="{ row }">{{ formatCount(row.selectedFileCount) }}</template>
+              </el-table-column>
+              <el-table-column label="容量" width="120" align="right">
+                <template #default="{ row }">{{ formatBytes(row.selectedTotalBytes) }}</template>
+              </el-table-column>
+              <el-table-column label="跳过" width="80" align="right">
+                <template #default="{ row }">{{ formatCount(row.objectStoredSkipCount) }}</template>
+              </el-table-column>
+              <el-table-column label="风险" min-width="260" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.riskMessages.join(' ') }}</template>
+              </el-table-column>
+            </el-table>
+          </template>
+
+          <el-table
+            v-if="waveReports"
+            v-loading="waveReportLoading"
+            :data="waveReports.projects.slice(0, 8)"
+            row-key="projectId"
+            class="task-detail__rows"
+            empty-text="暂无 Wave 1 覆盖率报告"
+          >
+            <el-table-column label="覆盖率报告" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.projectCode }} {{ row.projectName }}</template>
+            </el-table-column>
+            <el-table-column label="总文件" width="100" align="right">
+              <template #default="{ row }">{{ formatCount(row.totalFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="已对象化" width="110" align="right">
+              <template #default="{ row }">{{ formatCount(row.objectStoredFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="仍在 NAS" width="110" align="right">
+              <template #default="{ row }">{{ formatCount(row.nasOnlyFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="覆盖率" width="140">
+              <template #default="{ row }">{{ formatPercent(row.objectificationCoverageRate) }}%</template>
+            </el-table-column>
+            <el-table-column label="状态" width="110">
+              <template #default="{ row }">
+                <el-tag :type="row.executable ? 'success' : 'info'" size="small">
+                  {{ row.executable ? '候选' : '排除' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </section>
+
+        <section class="service-section">
+          <div class="service-section__header">
+            <div>
+              <h2>多项目小批规划</h2>
+              <span>历史过渡能力；M3G-6 主验收以 105 全量计划和连续分批执行为准。</span>
             </div>
             <el-button type="primary" :loading="multiPlanLoading" @click="runMultiProjectDryRun">生成多项目计划</el-button>
           </div>
@@ -133,8 +1000,8 @@
               <el-option label="迁移失败" value="MIGRATION_FAILED" />
             </el-select>
             <el-input v-model="multiPlanForm.extensionsText" clearable placeholder="扩展名：pdf,dwg,docx" />
-            <el-input-number v-model="multiPlanForm.limit" :min="1" :max="5000" controls-position="right" />
-            <el-input-number v-model="multiPlanForm.maxFilesPerProject" :min="1" :max="500" controls-position="right" />
+            <el-input-number v-model="multiPlanForm.limit" :min="1" :max="15" controls-position="right" />
+            <el-input-number v-model="multiPlanForm.maxFilesPerProject" :min="1" :max="15" controls-position="right" />
           </div>
 
           <div class="m3g-policy-grid">
@@ -226,6 +1093,15 @@
                 class="service-notice"
                 title="小批对象化执行已返回"
                 :description="multiExecutionResult.warnings.join(' ')"
+              />
+              <el-alert
+                v-if="multiExecutionResult.failureReasons.length > 0"
+                type="warning"
+                :closable="false"
+                show-icon
+                class="service-notice"
+                title="存在失败原因，可在任务详情中重试或复核"
+                :description="multiExecutionResult.failureReasons.join(' ')"
               />
               <el-table :data="multiExecutionResult.projectResults" row-key="taskId" empty-text="暂无执行结果">
                 <el-table-column label="项目" min-width="220" show-overflow-tooltip>
@@ -549,7 +1425,7 @@
           <el-descriptions :column="1" border>
             <el-descriptions-item label="真实路径">普通项目用户不可见，使用平台逻辑路径和受控访问入口。</el-descriptions-item>
             <el-descriptions-item label="预览与下载">通过短时票据访问，预览权限和下载权限分离。</el-descriptions-item>
-            <el-descriptions-item label="对象存储">只展示对象化状态，不展示 bucket、object key 或底层 URI。</el-descriptions-item>
+            <el-descriptions-item label="对象存储">只展示对象化状态，不展示底层对象定位信息或底层 URI。</el-descriptions-item>
             <el-descriptions-item label="Hermes">只读辅助，不能执行写库、NAS 操作或自动审批。</el-descriptions-item>
           </el-descriptions>
         </section>
@@ -605,26 +1481,51 @@ import { Plus, Refresh, Search } from '@element-plus/icons-vue';
 
 import {
   createStorageMigrationTask,
+  continueStorageObjectificationRun,
+  dryRunStorageObjectificationRun,
+  dryRunStorageObjectificationWave,
   dryRunMultiProjectStorageObjectificationPlan,
   dryRunStorageObjectificationPlan,
+  executeStorageObjectificationWave,
   executeMultiProjectStorageObjectificationPlan,
   fetchCatalogFiles,
+  fetchStorageObjectificationRunOverview,
+  fetchStorageObjectificationRunProjects,
+  fetchStorageObjectificationWaveCandidates,
+  fetchStorageObjectificationWaveReports,
+  fetchStorageObjectificationLongRun,
+  fetchStorageObjectificationFullPlan,
   fetchStorageObjectificationInventory,
   fetchStorageMigrationSummary,
   fetchStorageMigrationTask,
   fetchStorageMigrationTasks,
   fetchStorageProviderReadiness,
+  fetchStorageReadPolicy,
   retryStorageMigrationTask,
+  pauseStorageObjectificationRun,
+  pauseStorageObjectificationLongRun,
+  retryFailedStorageObjectificationRun,
+  resumeStorageObjectificationLongRun,
+  retryStorageObjectificationLongRunFailures,
+  startStorageObjectificationLongRun,
+  startStorageObjectificationRun,
   type CatalogFile,
   type MultiProjectStorageObjectificationDryRun,
   type MultiProjectStorageObjectificationExecuteResult,
   type ProjectStorageObjectificationInventory,
   type StorageObjectificationDryRun,
+  type StorageObjectificationFullPlan,
   type StorageObjectificationInventory,
+  type StorageObjectificationLongRun,
+  type StorageObjectificationRunOverview,
+  type StorageObjectificationRunProjects,
+  type StorageObjectificationWaveCandidates,
+  type StorageObjectificationWaveReports,
   type StorageMigrationSummary,
   type StorageMigrationTaskDetail,
   type StorageMigrationTaskListItem,
-  type StorageProviderReadiness
+  type StorageProviderReadiness,
+  type StorageReadPolicy
 } from '@/modules/data-steward/api/dataSteward';
 import { useAuthStore } from '@/stores/auth';
 
@@ -638,15 +1539,40 @@ const taskLoading = ref(false);
 const candidateLoading = ref(false);
 const creating = ref(false);
 const dryRunLoading = ref(false);
+const fullPlanLoading = ref(false);
+const fullPlanExecutionLoading = ref(false);
+const longRunLoading = ref(false);
+const longRunActionLoading = ref(false);
 const multiPlanLoading = ref(false);
 const multiExecutionLoading = ref(false);
+const waveCandidatesLoading = ref(false);
+const waveDryRunLoading = ref(false);
+const waveExecutionLoading = ref(false);
+const waveReportLoading = ref(false);
+const runOverviewLoading = ref(false);
+const runDryRunLoading = ref(false);
+const runExecutionLoading = ref(false);
+const runPauseLoading = ref(false);
+const runRetryLoading = ref(false);
 const detailVisible = ref(false);
 const summary = ref<StorageMigrationSummary | null>(null);
 const readiness = ref<StorageProviderReadiness | null>(null);
+const readPolicy = ref<StorageReadPolicy | null>(null);
 const inventory = ref<StorageObjectificationInventory | null>(null);
 const dryRunResult = ref<StorageObjectificationDryRun | null>(null);
+const fullPlan = ref<StorageObjectificationFullPlan | null>(null);
+const fullPlanExecutionResult = ref<MultiProjectStorageObjectificationExecuteResult | null>(null);
+const longRunStatus = ref<StorageObjectificationLongRun | null>(null);
 const multiPlanResult = ref<MultiProjectStorageObjectificationDryRun | null>(null);
 const multiExecutionResult = ref<MultiProjectStorageObjectificationExecuteResult | null>(null);
+const waveCandidates = ref<StorageObjectificationWaveCandidates | null>(null);
+const wavePlanResult = ref<MultiProjectStorageObjectificationDryRun | null>(null);
+const waveExecutionResult = ref<MultiProjectStorageObjectificationExecuteResult | null>(null);
+const waveReports = ref<StorageObjectificationWaveReports | null>(null);
+const runOverview = ref<StorageObjectificationRunOverview | null>(null);
+const runProjects = ref<StorageObjectificationRunProjects | null>(null);
+const runPlanResult = ref<MultiProjectStorageObjectificationDryRun | null>(null);
+const runExecutionResult = ref<MultiProjectStorageObjectificationExecuteResult | null>(null);
 const tasks = ref<StorageMigrationTaskListItem[]>([]);
 const selectedTask = ref<StorageMigrationTaskDetail | null>(null);
 const candidateRows = ref<CatalogFile[]>([]);
@@ -676,12 +1602,38 @@ const multiPlanForm = reactive({
   storageState: 'NAS_ONLY',
   checksumState: 'ANY',
   extensionsText: 'pdf,dwg,docx,xlsx,pptx',
-  limit: 50,
-  maxFilesPerProject: 10,
-  maxTotalMb: 80,
-  maxBytesPerProjectMb: 30,
+  limit: 15,
+  maxFilesPerProject: 5,
+  maxTotalMb: 100,
+  maxBytesPerProjectMb: 50,
   concurrencyLimit: 1
 });
+
+const longRunForm = reactive({
+  batchFileLimit: 5,
+  batchBytesMb: 50,
+  maxFileSizeMb: 10,
+  maxContinuousBatches: 2,
+  continueOnFailure: true
+});
+
+const runForm = reactive({
+  maxProjects: 5,
+  maxTotalFiles: 100,
+  maxFilesPerProject: 20,
+  maxTotalMb: 1024,
+  maxBytesPerProjectMb: 512,
+  maxFileSizeMb: 200,
+  maxContinuousBatches: 1,
+  continueOnFailure: true
+});
+
+const controlledExpansionMaxFilesTotal = 15;
+const controlledExpansionMaxFilesPerProject = 15;
+const controlledExpansionMaxTotalBytes = 100 * 1024 * 1024;
+const controlledExpansionMaxBytesPerProject = 50 * 1024 * 1024;
+const fullPlanBatchFileLimit = 15;
+const fullPlanBatchBytesLimit = 50 * 1024 * 1024;
 
 const targetProviderOptions = [
   { label: 'MinIO', value: 'MINIO' },
@@ -754,13 +1706,41 @@ const inventoryRows = computed<ProjectStorageObjectificationInventory[]>(() => {
   return rows.slice(0, 8);
 });
 
-const multiPlanMaxTotalBytes = computed(() => Math.max(1, Number(multiPlanForm.maxTotalMb || 80)) * 1024 * 1024);
-const multiPlanMaxBytesPerProject = computed(() => Math.max(1, Number(multiPlanForm.maxBytesPerProjectMb || 30)) * 1024 * 1024);
+const fullPlanNextBatchFileIds = computed(() => (fullPlan.value?.nextBatchItems ?? [])
+  .map((item) => Number(item.fileId))
+  .filter((fileId) => Number.isFinite(fileId) && fileId > 0));
+
+const canExecuteFullPlanNextBatch = computed(() => (
+  readinessReady.value
+  && Boolean(projectId.value)
+  && fullPlanNextBatchFileIds.value.length > 0
+));
+
+const longRunBatchBytes = computed(() => Math.max(1, Number(longRunForm.batchBytesMb || 50)) * 1024 * 1024);
+const longRunMaxFileSizeBytes = computed(() => Math.max(1, Number(longRunForm.maxFileSizeMb || 10)) * 1024 * 1024);
+const canStartLongRun = computed(() => (
+  readinessReady.value
+  && Boolean(projectId.value)
+  && projectId.value === 503
+  && longRunStatus.value?.runState !== 'PAUSED'
+));
+
+const canResumeLongRun = computed(() => (
+  readinessReady.value
+  && Boolean(projectId.value)
+  && projectId.value === 503
+  && longRunStatus.value?.runState === 'PAUSED'
+));
+
+const canPauseLongRun = computed(() => Boolean(projectId.value) && projectId.value === 503 && longRunStatus.value?.runState !== 'PAUSED');
+
+const multiPlanMaxTotalBytes = computed(() => Math.max(1, Number(multiPlanForm.maxTotalMb || 100)) * 1024 * 1024);
+const multiPlanMaxBytesPerProject = computed(() => Math.max(1, Number(multiPlanForm.maxBytesPerProjectMb || 50)) * 1024 * 1024);
 
 const multiPlanExecutableItems = computed(() => {
-  const maxFilesPerProject = Math.min(Number(multiPlanForm.maxFilesPerProject || 3), 3);
-  const maxTotalBytes = Math.min(multiPlanMaxTotalBytes.value, 100 * 1024 * 1024);
-  const maxProjectBytes = Math.min(multiPlanMaxBytesPerProject.value, 50 * 1024 * 1024);
+  const maxFilesPerProject = Math.min(Number(multiPlanForm.maxFilesPerProject || controlledExpansionMaxFilesPerProject), controlledExpansionMaxFilesPerProject);
+  const maxTotalBytes = Math.min(multiPlanMaxTotalBytes.value, controlledExpansionMaxTotalBytes);
+  const maxProjectBytes = Math.min(multiPlanMaxBytesPerProject.value, controlledExpansionMaxBytesPerProject);
   const maxFileBytes = Number(summary.value?.maxFileSizeBytes ?? 10 * 1024 * 1024);
   const selected: Array<{ projectId: number; fileId: number; sizeBytes: number }> = [];
   let selectedTotalBytes = 0;
@@ -777,7 +1757,7 @@ const multiPlanExecutableItems = computed(() => {
       if (sizeBytes > maxFileBytes) continue;
       if (projectFileCount + 1 > maxFilesPerProject) continue;
       if (projectTotalBytes + sizeBytes > maxProjectBytes) continue;
-      if (selected.length + 1 > 9) continue;
+      if (selected.length + 1 > controlledExpansionMaxFilesTotal) continue;
       if (selectedTotalBytes + sizeBytes > maxTotalBytes) continue;
       selected.push({ projectId: project.projectId, fileId, sizeBytes });
       projectFileCount += 1;
@@ -800,9 +1780,99 @@ const multiExecutionHint = computed(() => {
     return '先生成多项目 dry-run 计划，再确认执行受控小批。';
   }
   if (multiPlanExecutableFileIds.value.length === 0) {
-    return '当前计划没有符合 M3G-4 小批条件的 NAS_ONLY 文件。';
+    return '当前计划没有符合多项目小批条件的 NAS_ONLY 文件。';
   }
   return `将执行 ${multiPlanExecutableProjectIds.value.length} 个真实项目、${multiPlanExecutableFileIds.value.length} 个文件；只复制副本，不改动 NAS 原文件。`;
+});
+
+const waveDefaultProjectIds = computed(() => (waveCandidates.value?.candidates ?? [])
+  .map((row) => Number(row.projectId))
+  .filter((projectId) => Number.isFinite(projectId) && projectId > 0)
+  .slice(0, Number(waveCandidates.value?.maxProjectCount ?? 3)));
+
+const waveExecutableItems = computed(() => {
+  const maxFilesPerProject = Math.min(
+    Number(waveCandidates.value?.maxFilesPerProject ?? controlledExpansionMaxFilesPerProject),
+    controlledExpansionMaxFilesPerProject
+  );
+  const maxTotalBytes = Math.min(Number(waveCandidates.value?.maxTotalBytes ?? controlledExpansionMaxTotalBytes), controlledExpansionMaxTotalBytes);
+  const maxProjectBytes = Math.min(
+    Number(waveCandidates.value?.maxBytesPerProject ?? controlledExpansionMaxBytesPerProject),
+    controlledExpansionMaxBytesPerProject
+  );
+  const maxFileBytes = Number(waveCandidates.value?.maxFileSizeBytes ?? summary.value?.maxFileSizeBytes ?? 10 * 1024 * 1024);
+  const selected: Array<{ projectId: number; fileId: number; sizeBytes: number }> = [];
+  let selectedTotalBytes = 0;
+  for (const project of wavePlanResult.value?.projects ?? []) {
+    let projectFileCount = 0;
+    let projectTotalBytes = 0;
+    for (const item of project.sampleItems ?? []) {
+      const fileId = Number(item.fileId);
+      const sizeBytes = Number(item.sizeBytes ?? 0);
+      if (!Number.isFinite(fileId) || fileId <= 0) continue;
+      if (item.storageStatus !== 'NAS_ONLY') continue;
+      if (!['ELIGIBLE_DRY_RUN', 'MISSING_CHECKSUM'].includes(item.reason)) continue;
+      if (sizeBytes > maxFileBytes) continue;
+      if (projectFileCount + 1 > maxFilesPerProject) continue;
+      if (projectTotalBytes + sizeBytes > maxProjectBytes) continue;
+      if (selected.length + 1 > controlledExpansionMaxFilesTotal) continue;
+      if (selectedTotalBytes + sizeBytes > maxTotalBytes) continue;
+      selected.push({ projectId: project.projectId, fileId, sizeBytes });
+      projectFileCount += 1;
+      projectTotalBytes += sizeBytes;
+      selectedTotalBytes += sizeBytes;
+    }
+  }
+  return selected;
+});
+
+const waveExecutableFileIds = computed(() => waveExecutableItems.value.map((item) => item.fileId));
+const waveExecutableProjectIds = computed(() => Array.from(new Set(waveExecutableItems.value.map((item) => item.projectId))));
+const canExecuteWave = computed(() => readinessReady.value && waveExecutableFileIds.value.length > 0);
+
+const waveExecutionHint = computed(() => {
+  if (!readinessReady.value) {
+    return '需要 NAS 侧 MinIO READY 后才能执行；Wave 1 候选和 dry-run 本身仍是只读检查。';
+  }
+  if (!wavePlanResult.value) {
+    return '先生成 Wave 1 dry-run，再确认执行低风险小批。';
+  }
+  if (waveExecutableFileIds.value.length === 0) {
+    return '当前 Wave 1 dry-run 没有符合执行条件的 NAS_ONLY 文件。';
+  }
+  return `将执行 ${waveExecutableProjectIds.value.length} 个非 105 真实项目、${waveExecutableFileIds.value.length} 个文件；只复制副本，不改动 NAS 原文件。`;
+});
+
+const runMaxTotalBytes = computed(() => Math.max(1, Number(runForm.maxTotalMb || 1024)) * 1024 * 1024);
+const runMaxBytesPerProject = computed(() => Math.max(1, Number(runForm.maxBytesPerProjectMb || 512)) * 1024 * 1024);
+const runMaxFileSizeBytes = computed(() => Math.max(1, Number(runForm.maxFileSizeMb || 200)) * 1024 * 1024);
+
+const runExecutableRows = computed(() => (runProjects.value?.projects ?? runOverview.value?.projects ?? [])
+  .filter((row) => row.queueStatus === 'EXECUTABLE')
+  .slice(0, 8));
+
+const runGovernanceRows = computed(() => (runProjects.value?.projects ?? runOverview.value?.projects ?? [])
+  .filter((row) => row.queueStatus === 'GOVERNANCE_REQUIRED'));
+
+const runCompletedRows = computed(() => (runProjects.value?.projects ?? runOverview.value?.projects ?? [])
+  .filter((row) => row.queueStatus === 'COMPLETED'));
+
+const canExecuteRun = computed(() => readinessReady.value && Boolean(runPlanResult.value?.selectedFileCount));
+
+const runExecutionHint = computed(() => {
+  if (!readinessReady.value) {
+    return '需要 NAS 侧 MinIO READY 后才能执行；队列和 dry-run 仍可作为只读盘点。';
+  }
+  if (runOverview.value?.paused) {
+    return '当前跑批已暂停，可点击继续恢复受控跑批。';
+  }
+  if (!runPlanResult.value) {
+    return '先生成全项目 dry-run，再人工确认开始；所有执行都会套用项目、文件数、容量和连续批次硬上限。';
+  }
+  if (!runPlanResult.value.selectedFileCount) {
+    return '当前 dry-run 没有可执行文件，需查看治理项目或失败项。';
+  }
+  return `本轮计划 ${runPlanResult.value.plannedProjectCount} 个项目、${runPlanResult.value.selectedFileCount} 个文件，只复制对象存储副本，不改动 NAS 原文件。`;
 });
 
 const enabledServices: Array<{ title: string; description: string; target: RouteRecordName }> = [
@@ -843,7 +1913,19 @@ async function refresh() {
   if (!projectId.value) return;
   loading.value = true;
   try {
-    await Promise.all([loadReadiness(), loadInventory(), loadSummary(), loadTasks(), loadCandidates()]);
+    await Promise.all([
+      loadReadiness(),
+      loadReadPolicy(),
+      loadInventory(),
+      loadSummary(),
+      loadFullPlan(),
+      loadLongRunStatus(),
+      loadRunOverview(),
+      loadWaveCandidates(),
+      loadWaveReports(),
+      loadTasks(),
+      loadCandidates()
+    ]);
   } finally {
     loading.value = false;
   }
@@ -853,6 +1935,10 @@ async function loadReadiness() {
   readiness.value = await fetchStorageProviderReadiness();
 }
 
+async function loadReadPolicy() {
+  readPolicy.value = await fetchStorageReadPolicy();
+}
+
 async function loadInventory() {
   inventory.value = await fetchStorageObjectificationInventory();
 }
@@ -860,6 +1946,69 @@ async function loadInventory() {
 async function loadSummary() {
   if (!projectId.value) return;
   summary.value = await fetchStorageMigrationSummary(projectId.value);
+}
+
+async function loadFullPlan() {
+  if (!projectId.value) return;
+  fullPlanLoading.value = true;
+  try {
+    fullPlan.value = await fetchStorageObjectificationFullPlan(projectId.value, {
+      checksumState: 'ANY',
+      batchFileLimit: fullPlanBatchFileLimit,
+      batchBytesLimit: fullPlanBatchBytesLimit
+    });
+  } finally {
+    fullPlanLoading.value = false;
+  }
+}
+
+async function loadLongRunStatus() {
+  if (!projectId.value || projectId.value !== 503) {
+    longRunStatus.value = null;
+    return;
+  }
+  longRunLoading.value = true;
+  try {
+    longRunStatus.value = await fetchStorageObjectificationLongRun(projectId.value);
+  } finally {
+    longRunLoading.value = false;
+  }
+}
+
+async function loadWaveCandidates() {
+  waveCandidatesLoading.value = true;
+  try {
+    waveCandidates.value = await fetchStorageObjectificationWaveCandidates();
+  } finally {
+    waveCandidatesLoading.value = false;
+  }
+}
+
+async function loadWaveReports() {
+  waveReportLoading.value = true;
+  try {
+    waveReports.value = await fetchStorageObjectificationWaveReports();
+  } finally {
+    waveReportLoading.value = false;
+  }
+}
+
+async function refreshWave1() {
+  await Promise.all([loadWaveCandidates(), loadWaveReports()]);
+}
+
+async function loadRunOverview() {
+  runOverviewLoading.value = true;
+  try {
+    const [overview, projects] = await Promise.all([
+      fetchStorageObjectificationRunOverview(),
+      fetchStorageObjectificationRunProjects()
+    ]);
+    runOverview.value = overview;
+    runProjects.value = projects;
+  } finally {
+    runOverviewLoading.value = false;
+  }
 }
 
 async function loadTasks() {
@@ -985,9 +2134,224 @@ async function runMultiProjectDryRun() {
   }
 }
 
+async function runWaveDryRun() {
+  if (waveDefaultProjectIds.value.length === 0) {
+    ElMessage.warning('当前没有符合 Wave 1 条件的候选项目。');
+    return;
+  }
+  waveDryRunLoading.value = true;
+  try {
+    waveExecutionResult.value = null;
+    wavePlanResult.value = await dryRunStorageObjectificationWave({
+      projectIds: waveDefaultProjectIds.value,
+      maxProjects: waveCandidates.value?.maxProjectCount,
+      limit: waveCandidates.value?.maxTotalFiles,
+      maxTotalBytes: waveCandidates.value?.maxTotalBytes,
+      maxFilesPerProject: waveCandidates.value?.maxFilesPerProject,
+      maxBytesPerProject: waveCandidates.value?.maxBytesPerProject
+    });
+    ElMessage.success('Wave 1 dry-run 已生成，未创建迁移任务');
+  } finally {
+    waveDryRunLoading.value = false;
+  }
+}
+
+async function executeWavePlan() {
+  if (!canExecuteWave.value) return;
+  const confirmed = await confirmAction('将执行 M3G-7 Wave 1 多真实项目小批对象化：只复制文件副本到 NAS 侧 MinIO，不移动、不删除、不改名 NAS 原文件；不会读取正文或写语义索引。');
+  if (!confirmed) return;
+  waveExecutionLoading.value = true;
+  try {
+    waveExecutionResult.value = await executeStorageObjectificationWave({
+      projectIds: waveExecutableProjectIds.value,
+      fileIds: waveExecutableFileIds.value,
+      confirmed: true,
+      targetProvider: 'MINIO',
+      limit: waveExecutableFileIds.value.length,
+      maxTotalBytes: waveCandidates.value?.maxTotalBytes,
+      maxFilesPerProject: waveCandidates.value?.maxFilesPerProject,
+      maxBytesPerProject: waveCandidates.value?.maxBytesPerProject
+    });
+    ElMessage.success('Wave 1 小批对象化执行已返回');
+    await Promise.all([loadInventory(), loadSummary(), loadWaveCandidates(), loadWaveReports(), loadTasks()]);
+  } finally {
+    waveExecutionLoading.value = false;
+  }
+}
+
+function runPayload(confirmed = false) {
+  return {
+    maxProjects: Math.min(Math.max(1, Number(runForm.maxProjects || 5)), 5),
+    maxTotalFiles: Math.min(Math.max(1, Number(runForm.maxTotalFiles || 100)), 200),
+    maxFilesPerProject: Math.min(Math.max(1, Number(runForm.maxFilesPerProject || 20)), 50),
+    maxTotalBytes: Math.min(runMaxTotalBytes.value, 2 * 1024 * 1024 * 1024),
+    maxBytesPerProject: Math.min(runMaxBytesPerProject.value, 2 * 1024 * 1024 * 1024),
+    maxFileSizeBytes: Math.min(runMaxFileSizeBytes.value, 500 * 1024 * 1024),
+    maxContinuousBatches: Math.min(Math.max(1, Number(runForm.maxContinuousBatches || 1)), 3),
+    continueOnFailure: runForm.continueOnFailure,
+    confirmed,
+    targetProvider: 'MINIO'
+  };
+}
+
+async function runAllProjectDryRun() {
+  runDryRunLoading.value = true;
+  try {
+    runExecutionResult.value = null;
+    runPlanResult.value = await dryRunStorageObjectificationRun(runPayload(false));
+    ElMessage.success('全项目对象化 dry-run 已生成，未创建迁移任务');
+  } finally {
+    runDryRunLoading.value = false;
+  }
+}
+
+async function startAllProjectRun() {
+  if (!canExecuteRun.value) return;
+  const confirmed = await confirmAction('将按 M3G-7R 全项目对象化队列执行受控跑批：只复制副本到 NAS 侧 MinIO，不移动、不删除、不改名 NAS 原文件；不会读取正文或写语义索引。');
+  if (!confirmed) return;
+  runExecutionLoading.value = true;
+  try {
+    runExecutionResult.value = await startStorageObjectificationRun(runPayload(true));
+    ElMessage.success('全项目对象化跑批已返回');
+    await Promise.all([loadInventory(), loadRunOverview(), loadWaveReports()]);
+  } finally {
+    runExecutionLoading.value = false;
+  }
+}
+
+async function continueAllProjectRun() {
+  const confirmed = await confirmAction('将继续 M3G-7R 受控跑批；仍按硬上限推进，不改动 NAS 原文件。');
+  if (!confirmed) return;
+  runExecutionLoading.value = true;
+  try {
+    runExecutionResult.value = await continueStorageObjectificationRun(runPayload(true));
+    ElMessage.success('全项目对象化跑批已继续');
+    await Promise.all([loadInventory(), loadRunOverview(), loadWaveReports()]);
+  } finally {
+    runExecutionLoading.value = false;
+  }
+}
+
+async function pauseAllProjectRun() {
+  runPauseLoading.value = true;
+  try {
+    runOverview.value = await pauseStorageObjectificationRun();
+    await loadRunOverview();
+    ElMessage.success('全项目对象化跑批已暂停');
+  } finally {
+    runPauseLoading.value = false;
+  }
+}
+
+async function retryFailedAllProjectRun() {
+  const confirmed = await confirmAction('将只重试迁移失败项；已对象化文件会按幂等策略跳过，治理项仍需人工处理。');
+  if (!confirmed) return;
+  runRetryLoading.value = true;
+  try {
+    runExecutionResult.value = await retryFailedStorageObjectificationRun(runPayload(true));
+    ElMessage.success('失败项重试已返回');
+    await Promise.all([loadInventory(), loadRunOverview(), loadWaveReports()]);
+  } finally {
+    runRetryLoading.value = false;
+  }
+}
+
+async function executeFullPlanNextBatch() {
+  if (!projectId.value || !canExecuteFullPlanNextBatch.value || !fullPlan.value) return;
+  const fileIds = fullPlanNextBatchFileIds.value;
+  const confirmed = await confirmAction('将执行 105 全量对象化计划的下一批：只复制文件副本到 NAS 侧 MinIO，不移动、不删除、不改名 NAS 原文件；不会读取正文或写语义索引。');
+  if (!confirmed) return;
+  fullPlanExecutionLoading.value = true;
+  try {
+    fullPlanExecutionResult.value = await executeMultiProjectStorageObjectificationPlan({
+      projectIds: [projectId.value],
+      fileIds,
+      realProjectsOnly: true,
+      storageState: 'NAS_ONLY',
+      checksumState: 'ANY',
+      limit: fileIds.length,
+      maxTotalBytes: fullPlan.value.batchBytesLimit,
+      maxFilesPerProject: fileIds.length,
+      maxBytesPerProject: fullPlan.value.batchBytesLimit,
+      concurrencyLimit: 1,
+      confirmed: true,
+      targetProvider: 'MINIO'
+    });
+    ElMessage.success('105 下一批对象化执行已返回');
+    await Promise.all([loadInventory(), loadSummary(), loadFullPlan(), loadLongRunStatus(), loadTasks()]);
+  } finally {
+    fullPlanExecutionLoading.value = false;
+  }
+}
+
+function longRunPayload(confirmed = true) {
+  return {
+    batchFileLimit: Math.min(Math.max(1, Number(longRunForm.batchFileLimit || 5)), 15),
+    batchBytesLimit: Math.min(longRunBatchBytes.value, 512 * 1024 * 1024),
+    maxFileSizeBytes: Math.min(longRunMaxFileSizeBytes.value, 500 * 1024 * 1024),
+    maxContinuousBatches: Math.min(Math.max(1, Number(longRunForm.maxContinuousBatches || 1)), 5),
+    continueOnFailure: longRunForm.continueOnFailure,
+    confirmed,
+    targetProvider: 'MINIO'
+  };
+}
+
+async function startLongRun() {
+  if (!projectId.value || !canStartLongRun.value) return;
+  const confirmed = await confirmAction('将按 105 长跑控制执行多个受控小批：只复制副本到 NAS 侧 MinIO，不移动、不删除、不改名 NAS 原文件；不会读取正文或写语义索引。');
+  if (!confirmed) return;
+  longRunActionLoading.value = true;
+  try {
+    longRunStatus.value = await startStorageObjectificationLongRun(projectId.value, longRunPayload(true));
+    ElMessage.success('105 长跑已按受控批次推进');
+    await Promise.all([loadInventory(), loadSummary(), loadFullPlan(), loadTasks()]);
+  } finally {
+    longRunActionLoading.value = false;
+  }
+}
+
+async function pauseLongRun() {
+  if (!projectId.value || !canPauseLongRun.value) return;
+  longRunActionLoading.value = true;
+  try {
+    longRunStatus.value = await pauseStorageObjectificationLongRun(projectId.value);
+    ElMessage.success('105 长跑已暂停');
+  } finally {
+    longRunActionLoading.value = false;
+  }
+}
+
+async function resumeLongRun() {
+  if (!projectId.value || !canResumeLongRun.value) return;
+  const confirmed = await confirmAction('将从 105 剩余可执行项继续推进受控批次；NAS 原文件仍保持不变。');
+  if (!confirmed) return;
+  longRunActionLoading.value = true;
+  try {
+    longRunStatus.value = await resumeStorageObjectificationLongRun(projectId.value, longRunPayload(true));
+    ElMessage.success('105 长跑已继续推进');
+    await Promise.all([loadInventory(), loadSummary(), loadFullPlan(), loadTasks()]);
+  } finally {
+    longRunActionLoading.value = false;
+  }
+}
+
+async function retryLongRunFailures() {
+  if (!projectId.value || projectId.value !== 503) return;
+  const confirmed = await confirmAction('将只按受控小批重试失败项；已对象化文件会幂等跳过，治理项仍需人工处理。');
+  if (!confirmed) return;
+  longRunActionLoading.value = true;
+  try {
+    longRunStatus.value = await retryStorageObjectificationLongRunFailures(projectId.value, longRunPayload(true));
+    ElMessage.success('失败项重试已返回');
+    await Promise.all([loadInventory(), loadSummary(), loadFullPlan(), loadTasks()]);
+  } finally {
+    longRunActionLoading.value = false;
+  }
+}
+
 async function executeMultiProjectPlan() {
   if (!canExecuteMultiPlan.value) return;
-  const confirmed = await confirmAction('将对 dry-run 选中的真实项目执行 M3G-4 小批对象化：只复制文件副本到 NAS 侧 MinIO，不移动、不删除、不改名 NAS 原文件；不会读取正文或写语义索引。');
+  const confirmed = await confirmAction('将对 dry-run 选中的真实项目执行多项目小批对象化：只复制文件副本到 NAS 侧 MinIO，不移动、不删除、不改名 NAS 原文件；不会读取正文或写语义索引。');
   if (!confirmed) return;
   multiExecutionLoading.value = true;
   try {
@@ -999,14 +2363,14 @@ async function executeMultiProjectPlan() {
       checksumState: multiPlanForm.checksumState as 'ANY' | 'HAS_CHECKSUM' | 'MISSING_CHECKSUM',
       extensions: parseExtensions(multiPlanForm.extensionsText),
       limit: multiPlanExecutableFileIds.value.length,
-      maxTotalBytes: Math.min(multiPlanMaxTotalBytes.value, 100 * 1024 * 1024),
-      maxFilesPerProject: Math.min(Number(multiPlanForm.maxFilesPerProject || 3), 3),
-      maxBytesPerProject: Math.min(multiPlanMaxBytesPerProject.value, 50 * 1024 * 1024),
+      maxTotalBytes: Math.min(multiPlanMaxTotalBytes.value, controlledExpansionMaxTotalBytes),
+      maxFilesPerProject: Math.min(Number(multiPlanForm.maxFilesPerProject || controlledExpansionMaxFilesPerProject), controlledExpansionMaxFilesPerProject),
+      maxBytesPerProject: Math.min(multiPlanMaxBytesPerProject.value, controlledExpansionMaxBytesPerProject),
       concurrencyLimit: 1,
       confirmed: true,
       targetProvider: 'MINIO'
     });
-    ElMessage.success('M3G-4 小批对象化执行已返回');
+    ElMessage.success('多项目小批对象化执行已返回');
     await Promise.all([loadInventory(), loadSummary(), loadTasks()]);
   } finally {
     multiExecutionLoading.value = false;
@@ -1124,6 +2488,50 @@ function projectCategoryTagType(value: string) {
   return 'info';
 }
 
+function waveExclusionReasonLabel(value: string | null | undefined) {
+  return ({
+    NON_REAL_NAS_PROJECT: '非真实 NAS 项目',
+    EXCLUDED_PROJECT_CODE: '105 已完成或 95/98/99 待治理',
+    TEST_OR_SAMPLE_PROJECT: '测试 / 样例 / 冒烟项目',
+    NO_REGISTERED_FILES: '没有已登记文件',
+    ALREADY_OBJECTIFIED: '已无 NAS_ONLY 文件',
+    SOURCE_REFERENCE_REVIEW_REQUIRED: '存储引用需治理',
+    HAS_FAILED_MIGRATION: '存在历史迁移失败',
+    PROJECT_TOO_LARGE_FOR_WAVE1: '文件数超出 Wave 1 范围',
+    PROJECT_BYTES_TOO_LARGE_FOR_WAVE1: '容量超出 Wave 1 范围'
+  } as Record<string, string>)[value || ''] ?? value ?? '不符合候选条件';
+}
+
+function runQueueStatusLabel(value: string | null | undefined) {
+  return ({
+    EXECUTABLE: '可执行',
+    GOVERNANCE_REQUIRED: '需治理',
+    COMPLETED: '已完成',
+    SKIPPED: '跳过'
+  } as Record<string, string>)[value || ''] ?? value ?? '待确认';
+}
+
+function runQueueStatusTagType(value: string | null | undefined) {
+  if (value === 'EXECUTABLE') return 'success';
+  if (value === 'GOVERNANCE_REQUIRED') return 'warning';
+  if (value === 'COMPLETED') return 'info';
+  return 'info';
+}
+
+function runQueueReasonLabel(value: string | null | undefined) {
+  return ({
+    READY_FOR_RUN: '真实项目且存在可对象化文件',
+    GOVERNANCE_REVIEW_REQUIRED: '项目映射或历史治理要求人工复核',
+    FAILED_MIGRATION_REVIEW_REQUIRED: '存在历史迁移失败，需先治理或重试',
+    UNREADABLE_PATH_REVIEW_REQUIRED: '存在路径不可读记录',
+    STORAGE_REFERENCE_REVIEW_REQUIRED: '存储引用需治理',
+    NO_REGISTERED_FILES: '暂无登记文件',
+    ALREADY_OBJECTIFIED: '已无 NAS_ONLY 文件',
+    TEST_OR_SAMPLE_PROJECT: '测试 / 样例项目',
+    NON_REAL_NAS_PROJECT: '非真实 NAS 项目'
+  } as Record<string, string>)[value || ''] ?? value ?? '待确认';
+}
+
 function statusType(status: string) {
   const value = (status || '').toUpperCase();
   if (['COMPLETED', 'OBJECT_STORED', 'SKIPPED'].includes(value)) return 'success';
@@ -1139,6 +2547,25 @@ function taskStatusLabel(status: string) {
     PARTIAL_FAILED: '部分失败',
     RUNNING: '执行中'
   } as Record<string, string>)[status] ?? status;
+}
+
+function longRunStateLabel(status: string) {
+  return ({
+    IDLE: '待继续',
+    RUNNING: '执行中',
+    PAUSED: '已暂停',
+    COMPLETED: '已完成',
+    PARTIAL_WITH_FAILURES: '剩余治理项',
+    FAILED: '失败'
+  } as Record<string, string>)[status] ?? status;
+}
+
+function longRunStateTagType(status: string) {
+  if (status === 'COMPLETED') return 'success';
+  if (status === 'PAUSED' || status === 'PARTIAL_WITH_FAILURES') return 'warning';
+  if (status === 'FAILED') return 'danger';
+  if (status === 'RUNNING') return 'primary';
+  return 'info';
 }
 
 function migrationStatusLabel(status: string) {
@@ -1309,6 +2736,46 @@ function formatDate(value: string | null | undefined) {
   margin-bottom: 14px;
 }
 
+.multi-plan-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto 150px minmax(180px, 0.7fr) 130px 150px;
+  gap: 10px;
+  align-items: center;
+}
+
+.m3g-policy-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.m3g-policy-grid > article {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-soft);
+}
+
+.m3g-policy-grid span {
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.m3g-policy-grid strong {
+  color: var(--zy-ink);
+  font-size: 20px;
+}
+
+.m3g-policy-grid p {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .dry-run-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1334,6 +2801,17 @@ function formatDate(value: string | null | undefined) {
 .dry-run-summary strong {
   color: var(--zy-ink);
   font-size: 20px;
+}
+
+.long-run-field {
+  display: grid;
+  gap: 4px;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.long-run-field :deep(.el-input-number) {
+  width: 150px;
 }
 
 .dry-run-actions {
@@ -1439,6 +2917,7 @@ function formatDate(value: string | null | undefined) {
   .service-grid,
   .disabled-action-grid,
   .m3g-readiness,
+  .m3g-policy-grid,
   .dry-run-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1453,6 +2932,8 @@ function formatDate(value: string | null | undefined) {
   .migration-create,
   .candidate-toolbar,
   .m3g-readiness,
+  .m3g-policy-grid,
+  .multi-plan-form,
   .dry-run-form,
   .dry-run-summary,
   .service-grid,

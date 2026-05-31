@@ -350,7 +350,7 @@ assert_not_ok "${unconfirmed_response}"
 assert_no_forbidden "unconfirmed execute" "${unconfirmed_response}"
 pass "confirmed=false 被拒绝"
 
-over_limit_response="$(api_post "/api/data-steward/storage-objectification-plans:execute" "$(execute_body true 10)")"
+over_limit_response="$(api_post "/api/data-steward/storage-objectification-plans:execute" "$(execute_body true 16)")"
 assert_not_ok "${over_limit_response}"
 assert_no_forbidden "over-limit execute" "${over_limit_response}"
 pass "超出总文件数硬上限的执行请求被拒绝"

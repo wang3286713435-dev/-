@@ -289,6 +289,8 @@ public final class WorkCenterDtos {
         String fileKind,
         String versionNo,
         String fileExt,
+        String storageStatus,
+        String readSource,
         // review
         String reviewStatus,
         String readinessStatus,
@@ -427,6 +429,23 @@ public final class WorkCenterDtos {
         Boolean nasFileCopied,
         Integer rowCount,
         String csvContent
+    ) {
+    }
+
+    // ---- M3G-6T: delivery candidates from ownership/governance metadata ----
+
+    public record DeliveryCandidatesResponse(
+        Long projectId,
+        String viewType,
+        String targetType,
+        Boolean dryRun,
+        Boolean bindingCreated,
+        String evidenceMode,
+        String analysisBoundary,
+        Integer missingCount,
+        Integer candidateCount,
+        java.util.List<AgentGovernanceMissingItem> missingItems,
+        java.util.List<AgentBindingRecommendation> rows
     ) {
     }
 

@@ -180,13 +180,23 @@ payload = json.loads(os.environ["RESPONSE"])
 project_id = int(os.environ["PROJECT_ID"])
 for item in payload["data"]["projects"]:
     if int(item["projectId"]) == project_id:
-        print("true" if int(item.get("objectStoredFiles") or 0) > 0 and int(item.get("nasOnlyFiles") or 0) > 0 else "false")
+        object_stored = int(item.get("objectStoredFiles") or 0)
+        nas_only = int(item.get("nasOnlyFiles") or 0)
+        total = int(item.get("totalFiles") or 0)
+        if object_stored > 0 and nas_only > 0:
+            print("mixed")
+        elif total > 0 and object_stored == total and nas_only == 0:
+            print("completed")
+        else:
+            print("invalid")
         raise SystemExit(0)
-print("false")
+print("invalid")
 PY
 )"
-if [[ "${inventory_ok}" == "true" ]]; then
+if [[ "${inventory_ok}" == "mixed" ]]; then
   pass "105/503 仍能区分已对象化文件和历史 NAS 文件"
+elif [[ "${inventory_ok}" == "completed" ]]; then
+  pass "105/503 已全量对象化，存储展示回归进入完成态"
 else
   fail "105/503 对象化覆盖率不符合 M3G-5 混合状态预期"
 fi
@@ -292,7 +302,7 @@ pass "前端搜索模式只渲染文件行，且 fileKeyword query 可驱动状�
 echo ""
 echo "--- 6. Storage display fields are business-level and sanitized ---"
 object_row="$(mysql_exec "
-  SELECT f.id, HEX(f.original_name)
+  SELECT f.id, HEX(f.original_name), f.storage_uri
   FROM data_file_resources f
   JOIN data_file_object_versions fov ON fov.file_id = f.id
     AND fov.active = 1
@@ -318,12 +328,16 @@ nas_row="$(mysql_exec "
   ORDER BY f.id
   LIMIT 1;
 " 2>/dev/null | head -n 1 || true)"
-read -r OBJECT_FILE_ID OBJECT_NAME_HEX <<< "${object_row}"
+read -r OBJECT_FILE_ID OBJECT_NAME_HEX OBJECT_STORAGE_URI <<< "${object_row}"
 read -r NAS_FILE_ID NAS_NAME_HEX NAS_STORAGE_URI <<< "${nas_row}"
 OBJECT_NAME="$(decode_hex "${OBJECT_NAME_HEX}")"
 NAS_NAME="$(decode_hex "${NAS_NAME_HEX}")"
 object_search="$(api_get "/api/data-steward/catalog/files?projectId=${PROJECT_ID}&keyword=$(urlencode "${OBJECT_NAME}")&page=1&pageSize=20")"
-nas_search="$(api_get "/api/data-steward/catalog/files?projectId=${PROJECT_ID}&keyword=$(urlencode "${NAS_NAME}")&page=1&pageSize=20")"
+if [[ -n "${NAS_FILE_ID:-}" ]]; then
+  nas_search="$(api_get "/api/data-steward/catalog/files?projectId=${PROJECT_ID}&keyword=$(urlencode "${NAS_NAME}")&page=1&pageSize=20")"
+else
+  nas_search='{"code":"OK","traceId":"completed","data":{"items":[]}}'
+fi
 assert_ok "${object_search}"
 assert_ok "${nas_search}"
 assert_no_forbidden "object stored search" "${object_search}"
@@ -332,16 +346,20 @@ storage_ok="$(OBJECT_FILE_ID="${OBJECT_FILE_ID}" NAS_FILE_ID="${NAS_FILE_ID}" OB
 import json
 import os
 object_id = int(os.environ["OBJECT_FILE_ID"])
-nas_id = int(os.environ["NAS_FILE_ID"])
+nas_id = int(os.environ["NAS_FILE_ID"]) if os.environ.get("NAS_FILE_ID") else None
 object_rows = json.loads(os.environ["OBJECT_RESPONSE"])["data"]["items"]
 nas_rows = json.loads(os.environ["NAS_RESPONSE"])["data"]["items"]
 object_ok = any(int(item.get("fileId") or 0) == object_id and item.get("storageState") == "OBJECT_STORED" and item.get("accessSource") == "NAS_SIDE_MINIO" for item in object_rows)
-nas_ok = any(int(item.get("fileId") or 0) == nas_id and item.get("storageState") == "NAS_ONLY" for item in nas_rows)
+nas_ok = True if nas_id is None else any(int(item.get("fileId") or 0) == nas_id and item.get("storageState") == "NAS_ONLY" for item in nas_rows)
 print("true" if object_ok and nas_ok else "false")
 PY
 )"
 if [[ "${storage_ok}" == "true" ]]; then
-  pass "catalog/files 返回 OBJECT_STORED 与 NAS_ONLY 的脱敏业务字段"
+  if [[ -n "${NAS_FILE_ID:-}" ]]; then
+    pass "catalog/files 返回 OBJECT_STORED 与 NAS_ONLY 的脱敏业务字段"
+  else
+    pass "catalog/files 返回 OBJECT_STORED 脱敏业务字段，105 已无 NAS_ONLY 样本"
+  fi
 else
   fail "catalog/files 存储状态字段异常"
 fi
@@ -357,7 +375,7 @@ fi
 
 echo ""
 echo "--- 7. No migration tasks and no NAS original mutation ---"
-NAS_PATH="$(nas_path_from_uri "${NAS_STORAGE_URI}")"
+NAS_PATH="$(nas_path_from_uri "${NAS_STORAGE_URI:-${OBJECT_STORAGE_URI:-}}")"
 if [[ -f "${NAS_PATH}" ]]; then
   NAS_STAT_BEFORE="$(file_stat_signature "${NAS_PATH}")"
 else

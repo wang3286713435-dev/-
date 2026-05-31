@@ -921,9 +921,18 @@ public class DeliveryBindingRepository {
                 f.file_kind,
                 f.version_no,
                 LOWER(SUBSTRING_INDEX(f.original_name, '.', -1)) AS file_ext,
+                CASE WHEN obj.file_id IS NOT NULL THEN 'OBJECT_STORED' ELSE 'NAS_ONLY' END AS storage_status,
+                CASE WHEN obj.file_id IS NOT NULL THEN 'OBJECT_STORAGE' ELSE 'LEGACY_NAS' END AS read_source,
                 b.review_status
             FROM work_delivery_bindings b
             JOIN data_file_resources f ON f.id = b.file_resource_id AND f.project_id = b.project_id AND f.deleted = 0
+            LEFT JOIN (
+                SELECT DISTINCT file_id
+                FROM data_file_object_versions
+                WHERE active = 1
+                  AND deleted = 0
+                  AND storage_state = 'OBJECT_STORED'
+            ) obj ON obj.file_id = f.id
             JOIN masterdata_deliverable_types dt ON dt.id = b.deliverable_type_id AND dt.project_id = b.project_id AND dt.deleted = 0
             JOIN masterdata_deliverable_definitions dd ON dd.id = dt.deliverable_definition_id AND dd.project_id = b.project_id AND dd.deleted = 0
             LEFT JOIN masterdata_section_nodes sn ON sn.id = b.section_node_id AND sn.project_id = b.project_id AND sn.deleted = 0
@@ -955,6 +964,8 @@ public class DeliveryBindingRepository {
                     rs.getString("file_kind"),
                     rs.getString("version_no"),
                     rs.getString("file_ext"),
+                    rs.getString("storage_status"),
+                    rs.getString("read_source"),
                     reviewStatus,
                     null, // readinessStatus filled by service
                     null, null, null, null, // preview fields filled by service

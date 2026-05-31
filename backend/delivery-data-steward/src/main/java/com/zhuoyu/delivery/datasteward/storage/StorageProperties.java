@@ -9,6 +9,7 @@ public class StorageProperties {
 
     private ObjectStorageProvider minio = new ObjectStorageProvider();
     private ObjectStorageProvider s3Compatible = new ObjectStorageProvider();
+    private ReadPolicy readPolicy = new ReadPolicy();
 
     public ObjectStorageProvider getMinio() {
         return minio;
@@ -24,6 +25,14 @@ public class StorageProperties {
 
     public void setS3Compatible(ObjectStorageProvider s3Compatible) {
         this.s3Compatible = s3Compatible;
+    }
+
+    public ReadPolicy getReadPolicy() {
+        return readPolicy;
+    }
+
+    public void setReadPolicy(ReadPolicy readPolicy) {
+        this.readPolicy = readPolicy;
     }
 
     public static class ObjectStorageProvider {
@@ -71,6 +80,27 @@ public class StorageProperties {
 
         public void setDefaultBucket(String defaultBucket) {
             this.defaultBucket = defaultBucket;
+        }
+    }
+
+    public static class ReadPolicy {
+        private boolean objectFirstEnabled = true;
+        private boolean nasFallbackEnabled = false;
+
+        public boolean isObjectFirstEnabled() {
+            return objectFirstEnabled;
+        }
+
+        public void setObjectFirstEnabled(boolean objectFirstEnabled) {
+            this.objectFirstEnabled = objectFirstEnabled;
+        }
+
+        public boolean isNasFallbackEnabled() {
+            return nasFallbackEnabled;
+        }
+
+        public void setNasFallbackEnabled(boolean nasFallbackEnabled) {
+            this.nasFallbackEnabled = nasFallbackEnabled;
         }
     }
 }

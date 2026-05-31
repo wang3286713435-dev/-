@@ -46,6 +46,68 @@
       title="这是资产推导树，不是最终工程结构。文件归属不是正式交付完成；过程文件、参考资料和待判定资料也必须有归属，但只有人工确认的正式应交资料才会进入文档/图纸交付挂接。"
     />
 
+    <section class="ownership-business-tabs">
+      <el-tabs v-model="businessTab">
+        <el-tab-pane label="工程树草案" name="draft">
+          <div class="ownership-business__header">
+            <div>
+              <strong>对象化后工程树优化草案</strong>
+              <span>{{ treeDraft?.analysisBoundary || '只按目录、文件名和元数据生成草案。' }}</span>
+            </div>
+            <el-button size="small" :loading="draftApplyLoading" :disabled="!treeDraft?.nodes?.length" @click="confirmApplyTreeDraft">
+              确认草案
+            </el-button>
+          </div>
+          <el-table v-loading="draftLoading" :data="treeDraft?.nodes ?? []" class="master-table" empty-text="暂无工程树草案">
+            <el-table-column prop="nodeLabel" label="草案节点" min-width="140" />
+            <el-table-column prop="fileCount" label="文件" width="80" />
+            <el-table-column prop="modelCount" label="模型" width="80" />
+            <el-table-column prop="drawingCount" label="图纸" width="80" />
+            <el-table-column prop="formalDeliveryCandidateCount" label="候选" width="90" />
+            <el-table-column prop="currentMissingDeliverableCount" label="缺口" width="90" />
+            <el-table-column prop="recommendationReason" label="推荐原因" min-width="260" show-overflow-tooltip />
+          </el-table>
+        </el-tab-pane>
+        <el-tab-pane label="模型/图纸缺口" name="gap">
+          <div class="ownership-business__header">
+            <div>
+              <strong>目录级模型 / 图纸缺口</strong>
+              <span>{{ modelDrawingGap?.analysisBoundary || '不是 BIM 构件级解析，不能证明模型内部内容。' }}</span>
+            </div>
+            <el-tag type="warning" effect="plain">catalog-only</el-tag>
+          </div>
+          <el-table v-loading="gapLoading" :data="modelDrawingGap?.rows ?? []" class="master-table" empty-text="暂无缺口分析">
+            <el-table-column prop="nodeLabel" label="节点" min-width="130" />
+            <el-table-column label="状态" min-width="150">
+              <template #default="{ row }">
+                <el-tag :type="gapStatusTag(row.gapStatus)" size="small">{{ gapStatusLabel(row.gapStatus) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="modelCount" label="模型" width="80" />
+            <el-table-column prop="drawingCount" label="图纸" width="80" />
+            <el-table-column prop="processCount" label="过程" width="80" />
+            <el-table-column prop="recommendation" label="建议" min-width="300" show-overflow-tooltip />
+          </el-table>
+        </el-tab-pane>
+        <el-tab-pane label="待交付候选" name="candidates">
+          <div class="ownership-business__header">
+            <div>
+              <strong>缺失应交项候选文件</strong>
+              <span>{{ deliveryCandidates?.analysisBoundary || '候选不会自动挂接，必须人工确认。' }}</span>
+            </div>
+            <el-tag type="info" effect="plain">缺失 {{ deliveryCandidates?.missingCount ?? 0 }} / 候选 {{ deliveryCandidates?.candidateCount ?? 0 }}</el-tag>
+          </div>
+          <el-table v-loading="candidatesLoading" :data="deliveryCandidates?.rows ?? []" class="master-table" empty-text="暂无候选文件">
+            <el-table-column prop="targetName" label="交付目标" min-width="130" show-overflow-tooltip />
+            <el-table-column prop="deliverableTypeName" label="交付类型" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="fileName" label="推荐文件" min-width="220" show-overflow-tooltip />
+            <el-table-column prop="confidence" label="置信度" width="90" />
+            <el-table-column prop="recommendationReason" label="推荐依据" min-width="260" show-overflow-tooltip />
+          </el-table>
+        </el-tab-pane>
+      </el-tabs>
+    </section>
+
     <section class="ownership-layout">
       <aside class="ownership-tree">
         <header>
@@ -283,19 +345,25 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
 import {
+  applyFileOwnershipTreeDraft,
   applyFileOwnershipRecommendations,
   fetchFileOwnershipCoverage,
   fetchFileOwnershipNodeFiles,
+  fetchFileOwnershipTreeDraft,
   fetchFileOwnershipTree,
+  fetchModelDrawingGap,
   recommendFileOwnership,
   reviewFileOwnershipAssignments,
   type FileOwnershipCoverage,
   type FileOwnershipFileRow,
   type FileOwnershipReviewAction,
   type FileOwnershipRecommendation,
+  type FileOwnershipTreeDraft,
   type FileOwnershipTree,
-  type FileOwnershipTreeNode
+  type FileOwnershipTreeNode,
+  type ModelDrawingGap
 } from '@/modules/data-steward/api/dataSteward';
+import { fetchDeliveryCandidates, type DeliveryCandidatesResponse } from '@/modules/work-center/api/delivery';
 
 const props = defineProps<{
   projectId: number;
@@ -310,8 +378,16 @@ const emit = defineEmits<{
 const loading = ref(false);
 const recommendLoading = ref(false);
 const applyLoading = ref(false);
+const draftLoading = ref(false);
+const gapLoading = ref(false);
+const candidatesLoading = ref(false);
+const draftApplyLoading = ref(false);
+const businessTab = ref('draft');
 const coverage = ref<FileOwnershipCoverage | null>(null);
 const tree = ref<FileOwnershipTree | null>(null);
+const treeDraft = ref<FileOwnershipTreeDraft | null>(null);
+const modelDrawingGap = ref<ModelDrawingGap | null>(null);
+const deliveryCandidates = ref<DeliveryCandidatesResponse | null>(null);
 const recommendations = ref<FileOwnershipRecommendation[]>([]);
 const selectedNode = ref<FileOwnershipTreeNode | null>(null);
 const nodeFiles = ref<FileOwnershipFileRow[]>([]);
@@ -386,21 +462,52 @@ watch(() => props.focusNodePath, (nodePath) => {
 
 async function loadAll() {
   loading.value = true;
+  draftLoading.value = true;
+  gapLoading.value = true;
+  candidatesLoading.value = true;
   try {
-    const [nextCoverage, nextTree, nextRecommendations] = await Promise.all([
+    const [nextCoverage, nextTree, nextRecommendations, nextDraft, nextGap, nextCandidates] = await Promise.all([
       fetchFileOwnershipCoverage(props.projectId),
       fetchFileOwnershipTree(props.projectId),
-      recommendFileOwnership(props.projectId, { limit: 80, includeAssigned: false, source: 'RULE' })
+      recommendFileOwnership(props.projectId, { limit: 80, includeAssigned: false, source: 'RULE' }),
+      fetchFileOwnershipTreeDraft(props.projectId),
+      fetchModelDrawingGap(props.projectId),
+      fetchDeliveryCandidates(props.projectId, undefined, 'SECTION')
     ]);
     coverage.value = nextCoverage;
     tree.value = nextTree;
     recommendations.value = nextRecommendations.rows;
+    treeDraft.value = nextDraft;
+    modelDrawingGap.value = nextGap;
+    deliveryCandidates.value = nextCandidates;
     selectedNode.value = findNodeByPath(nextTree.nodes, props.focusNodePath || selectedNode.value?.nodePath || '') ?? nextTree.nodes[0] ?? null;
     if (selectedNode.value) await setTreeCurrentNode(selectedNode.value.nodePath);
     nodeFilePage.value = 1;
     await loadNodeFiles();
   } finally {
     loading.value = false;
+    draftLoading.value = false;
+    gapLoading.value = false;
+    candidatesLoading.value = false;
+  }
+}
+
+async function confirmApplyTreeDraft() {
+  if (!treeDraft.value?.nodes?.length) return;
+  await ElMessageBox.confirm(
+    '确认后只记录这版工程树草案已由人工查看，不会覆盖正式工程树，不会移动或修改 NAS 文件，也不会自动挂接交付。',
+    '确认工程树草案',
+    { type: 'info', confirmButtonText: '确认草案', cancelButtonText: '取消' }
+  );
+  draftApplyLoading.value = true;
+  try {
+    const result = await applyFileOwnershipTreeDraft(props.projectId, {
+      confirmed: true,
+      nodeKeys: treeDraft.value.nodes.map((node) => node.nodeKey)
+    });
+    ElMessage.success(result.message || '工程树草案已确认');
+  } finally {
+    draftApplyLoading.value = false;
   }
 }
 
@@ -614,6 +721,24 @@ function ownershipTypeLabel(type?: string | null) {
   return map[type || ''] || '待判定';
 }
 
+function gapStatusLabel(status?: string | null) {
+  const map: Record<string, string> = {
+    HAS_MODEL_AND_DRAWING: '有模型有图纸',
+    DRAWING_MISSING_MODEL: '有图纸缺模型',
+    MODEL_MISSING_DRAWING: '有模型缺图纸',
+    PROCESS_ONLY: '只有过程资料',
+    NEEDS_REVIEW: '待人工判断'
+  };
+  return map[status || ''] || '待人工判断';
+}
+
+function gapStatusTag(status?: string | null) {
+  if (status === 'HAS_MODEL_AND_DRAWING') return 'success';
+  if (status === 'DRAWING_MISSING_MODEL' || status === 'MODEL_MISSING_DRAWING') return 'warning';
+  if (status === 'PROCESS_ONLY') return 'info';
+  return 'danger';
+}
+
 function confidenceLabel(value?: string | null) {
   const map: Record<string, string> = { HIGH: '高', MEDIUM: '中', LOW: '低' };
   return map[value || ''] || '中';
@@ -717,6 +842,33 @@ function formatCount(value?: number | null) {
 
 .ownership-panel__notice {
   border-radius: 14px;
+}
+
+.ownership-business-tabs {
+  padding: 16px;
+  border: 1px solid rgba(91, 124, 255, 0.16);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 20px 48px rgba(42, 55, 104, 0.08);
+}
+
+.ownership-business__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.ownership-business__header > div {
+  display: grid;
+  gap: 4px;
+}
+
+.ownership-business__header span {
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .ownership-layout {

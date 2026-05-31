@@ -1,179 +1,243 @@
-# 开发 Agent 当前任务：M3G-5-F1 修复文件管理器搜索仍显示文件夹
+# 开发 Agent 当前任务：DT-F1 无损同步 origin/main 葛兰岱尔能力到当前 M3G 分支
 
 你是卓羽智能数据中台的开发 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
-本轮是 `M3G-5` 返工修复，不是新功能批次。
+本轮批次：
 
-## 0. 问题现象
+`DT-F1：BIM 协同 / 葛兰岱尔适配兼容收口`
 
-用户在浏览器访问：
+## 0. 已确认事实
 
-`http://127.0.0.1:5173/data-steward/assets/503?tab=files&fileKeyword=宝安`
+主 agent 已执行 `git fetch origin main --prune` 并确认：
 
-页面搜索框里显示 `宝安`，但右侧文件管理器仍展示项目根目录文件夹，例如：
+- `origin/main` 最新提交为：`d69cbc2 feat: integrate Glandar RVT lightweight preview pilot...`
+- `d69cbc2` 已存在于 `origin/main`。
+- 当前工作分支仍是：`codex/m3g-nas-minio-real-project-object-storage`。
+- 当前工作区有大量 M3G 未提交改动，不能覆盖、不能重置、不能丢。
 
-- `00_工作进度`
-- `01_文件收发`
-- `02_项目资源`
-- `03_过程文件`
+所以本轮不是继续开发新 BIM 功能，而是：
 
-这不符合预期。
+> 把已经合入 `origin/main` 的葛兰岱尔轻量化试点能力，无损同步到当前 M3G 分支，同时保护 M3G 对象存储、file-access、文件管理和迁移任务能力。
 
-用户理解里的搜索是：输入关键词后，应在整个项目中搜索相关文件，右侧应该列出和关键词相关的文件，并显示所在位置；不应该继续展示当前目录的文件夹直达子项。
+## 1. 必须先阅读
 
-## 1. 本轮目标
-
-修复文件管理器搜索模式：
-
-1. 带 `fileKeyword` URL 直接进入页面时，必须立即进入搜索模式。
-2. 在搜索模式下，右侧表格默认只展示匹配文件，不展示当前目录文件夹。
-3. 搜索模式下应显示“正在整个项目中搜索”提示和“所在位置”列。
-4. “仅当前文件夹及子目录”仍作为可选搜索范围。
-5. 清空关键词后，恢复当前目录 direct-only 浏览，即右侧显示当前目录直接文件夹和直接文件。
-6. 不改变后端对象化、NAS 写入、Hermes、语义索引等能力边界。
-
-## 2. 必查文件
-
-请先阅读：
-
+- `handoff/main-agent/status.md`
+- `handoff/main-agent/development-log.md`
+- `handoff/main-agent/phase2-current-roadmap.md`
+- `handoff/main-agent/m3-storage-evidence-chain-todo.md`
+- `handoff/main-agent/m3g9-pre-bim-collab-compatibility-check.md`
 - `handoff/dev-agent/latest-report.md`
 - `handoff/test-agent/latest-report.md`
-- `handoff/main-agent/m3g5-file-manager-search-storage-display-closure.md`
-- `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
-- `frontend/src/modules/data-steward/api/dataSteward.ts`
-- `scripts/dev/check-m3g5-file-manager-search-storage-display.sh`
 
-## 3. 已知根因线索
+如果当前分支缺少 `origin/main` 中新增的葛兰岱尔 handoff 文件，不要直接判定失败；以 `origin/main` 为准查看。
 
-重点检查这些点：
+## 2. 第一阶段：合并前保护工作区
 
-1. `AssetProjectFileBrowser.vue` 当前只在 `props.projectId / props.initialQualityIssue` 变化时初始化浏览状态。
-2. 如果同一个项目页面内 URL query 改为 `fileKeyword=宝安`，组件可能不会重新按 query 初始化并触发搜索。
-3. 搜索框值可能已经显示关键词，但右侧仍保留上一次 direct-only 目录浏览结果。
-4. `browserEntries` 当前由 `directoryEntries + fileEntries` 合并而来。搜索模式下如果没有强制排除 `directoryEntries`，右侧就会继续显示文件夹。
-5. 输入关键词时，如果前端已经把关键词同步进 URL，就不能让页面仍停留在“当前目录浏览模式”。
+先执行并记录：
 
-## 4. 推荐修复方向
+```bash
+git status --short --branch
+git log --oneline --decorate -8
+git log --oneline --decorate origin/main -8
+git merge-base --is-ancestor d69cbc2 origin/main && echo "Glandar PR is in origin/main"
+```
 
-优先做最小修复：
+当前工作区如果仍有未提交 M3G 改动，必须先做 checkpoint commit。
 
-### A. 搜索模式不展示目录项
+### checkpoint 要求
 
-当 `filters.keyword.trim()` 非空时，右侧表格应该只使用 `fileEntries`。
+允许提交：
 
-未搜索时，仍使用：
+- M3G / M3G-6 / M3G-7 / M3G-8 相关后端、前端、脚本、handoff 文件。
+- DT-F1 当前 prompt / 状态文件。
 
-`directoryEntries + fileEntries`
+禁止提交：
 
-也就是说，搜索模式和目录浏览模式要清晰分开。
+- `.claude/**`
+- `CLAUDE.md`
+- `tmp/**`
+- `tmp/run-logs/**`
+- 本地 jar / pid / log
+- 本机密钥、token、license、NAS 真实路径配置
 
-### B. URL query 必须驱动状态
+checkpoint commit 建议信息：
 
-当路由 query 中出现或变化以下字段时：
+`chore: checkpoint M3G before Glandar mainline sync`
 
-- `fileKeyword`
-- `fileSearchScope`
-- `fileDir`
-- `fileKind`
-- `discipline`
-- `fileExt`
-- `qualityIssue`
-- `ownershipStatus`
-- `filePage`
-- `filePageSize`
+注意：
 
-同项目内也要能同步到组件状态，并触发正确加载。
+- 不允许 `git reset --hard`。
+- 不允许 `git checkout -- .`。
+- 不允许为了合并方便丢弃当前 M3G 改动。
 
-注意避免死循环：
+## 3. 第二阶段：同步 origin/main
 
-- 内部 `router.replace` 同步状态时不要反复触发重复请求。
-- 可以比较当前状态和 query state，只有变化时才应用。
+checkpoint 完成后，执行：
 
-### C. 用户输入行为要一致
+```bash
+git merge origin/main
+```
 
-当前搜索框 `v-model` 会改变页面状态。只要 URL / 状态已经表现为“有关键词”，结果区就必须进入搜索模式。
+如果发生冲突，按下面规则解决。
 
-你可以选择：
+### A. M3G 对象存储 / 文件管理 / file-access 冲突
 
-- 保持点击“查询”/回车触发加载，但不要提前把未执行搜索的 keyword 写进 URL；或者
-- 输入关键词后 debounce 触发搜索。
+优先保留当前 M3G 实现。
 
-无论选择哪种，最终用户看到的状态必须一致：
+重点保护：
 
-- URL 有 `fileKeyword=宝安` 时，右侧就是“宝安”的搜索结果。
-- 搜索框有关键词且页面提示搜索时，右侧不能还显示当前目录文件夹。
+- NAS 侧 MinIO provider health
+- storage status
+- objectification / migration task
+- file-access 对象优先读取
+- 文件管理器对象化状态展示
+- M3G 相关脚本
 
-### D. 测试脚本补强
+不得删除葛兰岱尔新增入口。
 
-增强 `scripts/dev/check-m3g5-file-manager-search-storage-display.sh` 或新增极短返工脚本，至少覆盖：
+### B. BIM 协同 / 葛兰岱尔冲突
 
-1. 带 `fileKeyword` 的页面/接口场景不返回目录项作为搜索结果。
-2. 搜索模式下 `browserEntries` 或页面 DOM 不应出现“文件夹”行。
-3. 清空关键词后 direct-only 目录浏览恢复。
+优先保留 `origin/main` 中葛兰岱尔能力。
 
-如果脚本不方便用浏览器测 DOM，可以在报告中补浏览器短验步骤。
+重点保护：
 
-## 5. 禁止事项
+- `glandar/rvt-pilot-files`
+- `lightweight-jobs`
+- `viewer-ticket`
+- `GlandarViewerCanvas`
+- `GlandarModelPreviewPage`
+- BIM 协同页内嵌 Viewer
+- 105 项目 10 个 RVT 试点模型列表
 
-本轮严禁：
+不得把 Viewer 恢复成旧的“暂无模型预览”占位。
 
-1. 不要执行对象化迁移。
-2. 不要移动、删除、重命名、覆盖真实 NAS 文件。
-3. 不要读取文件正文。
-4. 不要新增 Hermes 能力。
-5. 不要写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
-6. 不要接入真实 BIM 引擎。
-7. 不要修改 `docs/**`。
-8. 不要改数据库迁移。
-9. 除非确认后端接口确实有问题，否则不要改后端。
+### C. 路由冲突
 
-## 6. 验收标准
+重点检查：
 
-必须同时满足：
+- `frontend/src/router/index.ts`
 
-1. 打开 `http://127.0.0.1:5173/data-steward/assets/503?tab=files&fileKeyword=宝安` 后，页面自动进入搜索模式。
-2. 搜索模式右侧表格不显示文件夹行。
-3. 搜索模式显示项目全局搜索提示。
-4. 搜索结果文件能显示所在位置。
-5. 勾选“仅当前文件夹及子目录”后，搜索范围能收窄。
-6. 清空关键词后恢复当前目录 direct-only 浏览。
-7. `OBJECT_STORED` / `NAS_ONLY` 展示不回归。
-8. 禁出字段扫描仍通过。
-9. 不创建迁移任务，不触碰真实 NAS 原文件。
+必须保证：
 
-## 7. 必跑验证
+- `/bim-collaboration`
+- `/visualization/glandar-viewer`
+- 旧 BIM 协同入口
+- 项目工作台入口
+
+都可正常访问。
+
+## 4. 合并后验收目标
+
+### 默认模式
+
+不注入葛兰岱尔配置时：
+
+- 后端可启动。
+- BIM 协同页可打开。
+- 页面不白屏。
+- 默认 MOCK / 元数据适配不报错。
+- 没有真实引擎配置时返回业务化提示，不返回 500。
+
+### 葛兰岱尔模式
+
+注入 GLANDAR 配置后：
+
+- 105 / `projectId=503` 能看到 10 个 RVT 试点模型或轻量化模型列表。
+- 已轻量化模型能打开平台内 Viewer。
+- Viewer 不暴露 token。
+- Viewer 不暴露 NAS 路径、bucket、object key、storage_uri。
+
+### M3G 回归
+
+必须确认：
+
+- 对象存储 provider health 不回归。
+- storage-status 不回归。
+- storage migration task 不回归。
+- file-access 不回归。
+- NAS 侧 MinIO 配置不回归。
+- 文件管理器对象化状态不回归。
+
+## 5. 必跑命令
 
 至少执行：
 
 ```bash
+cd /Users/vc/Documents/数字化交付平台/backend
+./mvnw -pl delivery-app -am -DskipTests package
+
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
-curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-m3g5-file-manager-search-storage-display.sh
-git diff --check
+curl -fsS http://127.0.0.1:8080/actuator/health || curl -fsS http://127.0.0.1:18088/actuator/health
+
+bash scripts/dev/check-phase2-batch4-file-access.sh
 ```
 
-浏览器短验：
+如果当前分支存在以下脚本，也必须跑：
 
-1. 打开 `/data-steward/assets/503?tab=files&fileKeyword=宝安`。
-2. 确认右侧不出现文件夹行。
-3. 确认页面提示正在整个项目中搜索。
-4. 清空关键词后确认根目录文件夹恢复。
+```bash
+bash scripts/dev/check-m3a-storage-service-foundation.sh
+bash scripts/dev/check-m3b-object-storage-mirror-trial.sh
+bash scripts/dev/check-m3c-storage-migration-task-center.sh
+bash scripts/dev/check-m3g4-controlled-multi-project-objectification.sh
+bash scripts/dev/check-m3g8-object-first-read-fallback.sh
+bash scripts/dev/check-8c-gd1-ten-rvt-platform-preview.sh
+```
 
-## 8. 报告要求
+如果某个脚本不存在，记录“不存在，跳过原因”，不要临时乱造同名脚本。
+
+最后执行：
+
+```bash
+git diff --check
+git diff --cached --check
+```
+
+## 6. 浏览器短验
+
+合并后启动或复用前端，检查：
+
+- `http://127.0.0.1:5173/bim-collaboration?projectId=503&preview=glandar`
+- 能看到 BIM 协同管理页。
+- 能看到 105 项目 10 个 RVT 试点模型或轻量化模型列表。
+- 能选择已轻量化模型。
+- 能打开 Viewer 或得到明确业务错误。
+- Viewer 不是旧的“暂无模型预览”。
+- M3G 文件管理页仍能打开。
+- 文件管理对象存储状态仍显示正常。
+
+## 7. 收口报告要求
 
 完成后写入：
 
 `handoff/dev-agent/latest-report.md`
 
-报告必须说明：
+报告必须包含：
 
-- 根因。
-- 修改文件。
-- 搜索模式如何和目录浏览模式分离。
-- URL query 如何驱动页面状态。
-- 验证结果。
-- 是否改动后端。
-- 是否有未完成事项。
+1. 当前分支名。
+2. checkpoint commit hash。
+3. 合并来源：`origin/main`。
+4. 是否包含 `d69cbc2`。
+5. 是否保留 M3G 对象存储能力。
+6. 冲突文件与解决策略。
+7. 路由验证结果。
+8. BIM 协同页验证结果。
+9. 105 试点模型 / Viewer 验证结果。
+10. M3G 回归结果。
+11. 禁出字段检查结果。
+12. 未完成事项。
+
+## 8. 完成定义
+
+只有同时满足以下条件，才能标记完成：
+
+- 当前 M3G 工作成果已 checkpoint，不丢改动。
+- `origin/main` 已合并到当前分支。
+- 葛兰岱尔能力在当前分支可见。
+- BIM 协同页可打开。
+- 105 RVT 试点模型或轻量化模型列表可见。
+- M3G 对象存储、file-access、文件管理不回归。
+- 不泄露 NAS 路径、bucket、object key、storage_uri、token、secret。
+- `handoff/dev-agent/latest-report.md` 已写。
