@@ -8,13 +8,9 @@
       </div>
       <div class="bim-collab-hero__actions">
         <el-tag effect="plain" round>{{ dashboard ? `项目 ${dashboard.project.projectId}` : '等待项目上下文' }}</el-tag>
-        <el-switch
-          v-model="darkThemeEnabled"
-          active-text="深色"
-          inactive-text="浅色"
-          inline-prompt
-          @change="persistTheme"
-        />
+        <el-button plain @click="toggleTheme">
+          {{ darkThemeEnabled ? '切换浅色' : '切换深色' }}
+        </el-button>
         <el-button :icon="Refresh" :loading="loading" @click="loadPage">刷新平台数据</el-button>
       </div>
     </header>
@@ -76,11 +72,26 @@ import { createRoot, type Root } from 'react-dom/client';
 
 import BimCollaborationIsland from '@/modules/visualization/bim-collab/BimCollaborationIsland';
 import { mapDashboardToBimCollab } from '@/modules/visualization/bim-collab/mapDashboardToBimCollab';
-import type { BimThemeMode } from '@/modules/visualization/bim-collab/types';
+import type { BimLightweightSummary, BimThemeMode } from '@/modules/visualization/bim-collab/types';
 import {
   fetchDigitalTwinDashboard,
+  fetchGlandarRvtPilotFiles,
+  type GlandarRvtPilotFile,
   type DigitalTwinDashboard
 } from '@/modules/visualization/api/visualization';
+import type { BimEmbeddedPreviewModel } from '@/modules/visualization/bim-collab/types';
+import {
+  fetchFileOwnershipCoverage,
+  fetchFileOwnershipTree,
+  type FileOwnershipCoverage,
+  type FileOwnershipTree
+} from '@/modules/data-steward/api/dataSteward';
+import {
+  fetchSectionTree,
+  fetchStandardStatus,
+  type SectionNode,
+  type StandardStatus
+} from '@/modules/master-data/api/masterData';
 import { useAuthStore } from '@/stores/auth';
 
 const THEME_STORAGE_KEY = 'delivery:bim-collab-theme';
@@ -89,21 +100,71 @@ const authStore = useAuthStore();
 const route = useRoute();
 const loading = ref(false);
 const dashboard = ref<DigitalTwinDashboard | null>(null);
+const pilotFiles = ref<GlandarRvtPilotFile[]>([]);
+const standardStatus = ref<StandardStatus | null>(null);
+const sectionTree = ref<SectionNode[]>([]);
+const ownershipCoverage = ref<FileOwnershipCoverage | null>(null);
+const ownershipTree = ref<FileOwnershipTree | null>(null);
 const errorMessage = ref('');
 const bimHostRef = ref<HTMLElement | null>(null);
 const darkThemeEnabled = ref(readInitialTheme() === 'dark');
 let bimRoot: Root | null = null;
 
 const routeProjectId = computed(() => Number(route.params.projectId));
+const routeQueryProjectId = computed(() => Number(route.query.projectId));
 const projectId = computed(() => {
   const routeId = routeProjectId.value;
   if (Number.isFinite(routeId) && routeId > 0) return routeId;
+  const queryId = routeQueryProjectId.value;
+  if (Number.isFinite(queryId) && queryId > 0) return queryId;
   return authStore.currentProjectId;
 });
 
 const themeMode = computed<BimThemeMode>(() => (darkThemeEnabled.value ? 'dark' : 'light'));
-const projectLabel = computed(() => authStore.currentUser?.currentProject?.name ?? '等待项目上下文');
+const projectLabel = computed(() => {
+  const selectedProject = authStore.currentUser?.projects.find((item) => item.id === projectId.value);
+  return selectedProject?.name ?? authStore.currentUser?.currentProject?.name ?? '等待项目上下文';
+});
 const bimData = computed(() => (dashboard.value ? mapDashboardToBimCollab(dashboard.value) : null));
+const embeddedPreviewModels = computed<BimEmbeddedPreviewModel[]>(() => {
+  const currentProjectId = projectId.value;
+  if (!currentProjectId) return [];
+  return pilotFiles.value
+    .filter((item) => item.viewerAvailable && item.latestJobId)
+    .sort((left, right) => scorePilotCompleteness(right) - scorePilotCompleteness(left))
+    .map((item) => ({
+      id: `glandar-${item.fileId}`,
+      modelFileId: item.fileId,
+      label: item.fileName,
+      meta: `文件 ${item.fileId} · ${formatBytes(item.sizeBytes)}`,
+      modelFormat: 'RVT',
+      versionNo: item.versionNo || 'V1',
+      integrationStatus: 'GLANDAR_PILOT',
+      status: 'normal',
+      weight: Math.max(item.sizeBytes ?? 1, 1),
+      previewStatus: 'AVAILABLE',
+      previewMode: 'GLANDAR_VIEWER',
+      conversionStatus: item.taskStatus || 'READY',
+      viewerAvailable: true,
+      statusLabel: item.statusLabel || '已轻量化',
+      actionHint: '已通过葛兰岱尔轻量化，可在当前 BIM 协同窗口内直接预览。',
+      fileManagerUrl: `/data-steward/assets/${currentProjectId}?tab=files&fileKeyword=${encodeURIComponent(item.fileName)}&lastFileId=${item.fileId}`,
+      sizeLabel: formatBytes(item.sizeBytes),
+      frameUrl: `/visualization/glandar-viewer-embed?projectId=${currentProjectId}&jobId=${encodeURIComponent(item.latestJobId || '')}&fileName=${encodeURIComponent(item.fileName)}&modelFileId=${item.fileId}&embedded=1&theme=${themeMode.value}`
+    }));
+});
+const lightweightSummary = computed<BimLightweightSummary>(() => {
+  const totalModelFiles = dashboard.value?.assetSummary.modelFileCount ?? 0;
+  const readyModels = embeddedPreviewModels.value;
+  const failedCount = pilotFiles.value.filter((item) => item.taskStatus === 'FAILED').length;
+  return {
+    totalModelFiles,
+    readyCount: readyModels.length,
+    pendingCount: Math.max(totalModelFiles - readyModels.length, 0),
+    failedCount,
+    readyModels
+  };
+});
 
 const kpiCards = computed(() => {
   const item = dashboard.value;
@@ -119,7 +180,7 @@ const kpiCards = computed(() => {
 });
 
 watch(projectId, () => loadPage(), { immediate: true });
-watch([bimData, themeMode], () => renderBimWindow());
+watch([bimData, themeMode, embeddedPreviewModels, lightweightSummary], () => renderBimWindow());
 
 onMounted(() => renderBimWindow());
 onBeforeUnmount(() => {
@@ -128,7 +189,8 @@ onBeforeUnmount(() => {
 });
 
 async function loadPage() {
-  if (!projectId.value) {
+  const targetProjectId = projectId.value;
+  if (!targetProjectId) {
     dashboard.value = null;
     renderBimWindow();
     return;
@@ -136,13 +198,65 @@ async function loadPage() {
   loading.value = true;
   errorMessage.value = '';
   try {
-    dashboard.value = await fetchDigitalTwinDashboard(projectId.value);
+    if (!(await ensureProjectContext(targetProjectId))) {
+      dashboard.value = null;
+      pilotFiles.value = [];
+      renderBimWindow();
+      return;
+    }
+    dashboard.value = await fetchDigitalTwinDashboard(targetProjectId);
+    await Promise.all([
+      loadPilotFiles(),
+      loadMasterDataContext(targetProjectId)
+    ]);
   } catch (error) {
     dashboard.value = null;
+    standardStatus.value = null;
+    sectionTree.value = [];
+    ownershipCoverage.value = null;
+    ownershipTree.value = null;
     errorMessage.value = error instanceof Error ? error.message : 'BIM 协同窗口数据加载失败';
   } finally {
     loading.value = false;
   }
+}
+
+async function ensureProjectContext(targetProjectId: number) {
+  if (authStore.currentProjectId === targetProjectId) return true;
+  try {
+    await authStore.changeProject(targetProjectId);
+    return true;
+  } catch {
+    errorMessage.value = '当前账号无法切换到该项目，请确认项目授权后重试。';
+    return false;
+  }
+}
+
+async function loadPilotFiles() {
+  if (!projectId.value) {
+    pilotFiles.value = [];
+    return;
+  }
+  try {
+    pilotFiles.value = await fetchGlandarRvtPilotFiles(projectId.value);
+    renderBimWindow();
+  } catch {
+    pilotFiles.value = [];
+    renderBimWindow();
+  }
+}
+
+async function loadMasterDataContext(targetProjectId: number) {
+  const [standardResult, sectionResult, coverageResult, treeResult] = await Promise.allSettled([
+    fetchStandardStatus(targetProjectId),
+    fetchSectionTree(targetProjectId),
+    fetchFileOwnershipCoverage(targetProjectId),
+    fetchFileOwnershipTree(targetProjectId)
+  ]);
+  standardStatus.value = standardResult.status === 'fulfilled' ? standardResult.value : null;
+  sectionTree.value = sectionResult.status === 'fulfilled' ? sectionResult.value : [];
+  ownershipCoverage.value = coverageResult.status === 'fulfilled' ? coverageResult.value : null;
+  ownershipTree.value = treeResult.status === 'fulfilled' ? treeResult.value : null;
 }
 
 function renderBimWindow() {
@@ -152,13 +266,37 @@ function renderBimWindow() {
       bimRoot = createRoot(bimHostRef.value);
     }
     const data = bimData.value;
-    bimRoot.render(data ? createElement(BimCollaborationIsland, { data, theme: themeMode.value }) : null);
+    bimRoot.render(data ? createElement(BimCollaborationIsland, {
+      data,
+      embeddedPreviewModels: embeddedPreviewModels.value,
+      lightweightSummary: lightweightSummary.value,
+      standardStatus: standardStatus.value,
+      sectionTree: sectionTree.value,
+      ownershipCoverage: ownershipCoverage.value,
+      ownershipTree: ownershipTree.value,
+      theme: themeMode.value
+    }) : null);
   });
 }
 
 function persistTheme() {
   localStorage.setItem(THEME_STORAGE_KEY, themeMode.value);
   renderBimWindow();
+}
+
+function toggleTheme() {
+  darkThemeEnabled.value = !darkThemeEnabled.value;
+  persistTheme();
+}
+
+function scorePilotCompleteness(item: GlandarRvtPilotFile) {
+  const name = item.fileName || '';
+  let score = item.sizeBytes ?? 0;
+  if (name.includes('全楼层')) score += 10_000_000_000;
+  if (name.includes('全楼') || name.includes('全栋')) score += 8_000_000_000;
+  if (/\d+\s*栋/.test(name)) score += 2_000_000_000;
+  if (item.viewerAvailable && item.latestJobId) score += 1_000_000_000;
+  return score;
 }
 
 function readInitialTheme(): BimThemeMode {
@@ -298,6 +436,58 @@ function engineModeLabel(value: string | null | undefined) {
   font-size: var(--zy-fs-2xl);
   font-variant-numeric: tabular-nums;
   line-height: 1;
+}
+
+.bim-collab-inline-viewer {
+  border: 1px solid var(--bim-line);
+  border-radius: 12px;
+  display: grid;
+  gap: var(--zy-sp-3);
+  min-width: 0;
+  padding: var(--zy-sp-3);
+}
+
+.bim-collab-inline-viewer__head {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--zy-sp-3);
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.bim-collab-inline-viewer__head > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bim-collab-inline-viewer__head span {
+  color: var(--bim-accent);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-semi);
+}
+
+.bim-collab-inline-viewer__head h3 {
+  color: var(--bim-text);
+  font-size: var(--zy-fs-lg);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bim-collab-inline-viewer__head p {
+  color: var(--bim-muted);
+  font-size: var(--zy-fs-xs);
+  margin: 0;
+}
+
+.bim-collab-inline-viewer__head > div:last-child {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zy-sp-2);
+  justify-content: flex-end;
 }
 
 .bim-collab-window-card {

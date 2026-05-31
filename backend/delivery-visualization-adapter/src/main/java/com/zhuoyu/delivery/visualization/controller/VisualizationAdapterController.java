@@ -8,20 +8,26 @@ import com.zhuoyu.delivery.visualization.application.VisualizationAdapterApplica
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ContextInjectRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ContextInjectResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.DigitalTwinDashboardResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.GlandarRvtPilotFileResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LinkageRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LinkageResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightJobCreateResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightJobResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightPlanResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightStatusResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LightweightViewerTicketResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.LocateResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.VisualizationContextResponse;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -84,6 +90,68 @@ public class VisualizationAdapterController {
         var principal = securityPrincipalAccessor.requireCurrentPrincipal();
         projectContextApplicationService.requireCurrentProject(principal, projectId);
         return ApiResponse.success(visualizationAdapterApplicationService.lightweightPlan(projectId, integrationId));
+    }
+
+    @PostMapping("/model-integrations/{integrationId}/lightweight-jobs")
+    public ApiResponse<LightweightJobCreateResponse> createLightweightJob(
+        @PathVariable Long projectId,
+        @PathVariable Long integrationId
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(visualizationAdapterApplicationService.createLightweightJob(
+            principal.userId(), projectId, integrationId));
+    }
+
+    @PostMapping("/files/{fileId}/lightweight-jobs")
+    public ApiResponse<LightweightJobCreateResponse> createLightweightJobForFile(
+        @PathVariable Long projectId,
+        @PathVariable Long fileId,
+        @RequestParam(required = false, defaultValue = "false") Boolean force
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(visualizationAdapterApplicationService.createLightweightJobForFile(
+            principal.userId(), projectId, fileId, force));
+    }
+
+    @GetMapping("/lightweight-jobs/{jobId}")
+    public ApiResponse<LightweightJobResponse> lightweightJob(
+        @PathVariable Long projectId,
+        @PathVariable String jobId
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(visualizationAdapterApplicationService.lightweightJob(projectId, jobId));
+    }
+
+    @PostMapping("/lightweight-jobs/{jobId}:viewer-ticket")
+    public ApiResponse<LightweightViewerTicketResponse> lightweightViewerTicket(
+        @PathVariable Long projectId,
+        @PathVariable String jobId
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(visualizationAdapterApplicationService.lightweightViewerTicket(
+            principal.userId(), projectId, jobId));
+    }
+
+    @GetMapping("/glandar/rvt-pilot-files")
+    public ApiResponse<List<GlandarRvtPilotFileResponse>> glandarRvtPilotFiles(@PathVariable Long projectId) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(visualizationAdapterApplicationService.glandarRvtPilotFiles(projectId));
+    }
+
+    @PostMapping("/glandar/rvt-pilot-files:submit")
+    public ApiResponse<List<GlandarRvtPilotFileResponse>> submitGlandarRvtPilotFiles(
+        @PathVariable Long projectId,
+        @RequestParam(required = false, defaultValue = "false") Boolean force
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(visualizationAdapterApplicationService.submitGlandarRvtPilotFiles(
+            principal.userId(), projectId, force));
     }
 
     @PostMapping("/managed-objects/{objectId}:locate")

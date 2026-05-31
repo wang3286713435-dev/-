@@ -193,6 +193,90 @@ export interface DistributionItem {
   totalSizeBytes: number;
 }
 
+export interface LightweightJobCreateResponse {
+  projectId: number;
+  integrationId: number | null;
+  modelFileId: number;
+  modelName: string;
+  modelFormat: string;
+  jobId: string;
+  lightweightName: string | null;
+  uniqueCode: string | null;
+  modelAccessAddress: string | null;
+  engineMode: string;
+  taskCreated: boolean;
+  taskStatus: string;
+  progressPercent: number;
+  statusLabel: string;
+  actionHint: string;
+  blockedReason: string | null;
+  realUploadExecuted: boolean;
+  realConversionExecuted: boolean;
+  modelBodyRead: boolean;
+  nasFileTouched: boolean;
+  viewerAvailable: boolean;
+  supportedOperations: string[];
+  forbiddenOperations: string[];
+}
+
+export interface LightweightJobResponse {
+  projectId: number;
+  jobId: string;
+  modelFileId: number;
+  lightweightName: string | null;
+  uniqueCode: string | null;
+  modelAccessAddress: string | null;
+  engineMode: string;
+  taskStatus: string;
+  progressPercent: number;
+  statusLabel: string;
+  blockedReason: string | null;
+  viewerAvailable: boolean;
+  realUploadExecuted: boolean;
+  realConversionExecuted: boolean;
+  lastErrorCode: string | null;
+  lastErrorMessage: string | null;
+  updatedAt: string | null;
+}
+
+export interface LightweightViewerTicketResponse {
+  projectId: number;
+  jobId: string;
+  engineMode: string;
+  viewerAvailable: boolean;
+  ticketIssued: boolean;
+  viewerTicket: string | null;
+  expiresAt: string | null;
+  launchUrl: string | null;
+  lightweightName: string | null;
+  modelAccessAddress: string | null;
+  engineStaticBase: string | null;
+  statusLabel: string;
+  blockedReason: string | null;
+  supportedOperations: string[];
+  forbiddenOperations: string[];
+}
+
+export interface GlandarRvtPilotFile {
+  projectId: number;
+  fileId: number;
+  assetUuid: string;
+  fileName: string;
+  modelFormat: string;
+  sizeBytes: number;
+  pilotRank: number;
+  inPilot: boolean;
+  latestJobId: string | null;
+  lightweightName: string | null;
+  taskStatus: string;
+  progressPercent: number;
+  viewerAvailable: boolean;
+  statusLabel: string;
+  actionHint: string;
+  blockedReason: string | null;
+  updatedAt: string | null;
+}
+
 export async function fetchVisualizationContext(projectId: number) {
   const { data } = await http.get<ApiResponse<VisualizationContext>>(
     `/api/visualization-adapter/projects/${projectId}/context`
@@ -233,6 +317,46 @@ export async function injectVisualizationContext(projectId: number, sectionNodeI
   const { data } = await http.post<ApiResponse<AdapterCommand>>(
     `/api/visualization-adapter/projects/${projectId}/context:inject`,
     { sectionNodeId, managedObjectId, source: 'FRONTEND_WORKBENCH' }
+  );
+  return data.data;
+}
+
+export async function fetchGlandarRvtPilotFiles(projectId: number) {
+  const { data } = await http.get<ApiResponse<GlandarRvtPilotFile[]>>(
+    `/api/visualization-adapter/projects/${projectId}/glandar/rvt-pilot-files`
+  );
+  return data.data;
+}
+
+export async function submitGlandarRvtPilotFiles(projectId: number, force = false) {
+  const { data } = await http.post<ApiResponse<GlandarRvtPilotFile[]>>(
+    `/api/visualization-adapter/projects/${projectId}/glandar/rvt-pilot-files:submit`,
+    {},
+    { params: { force } }
+  );
+  return data.data;
+}
+
+export async function createFileLightweightJob(projectId: number, fileId: number, force = false) {
+  const { data } = await http.post<ApiResponse<LightweightJobCreateResponse>>(
+    `/api/visualization-adapter/projects/${projectId}/files/${fileId}/lightweight-jobs`,
+    {},
+    { params: { force } }
+  );
+  return data.data;
+}
+
+export async function fetchLightweightJob(projectId: number, jobId: string) {
+  const { data } = await http.get<ApiResponse<LightweightJobResponse>>(
+    `/api/visualization-adapter/projects/${projectId}/lightweight-jobs/${jobId}`
+  );
+  return data.data;
+}
+
+export async function issueLightweightViewerTicket(projectId: number, jobId: string) {
+  const { data } = await http.post<ApiResponse<LightweightViewerTicketResponse>>(
+    `/api/visualization-adapter/projects/${projectId}/lightweight-jobs/${jobId}:viewer-ticket`,
+    {}
   );
   return data.data;
 }
