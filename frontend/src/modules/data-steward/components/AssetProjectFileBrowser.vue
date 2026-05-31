@@ -303,6 +303,13 @@
           <el-table-column label="预览产物" width="190">
             <template #default="{ row }">
               <div v-if="row.kind === 'FILE'" class="file-browser__artifact-cell">
+                <el-tag
+                  v-if="glandarPilotStatus(row.file)"
+                  :type="glandarPilotTag(row.file)"
+                  size="small"
+                >
+                  {{ glandarPilotStatus(row.file)?.statusLabel }}
+                </el-tag>
                 <el-tag :type="previewArtifactTag(row)" size="small">
                   {{ previewArtifactLabel(row) }}
                 </el-tag>
@@ -560,6 +567,13 @@ import {
   previewFromFileName,
   type PreviewStatusLike
 } from '@/modules/data-steward/utils/previewStatus';
+import {
+  createFileLightweightJob,
+  fetchGlandarRvtPilotFiles,
+  issueLightweightViewerTicket,
+  type GlandarRvtPilotFile,
+  type LightweightJobCreateResponse
+} from '@/modules/visualization/api/visualization';
 import { useAuthStore } from '@/stores/auth';
 
 const props = defineProps<{
@@ -616,6 +630,7 @@ const nasOperations = ref<NasOperationRecord[]>([]);
 const nasQuarantine = ref<NasQuarantineRecord[]>([]);
 const nasTrialStatus = ref<NasWriteTrialStatus | null>(null);
 const previewArtifacts = ref<Record<number, PreviewArtifact>>({});
+const glandarPilotFiles = ref<GlandarRvtPilotFile[]>([]);
 const activeDir = ref('');
 const expandedDirs = ref<string[]>([]);
 const lastFileId = ref<number | null>(null);
@@ -651,6 +666,7 @@ const previewFallbackTicket = ref<FileAccessTicket | null>(null);
 const previewFallbackFileName = ref('');
 const previewFallbackAction = ref<'PREVIEW' | 'DOWNLOAD'>('PREVIEW');
 const fileAccessOpening = ref(false);
+const glandarOpeningFileId = ref<number | null>(null);
 const batchDownloadDialogVisible = ref(false);
 const batchDownloadLoading = ref(false);
 const batchDownloadRows = ref<BatchDownloadRow[]>([]);
@@ -942,6 +958,12 @@ const browserEntries = computed<BrowserEntry[]>(() => [
   ...fileEntries.value
 ]);
 
+const glandarPilotByFileId = computed(() => {
+  const map = new Map<number, GlandarRvtPilotFile>();
+  glandarPilotFiles.value.forEach((item) => map.set(item.fileId, item));
+  return map;
+});
+
 const selectedEntries = computed(() => {
   const keys = selectedEntryKeys.value;
   return browserEntries.value.filter((entry) => keys.has(entry.key));
@@ -999,6 +1021,7 @@ watch(
     void loadNasWriteTrialStatus();
     void loadDirectories();
     void loadFiles();
+    void loadGlandarPilotFiles();
   },
   { immediate: true }
 );
@@ -1449,6 +1472,15 @@ async function loadFiles() {
   }
 }
 
+async function loadGlandarPilotFiles() {
+  if (!Number.isFinite(props.projectId)) return;
+  try {
+    glandarPilotFiles.value = await fetchGlandarRvtPilotFiles(props.projectId);
+  } catch {
+    glandarPilotFiles.value = [];
+  }
+}
+
 async function loadDirectoryChildrenForTree(dirPath: string) {
   if (!Number.isFinite(props.projectId)) return;
   try {
@@ -1468,7 +1500,8 @@ async function refreshBrowserViews(showSuccess = false) {
   const loaders: Promise<unknown>[] = [
     loadNasWriteTrialStatus(),
     loadDirectories(),
-    loadFiles()
+    loadFiles(),
+    loadGlandarPilotFiles()
   ];
   if (operationsDrawerVisible.value) loaders.push(loadNasOperations(false));
   if (quarantineDrawerVisible.value) loaders.push(loadNasQuarantine(false));
@@ -1590,13 +1623,20 @@ function buildContextMenuItems(entries: BrowserEntry[]): ContextMenuItem[] {
 
   const preview = previewForFileEntry(entry);
   const isModel = preview.previewMode === 'BIM_LIGHTWEIGHT';
+  const pilotStatus = isModel ? glandarPilotStatus(entry.file) : null;
   const unregisteredReason = isRegisteredFile(entry.file) ? '' : '未登记文件需先扫描入库后治理';
   return [
     {
       command: 'open',
-      label: isModel ? '模型预览占位' : '打开 / 预览',
+      label: isModel
+        ? pilotStatus?.taskStatus === 'READY'
+          ? '打开轻量化模型'
+          : pilotStatus
+            ? '提交 / 查看轻量化'
+            : '模型预览占位'
+        : '打开 / 预览',
       disabled: Boolean(unregisteredReason),
-      reason: unregisteredReason || (isModel ? '模型预览引擎未接入' : undefined)
+      reason: unregisteredReason || (isModel && !pilotStatus ? '当前模型未纳入 10 个 RVT 试点' : undefined)
     },
     { command: 'detail', label: '详情', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined },
     {
@@ -1702,7 +1742,7 @@ async function openFileByPreviewStrategy(entry: FileBrowserEntry) {
     return;
   }
   if (preview.previewMode === 'BIM_LIGHTWEIGHT') {
-    openModelPreviewPlaceholder(entry);
+    await openGlandarPreviewOrSubmit(entry);
     return;
   }
   if (preview.previewMode === 'OFFICE_CONVERSION' || preview.previewMode === 'CAD_CONVERSION') {
@@ -1711,6 +1751,92 @@ async function openFileByPreviewStrategy(entry: FileBrowserEntry) {
     return;
   }
   emit('open-detail', entry.file.fileId);
+}
+
+async function openGlandarPreviewOrSubmit(entry: FileBrowserEntry) {
+  if (!isRegisteredFile(entry.file) || entry.file.fileId == null) {
+    openModelPreviewPlaceholder(entry);
+    return;
+  }
+  const pilotStatus = glandarPilotStatus(entry.file);
+  if (!pilotStatus) {
+    openModelPreviewPlaceholder(entry);
+    ElMessage.info('当前模型未纳入 105 项目 10 个 RVT 轻量化试点，暂时保留占位预览。');
+    return;
+  }
+  if (glandarOpeningFileId.value) return;
+  glandarOpeningFileId.value = entry.file.fileId;
+  try {
+    let jobId = pilotStatus.latestJobId;
+    let status = pilotStatus.taskStatus;
+    if (!jobId || status === 'NOT_STARTED' || status === 'FAILED') {
+      const created = await createFileLightweightJob(props.projectId, entry.file.fileId, false);
+      jobId = created.jobId;
+      status = created.taskStatus;
+      upsertGlandarPilotStatus(entry.file, created);
+    }
+    if (status !== 'READY') {
+      ElMessage.info('葛兰岱尔轻量化任务已提交或正在处理，稍后刷新后即可预览。');
+      await loadGlandarPilotFiles();
+      return;
+    }
+    if (!jobId) {
+      ElMessage.warning('轻量化任务缺少编号，暂时无法打开 Viewer。');
+      return;
+    }
+    const ticket = await issueLightweightViewerTicket(props.projectId, jobId);
+    if (!ticket.viewerAvailable || !ticket.ticketIssued) {
+      ElMessage.warning(ticket.blockedReason || 'Viewer 暂不可用，请稍后刷新。');
+      await loadGlandarPilotFiles();
+      return;
+    }
+    const routeLocation = router.resolve({
+      name: 'glandar-model-preview',
+      query: {
+        projectId: String(props.projectId),
+        jobId,
+        fileName: entry.file.fileName
+      }
+    });
+    window.open(routeLocation.href, '_blank', 'noopener,noreferrer');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '葛兰岱尔模型预览打开失败');
+  } finally {
+    glandarOpeningFileId.value = null;
+  }
+}
+
+function glandarPilotStatus(file: CatalogFile) {
+  if (!isRegisteredFile(file) || file.fileId == null) return null;
+  return glandarPilotByFileId.value.get(file.fileId) ?? null;
+}
+
+function glandarPilotTag(file: CatalogFile) {
+  const status = glandarPilotStatus(file)?.taskStatus;
+  if (status === 'READY') return 'success';
+  if (status === 'FAILED') return 'danger';
+  if (status === 'RUNNING' || status === 'UPLOADED' || status === 'SUBMITTED') return 'warning';
+  return 'info';
+}
+
+function upsertGlandarPilotStatus(file: CatalogFile, created: LightweightJobCreateResponse) {
+  if (!isRegisteredFile(file) || file.fileId == null) return;
+  const current = glandarPilotByFileId.value.get(file.fileId);
+  if (!current) return;
+  glandarPilotFiles.value = glandarPilotFiles.value.map((item) => item.fileId === file.fileId
+    ? {
+        ...item,
+        latestJobId: created.jobId,
+        lightweightName: created.lightweightName,
+        taskStatus: created.taskStatus,
+        progressPercent: created.progressPercent,
+        viewerAvailable: created.viewerAvailable,
+        statusLabel: created.statusLabel,
+        actionHint: created.actionHint,
+        blockedReason: created.blockedReason,
+        updatedAt: new Date().toISOString()
+      }
+    : item);
 }
 
 function handlePreparePreviewArtifact(entry: FileBrowserEntry) {

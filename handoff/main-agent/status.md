@@ -1,5 +1,153 @@
 # 主 Agent 项目状态
 
+## 2026-05-27 8B-GD0 启动：葛兰岱尔轻量化引擎对接握手
+
+- 用户确认：真实 BIM 轻量化引擎厂商为 `葛兰岱尔轻量化引擎`。
+- 对接方式：`HTTP API`。
+- 引擎部署：公司局域网另一台电脑。
+- 当前 3D 引擎支线独立 worktree：
+
+```text
+/Users/vc/Documents/数字化交付平台-8b-gd
+```
+
+- 当前分支：
+
+```text
+codex/8b-gd-lightweight-engine-adapter
+```
+
+- 当前 active 批次：`8B-GD0：葛兰岱尔引擎对接握手`。
+- 8B-GD0 定位：
+  - 只做接口清单和边界冻结。
+  - 不写业务代码。
+  - 不提交真实转换任务。
+  - 不影响 M3G 对象存储主线。
+- 已写入：
+  - `handoff/main-agent/8b-gd-roadmap.md`
+  - `handoff/main-agent/8b-gd0-glandar-engine-handshake-plan.md`
+  - `handoff/main-agent/8b-gd0-glandar-engine-api-handoff-template.md`
+  - `handoff/main-agent/8b-gd0-glandar-api-review.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+- 当前裁决：
+  - 引擎 API 文档已提供，主 agent 已完成初步评审。
+  - PoC 首选链路从“引擎主动拉取短时链接”调整为“平台后端通过 StorageService 读取文件流并分片上传 Station API”。
+  - 该调整不改变安全边界：引擎仍不直连 NAS / MinIO 底层目录，前端仍只拿平台 viewer ticket。
+  - 待开发 agent 报告确认无业务代码改动后，可安排 8B-GD0 极短验收。
+  - 验收通过后再判断是否进入 `8B-GD1：平台侧葛兰岱尔适配骨架`。
+  - 8B-GD1 仍必须默认 `BIM_ENGINE_PROVIDER=MOCK`，显式配置 `GLANDAR` 才启用真实引擎。
+  - 8B-GD 不得在 M3G 分支上开发。
+
+## 2026-05-27 8B-GD1 启动：平台侧葛兰岱尔适配骨架
+
+- 用户授权：在不影响 M3G 对象存储主线的前提下，推进葛兰岱尔引擎接入代码开发。
+- 当前分支仍为：
+
+```text
+codex/8b-gd-lightweight-engine-adapter
+```
+
+- 当前 worktree 仍为：
+
+```text
+/Users/vc/Documents/数字化交付平台-8b-gd
+```
+
+- 当前 active 批次切换为：`8B-GD1：平台侧葛兰岱尔适配骨架`。
+- 本批目标：
+  - 默认 `MOCK` 不回归。
+  - 增加 `GLANDAR` provider 配置骨架。
+  - 新增 lightweight job / viewer ticket 平台接口骨架。
+  - GLANDAR 未配置时业务化不可用，不 500。
+- 本批禁止：
+  - 不真实调用 Station `SplitUploadFile`。
+  - 不上传真实 RVT。
+  - 不新增迁移。
+  - 不修改 `docs/**`。
+  - 不改 M3G 对象存储主线。
+- 已写入：
+  - `handoff/main-agent/8b-gd-task-graph.md`
+  - `handoff/main-agent/8b-gd1-glandar-adapter-skeleton-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+- 当前裁决：
+  - 可交给 8B-GD 独立 Claude Code worker 开发。
+  - 开发完成后必须由测试 agent 按 8B-GD1 prompt 验收。
+
+## 2026-05-27 8B-GD1 开发完成：等待测试复核
+
+- CMUX Claude Code 已尝试启动，但因模型 API 报错中断；主 agent 按用户授权兜底开发。
+- 已完成：
+  - `GLANDAR` provider 配置骨架。
+  - 默认 `MOCK` 安全模式保持。
+  - lightweight job / viewer ticket 平台接口骨架。
+  - 8B-GD1 专项脚本。
+- 本批未做：
+  - 未真实调用 Station API。
+  - 未上传 RVT。
+  - 未签发真实 viewer ticket。
+  - 未新增数据库迁移。
+  - 未修改 `docs/**`。
+  - 未触碰 M3G 对象存储主线。
+- 自测：
+  - 后端构建通过。
+  - 前端构建通过。
+  - 8B-GD1 专项通过，`PASS=16 FAIL=0`。
+  - 8A 回归通过，`PASS=11 FAIL=0`。
+  - 文件访问安全回归通过，`PASS=18 FAIL=0`。
+  - `git diff --check` 通过。
+- 当前建议：安排测试 agent 复核 8B-GD1；通过后再准备 8B-GD2 的 105 RVT PoC。
+
+## 2026-05-28 8B-GD1 收口
+
+- 测试 agent 已完成 8B-GD1 完整验收与 P1 极短复验。
+- 当前无 P0 / P1。
+- P2 仅为既有前端 chunk size warning。
+- P1“关键新增文件未纳入 Git 跟踪”已关闭：
+  - `GlandarEngineSettings.java` 已进入 Git 索引。
+  - `scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh` 已进入 Git 索引。
+- 收口记录：
+
+```text
+handoff/main-agent/8b-gd1-glandar-adapter-skeleton-closure.md
+```
+
+- 主 agent 裁决：
+  - `8B-GD1：平台侧葛兰岱尔适配骨架` 正式收口。
+  - 不自动进入 `8B-GD2`。
+  - 8B-GD2 启动前必须重新确认引擎安全凭据、105 RVT 样本和 Station API 实测规则。
+
+
+## 2026-05-28 8B-GD2 启动准备
+
+- 已从 `codex/8b-gd-lightweight-engine-adapter` 新建真实转换 PoC 分支：
+
+```text
+codex/8b-gd2-rvt-poc
+```
+
+- 当前目标：`8B-GD2：105 RVT PoC 转换闭环`。
+- 前置检查：
+  - 葛兰岱尔 Station API 可达。
+  - 葛兰岱尔 Web / config 可达。
+  - 当前 shell 尚未注入 GLANDAR 安全配置。
+  - 105 项目存在 RVT 小样本，优先 `fileId=1257`。
+- 已写入：
+  - `handoff/main-agent/8b-gd2-glandar-rvt-poc-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+- 真实转换执行前必须安全注入：
+
+```text
+BIM_ENGINE_PROVIDER=GLANDAR
+GLANDAR_STATION_API_BASE=http://192.168.1.37:18086
+GLANDAR_STATION_WEB_BASE=http://192.168.1.37:18087
+GLANDAR_TOKEN=<secure-injection-only>
+```
+
+- `GLANDAR_TOKEN` 不得进入聊天、handoff、Git、日志、前端或 API 响应。
+
 ## 2026-05-27 M3F 启动：新文件对象存储优先写入
 
 - 用户确认：先做 `M3F`，后续再做 `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`。

@@ -1,182 +1,145 @@
-# 测试 Agent 当前任务：M3F 新文件对象存储优先写入验收
+# 测试 Agent 当前任务：8B-GD2 葛兰岱尔 RVT PoC 转换闭环验收
 
-你是卓羽智能数据中台的测试 agent。工作目录：
+你是数字化交付平台测试 agent。本轮只测试独立 3D 引擎分支，不测试主 M 系列对象存储分支。
 
-`/Users/vc/Documents/数字化交付平台`
+工作目录：
 
-当前验收批次：
+`/Users/vc/Documents/数字化交付平台-8b-gd`
 
-`M3F：新文件对象存储优先写入与 NAS 兼容回退`
+当前分支必须是：
 
-## 0. 验收目标
+`codex/8b-gd2-rvt-poc`
 
-本轮只验收 M3F：
+## 1. 本轮目标
 
-- 通过平台上传的新文件默认写入对象存储。
-- 新文件仍进入 MySQL 业务台账。
-- 新文件有 `assetUuid` 和 active object version。
-- 新文件 `storage-status=OBJECT_STORED`。
-- 新文件可通过受控 `file-access` 读取。
-- 历史 NAS 文件、迁移任务、预览产物不回归。
+验收 `8B-GD2：105 RVT PoC 转换闭环`。
 
-本轮不验收：
+本批应能对 105 项目 1-3 个 RVT 小样本提交葛兰岱尔 Station 转换任务，并通过平台接口查询状态。
 
-- 全量 NAS 搬迁。
-- Hermes 正文问答。
-- documents / chunks / Qdrant / OpenSearch。
-- 文件正文读取。
-- 真实 BIM 引擎。
+## 2. 必读文件
 
-## 1. 必读文件
-
+- `handoff/main-agent/8b-gd-task-graph.md`
+- `handoff/main-agent/8b-gd2-glandar-rvt-poc-plan.md`
 - `handoff/dev-agent/latest-report.md`
-- `handoff/dev-agent/current-prompt.md`
-- `handoff/main-agent/m3f-object-storage-first-write-plan.md`
-- `handoff/main-agent/m3-storage-evidence-chain-todo.md`
-- `scripts/dev/check-m3f-object-storage-first-write.sh`
+- `scripts/dev/check-8b-gd2-glandar-rvt-poc.sh`
+- `/Users/vc/Downloads/葛兰岱尔StationManagement平台接入API文档.md`
 
-## 2. 必跑命令
+## 3. 禁止事项
 
-请执行：
+测试中禁止：
+
+- 不要修改业务代码。
+- 不要修改 `docs/**`。
+- 不要提交 Git。
+- 不要打印 token。
+- 不要上传全量模型。
+- 不要触碰真实 NAS 文件增删改名。
+- 不要写 Hermes memory / documents / chunks / Qdrant / OpenSearch。
+- 不要停止主线 8080 服务；如需后端，使用 18088。
+
+## 4. 必测项
+
+1. 缺少 GLANDAR 配置时，接口业务化阻断，不 500。
+2. GLANDAR 配置完整时，105 RVT 样本可提交转换任务。
+3. 平台任务记录可查询。
+4. Station 查询结果可映射为平台状态。
+5. 如果 Station 成功，状态应进入 READY 或 viewer 可用状态。
+6. 如果 Station 失败，失败原因必须可见。
+7. API 响应不得包含：
+   - `/Volumes`
+   - `smb://`
+   - `nas://`
+   - `storage_uri`
+   - bucket
+   - object_key
+   - Token
+   - secret
+   - raw row
+   - SQL
+8. 8B-GD1 / 8A / file-access 回归通过。
+
+## 5. 必跑命令
 
 ```bash
-cd /Users/vc/Documents/数字化交付平台/backend
+cd /Users/vc/Documents/数字化交付平台-8b-gd
+
+git branch --show-current
+git status --short
+
+cd backend
 ./mvnw -pl delivery-app -am -DskipTests package
 
-cd /Users/vc/Documents/数字化交付平台
+cd /Users/vc/Documents/数字化交付平台-8b-gd
+mkdir -p tmp/run-logs
+SERVER_PORT=18088 java -jar backend/delivery-app/target/delivery-app-1.0.0-SNAPSHOT.jar > tmp/run-logs/8b-gd2-test-backend.log 2>&1 &
+APP_PID=$!
+
+for i in {1..60}; do
+  if curl -fsS http://127.0.0.1:18088/actuator/health >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+curl -fsS http://127.0.0.1:18088/actuator/health
+
+BASE_URL=http://127.0.0.1:18088 bash scripts/dev/check-8b-gd2-glandar-rvt-poc.sh
+BASE_URL=http://127.0.0.1:18088 bash scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh
+BASE_URL=http://127.0.0.1:18088 bash scripts/dev/check-phase2-batch8a-bim-lightweight-adapter.sh
+BASE_URL=http://127.0.0.1:18088 bash scripts/dev/check-phase2-batch4-file-access.sh
+
 corepack pnpm --dir frontend build
-curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-m3f-object-storage-first-write.sh
-bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
-bash scripts/dev/check-m3d-real-nas-object-mirror-gray.sh
-bash scripts/dev/check-m3c-storage-migration-task-center.sh
-bash scripts/dev/check-m3b-object-storage-mirror-trial.sh
-bash scripts/dev/check-m3a-storage-service-foundation.sh
-bash scripts/dev/check-phase2-batch4-file-access.sh
+
 git diff --check
+
+kill $APP_PID || true
 ```
 
-如后端未运行，可按项目已有方式启动后重试健康检查和专项脚本。
-
-## 3. Git 范围检查
-
-请检查：
+如果本轮要测试真实 Station 转换，必须先由操作者在本地安全 shell 注入：
 
 ```bash
-git status --short
-git diff --name-only
-git diff --cached --name-status
+export BIM_ENGINE_PROVIDER=GLANDAR
+export GLANDAR_STATION_API_BASE=http://192.168.1.37:18086
+export GLANDAR_STATION_WEB_BASE=http://192.168.1.37:18087
+export GLANDAR_TOKEN='<secure-token>'
 ```
 
-M3F 允许包含：
+不要把 token 写入报告。
 
-- `backend/**` 中与 StorageService、文件上传、对象版本、受控访问相关的最小改动。
-- `frontend/**` 中文件管理器上传后状态展示的最小改动。
-- `scripts/dev/check-m3f-object-storage-first-write.sh`
-- `handoff/dev-agent/latest-report.md`
-- 必要的 Flyway 新迁移。
-
-M3F 不允许包含：
-
-- `docs/**`
-- Hermes 正文问答。
-- documents / chunks / Qdrant / OpenSearch / parser / indexing。
-- 真实 BIM 引擎。
-- 全量 NAS 迁移入口。
-- 真实 NAS 批量移动、删除、重命名能力扩展。
-
-## 4. 核心验收点
-
-重点确认：
-
-1. 新上传文件不是先写真实业务 NAS 目录。
-2. 新上传文件创建 `data_file_resources` 记录。
-3. 新上传文件有 `assetUuid`。
-4. 新上传文件创建 `data_storage_objects`。
-5. 新上传文件创建 active `data_file_object_versions`。
-6. `GET /api/data-steward/assets/files/{fileId}/storage-status` 返回 `OBJECT_STORED`。
-7. `file-access` 可读取对象存储新增文件内容。
-8. 对象存储不可用时不 500、不假成功。
-9. 历史 NAS 文件仍可走原有受控访问。
-10. M3E 预览产物、M3D 灰度镜像、M3C 迁移任务不回归。
-
-## 5. 禁出字段扫描
-
-所有 M3F 响应和脚本输出中不得出现：
-
-- `/Volumes`
-- `/Users`
-- `smb://`
-- `nas://`
-- `storage_uri`
-- `storageUri`
-- `bucket`
-- `object_key`
-- `objectKey`
-- raw row
-- SQL
-- token
-- secret
-- password
-
-说明性文案里可以出现“对象存储”这个业务词，但不能出现真实 bucket / object key 值。
-
-## 6. 浏览器轻量检查
-
-本轮不要求全量浏览器逐页点击，只做轻量检查：
-
-- 打开 `http://127.0.0.1:5173/data-steward/assets/503?tab=files`
-- 文件管理器页面不白屏。
-- 上传入口仍可见。
-- 上传成功后的文件能显示在当前目录。
-- 新文件的存储状态或详情可体现对象存储状态。
-- 不需要在真实业务目录执行破坏性操作。
-
-## 7. P0 / P1 判定
+## 6. P0 / P1 判定
 
 P0：
 
-- 新上传文件泄露真实 NAS 路径、bucket、object key、storage URI、token、secret。
-- 真实业务 NAS 文件被移动、删除、覆盖或改名。
-- file-access 权限链路回归失败。
-- 引入 Hermes 正文问答、parser、indexing、documents / chunks。
-- 全量历史 NAS 迁移被误开启。
+- token / secret 泄露。
+- 真实 NAS 路径、bucket、object key 泄露。
+- 误触发全量模型上传。
+- 修改或删除真实 NAS 文件。
+- 破坏 file-access 安全链路。
 
 P1：
 
-- 新上传文件仍默认写 NAS，未写对象存储。
-- 新文件无 `assetUuid`。
-- 新文件无 active object version。
-- 新文件 storage-status 不是 `OBJECT_STORED`。
-- 新文件无法通过受控 file-access 读取。
-- 对象存储不可用时假成功或 500。
-- M3F 专项脚本失败。
-- M3E / M3D / M3C / M3B / M3A 关键回归失败。
-- M3F 专项脚本未纳入 Git。
+- 105 RVT 样本无法提交任务且不是 Station/凭据环境问题。
+- Station 查询接口不可用且没有业务化失败原因。
+- 新增接口不在 OpenAPI。
+- 新增关键文件未纳入 Git 跟踪。
+- 缺配置时返回 500。
 
 P2：
 
-- 既有 Vite chunk warning。
-- `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪项，只记录，不阻塞。
-- 文案细节粗糙但不影响主链路。
+- 既有前端 chunk warning。
+- Station 转换耗时较长但状态可查。
 
-## 8. 报告要求
+## 7. 报告要求
 
-完成后写入：
+写入：
 
 `handoff/test-agent/latest-report.md`
 
-报告至少包含：
+报告必须说明：
 
-- 测试结论：通过 / 不通过。
-- P0 / P1 / P2。
-- 必跑命令结果。
-- M3F 专项脚本结果。
-- 新上传文件对象存储验证结果。
-- `assetUuid` / active object version / storage-status 验证结果。
-- file-access 读取验证结果。
-- 对象存储不可用场景验证结果。
-- 回归脚本结果。
+- 是否真的执行 Station 转换。
+- 使用的 fileId，不写真实路径。
+- 是否拿到 lightweightName。
+- Station 状态映射结果。
 - 禁出字段扫描结果。
-- Git 范围检查结果。
-- 是否建议主 agent 收口 M3F。
+- 是否建议主 agent 收口 8B-GD2。

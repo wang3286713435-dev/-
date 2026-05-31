@@ -4118,3 +4118,159 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - `handoff/main-agent/status.md`
   - `handoff/main-agent/phase2-current-roadmap.md`
 - 原下一步建议为 `M4A：documents / chunks 语义证据契约`；2026-05-27 已根据用户新裁决插入 `M3F：新文件对象存储优先写入` 与后续 `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`，M4A 顺延。
+# 2026-05-27 8B-GD0 葛兰岱尔轻量化引擎支线启动
+
+- 用户确认真实 BIM 轻量化引擎厂商为 `葛兰岱尔轻量化引擎`。
+- 主 agent 已从 `main` 创建独立 worktree：
+
+```text
+/Users/vc/Documents/数字化交付平台-8b-gd
+```
+
+- 独立分支：
+
+```text
+codex/8b-gd-lightweight-engine-adapter
+```
+
+- 本支线不在当前 M3G 对象存储主线分支上叠加开发。
+- 当前批次冻结为 `8B-GD0：葛兰岱尔引擎对接握手`。
+- 已新增对接路线、握手计划、引擎团队接口模板，并覆盖开发 / 测试 agent prompt。
+- 本批只允许 handoff 层更新，不允许修改后端、前端、脚本、迁移和仓库 `docs/**`。
+- 下一步需要引擎团队提供：
+  - base URL
+  - health API
+  - 认证方式
+  - submit conversion API
+  - task status API
+  - viewer session / URL API
+  - 错误码、格式限制、并发和文件大小限制
+
+## 2026-05-27 8B-GD0 葛兰岱尔 API 文档评审
+
+- 已阅读 `/Users/vc/Downloads/葛兰岱尔StationManagement平台接入API文档.md`。
+- 已新增评审文件：
+
+```text
+handoff/main-agent/8b-gd0-glandar-api-review.md
+```
+
+- 已确认 Station API 端口为 `18086`，Station Web / 引擎静态资源端口为 `18087`。
+- 已确认文档推荐大模型通过 `SplitUploadFile` 分片上传，不是引擎主动拉取。
+- 主 agent 裁决：
+  - 8B-GD1 / GD2 优先按“平台后端读取 StorageService 文件流并分片上传 Station API”实现。
+  - `ModelUploadUrl` / 引擎主动拉取短时链接保留为后续扩展，不作为首轮 PoC 前置。
+  - Station Token 必须由后端安全注入，不得进入前端、handoff 或 Git。
+  - `modelAccessAddress` 必须做可访问性校验，尤其要防止历史 `18087/Tools/output/model/...` 返回 404。
+
+## 2026-05-27 8B-GD1 任务图与开发 prompt
+
+- 已新增任务图：
+
+```text
+handoff/main-agent/8b-gd-task-graph.md
+```
+
+- 已新增开发计划：
+
+```text
+handoff/main-agent/8b-gd1-glandar-adapter-skeleton-plan.md
+```
+
+- 已覆盖：
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+
+- 8B-GD1 明确为代码骨架批次，但仍禁止真实转换。
+- 默认 provider 必须为 `MOCK`。
+- `GLANDAR` 仅在显式配置时启用，未配置时必须业务化降级。
+- 8B-GD1 不新增 Flyway 迁移，避免与 M3G 主线迁移号冲突。
+
+## 2026-05-27 8B-GD1 兜底开发完成
+
+- CMUX Claude Code 已尝试启动，但因模型 API 报错中断：
+
+```text
+API Error: 400 The content[].thinking in the thinking mode must be passed back to the API.
+```
+
+- 已由主 agent 在独立 worktree 兜底完成 8B-GD1 代码骨架。
+- 新增 `GlandarEngineSettings`，默认 provider 为 `MOCK`，显式配置才进入 `GLANDAR`。
+- 新增平台侧 lightweight job / viewer ticket 接口骨架：
+
+```text
+POST /api/visualization-adapter/projects/{projectId}/model-integrations/{integrationId}/lightweight-jobs
+GET  /api/visualization-adapter/projects/{projectId}/lightweight-jobs/{jobId}
+POST /api/visualization-adapter/projects/{projectId}/lightweight-jobs/{jobId}:viewer-ticket
+```
+
+- 本批不调用 Station `SplitUploadFile`，不读取模型正文，不上传 RVT，不签发真实 Viewer ticket。
+- 新增专项脚本：
+
+```text
+scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh
+```
+
+- 自测结果：
+  - 后端构建通过。
+  - 8B-GD1 专项脚本通过，`PASS=16 FAIL=0`。
+  - 8A Mock 轻量化回归通过，`PASS=11 FAIL=0`。
+  - Phase2 batch4 文件访问安全回归通过，`PASS=18 FAIL=0`。
+  - 前端构建通过，仅既有 chunk size warning。
+  - `git diff --check` 通过。
+- 当前 8B-GD1 等待测试 agent 复核，不应进入 8B-GD2 真实转换。
+
+## 2026-05-28 8B-GD1 正式收口
+
+- 测试 agent 已完成 8B-GD1 完整验收与 P1 极短复验。
+- 完整验收结果：
+  - 后端构建通过。
+  - `18088` 健康检查通过。
+  - 8B-GD1 专项脚本通过，`PASS=16 FAIL=0`。
+  - 8A Mock 回归通过，`PASS=11 FAIL=0`。
+  - file-access 回归通过，`PASS=18 FAIL=0`。
+  - 前端构建通过。
+  - `git diff --check` 通过。
+  - `BIM_ENGINE_PROVIDER=GLANDAR` 且未配置时返回业务化阻断，不是 500。
+- P1 极短复验结果：
+  - `GlandarEngineSettings.java` 已纳入 Git 跟踪。
+  - `scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh` 已纳入 Git 跟踪。
+  - `git diff --check` 与 `git diff --cached --check` 均通过。
+  - `git ls-files --others --exclude-standard` 无输出。
+- 主 agent 裁决：
+  - `8B-GD1：平台侧葛兰岱尔适配骨架` 正式收口。
+  - 不自动进入 `8B-GD2`。
+  - 8B-GD2 启动前必须确认 Station Token 安全注入、105 RVT 样本、Station 上传/查询/Viewer 规则。
+- 收口记录：
+
+```text
+handoff/main-agent/8b-gd1-glandar-adapter-skeleton-closure.md
+```
+
+## 2026-05-28 8B-GD2 启动准备
+
+- 已将 `8B-GD1` 推送远端，并从收口点新建分支：
+
+```text
+codex/8b-gd2-rvt-poc
+```
+
+- 已进行真实转换前置检查：
+  - Station API `http://192.168.1.37:18086` 可达。
+  - Station Web / config `http://192.168.1.37:18087/config.json` 可达。
+  - 当前 shell 未注入 `BIM_ENGINE_PROVIDER=GLANDAR`、`GLANDAR_STATION_API_BASE`、`GLANDAR_STATION_WEB_BASE`、安全凭据。
+  - 105 / 503 项目存在 RVT 小样本，优先样本 `fileId=1257`，约 10MB，已有 active object version。
+- 已新增 8B-GD2 计划：
+
+```text
+handoff/main-agent/8b-gd2-glandar-rvt-poc-plan.md
+```
+
+- 已更新开发 / 测试 prompt：
+
+```text
+handoff/dev-agent/current-prompt.md
+handoff/test-agent/current-prompt.md
+```
+
+- 当前裁决：可以进入 8B-GD2 开发，但真实转换必须先通过本机安全 shell 注入 Station 凭据，禁止把 token 写入聊天、Git、handoff、日志或前端。

@@ -10,7 +10,10 @@ export const http = axios.create({
 
 http.interceptors.request.use((config) => {
   const session = readSession();
-  if (session?.accessToken) {
+  const url = config.url ?? '';
+  const isPublicAuthRequest = url.includes('/api/core/auth/login')
+    || url.includes('/api/core/auth/register');
+  if (session?.accessToken && !isPublicAuthRequest) {
     config.headers.Authorization = `Bearer ${session.accessToken}`;
   }
   return config;

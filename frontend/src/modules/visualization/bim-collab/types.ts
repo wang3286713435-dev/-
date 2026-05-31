@@ -87,6 +87,20 @@ export interface BimSceneNode {
   actionHint: string;
 }
 
+export interface BimEmbeddedPreviewModel extends BimSceneNode {
+  frameUrl: string;
+  fileManagerUrl?: string;
+  sizeLabel?: string;
+}
+
+export interface BimLightweightSummary {
+  totalModelFiles: number;
+  readyCount: number;
+  pendingCount: number;
+  failedCount: number;
+  readyModels: BimEmbeddedPreviewModel[];
+}
+
 export interface BimTimelineEvent {
   id: string;
   title: string;
@@ -95,6 +109,7 @@ export interface BimTimelineEvent {
 }
 
 export interface BimCollaborationData {
+  projectId: number;
   projectName: string;
   projectCode: string;
   projectStage: string;
