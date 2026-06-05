@@ -7,6 +7,7 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageOb
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageObjectificationPlanDryRunResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationFullPlanRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationFullPlanResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationCoverageReportResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationInventoryResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationLongRunRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationLongRunResponse;
@@ -85,6 +86,11 @@ public class StorageMigrationController {
     @GetMapping("/storage-objectification-inventory")
     public ApiResponse<StorageObjectificationInventoryResponse> allProjectInventory() {
         return ApiResponse.success(storageMigrationApplicationService.inventory(currentUserId(), null));
+    }
+
+    @GetMapping("/storage-objectification-coverage")
+    public ApiResponse<StorageObjectificationCoverageReportResponse> objectificationCoverage() {
+        return ApiResponse.success(storageMigrationApplicationService.objectificationCoverage(currentUserId()));
     }
 
     @GetMapping("/projects/{projectId}/storage-objectification-inventory")

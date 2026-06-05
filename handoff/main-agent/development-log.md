@@ -1,5 +1,136 @@
 # 主 Agent 开发监控日志
 
+## 2026-06-04：UX4 平台视觉与员工使用效率修复启动
+
+- 用户要求：
+  - 当前阶段开始平台视觉与可用性修复。
+  - 明确视觉重点与员工使用效率。
+  - 当前批次修复一些 bug 和使用性问题。
+- 主 agent 裁决：
+  - 插入 `UX4：平台视觉与员工使用效率修复`。
+  - UX4 是前端体验修复批次，不是 M3/M4 功能批次。
+  - 本批只允许修改 `frontend/**` 和开发报告，不允许改后端、数据库、API 语义、权限、`docs/**`。
+  - UX4 完成后再回到 `M3-CLOSE` 和 `M3X`。
+- 视觉重点：
+  - 员工进入平台后先选项目。
+  - 最重要入口聚焦：文件管理、项目可视化、交付状态。
+  - 技术字段默认折叠，业务状态用业务语言解释。
+  - 文件管理器保持 Windows / macOS 文件管理器习惯。
+  - 对象存储状态可理解，但不误导为 AI 已理解文件。
+- 已写入：
+  - `handoff/main-agent/ux4-visual-usability-fix-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+
+## 2026-06-04：DOC-BASE 文档基线收口启动并完成
+
+- 用户要求：
+  - 开一个专门的文档收口批次。
+  - 更新 PRD、design 设计文档和后续开发任务图。
+  - 保留 API 接口文档。
+  - 建立后续实时维护文档同步规则。
+  - 全项目对象化后续单独开批次推进。
+- 主 agent 裁决：
+  - 当前 active 批次切换为 `DOC-BASE：文档基线收口`。
+  - 本批只更新文档和 handoff，不写业务代码，不执行对象化迁移。
+  - M3G-9 已验收通过，但 M3 整体收口需在 DOC-BASE 后单独判断。
+  - 全项目对象化后续单开 `M3X`，不混入文档批次。
+- 已新增：
+  - `docs/11-current-baseline-and-next-roadmap.md`
+  - `docs/12-api-contract-and-maintenance.md`
+  - `handoff/main-agent/doc-base-current-baseline-docs-closure.md`
+- 已更新：
+  - `docs/README.md`
+  - `docs/07-complete-delivery-prd.md`
+  - `docs/03-architecture-and-system-design.md`
+  - `docs/10-phase2-development-roadmap.md`
+  - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
+  - `handoff/main-agent/m3-m5-storage-evidence-task-graph.md`
+  - `handoff/main-agent/status.md`
+- 当前后续路线：
+  - `M3-CLOSE -> M3X -> M4A/M4B/M4C -> M5A/M5B -> 8D/8E -> 9A`。
+
+## 2026-06-03：8C-GD-F1 启动
+
+- 用户反馈：
+  - BIM 协同页轻量化模型列表不应一次性展示全部模型，需要分页。
+  - BIM 协同管理页应成为首屏，`平台窗口 · sc-datav BIM 前端组件` 应放在最上方。
+  - 资产文件、模型文件、图纸文件、管理对象、质量风险、交付完成率等指标应融入大屏，不应作为大屏外的独立卡片散落。
+- 主 agent 裁决：
+  - 当前插入小修批次 `8C-GD-F1：BIM 协同首屏与轻量化列表体验修复`。
+  - 本批只改前端，不改后端葛兰岱尔真实提交流程。
+  - READY 模型已存在，前端必须让用户能快速看到“已有模型可预览”。
+- 已更新：
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+  - `handoff/main-agent/status.md`
+- 验收重点：
+  - 大屏首屏。
+  - 指标融合进大屏。
+  - 模型列表分页。
+  - READY 模型可见且可打开 Viewer 入口。
+  - file-access 和 M3G-8 不回归。
+
+## 2026-06-01：8C-GD-MAINLINE-FULL 启动
+
+- 用户预览后反馈：
+  - 当前不是“真实合并成功”的业务状态。
+  - DT-F1 只证明葛兰岱尔代码已合入、BIM 协同页默认安全模式可打开。
+  - 还不能证明真实 GLANDAR Station 可连接、非试点模型可提交轻量化、转换完成后可真实打开 Viewer。
+- 主 agent 裁决：
+  - `DT-F1` 降级为兼容合并前置批次。
+  - 当前 active 批次切换为 `8C-GD-MAINLINE-FULL：葛兰岱尔轻量化引擎主线全量接入`。
+  - 本批不再以“10 个 RVT 试点列表可见”为完成标准，而以“真实配置注入后可提交、查询、预览”为完成标准。
+- 已更新：
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+  - `handoff/main-agent/status.md`
+- 本批关键边界：
+  - 不提交 `GLANDAR_TOKEN`。
+  - 不让前端接触长期 token。
+  - 不绕过平台权限直接访问 NAS。
+  - 不改 M3 对象存储核心逻辑。
+  - 不扩展 Hermes / semantic indexing。
+  - 真实 GLANDAR Station 不可达时，必须报告阻塞，不允许伪造通过。
+
+## 2026-06-03：8C-GD-MAINLINE-FULL 开发报告审计
+
+- 开发 agent 已完成 8C-GD-MAINLINE-FULL 开发并写回 `handoff/dev-agent/latest-report.md`。
+- 主 agent 已复核开发报告和 staged 改动范围：
+  - 后端新增全项目模型清单接口 `glandar/model-files`。
+  - 文件级轻量化提交已移除 10 个 RVT 试点硬限制。
+  - BIM 协同页改为展示全项目模型轻量化状态。
+  - 文件管理器模型打开逻辑已接入 READY / 未轻量化 / 失败 / 不支持格式等状态。
+  - 未发现 `docs/**`、Hermes、语义索引、M3 对象存储核心逻辑越界。
+- 主 agent 补跑验证：
+  - 后端健康检查：通过。
+  - `scripts/dev/check-8c-gd-mainline-full-glandar-render.sh`：`PASS=8 FAIL=0`。
+  - `scripts/dev/check-phase2-batch4-file-access.sh`：`PASS=18 FAIL=0`。
+  - `scripts/dev/check-m3g8-object-first-read-fallback.sh`：`PASS=7 FAIL=0`。
+  - `git diff --check` / `git diff --cached --check`：通过。
+- 当前审计判断：
+  - 可以进入测试 agent 验收。
+  - 但当前本机未安全注入 `GLANDAR_TOKEN`，因此只能验收“未配置安全模式 + 全项目模型清单 + 非试点提交被正确阻断”。
+  - 真实 Station 上传、转换、READY 产物和真实 Viewer 渲染仍属于未验证项；测试 agent 不得伪造通过。
+
+## 2026-06-03：GLANDAR token 本机安全注入验证
+
+- 用户已把 `GLANDAR_TOKEN` 写入 macOS 钥匙串。
+- 主 agent 验证：
+  - 钥匙串中存在 `zhuoyu-glandar-token`。
+  - 新增本机私有启动脚本：`/Users/vc/.zhuoyu-delivery/start-datahub-glandar.sh`。
+  - 脚本同时加载 `tmp/local-env/nas-minio.env` 和钥匙串 token。
+  - 后端以 `BIM_ENGINE_PROVIDER=GLANDAR`、`GLANDAR_STATION_API_BASE=http://192.168.1.37:18086`、`GLANDAR_STATION_WEB_BASE=http://192.168.1.37:18087` 启动。
+- 验证结果：
+  - 后端健康检查通过。
+  - `scripts/dev/check-8c-gd-mainline-full-glandar-render.sh` 通过：`PASS=8 FAIL=0`。
+  - 非试点 RVT 已不再返回 `GLANDAR_ENGINE_NOT_CONFIGURED`，实际提交后状态为 `RUNNING`。
+  - 输出禁出字段扫描通过，未发现 token、真实 NAS 路径、`storage_uri`、bucket、object key。
+- 当前仍需测试 agent 继续验证：
+  - Station 任务是否最终进入 `READY`。
+  - READY 后 Viewer ticket 是否可签发。
+  - 真实 Viewer 是否能渲染模型。
+
 ## 2026-05-29：M3-M5 后续任务图落地
 
 - 用户要求：将后续计划落地为任务图，完成一项勾选一项，完成后再收口 M3 批次。
@@ -4811,3 +4942,141 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - 排除 `.claude/**`、`CLAUDE.md`、`tmp/**` 和本地运行文件。
   - 合并 `origin/main` 后，BIM 协同和葛兰岱尔优先保留 main 能力，M3G 对象存储冲突优先保留当前分支能力。
   - 必须验证 `d69cbc2` 已进入当前分支。
+
+## 2026-06-03 8C-GD-F1 主 Agent 审计：BIM 协同首屏与轻量化列表体验
+
+- 开发 agent 已完成 `8C-GD-F1：BIM 协同首屏与轻量化列表体验修复`，报告写入 `handoff/dev-agent/latest-report.md`。
+- 主 agent 已审计当前 staged 范围：
+  - 8C-GD 主线接入相关后端 / 前端文件仍在 staged 范围内。
+  - 8C-GD-F1 本轮体验修复集中在 `DigitalTwinDashboardPage.vue`、`BimCollaborationIsland.tsx`、`BimCollaborationIsland.css`。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 仍为本地未跟踪项，未纳入交付。
+- 主 agent 已复跑：
+  - `corepack pnpm --dir frontend build`：通过，仅既有 Vite chunk warning。
+  - `curl -fsS http://127.0.0.1:8080/actuator/health`：通过。
+  - `bash scripts/dev/check-8c-gd-mainline-full-glandar-render.sh`：通过。
+  - `bash scripts/dev/check-phase2-batch4-file-access.sh`：通过。
+  - `bash scripts/dev/check-m3g8-object-first-read-fallback.sh`：通过。
+  - `git diff --check` / `git diff --cached --check`：通过。
+- 主 agent 浏览器短验：
+  - 打开 `/bim-collaboration?projectId=503&preview=glandar` 后，105 项目可进入 BIM 协同页。
+  - `平台窗口 · sc-datav BIM 前端组件` 位于首屏核心位置。
+  - 资产文件、模型文件、图纸文件、管理对象、质量风险、交付完成 6 个指标已进入 BIM 大屏内部信息层。
+  - BIM 场景默认显示 READY 模型 `宝安_启航华居_4栋_建_全楼层.rvt`，Viewer iframe 存在。
+  - 轻量化模型列表已分页，显示 `第 1 / 20 页 · 共 198 个模型 · 每页 10 个`，READY 模型在第一页并有 `打开预览`。
+- 主 agent 初步结论：
+  - 未发现 P0 / P1。
+  - 可以交给测试 agent 按 `handoff/test-agent/current-prompt.md` 做正式验收。
+  - 收口前仍需测试 agent 确认多分辨率、文件管理器模型入口和禁出字段扫描。
+
+## 2026-06-03 8C-GD-F2 启动：BIM 协同综合驾驶舱首屏纠偏
+
+- 用户反馈：
+  - BIM 协同首屏不应默认进入 `BIM 场景`。
+  - 默认首屏应为 `综合驾驶舱`。
+  - `构件分类统计` 和 `问题趋势` 两块应替换为真实项目核心指标。
+  - 页面底部 `下一步建议` 和 `安全边界` 模块应删除。
+- 主 agent 裁决：
+  - 插入小返工批次 `8C-GD-F2：BIM 协同综合驾驶舱首屏纠偏`。
+  - 不直接收口 F1。
+  - 不进入 M3G-9。
+  - 不扩大到后端或葛兰岱尔接口开发。
+- 已写入：
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+  - `handoff/main-agent/status.md`
+
+## 2026-06-03 8C-GD-F2 主 Agent 审计：综合驾驶舱默认首屏
+
+- 开发 agent 已完成 `8C-GD-F2：BIM 协同综合驾驶舱首屏纠偏`，报告写入 `handoff/dev-agent/latest-report.md`。
+- 主 agent 已复跑：
+  - `corepack pnpm --dir frontend build`：通过，仅既有 Vite chunk warning。
+  - `curl -fsS http://127.0.0.1:8080/actuator/health`：通过。
+  - `bash scripts/dev/check-8c-gd-mainline-full-glandar-render.sh`：通过。
+  - `bash scripts/dev/check-phase2-batch4-file-access.sh`：通过。
+  - `bash scripts/dev/check-m3g8-object-first-read-fallback.sh`：通过。
+  - `git diff --check` / `git diff --cached --check`：通过。
+- 主 agent 浏览器短验：
+  - 打开 `/bim-collaboration?projectId=503&preview=glandar` 后，默认模块为 `综合驾驶舱`，不是 `BIM 场景`。
+  - `平台窗口 · sc-datav BIM 前端组件` 位于首屏核心位置。
+  - 资产文件、模型文件、图纸文件、管理对象、质量风险、交付完成 6 个指标在大屏内部可见。
+  - `构件分类统计` 与 `问题趋势` 旧模块未出现在综合驾驶舱。
+  - 页面外层 `下一步建议` 与 `安全边界` 未继续展示。
+  - `BIM 场景` 与 READY Viewer 仍保留在模块入口中，8C-GD smoke 已覆盖 Viewer ticket。
+- 主 agent 初步结论：
+  - 未发现 P0 / P1。
+  - 可以交给测试 agent 按 `handoff/test-agent/current-prompt.md` 做正式验收。
+  - 收口前仍需测试 agent 确认多分辨率和文件管理器模型入口。
+
+## 2026-06-04 主线模块化开发门禁
+
+- 用户明确要求：后续开发必须以模块形式接入平台，不能一次性做一个“大壳子”后假装整体完成。
+- 主 agent 裁决：
+  - 当前不新增大功能，不进入新模块开发。
+  - 先完成 `8C-GD-F2` 正式测试验收。
+  - `8C-GD-F2` 通过后，进入 `M3G-9：全项目对象化覆盖率报告与 M3 收口`。
+  - M3 收口后再按模块推进：对象存储模块、文件管理模块、工程树/文件归属模块、交付工作中心模块、BIM 协同模块、后续 Hermes 证据模块。
+- 模块进入主线的最低要求：
+  - 必须围绕真实数据，不以 mock 或静态壳层冒充完成。
+  - 必须有稳定接口或明确数据来源。
+  - 必须有专项验收脚本。
+  - 必须说明边界，例如对象存储不等于语义理解、BIM Viewer 不等于构件级解析。
+  - 必须至少先在 105 或一个真实项目上跑通，再评估复制到其他项目。
+- 已更新 `handoff/test-agent/current-prompt.md`：
+  - 增加文件管理器 BIM 模型入口验收，避免继续展示 `准备预览产物状态` 等旧占位口径。
+
+## 2026-06-04 8C-GD-F2 正式收口
+
+- 测试 agent 已完成 `8C-GD-F2：BIM 协同综合驾驶舱首屏纠偏` 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：通过。
+- P0：无。
+- P1：无。
+- 已确认：
+  - BIM 协同页默认首屏为 `综合驾驶舱`。
+  - 资产文件、模型文件、图纸文件、管理对象、质量风险、交付完成 6 个真实指标显示正常。
+  - `构件分类统计`、`问题趋势`、外层 `下一步建议`、外层 `安全边界` 已不再展示。
+  - `BIM 场景` READY Viewer 未回归。
+  - 轻量化模型列表分页未回归。
+  - 文件管理器模型入口未回归。
+  - file-access 和 M3G-8 对象优先读取未回归。
+- 主 agent 裁决：
+  - `8C-GD-F2` 正式收口。
+  - 当前主线回到 M3 对象存储收口。
+  - 下一批次进入 `M3G-9：全项目对象化覆盖率报告与 M3 收口`。
+
+## 2026-06-04 M3G-9 启动：全项目对象化覆盖率报告与 M3 收口
+
+- 启动依据：
+  - `M3G-8` 已收口，对象优先读取和 NAS_ONLY 历史链路口径稳定。
+  - `8C-GD-F2` 已收口，BIM 协同兼容小返工不再阻塞 M3。
+  - 105 已完成 `2928 / 2928` 全量对象化。
+  - M3 收口前仍缺一个平台级“全项目对象化覆盖率报告”。
+- 本批目标：
+  - 输出全项目对象化覆盖率。
+  - 明确每个真实项目状态：已完成、部分完成、NAS_ONLY、失败待治理、排除。
+  - 明确 105 样板项目状态。
+  - 给出 M3 是否可收口的依据。
+  - 不执行迁移，不触碰真实 NAS 文件。
+- 已写入：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+- 模块化门禁继续生效：
+  - M3G-9 必须基于真实数据库和真实对象状态。
+  - 不允许用静态假数据或大壳子报告冒充完成。
+  - 后续 M4 / Hermes / 语义证据只能在 M3 收口后再另行裁决。
+
+## 2026-06-05 BASELINE-PREP：M3 与 8C-GD-F4 基线准备完成
+
+- 用户要求：
+  - 先完成当前工作区 checkpoint、M3 整体收口和 8C-GD-F4 极短验证。
+  - 完成后再由用户批准是否插入平台交互逻辑优化批次。
+- 主 agent 已完成：
+  - `CHECKPOINT-1：主线基线准备与工作区归类报告`
+  - `M3 整体收口报告：对象存储主链路`
+  - `8C-GD-F4 极短验收记录：构件拾取、模型爆炸与属性代理`
+- 验证结果：
+  - 后端健康检查返回 `UP`。
+  - `scripts/dev/check-8c-gd-f4-component-pick-blow-properties.sh` 通过，`PASS=22 FAIL=0`。
+- 主 agent 裁决：
+  - `M3-CLOSE` 通过，对象存储主链路可收口。
+  - `8C-GD-F4` 可作为当前葛兰岱尔 Viewer 交互基线。
+  - 平台交互逻辑优化批次暂不自动启动，等待用户批准。

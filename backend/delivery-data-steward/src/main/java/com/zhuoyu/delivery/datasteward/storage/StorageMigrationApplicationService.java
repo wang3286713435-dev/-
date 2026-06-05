@@ -11,6 +11,10 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageOb
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageObjectificationPlanDryRunResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.MultiProjectStorageObjectificationPlanProject;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ProjectStorageObjectificationInventoryResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ProjectStorageObjectificationCoverageResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationClosureAssessmentResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationCoverageReportResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationCoverageSummaryResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationDistributionItem;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationFailureSummary;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationFullPlanRequest;
@@ -108,6 +112,7 @@ public class StorageMigrationApplicationService {
     private static final long WAVE1_PROJECT_NAS_BYTES_SOFT_LIMIT = 10L * 1024L * 1024L * 1024L;
     private static final Set<String> WAVE1_EXCLUDED_PROJECT_CODES = Set.of("105", "95", "98", "99");
     private static final String RUN_CODE = "M3G-7R";
+    private static final String COVERAGE_REPORT_CODE = "M3G-9";
     private static final int RUN_MAX_PROJECTS = 5;
     private static final int RUN_MAX_TOTAL_FILES = 200;
     private static final int RUN_MAX_FILES_PER_PROJECT = 50;
@@ -504,6 +509,35 @@ public class StorageMigrationApplicationService {
             pendingFiles,
             failedFiles,
             percentage(objectStoredFiles, totalFiles),
+            projects
+        );
+    }
+
+    public StorageObjectificationCoverageReportResponse objectificationCoverage(Long userId) {
+        StorageObjectificationInventoryResponse inventory = inventory(userId, null);
+        List<ProjectStorageObjectificationInventoryResponse> inventoryProjects = inventory.projects() == null
+            ? List.of()
+            : inventory.projects();
+        List<Long> projectIds = inventoryProjects.stream()
+            .map(ProjectStorageObjectificationInventoryResponse::projectId)
+            .filter(Objects::nonNull)
+            .toList();
+        Map<Long, Instant> lastObjectifiedAt = lastObjectifiedAtByProject(projectIds);
+        Map<Long, List<StorageObjectificationFailureSummary>> failures = coverageFailureSummariesByProject(projectIds);
+        List<ProjectStorageObjectificationCoverageResponse> projects = inventoryProjects.stream()
+            .map(row -> toCoverageProject(
+                row,
+                lastObjectifiedAt.get(row.projectId()),
+                failures.getOrDefault(row.projectId(), List.of())
+            ))
+            .toList();
+        StorageObjectificationCoverageSummaryResponse summary = coverageSummary(inventoryProjects, projects);
+        StorageObjectificationClosureAssessmentResponse closureAssessment = closureAssessment(summary, projects);
+        return new StorageObjectificationCoverageReportResponse(
+            true,
+            COVERAGE_REPORT_CODE,
+            summary,
+            closureAssessment,
             projects
         );
     }
@@ -1887,6 +1921,329 @@ public class StorageMigrationApplicationService {
             row.checksumCoverageRate(),
             riskMessages.stream().distinct().toList()
         );
+    }
+
+    private ProjectStorageObjectificationCoverageResponse toCoverageProject(
+        ProjectStorageObjectificationInventoryResponse row,
+        Instant lastObjectifiedAt,
+        List<StorageObjectificationFailureSummary> recordedFailures
+    ) {
+        String status = coverageStatus(row);
+        long migrationFailedCount = nullToZero(row.migrationFailedFiles());
+        long unreadableCount = nullToZero(row.unreadablePathFiles());
+        long governanceCount = migrationFailedCount + unreadableCount;
+        List<StorageObjectificationFailureSummary> failureSummary = coverageFailureSummary(
+            recordedFailures,
+            migrationFailedCount,
+            unreadableCount
+        );
+        List<String> warnings = coverageProjectWarnings(row, status);
+        List<String> nextActions = coverageProjectNextActions(row, status);
+        return new ProjectStorageObjectificationCoverageResponse(
+            row.projectId(),
+            row.projectCode(),
+            row.projectName(),
+            row.projectStage(),
+            row.assetSource(),
+            row.projectCategory(),
+            coverageOnboardingStatus(row, status),
+            row.totalFiles(),
+            row.objectStoredFiles(),
+            row.nasOnlyFiles(),
+            migrationFailedCount,
+            governanceCount,
+            unreadableCount,
+            row.checksumCoverageRate(),
+            row.objectificationCoverageRate(),
+            row.totalBytes(),
+            row.objectStoredBytes(),
+            lastObjectifiedAt,
+            readStrategySummary(row, status),
+            status,
+            failureSummary,
+            warnings,
+            nextActions
+        );
+    }
+
+    private StorageObjectificationCoverageSummaryResponse coverageSummary(
+        List<ProjectStorageObjectificationInventoryResponse> inventoryProjects,
+        List<ProjectStorageObjectificationCoverageResponse> projects
+    ) {
+        long totalProjects = projects.size();
+        long completedProjects = countCoverageProjects(projects, "COMPLETED");
+        long partialProjects = countCoverageProjects(projects, "PARTIAL");
+        long nasOnlyProjects = countCoverageProjects(projects, "NAS_ONLY");
+        long failedOrGovernanceProjects = countCoverageProjects(projects, "FAILED_NEEDS_GOVERNANCE");
+        long excludedProjects = countCoverageProjects(projects, "EXCLUDED");
+        long totalFiles = projects.stream().mapToLong(row -> nullToZero(row.totalFiles())).sum();
+        long objectStoredFiles = projects.stream().mapToLong(row -> nullToZero(row.objectStoredCount())).sum();
+        long nasOnlyFiles = projects.stream().mapToLong(row -> nullToZero(row.nasOnlyCount())).sum();
+        long failedFiles = projects.stream().mapToLong(row -> nullToZero(row.migrationFailedCount())).sum();
+        long totalSizeBytes = projects.stream().mapToLong(row -> nullToZero(row.totalSizeBytes())).sum();
+        long objectStoredSizeBytes = projects.stream().mapToLong(row -> nullToZero(row.objectStoredSizeBytes())).sum();
+        long checksumCoveredFiles = inventoryProjects.stream()
+            .mapToLong(row -> nullToZero(row.checksumCoveredFiles()))
+            .sum();
+        return new StorageObjectificationCoverageSummaryResponse(
+            totalProjects,
+            completedProjects,
+            partialProjects,
+            nasOnlyProjects,
+            failedOrGovernanceProjects,
+            excludedProjects,
+            totalFiles,
+            objectStoredFiles,
+            nasOnlyFiles,
+            failedFiles,
+            percentage(objectStoredFiles, totalFiles),
+            totalSizeBytes,
+            objectStoredSizeBytes,
+            percentage(checksumCoveredFiles, totalFiles)
+        );
+    }
+
+    private StorageObjectificationClosureAssessmentResponse closureAssessment(
+        StorageObjectificationCoverageSummaryResponse summary,
+        List<ProjectStorageObjectificationCoverageResponse> projects
+    ) {
+        List<String> blockingReasons = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+        List<String> nextActions = new ArrayList<>();
+        ProjectStorageObjectificationCoverageResponse project105 = projects.stream()
+            .filter(row -> Objects.equals(row.projectId(), LONG_RUN_PILOT_PROJECT_ID)
+                || "105".equals(String.valueOf(row.projectCode()).trim()))
+            .findFirst()
+            .orElse(null);
+        if (projects.isEmpty()) {
+            blockingReasons.add("当前用户没有可解释的项目对象化盘点结果。");
+        }
+        if (project105 == null) {
+            blockingReasons.add("未找到 105 / projectId=503 样板项目，无法证明 M3 全量对象化样板。");
+        } else if (!"COMPLETED".equals(project105.status())) {
+            blockingReasons.add("105 / projectId=503 尚未达到对象化 100%，不能作为 M3 完整样板项目。");
+        }
+        if (nullToZero(summary.failedOrGovernanceProjects()) > 0) {
+            blockingReasons.add("仍有项目存在迁移失败或存储引用治理项，需先解释或治理后再做最终收口裁决。");
+        }
+        if (nullToZero(summary.objectStoredFiles()) == 0) {
+            blockingReasons.add("当前没有任何已对象化文件，不能证明对象存储主链路可用。");
+        }
+        if (nullToZero(summary.partialProjects()) > 0) {
+            warnings.add("存在部分对象化项目，说明主链路可用，但剩余文件仍需纳入后续批量计划。");
+            nextActions.add("对 PARTIAL 项目按容量、文件数和风险分批生成 dry-run 计划。");
+        }
+        if (nullToZero(summary.nasOnlyProjects()) > 0) {
+            warnings.add("存在 NAS_ONLY 项目，本报告只说明其状态可解释，不表示这些项目已完成对象化。");
+            nextActions.add("对 NAS_ONLY 项目先做对象化 dry-run，再按低风险项目优先推进。");
+        }
+        if (nullToZero(summary.excludedProjects()) > 0) {
+            warnings.add("存在非真实 NAS、测试样例或无登记文件项目，已按 EXCLUDED 单独解释。");
+        }
+        if (nextActions.isEmpty()) {
+            nextActions.add("保持对象优先读取回归和文件访问安全回归，等待主 agent 做最终收口判断。");
+        }
+        return new StorageObjectificationClosureAssessmentResponse(
+            blockingReasons.isEmpty(),
+            blockingReasons,
+            warnings,
+            nextActions
+        );
+    }
+
+    private String coverageStatus(ProjectStorageObjectificationInventoryResponse row) {
+        long totalFiles = nullToZero(row.totalFiles());
+        long objectStoredFiles = nullToZero(row.objectStoredFiles());
+        if (!Boolean.TRUE.equals(row.realNasProject()) || isTestOrSampleProject(row) || totalFiles == 0) {
+            return "EXCLUDED";
+        }
+        if (nullToZero(row.unreadablePathFiles()) > 0 || nullToZero(row.migrationFailedFiles()) > 0) {
+            return "FAILED_NEEDS_GOVERNANCE";
+        }
+        if (objectStoredFiles >= totalFiles) {
+            return "COMPLETED";
+        }
+        if (objectStoredFiles == 0) {
+            return "NAS_ONLY";
+        }
+        return "PARTIAL";
+    }
+
+    private String coverageOnboardingStatus(ProjectStorageObjectificationInventoryResponse row, String status) {
+        if (!Boolean.TRUE.equals(row.realNasProject())) {
+            return "EXCLUDED_NON_REAL_NAS";
+        }
+        if (isTestOrSampleProject(row)) {
+            return "EXCLUDED_TEST_OR_SAMPLE";
+        }
+        if (nullToZero(row.totalFiles()) == 0) {
+            return "NO_REGISTERED_FILES";
+        }
+        return switch (status) {
+            case "COMPLETED" -> "OBJECTIFICATION_COMPLETED";
+            case "PARTIAL" -> "OBJECTIFICATION_PARTIAL";
+            case "NAS_ONLY" -> "WAITING_OBJECTIFICATION";
+            case "FAILED_NEEDS_GOVERNANCE" -> "GOVERNANCE_REQUIRED";
+            default -> "EXCLUDED";
+        };
+    }
+
+    private String readStrategySummary(ProjectStorageObjectificationInventoryResponse row, String status) {
+        if ("EXCLUDED".equals(status)) {
+            return "EXCLUDED";
+        }
+        long totalFiles = nullToZero(row.totalFiles());
+        long objectStoredFiles = nullToZero(row.objectStoredFiles());
+        if (totalFiles > 0 && objectStoredFiles >= totalFiles) {
+            return "OBJECT_FIRST";
+        }
+        if (objectStoredFiles == 0) {
+            return "LEGACY_NAS";
+        }
+        return "MIXED";
+    }
+
+    private List<String> coverageProjectWarnings(ProjectStorageObjectificationInventoryResponse row, String status) {
+        List<String> warnings = new ArrayList<>();
+        if ("NAS_ONLY".equals(status)) {
+            warnings.add("该项目仍是 NAS_ONLY；当前可解释状态，不代表对象化已完成。");
+        }
+        if ("PARTIAL".equals(status)) {
+            warnings.add("该项目处于 MIXED；已对象化文件走对象优先读取，剩余文件仍走受控历史 NAS。");
+        }
+        if ("FAILED_NEEDS_GOVERNANCE".equals(status)) {
+            warnings.add("该项目存在失败或存储引用治理项，需先人工治理后再继续对象化。");
+        }
+        if ("EXCLUDED".equals(status)) {
+            warnings.add("该项目不纳入 M3 主线对象化覆盖率完成口径。");
+        }
+        return warnings;
+    }
+
+    private List<String> coverageProjectNextActions(ProjectStorageObjectificationInventoryResponse row, String status) {
+        if ("COMPLETED".equals(status)) {
+            return List.of("继续走对象优先读取与文件访问安全回归。");
+        }
+        if ("PARTIAL".equals(status) || "NAS_ONLY".equals(status)) {
+            return List.of("后续按 dry-run 计划分批对象化，仍不移动、不删除、不覆盖 NAS 原文件。");
+        }
+        if ("FAILED_NEEDS_GOVERNANCE".equals(status)) {
+            return List.of("先处理迁移失败和存储引用治理项，再重新生成 dry-run。");
+        }
+        if (nullToZero(row.totalFiles()) == 0) {
+            return List.of("如该项目需要纳入对象化，需先完成文件登记。");
+        }
+        return List.of("保留为解释性排除项。");
+    }
+
+    private List<StorageObjectificationFailureSummary> coverageFailureSummary(
+        List<StorageObjectificationFailureSummary> recordedFailures,
+        long migrationFailedCount,
+        long unreadableCount
+    ) {
+        Map<String, StorageObjectificationFailureSummary> merged = new LinkedHashMap<>();
+        for (StorageObjectificationFailureSummary failure : recordedFailures == null ? List.<StorageObjectificationFailureSummary>of() : recordedFailures) {
+            String reasonCode = normalizeFailureReasonCode(failure.reasonCode());
+            merged.put(reasonCode, new StorageObjectificationFailureSummary(
+                reasonCode,
+                coverageFailureMessage(reasonCode),
+                nullToZero(failure.fileCount())
+            ));
+        }
+        if (migrationFailedCount > 0 && merged.isEmpty()) {
+            merged.put("HAS_FAILED_MIGRATION", new StorageObjectificationFailureSummary(
+                "HAS_FAILED_MIGRATION",
+                coverageFailureMessage("HAS_FAILED_MIGRATION"),
+                migrationFailedCount
+            ));
+        }
+        if (unreadableCount > 0) {
+            merged.put("SOURCE_REFERENCE_REVIEW_REQUIRED", new StorageObjectificationFailureSummary(
+                "SOURCE_REFERENCE_REVIEW_REQUIRED",
+                coverageFailureMessage("SOURCE_REFERENCE_REVIEW_REQUIRED"),
+                unreadableCount
+            ));
+        }
+        return new ArrayList<>(merged.values());
+    }
+
+    private long countCoverageProjects(List<ProjectStorageObjectificationCoverageResponse> projects, String status) {
+        return projects.stream().filter(row -> status.equals(row.status())).count();
+    }
+
+    private Map<Long, Instant> lastObjectifiedAtByProject(List<Long> projectIds) {
+        if (projectIds == null || projectIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Instant> result = new HashMap<>();
+        jdbcTemplate.query("""
+            SELECT f.project_id,
+                   MAX(COALESCE(fov.last_verified_at, so.last_verified_at, fov.created_at)) AS last_objectified_at
+            FROM data_file_resources f
+            JOIN data_file_object_versions fov
+              ON fov.file_id = f.id
+             AND fov.active = 1
+             AND fov.deleted = 0
+             AND fov.storage_state = 'OBJECT_STORED'
+            LEFT JOIN data_storage_objects so
+              ON so.id = fov.storage_object_id
+             AND so.deleted = 0
+            WHERE f.deleted = 0
+              AND f.project_id IN (:projectIds)
+            GROUP BY f.project_id
+            """, new MapSqlParameterSource("projectIds", projectIds), rs -> {
+            result.put(rs.getLong("project_id"), instant(rs.getTimestamp("last_objectified_at")));
+        });
+        return result;
+    }
+
+    private Map<Long, List<StorageObjectificationFailureSummary>> coverageFailureSummariesByProject(List<Long> projectIds) {
+        if (projectIds == null || projectIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<StorageObjectificationFailureSummary>> result = new HashMap<>();
+        jdbcTemplate.query("""
+            SELECT project_id,
+                   COALESCE(NULLIF(SUBSTRING_INDEX(failure_reason, ':', 1), ''), 'UNKNOWN') AS reason_code,
+                   COUNT(DISTINCT file_id) AS file_count
+            FROM data_object_migration_tasks
+            WHERE project_id IN (:projectIds)
+              AND migration_status = 'FAILED'
+              AND deleted = 0
+            GROUP BY project_id, reason_code
+            ORDER BY file_count DESC, reason_code
+            """, new MapSqlParameterSource("projectIds", projectIds), rs -> {
+            long projectId = rs.getLong("project_id");
+            String reasonCode = normalizeFailureReasonCode(rs.getString("reason_code"));
+            result.computeIfAbsent(projectId, ignored -> new ArrayList<>())
+                .add(new StorageObjectificationFailureSummary(
+                    reasonCode,
+                    coverageFailureMessage(reasonCode),
+                    rs.getLong("file_count")
+                ));
+        });
+        return result;
+    }
+
+    private String normalizeFailureReasonCode(String value) {
+        if (value == null || value.isBlank()) {
+            return "UNKNOWN";
+        }
+        String normalized = value.trim().toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9_-]", "_");
+        if (normalized.length() > 80) {
+            return normalized.substring(0, 80);
+        }
+        return normalized;
+    }
+
+    private String coverageFailureMessage(String reasonCode) {
+        return switch (reasonCode == null ? "UNKNOWN" : reasonCode) {
+            case "SOURCE_REFERENCE_REVIEW_REQUIRED" -> "存在缺少受控存储引用或路径不可读文件，需要人工治理。";
+            case "HAS_FAILED_MIGRATION", "MIGRATION_FAILED" -> "存在历史对象化失败任务，需要重试或人工治理。";
+            case "OBJECT_WRITE_FAILED" -> "对象副本写入失败，需要检查对象存储连接和文件状态。";
+            case "CHECKSUM_MISMATCH" -> "对象副本校验不一致，需要重新核验后再处理。";
+            default -> "存在对象化失败记录，已按原因分组隐藏底层路径细节。";
+        };
     }
 
     private RunQueue runQueue(ProjectStorageObjectificationInventoryResponse row) {

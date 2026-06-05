@@ -1586,6 +1586,68 @@ public final class AssetDtos {
     ) {
     }
 
+    public record StorageObjectificationCoverageReportResponse(
+        Boolean dryRun,
+        String reportCode,
+        StorageObjectificationCoverageSummaryResponse summary,
+        StorageObjectificationClosureAssessmentResponse closureAssessment,
+        List<ProjectStorageObjectificationCoverageResponse> projects
+    ) {
+    }
+
+    public record StorageObjectificationCoverageSummaryResponse(
+        Long totalProjects,
+        Long completedProjects,
+        Long partialProjects,
+        Long nasOnlyProjects,
+        Long failedOrGovernanceProjects,
+        Long excludedProjects,
+        Long totalFiles,
+        Long objectStoredFiles,
+        Long nasOnlyFiles,
+        Long failedFiles,
+        BigDecimal overallObjectificationRate,
+        Long totalSizeBytes,
+        Long objectStoredSizeBytes,
+        BigDecimal checksumCoverageRate
+    ) {
+    }
+
+    public record StorageObjectificationClosureAssessmentResponse(
+        Boolean m3ClosureReady,
+        List<String> blockingReasons,
+        List<String> warnings,
+        List<String> nextActions
+    ) {
+    }
+
+    public record ProjectStorageObjectificationCoverageResponse(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        String projectStage,
+        String assetSource,
+        String projectCategory,
+        String onboardingStatus,
+        Long totalFiles,
+        Long objectStoredCount,
+        Long nasOnlyCount,
+        Long migrationFailedCount,
+        Long governanceCount,
+        Long unreadableCount,
+        BigDecimal checksumCoverageRate,
+        BigDecimal objectificationCoverageRate,
+        Long totalSizeBytes,
+        Long objectStoredSizeBytes,
+        Instant lastObjectifiedAt,
+        String readStrategySummary,
+        String status,
+        List<StorageObjectificationFailureSummary> failureSummary,
+        List<String> warnings,
+        List<String> nextActions
+    ) {
+    }
+
     public record ProjectStorageObjectificationInventoryResponse(
         Long projectId,
         String projectCode,

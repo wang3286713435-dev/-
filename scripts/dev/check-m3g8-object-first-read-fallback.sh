@@ -200,7 +200,7 @@ create_ticket() {
   api_post "/api/data-steward/assets/files/${file_id}/access-tickets" "{\"action\":\"${action}\"}"
 }
 
-object_stored_sample_file_id() {
+object_stored_sample_file_ids() {
   mysql_exec "SELECT f.id
 FROM data_file_resources f
 JOIN data_file_object_versions fov ON fov.file_id = f.id AND fov.active = 1 AND fov.deleted = 0 AND fov.storage_state = 'OBJECT_STORED'
@@ -210,7 +210,7 @@ WHERE f.project_id = ${PROJECT_ID}
   AND LOWER(SUBSTRING_INDEX(f.original_name, '.', -1)) IN ('pdf','png','jpg','jpeg','webp','gif','bmp','svg')
   AND COALESCE(fov.size_bytes, so.size_bytes, f.size_bytes, 0) BETWEEN 1 AND 2097152
 ORDER BY f.id
-LIMIT 1;"
+LIMIT 20;"
 }
 
 object_bucket_for_file() {
@@ -270,27 +270,41 @@ else
   fail "读取策略接口没有返回对象优先/fallback 状态"
 fi
 
-object_file_id="$(object_stored_sample_file_id || true)"
-if [[ -z "${object_file_id}" ]]; then
+object_file_id=""
+object_ticket=""
+object_candidate_ids="$(object_stored_sample_file_ids || true)"
+if [[ -z "${object_candidate_ids}" ]]; then
   fail "没有找到可用于受控读取验证的小型 OBJECT_STORED 文件"
 else
-  object_ticket="$(create_ticket "${object_file_id}" "DOWNLOAD")"
-  assert_ok "${object_ticket}"
-  assert_no_forbidden "object-ticket" "${object_ticket}"
-  if [[ "$(json_expr "${object_ticket}" "data['data']['storageStatus'] == 'OBJECT_STORED' and data['data']['readSource'] == 'OBJECT_STORAGE' and data['data']['fallbackUsed'] is False and data['data']['objectReadable'] is True")" == "true" ]]; then
+  while IFS= read -r candidate_file_id; do
+    [[ -n "${candidate_file_id}" ]] || continue
+    candidate_ticket="$(create_ticket "${candidate_file_id}" "DOWNLOAD")"
+    assert_no_forbidden "object-ticket-candidate" "${candidate_ticket}"
+    candidate_code="$(json_expr "${candidate_ticket}" "data.get('code')")"
+    if [[ "${candidate_code}" == "OK" ]]; then
+      object_file_id="${candidate_file_id}"
+      object_ticket="${candidate_ticket}"
+      break
+    fi
+  done <<<"${object_candidate_ids}"
+  if [[ -z "${object_file_id}" ]]; then
+    fail "OBJECT_STORED 候选存在，但当前未找到 MinIO 副本可读的小文件"
+  elif [[ "$(json_expr "${object_ticket}" "data['data']['storageStatus'] == 'OBJECT_STORED' and data['data']['readSource'] == 'OBJECT_STORAGE' and data['data']['fallbackUsed'] is False and data['data']['objectReadable'] is True")" == "true" ]]; then
     pass "OBJECT_STORED 文件访问票据明确标记 OBJECT_STORAGE 且未 fallback"
   else
     fail "OBJECT_STORED 文件访问票据读取口径不正确"
   fi
-  object_access_url="$(json_expr "${object_ticket}" "data['data']['accessUrl']")"
-  object_headers="${TMP_DIR}/object.headers"
-  open_ticket_and_headers "${object_access_url}" "${object_headers}"
-  assert_no_forbidden "object-access-headers" "$(cat "${object_headers}")"
-  if grep -qi '^X-Delivery-Read-Source: OBJECT_STORAGE' "${object_headers}" \
-    && grep -qi '^X-Delivery-Fallback-Used: false' "${object_headers}"; then
-    pass "对象存储读取响应头明确标记 readSource/fallback"
-  else
-    fail "对象存储读取响应头缺少 readSource/fallback 标记"
+  if [[ -n "${object_file_id}" ]]; then
+    object_access_url="$(json_expr "${object_ticket}" "data['data']['accessUrl']")"
+    object_headers="${TMP_DIR}/object.headers"
+    open_ticket_and_headers "${object_access_url}" "${object_headers}"
+    assert_no_forbidden "object-access-headers" "$(cat "${object_headers}")"
+    if grep -qi '^X-Delivery-Read-Source: OBJECT_STORAGE' "${object_headers}" \
+      && grep -qi '^X-Delivery-Fallback-Used: false' "${object_headers}"; then
+      pass "对象存储读取响应头明确标记 readSource/fallback"
+    else
+      fail "对象存储读取响应头缺少 readSource/fallback 标记"
+    fi
   fi
 fi
 

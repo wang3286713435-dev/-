@@ -34,14 +34,148 @@
         <p>只做专用 smoke 探测，不返回服务地址、底层对象定位信息或密钥。</p>
       </article>
       <article class="readiness-card readiness-card--wide">
-        <span>全项目对象化覆盖率</span>
-        <strong>{{ formatPercent(inventory?.objectificationCoverageRate) }}%</strong>
+        <span>M3G-9 全项目对象化报告</span>
+        <strong>{{ formatPercent(coverageReport?.summary?.overallObjectificationRate) }}%</strong>
         <p>
-          {{ formatCount(inventory?.totalProjects) }} 个项目，
-          {{ formatCount(inventory?.totalFiles) }} 个文件，
-          仍在 NAS {{ formatCount(inventory?.nasOnlyFiles) }} 个。
+          {{ formatCount(coverageReport?.summary?.totalProjects) }} 个项目，
+          {{ formatCount(coverageReport?.summary?.totalFiles) }} 个文件，
+          已对象化 {{ formatCount(coverageReport?.summary?.objectStoredFiles) }} 个。
         </p>
       </article>
+    </section>
+
+    <section class="service-section coverage-section">
+      <div class="service-section__header">
+        <div>
+          <h2>全项目对象化覆盖率</h2>
+          <span>只读报告：基于 MySQL 台账和对象版本状态生成，不创建迁移任务，不触碰 NAS 原文件。</span>
+        </div>
+        <el-tag :type="coverageReport?.closureAssessment?.m3ClosureReady ? 'success' : 'warning'" effect="plain">
+          {{ coverageReport?.closureAssessment?.m3ClosureReady ? 'M3 基线可解释收口' : '仍有收口关注项' }}
+        </el-tag>
+      </div>
+
+      <div class="coverage-summary-grid">
+        <article>
+          <span>完成项目</span>
+          <strong>{{ formatCount(coverageReport?.summary?.completedProjects) }}</strong>
+          <p>对象化 100%，读取策略为对象优先。</p>
+        </article>
+        <article>
+          <span>部分对象化</span>
+          <strong>{{ formatCount(coverageReport?.summary?.partialProjects) }}</strong>
+          <p>MIXED 状态，剩余文件仍按受控 NAS 读取。</p>
+        </article>
+        <article>
+          <span>NAS_ONLY 项目</span>
+          <strong>{{ formatCount(coverageReport?.summary?.nasOnlyProjects) }}</strong>
+          <p>状态已解释，但不代表完成对象化。</p>
+        </article>
+        <article>
+          <span>需治理项目</span>
+          <strong>{{ formatCount(coverageReport?.summary?.failedOrGovernanceProjects) }}</strong>
+          <p>存在失败或存储引用治理项。</p>
+        </article>
+        <article>
+          <span>总容量</span>
+          <strong>{{ formatBytes(coverageReport?.summary?.totalSizeBytes) }}</strong>
+          <p>对象副本 {{ formatBytes(coverageReport?.summary?.objectStoredSizeBytes) }}。</p>
+        </article>
+        <article>
+          <span>Checksum 覆盖</span>
+          <strong>{{ formatPercent(coverageReport?.summary?.checksumCoverageRate) }}%</strong>
+          <p>用于对象化和读取证据链校验。</p>
+        </article>
+      </div>
+
+      <el-alert
+        :type="coverageReport?.closureAssessment?.m3ClosureReady ? 'success' : 'warning'"
+        :closable="false"
+        show-icon
+        class="service-notice"
+        :title="coverageClosureTitle"
+        :description="coverageClosureDescription"
+      />
+
+      <el-table
+        :data="coverageRows"
+        row-key="projectId"
+        empty-text="暂无全项目覆盖率报告"
+        class="coverage-table"
+      >
+        <el-table-column type="expand">
+          <template #default="{ row }">
+            <div class="coverage-diagnostics">
+              <section>
+                <h3>诊断信息</h3>
+                <p>本区只展示脱敏分组说明，不展示底层路径、对象定位信息或原始数据库行。</p>
+              </section>
+              <section v-if="row.failureSummary?.length">
+                <h4>失败 / 治理原因</h4>
+                <ul>
+                  <li v-for="item in row.failureSummary" :key="`${row.projectId}-${item.reasonCode}`">
+                    {{ item.reasonCode }}：{{ item.message }}（{{ formatCount(item.fileCount) }} 个文件）
+                  </li>
+                </ul>
+              </section>
+              <section v-if="row.warnings?.length">
+                <h4>状态说明</h4>
+                <ul>
+                  <li v-for="item in row.warnings" :key="item">{{ item }}</li>
+                </ul>
+              </section>
+              <section v-if="row.nextActions?.length">
+                <h4>下一步</h4>
+                <ul>
+                  <li v-for="item in row.nextActions" :key="item">{{ item }}</li>
+                </ul>
+              </section>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="项目" min-width="240" show-overflow-tooltip>
+          <template #default="{ row }">
+            <div class="coverage-project-cell">
+              <strong>{{ row.projectCode }} {{ row.projectName }}</strong>
+              <span>{{ projectCategoryLabel(row.projectCategory) }} / {{ row.onboardingStatus }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="128">
+          <template #default="{ row }">
+            <el-tag :type="coverageStatusTagType(row.status)" size="small">
+              {{ coverageStatusLabel(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="读取策略" width="120">
+          <template #default="{ row }">
+            <el-tag :type="readStrategyTagType(row.readStrategySummary)" size="small" effect="plain">
+              {{ readStrategyLabel(row.readStrategySummary) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="文件" width="100" align="right">
+          <template #default="{ row }">{{ formatCount(row.totalFiles) }}</template>
+        </el-table-column>
+        <el-table-column label="已对象化" width="110" align="right">
+          <template #default="{ row }">{{ formatCount(row.objectStoredCount) }}</template>
+        </el-table-column>
+        <el-table-column label="仍在 NAS" width="110" align="right">
+          <template #default="{ row }">{{ formatCount(row.nasOnlyCount) }}</template>
+        </el-table-column>
+        <el-table-column label="治理项" width="100" align="right">
+          <template #default="{ row }">{{ formatCount(row.governanceCount) }}</template>
+        </el-table-column>
+        <el-table-column label="对象化率" width="150">
+          <template #default="{ row }">
+            <el-progress :percentage="Number(row.objectificationCoverageRate || 0)" :stroke-width="8" />
+          </template>
+        </el-table-column>
+        <el-table-column label="最后对象化" width="170">
+          <template #default="{ row }">{{ formatDate(row.lastObjectifiedAt) }}</template>
+        </el-table-column>
+      </el-table>
     </section>
 
     <section class="service-section read-policy-section">
@@ -1489,6 +1623,7 @@ import {
   executeStorageObjectificationWave,
   executeMultiProjectStorageObjectificationPlan,
   fetchCatalogFiles,
+  fetchStorageObjectificationCoverage,
   fetchStorageObjectificationRunOverview,
   fetchStorageObjectificationRunProjects,
   fetchStorageObjectificationWaveCandidates,
@@ -1512,7 +1647,9 @@ import {
   type CatalogFile,
   type MultiProjectStorageObjectificationDryRun,
   type MultiProjectStorageObjectificationExecuteResult,
+  type ProjectStorageObjectificationCoverage,
   type ProjectStorageObjectificationInventory,
+  type StorageObjectificationCoverageReport,
   type StorageObjectificationDryRun,
   type StorageObjectificationFullPlan,
   type StorageObjectificationInventory,
@@ -1559,6 +1696,7 @@ const summary = ref<StorageMigrationSummary | null>(null);
 const readiness = ref<StorageProviderReadiness | null>(null);
 const readPolicy = ref<StorageReadPolicy | null>(null);
 const inventory = ref<StorageObjectificationInventory | null>(null);
+const coverageReport = ref<StorageObjectificationCoverageReport | null>(null);
 const dryRunResult = ref<StorageObjectificationDryRun | null>(null);
 const fullPlan = ref<StorageObjectificationFullPlan | null>(null);
 const fullPlanExecutionResult = ref<MultiProjectStorageObjectificationExecuteResult | null>(null);
@@ -1704,6 +1842,41 @@ const inventoryRows = computed<ProjectStorageObjectificationInventory[]>(() => {
     return current ? [current, ...rows.filter((row) => Number(row.projectId) !== Number(projectId.value)).slice(0, 5)] : rows.slice(0, 6);
   }
   return rows.slice(0, 8);
+});
+
+const coverageRows = computed<ProjectStorageObjectificationCoverage[]>(() => {
+  const rows = [...(coverageReport.value?.projects ?? [])];
+  const statusWeight: Record<string, number> = {
+    COMPLETED: 0,
+    PARTIAL: 1,
+    NAS_ONLY: 2,
+    FAILED_NEEDS_GOVERNANCE: 3,
+    EXCLUDED: 4
+  };
+  return rows.sort((a, b) => {
+    if (Number(a.projectId) === 503) return -1;
+    if (Number(b.projectId) === 503) return 1;
+    const statusCompare = (statusWeight[a.status] ?? 9) - (statusWeight[b.status] ?? 9);
+    if (statusCompare !== 0) return statusCompare;
+    return Number(b.totalFiles || 0) - Number(a.totalFiles || 0);
+  });
+});
+
+const coverageClosureTitle = computed(() => {
+  if (!coverageReport.value) return '正在读取 M3G-9 覆盖率报告';
+  return coverageReport.value.closureAssessment?.m3ClosureReady
+    ? 'M3 对象存储主链路具备解释性收口依据'
+    : 'M3 收口仍有关注项';
+});
+
+const coverageClosureDescription = computed(() => {
+  const closure = coverageReport.value?.closureAssessment;
+  if (!closure) return '报告查询只读，不会创建迁移任务，也不会访问文件正文。';
+  const blockers = closure.blockingReasons ?? [];
+  const warnings = closure.warnings ?? [];
+  const nextActions = closure.nextActions ?? [];
+  const parts = [...blockers, ...warnings, ...nextActions].filter(Boolean);
+  return parts.length ? parts.join(' ') : '当前项目状态均可解释，等待主 agent 和测试 agent 做最终裁决。';
 });
 
 const fullPlanNextBatchFileIds = computed(() => (fullPlan.value?.nextBatchItems ?? [])
@@ -1917,6 +2090,7 @@ async function refresh() {
       loadReadiness(),
       loadReadPolicy(),
       loadInventory(),
+      loadCoverageReport(),
       loadSummary(),
       loadFullPlan(),
       loadLongRunStatus(),
@@ -1941,6 +2115,10 @@ async function loadReadPolicy() {
 
 async function loadInventory() {
   inventory.value = await fetchStorageObjectificationInventory();
+}
+
+async function loadCoverageReport() {
+  coverageReport.value = await fetchStorageObjectificationCoverage();
 }
 
 async function loadSummary() {
@@ -2488,6 +2666,40 @@ function projectCategoryTagType(value: string) {
   return 'info';
 }
 
+function coverageStatusLabel(value: string) {
+  return ({
+    COMPLETED: '已完成',
+    PARTIAL: '部分对象化',
+    NAS_ONLY: '仍在 NAS',
+    FAILED_NEEDS_GOVERNANCE: '需治理',
+    EXCLUDED: '已排除'
+  } as Record<string, string>)[value] ?? value;
+}
+
+function coverageStatusTagType(value: string) {
+  if (value === 'COMPLETED') return 'success';
+  if (value === 'PARTIAL') return 'warning';
+  if (value === 'NAS_ONLY') return 'info';
+  if (value === 'FAILED_NEEDS_GOVERNANCE') return 'danger';
+  return 'info';
+}
+
+function readStrategyLabel(value: string) {
+  return ({
+    OBJECT_FIRST: '对象优先',
+    MIXED: '混合读取',
+    LEGACY_NAS: '历史 NAS',
+    EXCLUDED: '不纳入'
+  } as Record<string, string>)[value] ?? value;
+}
+
+function readStrategyTagType(value: string) {
+  if (value === 'OBJECT_FIRST') return 'success';
+  if (value === 'MIXED') return 'warning';
+  if (value === 'LEGACY_NAS') return 'info';
+  return 'info';
+}
+
 function waveExclusionReasonLabel(value: string | null | undefined) {
   return ({
     NON_REAL_NAS_PROJECT: '非真实 NAS 项目',
@@ -2776,6 +2988,96 @@ function formatDate(value: string | null | undefined) {
   line-height: 1.5;
 }
 
+.coverage-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.coverage-summary-grid > article {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-soft);
+}
+
+.coverage-summary-grid span {
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.coverage-summary-grid strong {
+  color: var(--zy-ink);
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.coverage-summary-grid p {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.coverage-project-cell {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.coverage-project-cell strong {
+  overflow: hidden;
+  color: var(--zy-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coverage-project-cell span {
+  overflow: hidden;
+  color: var(--zy-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coverage-diagnostics {
+  display: grid;
+  gap: 10px;
+  padding: 12px 18px;
+  background: var(--zy-bg);
+}
+
+.coverage-diagnostics h3,
+.coverage-diagnostics h4,
+.coverage-diagnostics p,
+.coverage-diagnostics ul {
+  margin: 0;
+}
+
+.coverage-diagnostics h3 {
+  color: var(--zy-ink);
+  font-size: 14px;
+}
+
+.coverage-diagnostics h4 {
+  color: var(--zy-ink);
+  font-size: 13px;
+}
+
+.coverage-diagnostics p,
+.coverage-diagnostics li {
+  color: var(--zy-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.coverage-diagnostics ul {
+  padding-left: 18px;
+}
+
 .dry-run-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2918,6 +3220,7 @@ function formatDate(value: string | null | undefined) {
   .disabled-action-grid,
   .m3g-readiness,
   .m3g-policy-grid,
+  .coverage-summary-grid,
   .dry-run-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2933,6 +3236,7 @@ function formatDate(value: string | null | undefined) {
   .candidate-toolbar,
   .m3g-readiness,
   .m3g-policy-grid,
+  .coverage-summary-grid,
   .multi-plan-form,
   .dry-run-form,
   .dry-run-summary,

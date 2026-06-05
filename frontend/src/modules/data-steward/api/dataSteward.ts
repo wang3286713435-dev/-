@@ -459,6 +459,64 @@ export interface StorageObjectificationInventory {
   projects: ProjectStorageObjectificationInventory[];
 }
 
+export interface StorageObjectificationCoverageSummary {
+  totalProjects: number;
+  completedProjects: number;
+  partialProjects: number;
+  nasOnlyProjects: number;
+  failedOrGovernanceProjects: number;
+  excludedProjects: number;
+  totalFiles: number;
+  objectStoredFiles: number;
+  nasOnlyFiles: number;
+  failedFiles: number;
+  overallObjectificationRate: number;
+  totalSizeBytes: number;
+  objectStoredSizeBytes: number;
+  checksumCoverageRate: number;
+}
+
+export interface StorageObjectificationClosureAssessment {
+  m3ClosureReady: boolean;
+  blockingReasons: string[];
+  warnings: string[];
+  nextActions: string[];
+}
+
+export interface ProjectStorageObjectificationCoverage {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  projectStage: string | null;
+  assetSource: string | null;
+  projectCategory: string;
+  onboardingStatus: string;
+  totalFiles: number;
+  objectStoredCount: number;
+  nasOnlyCount: number;
+  migrationFailedCount: number;
+  governanceCount: number;
+  unreadableCount: number;
+  checksumCoverageRate: number;
+  objectificationCoverageRate: number;
+  totalSizeBytes: number;
+  objectStoredSizeBytes: number;
+  lastObjectifiedAt: string | null;
+  readStrategySummary: 'OBJECT_FIRST' | 'LEGACY_NAS' | 'MIXED' | 'EXCLUDED' | string;
+  status: 'COMPLETED' | 'PARTIAL' | 'NAS_ONLY' | 'FAILED_NEEDS_GOVERNANCE' | 'EXCLUDED' | string;
+  failureSummary: StorageObjectificationFailureSummary[];
+  warnings: string[];
+  nextActions: string[];
+}
+
+export interface StorageObjectificationCoverageReport {
+  dryRun: boolean;
+  reportCode: string;
+  summary: StorageObjectificationCoverageSummary;
+  closureAssessment: StorageObjectificationClosureAssessment;
+  projects: ProjectStorageObjectificationCoverage[];
+}
+
 export interface StorageObjectificationDryRunPayload {
   directoryPath?: string;
   fileKinds?: string[];
@@ -1311,6 +1369,13 @@ export async function fetchStorageObjectificationInventory(projectId?: number) {
     ? `/api/data-steward/projects/${projectId}/storage-objectification-inventory`
     : '/api/data-steward/storage-objectification-inventory';
   const { data } = await http.get<ApiResponse<StorageObjectificationInventory>>(url);
+  return data.data;
+}
+
+export async function fetchStorageObjectificationCoverage() {
+  const { data } = await http.get<ApiResponse<StorageObjectificationCoverageReport>>(
+    '/api/data-steward/storage-objectification-coverage'
+  );
   return data.data;
 }
 
