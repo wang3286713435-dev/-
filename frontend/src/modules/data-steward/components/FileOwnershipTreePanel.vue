@@ -9,7 +9,7 @@
       <div class="ownership-panel__actions">
         <el-button :loading="loading" @click="loadAll">刷新</el-button>
         <el-button :loading="recommendLoading" @click="loadRecommendations">生成归属建议</el-button>
-        <el-button type="primary" :disabled="!coverage?.unassignedFiles" :loading="applyLoading" @click="confirmApplyAll">
+        <el-button type="primary" :disabled="!displayUnassignedFiles" :loading="applyLoading" @click="confirmApplyAll">
           确认全部未归属文件
         </el-button>
       </div>
@@ -18,18 +18,18 @@
     <section class="ownership-kpis">
       <article>
         <span>项目文件</span>
-        <strong>{{ formatCount(coverage?.totalFiles) }}</strong>
-        <em>105 试点资产</em>
+        <strong>{{ formatCount(displayTotalFiles) }}</strong>
+        <em>{{ projectScopeLabel }}</em>
       </article>
       <article>
         <span>已有归属</span>
-        <strong>{{ formatCount(coverage?.assignedFiles) }}</strong>
-        <em>{{ coverage?.assignmentCoverageRate ?? 0 }}%</em>
+        <strong>{{ formatCount(displayAssignedFiles) }}</strong>
+        <em>{{ displayAssignmentRate }}%</em>
       </article>
       <article>
         <span>未归属</span>
-        <strong>{{ formatCount(coverage?.unassignedFiles) }}</strong>
-        <em>目标为 0</em>
+        <strong>{{ formatCount(displayUnassignedFiles) }}</strong>
+        <em>{{ displayUnassignedFiles > 0 ? '待建立归属' : '目标已达成' }}</em>
       </article>
       <article>
         <span>已确认</span>
@@ -347,6 +347,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   applyFileOwnershipTreeDraft,
   applyFileOwnershipRecommendations,
+  fetchAssetStatistics,
   fetchFileOwnershipCoverage,
   fetchFileOwnershipNodeFiles,
   fetchFileOwnershipTreeDraft,
@@ -384,6 +385,7 @@ const candidatesLoading = ref(false);
 const draftApplyLoading = ref(false);
 const businessTab = ref('draft');
 const coverage = ref<FileOwnershipCoverage | null>(null);
+const assetFileTotal = ref<number | null>(null);
 const tree = ref<FileOwnershipTree | null>(null);
 const treeDraft = ref<FileOwnershipTreeDraft | null>(null);
 const modelDrawingGap = ref<ModelDrawingGap | null>(null);
@@ -417,6 +419,23 @@ const batchMoveForm = reactive({
 });
 
 const treeNodes = computed(() => tree.value?.nodes ?? []);
+const displayTotalFiles = computed(() => {
+  const coverageTotal = Number(coverage.value?.totalFiles ?? 0);
+  const assetTotal = Number(assetFileTotal.value ?? 0);
+  return coverageTotal > 0 ? coverageTotal : assetTotal;
+});
+const displayAssignedFiles = computed(() => Number(coverage.value?.assignedFiles ?? 0));
+const displayUnassignedFiles = computed(() => Math.max(0, displayTotalFiles.value - displayAssignedFiles.value));
+const displayAssignmentRate = computed(() => {
+  if (!displayTotalFiles.value) return 0;
+  return Number(((displayAssignedFiles.value / displayTotalFiles.value) * 100).toFixed(2));
+});
+const projectScopeLabel = computed(() => {
+  const name = coverage.value?.projectName || tree.value?.projectName || '当前项目';
+  if (!displayTotalFiles.value) return `${name} 暂无登记文件`;
+  if (!displayAssignedFiles.value) return `${name} 待建立工程树归属`;
+  return `${name} 资产`;
+});
 const nodeOptions = computed(() => flattenNodes(treeNodes.value).filter((node) => node.nodePath));
 const recommendationRows = computed(() => {
   if (!selectedNode.value) return recommendations.value;
@@ -466,15 +485,17 @@ async function loadAll() {
   gapLoading.value = true;
   candidatesLoading.value = true;
   try {
-    const [nextCoverage, nextTree, nextRecommendations, nextDraft, nextGap, nextCandidates] = await Promise.all([
+    const [nextCoverage, nextTree, nextRecommendations, nextDraft, nextGap, nextCandidates, nextAssetStats] = await Promise.all([
       fetchFileOwnershipCoverage(props.projectId),
       fetchFileOwnershipTree(props.projectId),
       recommendFileOwnership(props.projectId, { limit: 80, includeAssigned: false, source: 'RULE' }),
       fetchFileOwnershipTreeDraft(props.projectId),
       fetchModelDrawingGap(props.projectId),
-      fetchDeliveryCandidates(props.projectId, undefined, 'SECTION')
+      fetchDeliveryCandidates(props.projectId, undefined, 'SECTION'),
+      fetchAssetStatistics(props.projectId)
     ]);
     coverage.value = nextCoverage;
+    assetFileTotal.value = Number(nextAssetStats?.fileCount ?? 0);
     tree.value = nextTree;
     recommendations.value = nextRecommendations.rows;
     treeDraft.value = nextDraft;
@@ -697,6 +718,7 @@ async function submitBatchReview(
     const selectedPath = selectedNode.value?.nodePath || '';
     await Promise.all([
       fetchFileOwnershipCoverage(props.projectId).then((next) => { coverage.value = next; }),
+      fetchAssetStatistics(props.projectId).then((next) => { assetFileTotal.value = Number(next?.fileCount ?? 0); }),
       fetchFileOwnershipTree(props.projectId).then((next) => { tree.value = next; })
     ]);
     selectedNode.value = findNodeByPath(treeNodes.value, selectedPath) ?? selectedNode.value;

@@ -15,7 +15,16 @@
     <div class="app-layout__main">
       <header class="app-layout__header">
         <div class="app-layout__header-left">
-          <span class="app-layout__route-eyebrow">{{ shellEyebrow }}</span>
+          <el-button
+            v-if="routeProjectId"
+            text
+            :icon="Back"
+            class="app-layout__back-button"
+            @click="goAssetOverview"
+          >
+            返回资产总览
+          </el-button>
+          <span v-else class="app-layout__route-eyebrow">{{ shellEyebrow }}</span>
           <div class="app-layout__route-context">
             <strong>{{ shellTitle }}</strong>
             <small>{{ shellSubtitle }}</small>
@@ -69,7 +78,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ChatDotRound } from '@element-plus/icons-vue';
+import { Back, ChatDotRound } from '@element-plus/icons-vue';
 
 import DataStewardPanel from '@/modules/data-steward/components/DataStewardPanel.vue';
 import HermesWorkspaceDrawer from '@/modules/data-steward/components/HermesWorkspaceDrawer.vue';
@@ -211,6 +220,10 @@ const shellSubtitle = computed(() => {
 async function handleLogout() {
   await authStore.signOut();
   router.replace({ name: 'login' });
+}
+
+function goAssetOverview() {
+  router.push({ name: 'data-steward-assets' });
 }
 </script>
 

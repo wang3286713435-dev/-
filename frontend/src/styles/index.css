@@ -387,6 +387,26 @@ a:hover {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
 }
 
+.app-layout__back-button.el-button {
+  flex-shrink: 0;
+  height: 28px;
+  margin-left: 0;
+  padding: 0 10px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-blue-50);
+  color: var(--zy-blue-700);
+  font-size: 12px;
+  font-weight: var(--zy-fw-semi);
+  line-height: 1;
+}
+
+.app-layout__back-button.el-button:hover {
+  border-color: rgba(37, 99, 235, 0.28);
+  background: color-mix(in srgb, var(--zy-blue-50) 82%, white);
+  color: var(--zy-blue-800);
+}
+
 .app-layout__route-context {
   display: grid;
   gap: 2px;

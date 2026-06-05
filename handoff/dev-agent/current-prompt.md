@@ -1,214 +1,239 @@
-# 开发 Agent 当前任务：DT-F1 无损同步 origin/main 葛兰岱尔能力到当前 M3G 分支
+# 开发 Agent 当前任务：UX4 平台视觉与员工使用效率修复
 
 你是卓羽智能数据中台的开发 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
-本轮批次：
+当前批次：
 
-`DT-F1：BIM 协同 / 葛兰岱尔适配兼容收口`
+`UX4：平台视觉与员工使用效率修复`
 
-## 0. 已确认事实
+## 0. 批次定位
 
-主 agent 已执行 `git fetch origin main --prune` 并确认：
+本批不是新增业务能力，不是继续对象化迁移，不是做 Hermes / BIM 新功能。
 
-- `origin/main` 最新提交为：`d69cbc2 feat: integrate Glandar RVT lightweight preview pilot...`
-- `d69cbc2` 已存在于 `origin/main`。
-- 当前工作分支仍是：`codex/m3g-nas-minio-real-project-object-storage`。
-- 当前工作区有大量 M3G 未提交改动，不能覆盖、不能重置、不能丢。
+本批目标是把当前已经开发出来的核心功能做得更容易用、更清楚、更适合员工日常试用。
 
-所以本轮不是继续开发新 BIM 功能，而是：
+一句话目标：
 
-> 把已经合入 `origin/main` 的葛兰岱尔轻量化试点能力，无损同步到当前 M3G 分支，同时保护 M3G 对象存储、file-access、文件管理和迁移任务能力。
+> 员工进入平台后，能快速知道先选哪个项目、在哪里管文件、在哪里看项目状态、在哪里处理交付，不被技术字段和复杂入口干扰。
 
-## 1. 必须先阅读
+## 1. 必读文件
 
+开始前先读：
+
+- `docs/11-current-baseline-and-next-roadmap.md`
+- `docs/12-api-contract-and-maintenance.md`
 - `handoff/main-agent/status.md`
 - `handoff/main-agent/development-log.md`
-- `handoff/main-agent/phase2-current-roadmap.md`
-- `handoff/main-agent/m3-storage-evidence-chain-todo.md`
-- `handoff/main-agent/m3g9-pre-bim-collab-compatibility-check.md`
 - `handoff/dev-agent/latest-report.md`
 - `handoff/test-agent/latest-report.md`
 
-如果当前分支缺少 `origin/main` 中新增的葛兰岱尔 handoff 文件，不要直接判定失败；以 `origin/main` 为准查看。
-
-## 2. 第一阶段：合并前保护工作区
-
-先执行并记录：
-
-```bash
-git status --short --branch
-git log --oneline --decorate -8
-git log --oneline --decorate origin/main -8
-git merge-base --is-ancestor d69cbc2 origin/main && echo "Glandar PR is in origin/main"
-```
-
-当前工作区如果仍有未提交 M3G 改动，必须先做 checkpoint commit。
-
-### checkpoint 要求
-
-允许提交：
-
-- M3G / M3G-6 / M3G-7 / M3G-8 相关后端、前端、脚本、handoff 文件。
-- DT-F1 当前 prompt / 状态文件。
-
-禁止提交：
-
-- `.claude/**`
-- `CLAUDE.md`
-- `tmp/**`
-- `tmp/run-logs/**`
-- 本地 jar / pid / log
-- 本机密钥、token、license、NAS 真实路径配置
-
-checkpoint commit 建议信息：
-
-`chore: checkpoint M3G before Glandar mainline sync`
-
-注意：
-
-- 不允许 `git reset --hard`。
-- 不允许 `git checkout -- .`。
-- 不允许为了合并方便丢弃当前 M3G 改动。
-
-## 3. 第二阶段：同步 origin/main
-
-checkpoint 完成后，执行：
-
-```bash
-git merge origin/main
-```
-
-如果发生冲突，按下面规则解决。
-
-### A. M3G 对象存储 / 文件管理 / file-access 冲突
-
-优先保留当前 M3G 实现。
-
-重点保护：
-
-- NAS 侧 MinIO provider health
-- storage status
-- objectification / migration task
-- file-access 对象优先读取
-- 文件管理器对象化状态展示
-- M3G 相关脚本
-
-不得删除葛兰岱尔新增入口。
-
-### B. BIM 协同 / 葛兰岱尔冲突
-
-优先保留 `origin/main` 中葛兰岱尔能力。
-
-重点保护：
-
-- `glandar/rvt-pilot-files`
-- `lightweight-jobs`
-- `viewer-ticket`
-- `GlandarViewerCanvas`
-- `GlandarModelPreviewPage`
-- BIM 协同页内嵌 Viewer
-- 105 项目 10 个 RVT 试点模型列表
-
-不得把 Viewer 恢复成旧的“暂无模型预览”占位。
-
-### C. 路由冲突
-
-重点检查：
+重点检查前端：
 
 - `frontend/src/router/index.ts`
+- `frontend/src/modules/core/layout/AppLayout.vue`
+- `frontend/src/modules/core/components/SidebarMenu.vue`
+- `frontend/src/modules/data-steward/pages/AssetOverviewPage.vue`
+- `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
+- `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
+- `frontend/src/modules/data-steward/pages/DataStewardFileServicePage.vue`
+- `frontend/src/modules/visualization/pages/DigitalTwinDashboardPage.vue`
+- `frontend/src/modules/visualization/bim-collab/**`
+- `frontend/src/styles/**`
 
-必须保证：
+## 2. 允许范围
 
-- `/bim-collaboration`
-- `/visualization/glandar-viewer`
-- 旧 BIM 协同入口
-- 项目工作台入口
+只允许修改：
 
-都可正常访问。
+- `frontend/**`
+- `handoff/dev-agent/latest-report.md`
 
-## 4. 合并后验收目标
+如确实需要修改 `handoff/dev-agent/current-prompt.md` 以记录执行状态，可以说明原因后最小改动。
 
-### 默认模式
+## 3. 禁止范围
 
-不注入葛兰岱尔配置时：
+严禁：
 
-- 后端可启动。
-- BIM 协同页可打开。
-- 页面不白屏。
-- 默认 MOCK / 元数据适配不报错。
-- 没有真实引擎配置时返回业务化提示，不返回 500。
+- 修改 `backend/**`
+- 新增 Flyway / 数据库迁移
+- 修改接口语义或权限规则
+- 修改真实 NAS 文件
+- 执行对象化迁移任务
+- 新增 Hermes 正文问答、parser、documents/chunks、Qdrant、OpenSearch
+- 新增 BIM 构件级能力
+- 修改 `docs/**`
+- 把低频工具做成新的主入口
+- 删除旧路由导致历史链接失效
 
-### 葛兰岱尔模式
+如果你认为必须改后端，立即停止并在报告里说明，不要擅自改。
 
-注入 GLANDAR 配置后：
+## 4. 视觉与体验原则
 
-- 105 / `projectId=503` 能看到 10 个 RVT 试点模型或轻量化模型列表。
-- 已轻量化模型能打开平台内 Viewer。
-- Viewer 不暴露 token。
-- Viewer 不暴露 NAS 路径、bucket、object key、storage_uri。
+本批按“精致企业工具”处理，不做炫酷营销页。
 
-### M3G 回归
+要求：
 
-必须确认：
+- 视觉服务于员工效率，不为装饰而装饰。
+- 主色只用于当前选中、主操作和状态强调。
+- 少用大段说明文字，用结构和操作引导用户。
+- 不使用大面积玻璃、强模糊、霓虹、渐变文字。
+- 表格、文件管理、权限、写操作必须清晰可靠。
+- 技术字段默认折叠，例如内部 ID、checksum、object version、diagnostic、trace。
+- 每个关键页面必须让用户知道：
+  - 当前在哪里
+  - 现在能做什么
+  - 下一步最推荐做什么
 
-- 对象存储 provider health 不回归。
-- storage-status 不回归。
-- storage migration task 不回归。
-- file-access 不回归。
-- NAS 侧 MinIO 配置不回归。
-- 文件管理器对象化状态不回归。
+## 5. 本批优先修复点
 
-## 5. 必跑命令
+请先做一次前端现状巡检，再按优先级修复。不要一次性大重构。
+
+### A. 项目入口与资产总览
+
+目标：
+
+- 员工打开平台后，第一眼知道“先选项目”。
+- 真实项目、最近项目、待处理项目清晰。
+- 搜索、排序、进入项目、文件管理、项目可视化入口明显。
+
+请修复：
+
+- 过多说明文字。
+- 过多平级入口。
+- 过度技术化标签。
+- 主操作不突出。
+- 项目卡片/列表信息噪音过多。
+
+### B. 项目工作台
+
+目标：
+
+- 项目工作台围绕三个核心动作：
+  - 文件管理
+  - 项目可视化 / BIM 协同
+  - 交付状态
+- 工程主数据、文件服务、对象存储、低频工具不要抢首屏。
+
+请修复：
+
+- “项目资产、工程主数据、交付工作中心、BIM、对象存储”入口层级混乱。
+- 工作台中仍显眼展示内部技术状态。
+- 用户不知道下一步该点哪里。
+
+### C. 文件管理器
+
+目标：
+
+- 文件管理器像 Windows / macOS 文件管理器一样顺手。
+- 当前目录、搜索模式、选中数量、存储状态、预览状态要清楚。
+- 全项目搜索和当前目录浏览不能混淆。
+
+请重点检查并修复：
+
+- 搜索状态提示不清楚。
+- 目录模式和搜索模式视觉混在一起。
+- 对象存储状态展示过技术化。
+- 文件夹 / 文件行操作过密。
+- 右键菜单、顶部工具栏和行内操作重复。
+- 未入库文件、NAS_ONLY、OBJECT_STORED、UNREGISTERED 的业务说明不清楚。
+
+### D. 工程树与交付工作中心
+
+目标：
+
+- 用户能理解：先看文件归属，再看交付缺什么，再人工补交。
+- 不要让工程树像一个孤立功能。
+
+请修复：
+
+- 工程树、文件归属、文档交付、图纸交付之间的跳转提示。
+- 缺失项说明过技术化。
+- 待交付候选入口不明显。
+- “正式交付资料”和“过程资料/归档资料”区分不够清楚。
+
+### E. 文件服务与对象存储
+
+目标：
+
+- 让用户看懂对象化覆盖率，但不被存储术语淹没。
+- 105 完成样板要清楚，其他项目待对象化要清楚。
+
+请修复：
+
+- `OBJECT_STORED`、`NAS_ONLY`、`MIGRATION_FAILED` 等状态可以保留，但要有业务化解释。
+- 不展示 bucket、object key、真实 NAS 路径。
+- 避免把对象化说成“AI 已理解文件”。
+
+### F. BIM 协同 / 综合驾驶舱
+
+目标：
+
+- 默认首屏是综合驾驶舱。
+- READY Viewer 模型入口清楚。
+- 轻量化模型分页清晰。
+- 不把未完成的构件级能力暗示为已完成。
+
+请修复：
+
+- “Viewer 暂不可用”类过时提示。
+- 模型列表分页、状态、打开预览入口不够清楚。
+- 视觉和数据管家主界面风格割裂。
+
+## 6. 必须保持的兼容
+
+- Fresh login 仍进入 `/data-steward/assets`。
+- 旧链接必须兼容，不白屏：
+  - `/master-data/*`
+  - `/work/*`
+  - `/data-steward/models`
+  - `/data-steward/objects`
+  - `/data-steward/assets/:projectId?tab=files`
+  - `/bim-collaboration?projectId=503&preview=glandar`
+- 503 / 105 和 506 / 93 项目都要能打开。
+- 文件管理器 direct-only 浏览、全项目搜索、PDF 受控预览、模型 Viewer 入口不能回归。
+- 对象存储 file-access 和 M3G-9 覆盖率页面不能回归。
+
+## 7. 建议开发方式
+
+请按小步提交思路开发，不要一次性推翻整个前端：
+
+1. 先做视觉 / 可用性巡检，列出你准备修的 5-10 个点。
+2. 优先修影响员工理解和效率的点。
+3. 每修完一组页面，浏览器短验一次。
+4. 不要修改后端。
+5. 完成后写报告。
+
+## 8. 自测要求
 
 至少执行：
 
 ```bash
-cd /Users/vc/Documents/数字化交付平台/backend
-./mvnw -pl delivery-app -am -DskipTests package
-
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
-curl -fsS http://127.0.0.1:8080/actuator/health || curl -fsS http://127.0.0.1:18088/actuator/health
-
-bash scripts/dev/check-phase2-batch4-file-access.sh
-```
-
-如果当前分支存在以下脚本，也必须跑：
-
-```bash
-bash scripts/dev/check-m3a-storage-service-foundation.sh
-bash scripts/dev/check-m3b-object-storage-mirror-trial.sh
-bash scripts/dev/check-m3c-storage-migration-task-center.sh
-bash scripts/dev/check-m3g4-controlled-multi-project-objectification.sh
+curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-m3g9-objectification-coverage-report.sh
 bash scripts/dev/check-m3g8-object-first-read-fallback.sh
-bash scripts/dev/check-8c-gd1-ten-rvt-platform-preview.sh
-```
-
-如果某个脚本不存在，记录“不存在，跳过原因”，不要临时乱造同名脚本。
-
-最后执行：
-
-```bash
+bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
-git diff --cached --check
 ```
 
-## 6. 浏览器短验
+浏览器至少检查：
 
-合并后启动或复用前端，检查：
-
+- `http://127.0.0.1:5173/data-steward/assets`
+- `http://127.0.0.1:5173/data-steward/assets/503?tab=files`
+- `http://127.0.0.1:5173/data-steward/assets/503?tab=file-service`
+- `http://127.0.0.1:5173/data-steward/assets/503/work/document-delivery`
+- `http://127.0.0.1:5173/data-steward/assets/503/work/drawing-delivery`
 - `http://127.0.0.1:5173/bim-collaboration?projectId=503&preview=glandar`
-- 能看到 BIM 协同管理页。
-- 能看到 105 项目 10 个 RVT 试点模型或轻量化模型列表。
-- 能选择已轻量化模型。
-- 能打开 Viewer 或得到明确业务错误。
-- Viewer 不是旧的“暂无模型预览”。
-- M3G 文件管理页仍能打开。
-- 文件管理对象存储状态仍显示正常。
 
-## 7. 收口报告要求
+检查宽度：
+
+- 1280
+- 1440
+- 1920
+
+## 9. 报告要求
 
 完成后写入：
 
@@ -216,28 +241,24 @@ git diff --cached --check
 
 报告必须包含：
 
-1. 当前分支名。
-2. checkpoint commit hash。
-3. 合并来源：`origin/main`。
-4. 是否包含 `d69cbc2`。
-5. 是否保留 M3G 对象存储能力。
-6. 冲突文件与解决策略。
-7. 路由验证结果。
-8. BIM 协同页验证结果。
-9. 105 试点模型 / Viewer 验证结果。
-10. M3G 回归结果。
-11. 禁出字段检查结果。
-12. 未完成事项。
+1. 本轮修复了哪些员工使用问题。
+2. 修改了哪些文件。
+3. 是否改动后端，预期应为否。
+4. 旧路由兼容情况。
+5. 浏览器检查结果。
+6. 构建和回归脚本结果。
+7. 仍需后续 UX 批次处理的问题。
 
-## 8. 完成定义
+## 10. 完成定义
 
-只有同时满足以下条件，才能标记完成：
+只有同时满足以下条件，才算完成：
 
-- 当前 M3G 工作成果已 checkpoint，不丢改动。
-- `origin/main` 已合并到当前分支。
-- 葛兰岱尔能力在当前分支可见。
-- BIM 协同页可打开。
-- 105 RVT 试点模型或轻量化模型列表可见。
-- M3G 对象存储、file-access、文件管理不回归。
-- 不泄露 NAS 路径、bucket、object key、storage_uri、token、secret。
+- 员工主路径更清楚。
+- 文件管理器更好用。
+- 工程树和交付工作中心关系更清楚。
+- 对象存储 / 文件服务状态更容易理解。
+- BIM 协同入口和 Viewer 状态更清楚。
+- 没有后端、数据库、权限、API 语义改动。
+- 前端构建通过。
+- 必要回归脚本通过。
 - `handoff/dev-agent/latest-report.md` 已写。
