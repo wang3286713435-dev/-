@@ -1,73 +1,151 @@
-# 8B-GD1 P1 极短复验报告
+# 测试 Agent 报告：M3G-9 全项目对象化覆盖率报告与 M3 收口验收
 
-生成时间：2026-05-28 CST
+时间：2026-06-04 11:16 CST
 
-## 1. 复验结论
+## 1. 结论
 
-结论：通过。
+M3G-9 验收通过。
 
-上轮 P1 已关闭，建议主 agent 收口 `8B-GD1`。
+本轮确认平台已能基于真实业务台账和当前对象版本状态生成全项目对象化覆盖率只读报告。报告能够说明平台总体覆盖率、105 样板项目完成状态、非 105 项目状态分布、剩余治理与后续动作，并且查询报告不会创建迁移任务或触碰真实项目文件。
 
-本轮仅执行 Git 交付面极短复验，未重跑后端、前端和全量验收脚本。
+建议主 agent 收口 M3G-9，并建议主 agent 进入 M3 整体收口判断。
 
-## 2. 执行命令与结果
+## 2. P0 / P1 / P2
 
-- `git branch --show-current`
-  - 结果：`codex/8b-gd-lightweight-engine-adapter`
-  - 判定：通过
+- P0：无。
+- P1：无。
+- P2：既有前端构建大包 warning；本地非交付未跟踪项仍存在但未纳入 Git。
 
-- `git status --short`
-  - 结果：
-    - `M  backend/delivery-visualization-adapter/src/main/java/com/zhuoyu/delivery/visualization/application/VisualizationAdapterApplicationService.java`
-    - `M  backend/delivery-visualization-adapter/src/main/java/com/zhuoyu/delivery/visualization/controller/VisualizationAdapterController.java`
-    - `M  backend/delivery-visualization-adapter/src/main/java/com/zhuoyu/delivery/visualization/dto/VisualizationDtos.java`
-    - `A  backend/delivery-visualization-adapter/src/main/java/com/zhuoyu/delivery/visualization/engine/GlandarEngineSettings.java`
-    - `M  handoff/dev-agent/latest-report.md`
-    - `M  handoff/main-agent/8b-gd-task-graph.md`
-    - `M  handoff/main-agent/development-log.md`
-    - `M  handoff/main-agent/status.md`
-    - `M  handoff/test-agent/latest-report.md`
-    - `A  scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh`
-  - 判定：通过
-  - 说明：两个关键新增文件均已进入 staged；未见新的未跟踪核心交付文件。
+## 3. 构建和脚本结果
 
-- `git diff --check`
-  - 结果：无输出
-  - 判定：通过
+- 后端构建：通过，`BUILD SUCCESS`。
+- 前端构建：通过，仅既有大包 warning。
+- 后端健康检查：通过，返回 `UP`。
+- M3G-9 专项脚本：通过，`PASS=11 FAIL=0`。
+- M3G-8 对象优先读取回归：通过，`PASS=7 FAIL=0`。
+- M3G-6S-F1 对象版本一致性回归：通过，`PASS=13 FAIL=0`。
+- 文件访问安全回归：通过，`PASS=18 FAIL=0`。
+- 工作区空白字符检查：通过。
+- 暂存区空白字符检查：通过。
 
-- `git diff --cached --check`
-  - 结果：无输出
-  - 判定：通过
+## 4. 105 覆盖率结果
 
-- `git diff --cached --name-status | grep -E 'GlandarEngineSettings.java|check-8b-gd1-glandar-adapter-skeleton.sh'`
-  - 结果：
-    - `A backend/delivery-visualization-adapter/src/main/java/com/zhuoyu/delivery/visualization/engine/GlandarEngineSettings.java`
-    - `A scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh`
-  - 判定：通过
+接口抽查确认 105 / `projectId=503`：
 
-- `git ls-files --others --exclude-standard`
-  - 结果：无输出
-  - 判定：通过
+- 项目编码：`105`。
+- 项目名称：启航华居项目。
+- 总文件数：`2928`。
+- 已对象化文件数：`2928`。
+- 仍在历史 NAS 链路的文件数：`0`。
+- 迁移失败数：`0`。
+- 治理项数：`0`。
+- checksum 覆盖率：`100.0%`。
+- 对象化覆盖率：`100.0%`。
+- 读取策略：`OBJECT_FIRST`。
+- 状态：`COMPLETED`。
 
-## 3. 验收标准对照
+M3G-6S-F1 回归进一步确认：
 
-- 当前分支是 `codex/8b-gd-lightweight-engine-adapter`：通过
-- `GlandarEngineSettings.java` 已是 `A` 或已纳入 staged diff：通过
-- `scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh` 已是 `A` 或已纳入 staged diff：通过
-- 不存在新的未跟踪核心交付文件：通过
-- `git diff --check` 通过：通过
-- `git diff --cached --check` 通过：通过
+- 105 active object version 全部可从当前 NAS 侧 MinIO 读取。
+- 105 对象化覆盖仍完整。
+- active object version 未重复污染。
+- 受控 file-access 可读取对象化文件。
+- 抽样 NAS 原文件 size / mtime 未变化。
 
-## 4. P0 / P1 / P2
+## 5. 非 105 项目状态分布
 
-P0：未发现。
+接口抽查状态分布：
 
-P1：未发现。
+- `PARTIAL`：`13` 个项目。
+- `NAS_ONLY`：`2` 个项目。
+- `COMPLETED`：`1` 个项目。
+- `EXCLUDED`：`81` 个项目。
+- `FAILED_NEEDS_GOVERNANCE`：`0` 个项目。
 
-P2：未发现。
+读取策略分布：
 
-## 5. 是否建议主 agent 收口 8B-GD1
+- `MIXED`：`13` 个项目。
+- `LEGACY_NAS`：`2` 个项目。
+- `OBJECT_FIRST`：`1` 个项目。
+- `EXCLUDED`：`81` 个项目。
 
-建议收口。
+结论：非 105 项目没有被伪装成全部完成，平台能明确区分部分对象化、仍为历史 NAS 链路、已排除和已完成项目。
 
-本轮极短复验范围内，上轮唯一 P1 已关闭，当前 `8B-GD1` 的 Git 交付面满足收口前要求。
+## 6. M3 收口判断字段验证
+
+覆盖率报告返回：
+
+- `dryRun=true`。
+- `reportCode=M3G-9`。
+- `m3ClosureReady=true`。
+- `blockingReasons=[]`。
+- `warnings` 存在，并说明仍有部分对象化项目、历史 NAS 链路项目和排除项目。
+- `nextActions` 存在，并给出 PARTIAL 项目继续分批规划、NAS_ONLY 项目先做 dry-run 后按低风险推进的后续动作。
+
+平台级摘要：
+
+- 项目总数：`97`。
+- 文件总数：`41214`。
+- 已对象化文件数：`2994`。
+- 仍在历史 NAS 链路文件数：`38220`。
+- 失败文件数：`0`。
+- 平台对象化覆盖率：`7.26%`。
+- checksum 覆盖率：`10.72%`。
+
+补充核对：数据库中的 active 对象化文件数为 `2994`，与接口摘要一致；105 文件总数和对象化数均为 `2928`，与接口一致。全局原始文件总数高于报告总数，原因是报告按 M3 收口口径过滤真实项目与可解释项目，不把排除范围外数据混入收口口径。
+
+## 7. 禁出字段扫描结果
+
+M3G-9 专项脚本对接口响应完成禁出字段扫描，结果通过。
+
+浏览器轻验文件服务页时，未发现真实底层路径、对象桶名、对象键、真实查询语句、密钥类字段或底层行数据泄露。
+
+说明：页面出现“基于数据库台账和对象版本状态生成”这类业务说明，不属于底层查询语句泄露。
+
+## 8. 前端轻验结果
+
+打开文件服务 / 对象存储页面：
+
+`http://127.0.0.1:5173/data-steward/assets/503/data-steward/file-service`
+
+验证结果：
+
+- 页面不白屏。
+- 页面无横向溢出。
+- 能看到 `M3G-9 全项目对象化报告`。
+- 能看到全项目对象化覆盖率 `7.26%`。
+- 能看到 97 个项目、41214 个文件、已对象化 2994 个。
+- 能看到完成项目、部分对象化项目、历史 NAS 链路项目、需治理项目、容量、checksum 覆盖等摘要。
+- 能看到 105 为已完成，文件数 `2928`、已对象化 `2928`、剩余 `0`、治理项 `0`、对象化率 `100%`。
+- 能看到非 105 项目状态表，包含部分对象化和历史 NAS 链路项目。
+- 页面未展示真实底层路径、对象桶名、对象键或密钥类字段。
+
+## 9. 是否触碰真实 NAS
+
+未发现真实 NAS 原文件被移动、删除、重命名或覆盖。
+
+本轮 M3G-9 查询是只读报告口径：
+
+- 专项脚本确认查询前后迁移任务数量未增加。
+- M3G-6S-F1 回归确认抽样 NAS 原文件 size / mtime 未变化。
+- M3G-8 回归确认对象读取异常不会静默回退伪装成功。
+
+## 10. 边界检查
+
+本轮未发现：
+
+- 执行全量迁移。
+- 读取 PDF / Office / DWG / RVT / IFC 正文。
+- 写入语义文档或向量索引。
+- 写入 Hermes 记忆。
+- 新增 Hermes 正文问答。
+- 新增 BIM 构件级能力。
+- 修改 `docs/**`。
+
+新增关键脚本 `scripts/dev/check-m3g9-objectification-coverage-report.sh` 已纳入 Git 跟踪。
+
+## 11. 是否建议收口
+
+建议主 agent 收口 M3G-9。
+
+同时建议主 agent 进入 M3 整体收口判断。测试侧依据是：105 完整样板已完成，对象优先读取稳定，全项目覆盖率报告可查，非 105 状态可解释，file-access 与 M3G-8 回归通过，当前无 P0 / P1。

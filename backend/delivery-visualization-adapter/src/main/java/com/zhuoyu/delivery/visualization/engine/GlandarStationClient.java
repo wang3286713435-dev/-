@@ -12,8 +12,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -26,6 +28,7 @@ public class GlandarStationClient {
     private static final String UPLOAD_PATH = "/api/app/model/SplitUploadFile";
     private static final String DIRECT_UPLOAD_PATH = "/api/app/model/upload-file";
     private static final String QUERY_PATH = "/api/app/model/query-model-info";
+    private static final String COMPONENT_PROPERTY_PATH = "/api/app/model/property-data-by-externalid";
     private static final long DIRECT_UPLOAD_MAX_BYTES = 64L * 1024L * 1024L;
 
     private final GlandarEngineSettings settings;
@@ -133,6 +136,58 @@ public class GlandarStationClient {
             Thread.currentThread().interrupt();
             throw new BusinessException("ENGINE_API_UNREACHABLE", "轻量化任务查询被中断",
                 HttpStatus.PRECONDITION_FAILED);
+        }
+    }
+
+    public ComponentPropertyResult componentProperties(String lightweightName, String externalId) {
+        requireReady();
+        if (!hasText(lightweightName) || !hasText(externalId)) {
+            throw new BusinessException("ENGINE_COMPONENT_PROPERTY_INPUT_INVALID",
+                "构件属性查询缺少轻量化名称或构件 ID", HttpStatus.BAD_REQUEST);
+        }
+        String url = settings.stationApiBase() + COMPONENT_PROPERTY_PATH
+            + "?LightweightName=" + URLEncoder.encode(lightweightName, StandardCharsets.UTF_8)
+            + "&ExternalId=" + URLEncoder.encode(externalId, StandardCharsets.UTF_8);
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+            .timeout(Duration.ofSeconds(30))
+            .header("Token", settings.stationToken())
+            .GET()
+            .build();
+        try {
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new BusinessException("ENGINE_COMPONENT_PROPERTY_UNREACHABLE",
+                    "构件属性查询失败：引擎接口不可用", HttpStatus.PRECONDITION_FAILED);
+            }
+            JsonNode root = parseJson(response.body(), "ENGINE_COMPONENT_PROPERTY_RESPONSE_INVALID");
+            if (root.path("code").asInt(0) != 1) {
+                throw new BusinessException("ENGINE_COMPONENT_PROPERTY_FAILED",
+                    "构件属性查询失败：" + safeMessage(root.path("codeMsg").asText()), HttpStatus.PRECONDITION_FAILED);
+            }
+            List<ComponentPropertyRow> rows = new ArrayList<>();
+            JsonNode datas = root.path("datas");
+            if (datas != null && datas.isArray()) {
+                for (JsonNode item : datas) {
+                    rows.add(new ComponentPropertyRow(
+                        item.path("externalId").asText(null),
+                        item.path("propertyTypeName").asText(null),
+                        item.path("propertySetName").asText(null),
+                        item.path("propertyname").asText(null),
+                        item.path("value").asText(null),
+                        item.path("groupname").asText(null)
+                    ));
+                }
+            }
+            return new ComponentPropertyResult(rows, response.body());
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (IOException exception) {
+            throw new BusinessException("ENGINE_COMPONENT_PROPERTY_UNREACHABLE",
+                "构件属性查询失败：引擎接口不可达", HttpStatus.PRECONDITION_FAILED);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException("ENGINE_COMPONENT_PROPERTY_UNREACHABLE",
+                "构件属性查询被中断", HttpStatus.PRECONDITION_FAILED);
         }
     }
 
@@ -280,7 +335,7 @@ public class GlandarStationClient {
         config.put("schedule", 0);
         config.put("combineResult", 0);
         config.put("dbTreeType", 1);
-        config.put("dbPropertyType", 0);
+        config.put("dbPropertyType", 1);
         config.put("simplification", 0);
         config.put("generateSubMesh", 0);
         config.put("residentRatio", 0.5);
@@ -379,6 +434,22 @@ public class GlandarStationClient {
         String errorCode,
         String message,
         String stationRecordJson
+    ) {
+    }
+
+    public record ComponentPropertyResult(
+        List<ComponentPropertyRow> rows,
+        String stationRecordJson
+    ) {
+    }
+
+    public record ComponentPropertyRow(
+        String externalId,
+        String propertyTypeName,
+        String propertySetName,
+        String propertyName,
+        String value,
+        String groupName
     ) {
     }
 }

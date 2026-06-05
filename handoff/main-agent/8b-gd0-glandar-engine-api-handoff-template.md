@@ -189,4 +189,3 @@ curl -fsS '<ENGINE_BASE_URL>/<TASK_STATUS_PATH>/<TASK_ID>'
 - [ ] 引擎不会在日志中输出完整文件下载 URL、token 或敏感路径。
 - [ ] viewer URL / session 可设置过期时间。
 - [ ] 引擎错误响应不会回显真实平台存储路径。
-

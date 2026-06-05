@@ -3,10 +3,14 @@ package com.zhuoyu.delivery.workcenter.delivery;
 import com.zhuoyu.delivery.core.auth.application.SecurityPrincipalAccessor;
 import com.zhuoyu.delivery.core.project.application.ProjectContextApplicationService;
 import com.zhuoyu.delivery.shared.api.ApiResponse;
+import com.zhuoyu.delivery.workcenter.agentgovernance.AgentGovernanceApplicationService;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.ApplyAgentRecommendationsRequest;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.ApplyAgentRecommendationsResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.BatchDeliveryBindingRequest;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.BatchDeliveryBindingResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.CreateDeliveryPackageDraftRequest;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DashboardSummaryResponse;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCandidatesResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryBindingRequest;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryBindingResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCompletenessResponse;
@@ -38,15 +42,18 @@ public class DeliveryController {
     private final SecurityPrincipalAccessor securityPrincipalAccessor;
     private final ProjectContextApplicationService projectContextApplicationService;
     private final DeliveryApplicationService deliveryApplicationService;
+    private final AgentGovernanceApplicationService agentGovernanceApplicationService;
 
     public DeliveryController(
         SecurityPrincipalAccessor securityPrincipalAccessor,
         ProjectContextApplicationService projectContextApplicationService,
-        DeliveryApplicationService deliveryApplicationService
+        DeliveryApplicationService deliveryApplicationService,
+        AgentGovernanceApplicationService agentGovernanceApplicationService
     ) {
         this.securityPrincipalAccessor = securityPrincipalAccessor;
         this.projectContextApplicationService = projectContextApplicationService;
         this.deliveryApplicationService = deliveryApplicationService;
+        this.agentGovernanceApplicationService = agentGovernanceApplicationService;
     }
 
     @PostMapping("/delivery-bindings")
@@ -126,6 +133,27 @@ public class DeliveryController {
         var principal = securityPrincipalAccessor.requireCurrentPrincipal();
         projectContextApplicationService.requireCurrentProject(principal, projectId);
         return ApiResponse.success(deliveryApplicationService.exportPrecheck(projectId, viewType, targetType));
+    }
+
+    @GetMapping("/delivery-candidates")
+    public ApiResponse<DeliveryCandidatesResponse> deliveryCandidates(
+        @PathVariable Long projectId,
+        @RequestParam(required = false) String viewType,
+        @RequestParam(defaultValue = "SECTION") String targetType
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(agentGovernanceApplicationService.deliveryCandidates(principal.userId(), projectId, viewType, targetType));
+    }
+
+    @PostMapping("/delivery-candidates:apply")
+    public ApiResponse<ApplyAgentRecommendationsResponse> applyDeliveryCandidates(
+        @PathVariable Long projectId,
+        @Valid @RequestBody ApplyAgentRecommendationsRequest request
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(agentGovernanceApplicationService.applyRecommendations(principal.userId(), projectId, request));
     }
 
     @GetMapping("/delivery-package/prepare")

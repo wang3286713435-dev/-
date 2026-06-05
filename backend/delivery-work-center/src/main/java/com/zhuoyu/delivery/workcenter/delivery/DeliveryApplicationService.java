@@ -511,6 +511,7 @@ public class DeliveryApplicationService {
                     mr.deliverableTypeId(), mr.deliverableTypeName(),
                     mr.targetType(), mr.targetId(), mr.targetName(),
                     (Long) null, (Long) null, (String) null, mr.fileKind(), (String) null, (String) null,
+                    "MISSING", "NONE",
                     (String) null, "MISSING",
                     "UNSUPPORTED", "NONE", "NOT_SUPPORTED", false,
                     false, "缺失文件", missingReason(mr, vt), "DANGER",
@@ -810,6 +811,7 @@ public class DeliveryApplicationService {
             row.targetType(), row.targetId(), row.targetName(),
             row.bindingId(), row.fileResourceId(), row.fileName(),
             row.fileKind(), row.versionNo(), row.fileExt(),
+            normalizeStorageStatus(row.storageStatus()), normalizeReadSource(row.readSource(), row.storageStatus()),
             row.reviewStatus(), readinessStatus,
             pd.previewStatus(), pd.previewMode(), pd.conversionStatus(), pd.conversionRequired(),
             pd.downloadOnly(), pd.statusLabel(), pd.actionHint(), pd.riskLevel(),
@@ -857,6 +859,31 @@ public class DeliveryApplicationService {
 
     private String fileKindLabel(String fileKind) {
         return "DRAWING".equals(fileKind) ? "图纸" : "文档";
+    }
+
+    private String normalizeStorageStatus(String storageStatus) {
+        if (storageStatus == null || storageStatus.isBlank()) {
+            return "NAS_ONLY";
+        }
+        String normalized = storageStatus.trim().toUpperCase();
+        return switch (normalized) {
+            case "OBJECT_STORED", "NAS_ONLY", "MIGRATION_PENDING", "MIGRATION_FAILED", "OBJECT_UNREADABLE", "MISSING" -> normalized;
+            default -> "NAS_ONLY";
+        };
+    }
+
+    private String normalizeReadSource(String readSource, String storageStatus) {
+        if (readSource != null && !readSource.isBlank()) {
+            String normalized = readSource.trim().toUpperCase();
+            if (List.of("OBJECT_STORAGE", "LEGACY_NAS", "FALLBACK_NAS", "NONE").contains(normalized)) {
+                return normalized;
+            }
+        }
+        return switch (normalizeStorageStatus(storageStatus)) {
+            case "OBJECT_STORED" -> "OBJECT_STORAGE";
+            case "MISSING", "MIGRATION_PENDING", "MIGRATION_FAILED", "OBJECT_UNREADABLE" -> "NONE";
+            default -> "LEGACY_NAS";
+        };
     }
 
     private String normalizeFileExt(String fileExt, String fileName) {

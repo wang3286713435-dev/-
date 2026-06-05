@@ -1,7 +1,5 @@
 <template>
   <section class="mvp-page asset-page">
-    <ProjectWorkspaceNav v-if="Number.isFinite(projectId)" :project-id="projectId" />
-
     <header ref="commandRef" class="asset-command-center">
       <div class="zy-hero-lightfield" aria-hidden="true">
         <span></span>
@@ -813,7 +811,6 @@ import {
   previewRiskTagType,
   previewStatusLabel
 } from '@/modules/data-steward/utils/previewStatus';
-import ProjectWorkspaceNav from '@/modules/core/components/ProjectWorkspaceNav.vue';
 import { fetchInitializationStatus, type InitializationStatus } from '@/modules/master-data/api/masterData';
 
 const route = useRoute();

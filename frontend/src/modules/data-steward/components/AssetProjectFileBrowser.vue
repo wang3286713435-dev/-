@@ -87,6 +87,14 @@
             @clear="reloadFiles"
           />
           <el-button :icon="Search" @click="reloadFiles">查询</el-button>
+          <el-checkbox
+            v-if="hasKeyword"
+            v-model="filters.searchCurrentFolderOnly"
+            class="file-browser__search-scope-toggle"
+            @change="reloadFiles"
+          >
+            仅当前文件夹及子目录
+          </el-checkbox>
           <el-button text @click="advancedSearchVisible = !advancedSearchVisible">
             高级搜索
             <el-icon class="file-browser__chevron" :class="{ 'is-open': advancedSearchVisible }">
@@ -122,6 +130,15 @@
           <el-tag v-if="currentProjectMismatch" type="info" effect="plain">按本页面项目执行</el-tag>
         </div>
       </section>
+
+      <el-alert
+        v-if="hasKeyword"
+        class="file-browser__search-alert"
+        type="info"
+        show-icon
+        :closable="false"
+        :title="searchScopeHint"
+      />
 
       <div class="file-browser__continuity" data-m1e-continuity-bar>
         <div>
@@ -222,7 +239,7 @@
           :row-key="entryRowKey"
           :row-class-name="entryRowClassName"
           class="master-table file-browser__entry-table"
-          empty-text="当前文件夹暂无文件或直接子文件夹"
+          :empty-text="fileTableEmptyText"
           @row-click="handleEntryClick"
           @row-dblclick="handleEntryDblClick"
           @row-contextmenu="handleEntryContextMenu"
@@ -236,8 +253,15 @@
                 <div>
                   <strong>{{ row.name }}</strong>
                   <span v-if="row.kind === 'DIRECTORY'">{{ row.path || '项目根目录' }}</span>
+                  <span v-else-if="hasKeyword">所在位置：{{ fileLocationLabel(row.file) }}</span>
                 </div>
               </div>
+            </template>
+          </el-table-column>
+          <el-table-column v-if="hasKeyword" label="所在位置" min-width="220" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span v-if="row.kind === 'FILE'">{{ fileLocationLabel(row.file) }}</span>
+              <span v-else>{{ row.path || '项目根目录' }}</span>
             </template>
           </el-table-column>
           <el-table-column label="类型" width="110">
@@ -285,13 +309,20 @@
               <span v-else class="file-browser__muted">-</span>
             </template>
           </el-table-column>
+          <el-table-column label="资料用途" width="130">
+            <template #default="{ row }">
+              <el-tag v-if="row.kind === 'FILE' && isRegisteredFile(row.file)" effect="plain" size="small">
+                {{ ownershipTypeLabel(row.file.ownershipType) }}
+              </el-tag>
+              <span v-else class="file-browser__muted">-</span>
+            </template>
+          </el-table-column>
           <el-table-column label="状态" width="160">
             <template #default="{ row }">
               <div v-if="row.kind === 'FILE'" class="file-browser__status-cell">
                 <el-tag v-if="!isRegisteredFile(row.file)" type="warning" size="small">未登记</el-tag>
                 <el-tag v-else-if="!row.file.qualityFlags || row.file.qualityFlags.length === 0" type="success" size="small">正常</el-tag>
                 <el-tag v-else type="warning" size="small">{{ row.file.qualityFlags.length }} 项待处理</el-tag>
-                <el-tag v-if="isObjectStoredFile(row.file)" type="success" size="small">对象存储</el-tag>
                 <span>{{ isRegisteredFile(row.file) ? (row.file.confidenceLevel === 'HIGH' ? '高置信度' : '需复核') : '需扫描入库后治理' }}</span>
               </div>
               <div v-else class="file-browser__status-cell">
@@ -300,15 +331,26 @@
               </div>
             </template>
           </el-table-column>
+          <el-table-column label="存储" width="170">
+            <template #default="{ row }">
+              <div v-if="row.kind === 'FILE'" class="file-browser__storage-cell">
+                <el-tag :type="storageStateTagType(row.file)" size="small">
+                  {{ storageStateLabel(row.file) }}
+                </el-tag>
+                <span>{{ accessSourceLabel(row.file) }}</span>
+              </div>
+              <span v-else class="file-browser__muted">-</span>
+            </template>
+          </el-table-column>
           <el-table-column label="预览产物" width="190">
             <template #default="{ row }">
               <div v-if="row.kind === 'FILE'" class="file-browser__artifact-cell">
                 <el-tag
-                  v-if="glandarPilotStatus(row.file)"
-                  :type="glandarPilotTag(row.file)"
+                  v-if="glandarModelStatus(row.file)"
+                  :type="glandarModelTag(row.file)"
                   size="small"
                 >
-                  {{ glandarPilotStatus(row.file)?.statusLabel }}
+                  {{ glandarModelStatus(row.file)?.statusLabel }}
                 </el-tag>
                 <el-tag :type="previewArtifactTag(row)" size="small">
                   {{ previewArtifactLabel(row) }}
@@ -319,10 +361,10 @@
                   link
                   type="primary"
                   size="small"
-                  :loading="previewArtifactLoadingId === row.file.fileId"
+                  :loading="previewArtifactActionLoading(row)"
                   @click.stop="handlePreparePreviewArtifact(row)"
                 >
-                  准备状态
+                  {{ previewArtifactActionLabel(row) }}
                 </el-button>
               </div>
               <span v-else class="file-browser__muted">-</span>
@@ -539,6 +581,7 @@ import {
   createNasDirectory,
   fetchCatalogDirectories,
   fetchCatalogDirectoryChildren,
+  fetchCatalogFiles,
   fetchNasWriteTrialStatus,
   fetchNasOperations,
   fetchNasQuarantine,
@@ -569,9 +612,9 @@ import {
 } from '@/modules/data-steward/utils/previewStatus';
 import {
   createFileLightweightJob,
-  fetchGlandarRvtPilotFiles,
+  fetchGlandarModelFiles,
   issueLightweightViewerTicket,
-  type GlandarRvtPilotFile,
+  type GlandarModelFile,
   type LightweightJobCreateResponse
 } from '@/modules/visualization/api/visualization';
 import { useAuthStore } from '@/stores/auth';
@@ -607,6 +650,7 @@ const QUERY_KEYS = [
   'tab',
   'fileDir',
   'fileKeyword',
+  'fileSearchScope',
   'fileKind',
   'discipline',
   'fileExt',
@@ -630,7 +674,7 @@ const nasOperations = ref<NasOperationRecord[]>([]);
 const nasQuarantine = ref<NasQuarantineRecord[]>([]);
 const nasTrialStatus = ref<NasWriteTrialStatus | null>(null);
 const previewArtifacts = ref<Record<number, PreviewArtifact>>({});
-const glandarPilotFiles = ref<GlandarRvtPilotFile[]>([]);
+const glandarModelFiles = ref<GlandarModelFile[]>([]);
 const activeDir = ref('');
 const expandedDirs = ref<string[]>([]);
 const lastFileId = ref<number | null>(null);
@@ -681,6 +725,7 @@ let stateReady = false;
 
 const filters = reactive({
   keyword: '',
+  searchCurrentFolderOnly: false,
   fileKind: 'ALL',
   disciplineCode: '',
   fileExt: '',
@@ -725,6 +770,7 @@ const ownershipStatusOptions = [
 type FileBrowserState = {
   activeDir?: string;
   keyword?: string;
+  searchCurrentFolderOnly?: boolean;
   fileKind?: string;
   disciplineCode?: string;
   fileExt?: string;
@@ -872,6 +918,18 @@ const nasTrialSummary = computed(() => {
 });
 
 const activeDirectoryLabel = computed(() => activeDir.value || '项目根目录');
+const hasKeyword = computed(() => filters.keyword.trim().length > 0);
+const searchScopeHint = computed(() => {
+  if (!hasKeyword.value) return '';
+  if (filters.searchCurrentFolderOnly) {
+    return `正在“${activeDirectoryLabel.value}”及其子目录中搜索，结果不会包含其他项目目录。`;
+  }
+  return '正在整个项目中搜索，结果会显示所在位置；不会暴露真实 NAS 路径。';
+});
+const fileTableEmptyText = computed(() => {
+  if (!hasKeyword.value) return '当前文件夹暂无文件或直接子文件夹';
+  return filters.searchCurrentFolderOnly ? '当前文件夹及子目录没有匹配文件' : '整个项目没有匹配文件';
+});
 const activeDirectoryHelper = computed(() => {
   if (nasTrialLoadFailed.value) return '暂时无法确认灰度状态，页面已停用真实写按钮。';
   if (!hasRouteProjectAccess.value) return '当前账号没有本项目权限，不能查看或操作这个项目的文件。';
@@ -953,14 +1011,17 @@ const fileEntries = computed<FileBrowserEntry[]>(() =>
   }))
 );
 
-const browserEntries = computed<BrowserEntry[]>(() => [
-  ...directoryEntries.value,
-  ...fileEntries.value
-]);
+const browserEntries = computed<BrowserEntry[]>(() => {
+  if (hasKeyword.value) return fileEntries.value;
+  return [
+    ...directoryEntries.value,
+    ...fileEntries.value
+  ];
+});
 
-const glandarPilotByFileId = computed(() => {
-  const map = new Map<number, GlandarRvtPilotFile>();
-  glandarPilotFiles.value.forEach((item) => map.set(item.fileId, item));
+const glandarModelByFileId = computed(() => {
+  const map = new Map<number, GlandarModelFile>();
+  glandarModelFiles.value.forEach((item) => map.set(item.fileId, item));
   return map;
 });
 
@@ -979,6 +1040,10 @@ const selectedDirectoryEntries = computed(() =>
 
 const selectionSummary = computed(() => {
   if (!selectedEntries.value.length) {
+    if (hasKeyword.value) {
+      const scope = filters.searchCurrentFolderOnly ? '当前文件夹及子目录' : '整个项目';
+      return `搜索结果：${scope}内 ${pagination.total} 个文件`;
+    }
     return `当前文件夹：${directoryEntries.value.length} 个文件夹 / ${pagination.total} 个文件`;
   }
   return `已选 ${selectedEntries.value.length} 项：文件 ${selectedFileEntries.value.length} 个，文件夹 ${selectedDirectoryEntries.value.length} 个`;
@@ -1021,7 +1086,7 @@ watch(
     void loadNasWriteTrialStatus();
     void loadDirectories();
     void loadFiles();
-    void loadGlandarPilotFiles();
+    void loadGlandarModelFiles();
   },
   { immediate: true }
 );
@@ -1044,8 +1109,33 @@ watch(
 
 watch(
   () => [
+    route.query.fileDir,
+    route.query.fileKeyword,
+    route.query.fileSearchScope,
+    route.query.fileKind,
+    route.query.discipline,
+    route.query.fileExt,
+    route.query.qualityIssue,
+    route.query.ownershipStatus,
+    route.query.filePage,
+    route.query.filePageSize
+  ],
+  () => {
+    if (!stateReady || applyingSavedState) return;
+    const state = readQueryState();
+    if (!state || isCurrentBrowserStateEquivalent(state)) return;
+    applyBrowserState(state, true);
+    clearSelection();
+    void loadNasWriteTrialStatus();
+    void loadFiles();
+  }
+);
+
+watch(
+  () => [
     activeDir.value,
     filters.keyword,
+    filters.searchCurrentFolderOnly,
     filters.fileKind,
     filters.disciplineCode,
     filters.fileExt,
@@ -1095,9 +1185,19 @@ function initializeBrowserState() {
   pagination.total = 0;
 
   const state = readQueryState() ?? readStoredBrowserState() ?? {};
+  applyBrowserState(state, true);
+
+  applyingSavedState = false;
+  stateReady = true;
+  persistBrowserState();
+}
+
+function applyBrowserState(state: FileBrowserState, preserveViewMemory = false) {
+  applyingSavedState = true;
   const fallbackQualityIssue = props.initialQualityIssue || 'ALL';
   activeDir.value = normalizeProjectDirectoryPath(state.activeDir ?? '');
   filters.keyword = state.keyword ?? '';
+  filters.searchCurrentFolderOnly = state.searchCurrentFolderOnly === true;
   filters.fileKind = normalizeFileKind(state.fileKind);
   filters.disciplineCode = state.disciplineCode ?? '';
   filters.fileExt = state.fileExt ?? '';
@@ -1105,14 +1205,13 @@ function initializeBrowserState() {
   filters.ownershipStatus = normalizeOwnershipStatus(state.ownershipStatus);
   pagination.page = positiveNumber(state.page, 1);
   pagination.pageSize = normalizePageSize(state.pageSize);
-  expandedDirs.value = Array.isArray(state.expandedDirs) ? state.expandedDirs.filter(Boolean) : [];
+  expandedDirs.value = Array.isArray(state.expandedDirs)
+    ? state.expandedDirs.filter(Boolean)
+    : preserveViewMemory ? expandedDirs.value : [];
   lastFileId.value = state.lastFileId && Number.isFinite(Number(state.lastFileId)) ? Number(state.lastFileId) : null;
-  lastFileName.value = state.lastFileName ?? '';
+  lastFileName.value = state.lastFileName ?? (preserveViewMemory ? lastFileName.value : '');
   advancedSearchVisible.value = hasAdvancedFilters();
-
   applyingSavedState = false;
-  stateReady = true;
-  persistBrowserState();
 }
 
 function readQueryState(): FileBrowserState | null {
@@ -1121,6 +1220,7 @@ function readQueryState(): FileBrowserState | null {
   return {
     activeDir: queryString(route.query.fileDir) ?? '',
     keyword: queryString(route.query.fileKeyword) ?? '',
+    searchCurrentFolderOnly: queryString(route.query.fileSearchScope) === 'current',
     fileKind: queryString(route.query.fileKind) ?? 'ALL',
     disciplineCode: queryString(route.query.discipline) ?? '',
     fileExt: queryString(route.query.fileExt) ?? '',
@@ -1156,11 +1256,12 @@ function currentBrowserState(): FileBrowserState {
   return {
     activeDir: activeDir.value,
     keyword: filters.keyword.trim(),
+    searchCurrentFolderOnly: filters.searchCurrentFolderOnly,
     fileKind: filters.fileKind,
     disciplineCode: filters.disciplineCode,
-      fileExt: filters.fileExt.trim(),
-      qualityIssue: filters.qualityIssue,
-      ownershipStatus: filters.ownershipStatus,
+    fileExt: filters.fileExt.trim(),
+    qualityIssue: filters.qualityIssue,
+    ownershipStatus: filters.ownershipStatus,
     page: pagination.page,
     pageSize: pagination.pageSize,
     expandedDirs: expandedDirs.value,
@@ -1168,6 +1269,19 @@ function currentBrowserState(): FileBrowserState {
     lastFileName: lastFileName.value,
     updatedAt: new Date().toISOString()
   };
+}
+
+function isCurrentBrowserStateEquivalent(state: FileBrowserState) {
+  return normalizeProjectDirectoryPath(state.activeDir ?? '') === activeDir.value
+    && (state.keyword ?? '') === filters.keyword
+    && (state.searchCurrentFolderOnly === true) === filters.searchCurrentFolderOnly
+    && normalizeFileKind(state.fileKind) === filters.fileKind
+    && (state.disciplineCode ?? '') === filters.disciplineCode
+    && (state.fileExt ?? '') === filters.fileExt
+    && (state.qualityIssue ?? props.initialQualityIssue ?? 'ALL') === filters.qualityIssue
+    && normalizeOwnershipStatus(state.ownershipStatus) === filters.ownershipStatus
+    && positiveNumber(state.page, 1) === pagination.page
+    && normalizePageSize(state.pageSize) === pagination.pageSize;
 }
 
 function syncBrowserStateToRoute(state: FileBrowserState) {
@@ -1180,6 +1294,7 @@ function syncBrowserStateToRoute(state: FileBrowserState) {
   nextQuery.tab = 'files';
   assignQuery(nextQuery, 'fileDir', state.activeDir);
   assignQuery(nextQuery, 'fileKeyword', state.keyword);
+  assignQuery(nextQuery, 'fileSearchScope', state.searchCurrentFolderOnly ? 'current' : '');
   assignQuery(nextQuery, 'fileKind', state.fileKind === 'ALL' ? '' : state.fileKind);
   assignQuery(nextQuery, 'discipline', state.disciplineCode);
   assignQuery(nextQuery, 'fileExt', state.fileExt);
@@ -1196,6 +1311,7 @@ function syncBrowserStateToRoute(state: FileBrowserState) {
 function resetViewState() {
   activeDir.value = '';
   filters.keyword = '';
+  filters.searchCurrentFolderOnly = false;
   filters.fileKind = 'ALL';
   filters.disciplineCode = '';
   filters.fileExt = '';
@@ -1441,10 +1557,10 @@ async function loadFiles() {
   const requestId = ++fileRequestId;
   fileLoading.value = true;
   try {
-    const result = await fetchCatalogDirectoryChildren({
+    const keyword = filters.keyword.trim();
+    const commonParams = {
       projectId: props.projectId,
-      directoryPath: activeDir.value || undefined,
-      keyword: filters.keyword.trim() || undefined,
+      keyword: keyword || undefined,
       fileKind: filters.fileKind === 'ALL' ? undefined : filters.fileKind,
       disciplineCode: filters.disciplineCode || undefined,
       fileExt: normalizeExt(filters.fileExt),
@@ -1452,6 +1568,28 @@ async function loadFiles() {
       ownershipStatus: filters.ownershipStatus === 'ALL' ? undefined : filters.ownershipStatus,
       page: pagination.page,
       pageSize: pagination.pageSize
+    };
+
+    if (keyword) {
+      const result = await fetchCatalogFiles({
+        ...commonParams,
+        directoryPath: filters.searchCurrentFolderOnly ? activeDir.value || undefined : undefined,
+        directOnly: false
+      });
+      if (requestId === fileRequestId) {
+        directDirectories.value = [];
+        files.value = result.rows;
+        pagination.page = result.page;
+        pagination.pageSize = result.pageSize;
+        pagination.total = result.total;
+      }
+      return;
+    }
+
+    const result = await fetchCatalogDirectoryChildren({
+      ...commonParams,
+      directoryPath: activeDir.value || undefined,
+      directOnly: true
     });
     if (requestId === fileRequestId) {
       directDirectories.value = result.directories;
@@ -1472,12 +1610,12 @@ async function loadFiles() {
   }
 }
 
-async function loadGlandarPilotFiles() {
+async function loadGlandarModelFiles() {
   if (!Number.isFinite(props.projectId)) return;
   try {
-    glandarPilotFiles.value = await fetchGlandarRvtPilotFiles(props.projectId);
+    glandarModelFiles.value = await fetchGlandarModelFiles(props.projectId);
   } catch {
-    glandarPilotFiles.value = [];
+    glandarModelFiles.value = [];
   }
 }
 
@@ -1501,7 +1639,7 @@ async function refreshBrowserViews(showSuccess = false) {
     loadNasWriteTrialStatus(),
     loadDirectories(),
     loadFiles(),
-    loadGlandarPilotFiles()
+    loadGlandarModelFiles()
   ];
   if (operationsDrawerVisible.value) loaders.push(loadNasOperations(false));
   if (quarantineDrawerVisible.value) loaders.push(loadNasQuarantine(false));
@@ -1623,28 +1761,30 @@ function buildContextMenuItems(entries: BrowserEntry[]): ContextMenuItem[] {
 
   const preview = previewForFileEntry(entry);
   const isModel = preview.previewMode === 'BIM_LIGHTWEIGHT';
-  const pilotStatus = isModel ? glandarPilotStatus(entry.file) : null;
+  const modelStatus = isModel ? glandarModelStatus(entry.file) : null;
   const unregisteredReason = isRegisteredFile(entry.file) ? '' : '未登记文件需先扫描入库后治理';
   return [
     {
       command: 'open',
       label: isModel
-        ? pilotStatus?.taskStatus === 'READY'
+        ? modelStatus?.taskStatus === 'READY'
           ? '打开轻量化模型'
-          : pilotStatus
+          : modelStatus?.supported
             ? '提交 / 查看轻量化'
-            : '模型预览占位'
+            : '模型暂不支持轻量化'
         : '打开 / 预览',
       disabled: Boolean(unregisteredReason),
-      reason: unregisteredReason || (isModel && !pilotStatus ? '当前模型未纳入 10 个 RVT 试点' : undefined)
+      reason: unregisteredReason || (isModel && modelStatus && !modelStatus.supported ? modelStatus.unsupportedReason || '当前模型格式暂不支持轻量化' : undefined)
     },
     { command: 'detail', label: '详情', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined },
-    {
-      command: 'prepare-preview-artifact',
-      label: '准备预览产物状态',
-      disabled: Boolean(unregisteredReason),
-      reason: unregisteredReason || '仅登记对象化状态或转换占位，不读取文件正文'
-    },
+    ...(!isModel
+      ? [{
+          command: 'prepare-preview-artifact' as const,
+          label: '准备预览产物状态',
+          disabled: Boolean(unregisteredReason),
+          reason: unregisteredReason || '仅登记对象化状态或转换占位，不读取文件正文'
+        }]
+      : []),
     { command: 'metadata', label: '治理', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined },
     { command: 'hermes-ownership', label: '询问 Hermes 归属建议', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined },
     { command: 'checksum', label: '补 checksum', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined },
@@ -1758,26 +1898,31 @@ async function openGlandarPreviewOrSubmit(entry: FileBrowserEntry) {
     openModelPreviewPlaceholder(entry);
     return;
   }
-  const pilotStatus = glandarPilotStatus(entry.file);
-  if (!pilotStatus) {
+  const modelStatus = glandarModelStatus(entry.file);
+  if (!modelStatus) {
     openModelPreviewPlaceholder(entry);
-    ElMessage.info('当前模型未纳入 105 项目 10 个 RVT 轻量化试点，暂时保留占位预览。');
+    ElMessage.info('当前模型尚未进入葛兰岱尔轻量化清单，暂时保留占位预览。');
+    return;
+  }
+  if (!modelStatus.supported) {
+    openModelPreviewPlaceholder(entry);
+    ElMessage.warning(modelStatus.unsupportedReason || '当前模型格式暂不支持葛兰岱尔轻量化。');
     return;
   }
   if (glandarOpeningFileId.value) return;
   glandarOpeningFileId.value = entry.file.fileId;
   try {
-    let jobId = pilotStatus.latestJobId;
-    let status = pilotStatus.taskStatus;
+    let jobId = modelStatus.latestJobId;
+    let status = modelStatus.taskStatus;
     if (!jobId || status === 'NOT_STARTED' || status === 'FAILED') {
       const created = await createFileLightweightJob(props.projectId, entry.file.fileId, false);
       jobId = created.jobId;
       status = created.taskStatus;
-      upsertGlandarPilotStatus(entry.file, created);
+      upsertGlandarModelStatus(entry.file, created);
     }
     if (status !== 'READY') {
       ElMessage.info('葛兰岱尔轻量化任务已提交或正在处理，稍后刷新后即可预览。');
-      await loadGlandarPilotFiles();
+      await loadGlandarModelFiles();
       return;
     }
     if (!jobId) {
@@ -1787,7 +1932,7 @@ async function openGlandarPreviewOrSubmit(entry: FileBrowserEntry) {
     const ticket = await issueLightweightViewerTicket(props.projectId, jobId);
     if (!ticket.viewerAvailable || !ticket.ticketIssued) {
       ElMessage.warning(ticket.blockedReason || 'Viewer 暂不可用，请稍后刷新。');
-      await loadGlandarPilotFiles();
+      await loadGlandarModelFiles();
       return;
     }
     const routeLocation = router.resolve({
@@ -1806,40 +1951,68 @@ async function openGlandarPreviewOrSubmit(entry: FileBrowserEntry) {
   }
 }
 
-function glandarPilotStatus(file: CatalogFile) {
+function glandarModelStatus(file: CatalogFile) {
   if (!isRegisteredFile(file) || file.fileId == null) return null;
-  return glandarPilotByFileId.value.get(file.fileId) ?? null;
+  return glandarModelByFileId.value.get(file.fileId) ?? null;
 }
 
-function glandarPilotTag(file: CatalogFile) {
-  const status = glandarPilotStatus(file)?.taskStatus;
+function glandarModelTag(file: CatalogFile) {
+  const modelStatus = glandarModelStatus(file);
+  if (modelStatus && !modelStatus.supported) return 'info';
+  const status = modelStatus?.taskStatus;
   if (status === 'READY') return 'success';
   if (status === 'FAILED') return 'danger';
   if (status === 'RUNNING' || status === 'UPLOADED' || status === 'SUBMITTED') return 'warning';
   return 'info';
 }
 
-function upsertGlandarPilotStatus(file: CatalogFile, created: LightweightJobCreateResponse) {
+function upsertGlandarModelStatus(file: CatalogFile, created: LightweightJobCreateResponse) {
   if (!isRegisteredFile(file) || file.fileId == null) return;
-  const current = glandarPilotByFileId.value.get(file.fileId);
-  if (!current) return;
-  glandarPilotFiles.value = glandarPilotFiles.value.map((item) => item.fileId === file.fileId
+  const current = glandarModelByFileId.value.get(file.fileId);
+  const next: GlandarModelFile = {
+    projectId: props.projectId,
+    fileId: file.fileId,
+    assetUuid: file.assetUuid || '',
+    fileName: file.fileName,
+    extension: file.fileExt || created.modelFormat,
+    fileKind: file.fileKind,
+    sizeBytes: file.sizeBytes,
+    versionNo: file.version || 'V1',
+    relativePathHint: '项目模型资产',
+    lightweightStatus: created.taskStatus === 'READY'
+      ? 'READY'
+      : created.taskStatus === 'FAILED'
+        ? 'FAILED'
+        : 'RUNNING',
+    latestJobId: created.jobId,
+    taskStatus: created.taskStatus,
+    progress: created.progressPercent,
+    failureReason: created.blockedReason,
+    viewerAvailable: created.viewerAvailable,
+    supported: true,
+    unsupportedReason: null,
+    statusLabel: created.statusLabel,
+    actionHint: created.actionHint,
+    updatedAt: new Date().toISOString()
+  };
+  if (!current) {
+    glandarModelFiles.value = [...glandarModelFiles.value, next];
+    return;
+  }
+  glandarModelFiles.value = glandarModelFiles.value.map((item) => item.fileId === file.fileId
     ? {
         ...item,
-        latestJobId: created.jobId,
-        lightweightName: created.lightweightName,
-        taskStatus: created.taskStatus,
-        progressPercent: created.progressPercent,
-        viewerAvailable: created.viewerAvailable,
-        statusLabel: created.statusLabel,
-        actionHint: created.actionHint,
-        blockedReason: created.blockedReason,
-        updatedAt: new Date().toISOString()
+        ...next
       }
     : item);
 }
 
 function handlePreparePreviewArtifact(entry: FileBrowserEntry) {
+  const preview = previewForFileEntry(entry);
+  if (preview.previewMode === 'BIM_LIGHTWEIGHT') {
+    runAsyncAction(() => openGlandarPreviewOrSubmit(entry), 'BIM 轻量化状态处理失败');
+    return;
+  }
   runAsyncAction(() => preparePreviewArtifactForEntry(entry), '预览产物状态准备失败，平台未读取文件正文');
 }
 
@@ -1880,7 +2053,7 @@ async function openControlledFileAccess(row: CatalogFile, action: 'PREVIEW' | 'D
   try {
     const ticket = await createFileAccessTicket(row.fileId, action);
     if (openAccessTicket(ticket, popup)) {
-      ElMessage.success(action === 'PREVIEW' ? '预览入口已打开' : '下载入口已打开');
+      ElMessage.success(fileAccessTicketMessage(ticket, action));
       return;
     }
     popup = null;
@@ -1893,6 +2066,15 @@ async function openControlledFileAccess(row: CatalogFile, action: 'PREVIEW' | 'D
   } finally {
     fileAccessOpening.value = false;
   }
+}
+
+function fileAccessTicketMessage(ticket: { readSource?: string; fallbackUsed?: boolean; userMessage?: string }, action: 'PREVIEW' | 'DOWNLOAD') {
+  const actionLabel = action === 'PREVIEW' ? '预览入口已打开' : '下载入口已打开';
+  const source = (ticket.readSource || '').toUpperCase();
+  if (ticket.fallbackUsed) return `${actionLabel}，本次使用 NAS fallback，已记录审计。`;
+  if (source === 'OBJECT_STORAGE') return `${actionLabel}，本次从对象存储读取。`;
+  if (source === 'LEGACY_NAS') return `${actionLabel}，本次按历史 NAS 受控读取。`;
+  return ticket.userMessage || actionLabel;
 }
 
 function tryOpenBlankPopup() {
@@ -1959,6 +2141,8 @@ function previewArtifactForEntry(entry: FileBrowserEntry): PreviewArtifact | nul
 
 function previewArtifactTag(entry: FileBrowserEntry) {
   if (!isRegisteredFile(entry.file)) return 'warning';
+  const preview = previewForFileEntry(entry);
+  if (preview.previewMode === 'BIM_LIGHTWEIGHT') return glandarModelTag(entry.file);
   const artifact = previewArtifactForEntry(entry);
   if (artifact) {
     if (artifact.previewStatus === 'AVAILABLE' && artifact.storageState === 'OBJECT_STORED') return 'success';
@@ -1966,7 +2150,6 @@ function previewArtifactTag(entry: FileBrowserEntry) {
     if (artifact.previewStatus === 'BLOCKED' || artifact.generationStatus === 'FAILED') return 'danger';
     return 'info';
   }
-  const preview = previewForFileEntry(entry);
   if (preview.previewStatus === 'AVAILABLE') return 'success';
   if (preview.previewStatus === 'NEEDS_CONVERSION') return 'warning';
   if (preview.previewStatus === 'BLOCKED') return 'danger';
@@ -1975,6 +2158,19 @@ function previewArtifactTag(entry: FileBrowserEntry) {
 
 function previewArtifactLabel(entry: FileBrowserEntry) {
   if (!isRegisteredFile(entry.file)) return '未登记';
+  const preview = previewForFileEntry(entry);
+  if (preview.previewMode === 'BIM_LIGHTWEIGHT') {
+    const modelStatus = glandarModelStatus(entry.file);
+    if (!modelStatus) return '待轻量化';
+    if (!modelStatus.supported) return '不支持轻量化';
+    if (modelStatus.taskStatus === 'READY' && modelStatus.viewerAvailable) return '可在线预览';
+    if (modelStatus.taskStatus === 'READY') return '已轻量化';
+    if (modelStatus.taskStatus === 'FAILED') return '轻量化失败';
+    if (modelStatus.taskStatus === 'RUNNING' || modelStatus.taskStatus === 'UPLOADED' || modelStatus.taskStatus === 'SUBMITTED') {
+      return '轻量化中';
+    }
+    return '待轻量化';
+  }
   const artifact = previewArtifactForEntry(entry);
   if (artifact) {
     if (artifact.previewStatus === 'AVAILABLE' && artifact.storageState === 'OBJECT_STORED') return '对象化预览';
@@ -1983,7 +2179,6 @@ function previewArtifactLabel(entry: FileBrowserEntry) {
     if (artifact.previewStatus === 'NOT_STARTED') return '待准备';
     return artifact.previewStatus || '-';
   }
-  const preview = previewForFileEntry(entry);
   if (preview.previewMode === 'BROWSER_NATIVE') return '可对象化';
   if (preview.conversionRequired) return '需转换占位';
   if (preview.downloadOnly) return '仅原文件';
@@ -1992,14 +2187,38 @@ function previewArtifactLabel(entry: FileBrowserEntry) {
 
 function previewArtifactHint(entry: FileBrowserEntry) {
   if (!isRegisteredFile(entry.file)) return '需扫描入库';
+  const preview = previewForFileEntry(entry);
+  if (preview.previewMode === 'BIM_LIGHTWEIGHT') {
+    const modelStatus = glandarModelStatus(entry.file);
+    if (!modelStatus) return '从模型入口提交或查看轻量化任务';
+    if (!modelStatus.supported) return modelStatus.unsupportedReason || '当前模型格式暂不支持轻量化';
+    if (modelStatus.taskStatus === 'READY' && modelStatus.viewerAvailable) return '已完成轻量化，可打开 Viewer';
+    if (modelStatus.taskStatus === 'FAILED') return modelStatus.failureReason || '轻量化失败，可重试';
+    return modelStatus.actionHint || '轻量化任务提交后可在线预览';
+  }
   const artifact = previewArtifactForEntry(entry);
   if (artifact?.message) {
     return artifact.message;
   }
-  const preview = previewForFileEntry(entry);
   if (preview.previewMode === 'BROWSER_NATIVE') return '通过受控预览票据打开';
   if (preview.conversionRequired) return '当前只登记占位';
   return previewActionHint(preview);
+}
+
+function previewArtifactActionLabel(entry: FileBrowserEntry) {
+  const preview = previewForFileEntry(entry);
+  if (preview.previewMode !== 'BIM_LIGHTWEIGHT') return '准备状态';
+  const modelStatus = glandarModelStatus(entry.file);
+  if (modelStatus?.taskStatus === 'READY' && modelStatus.viewerAvailable) return '打开预览';
+  if (modelStatus?.taskStatus === 'FAILED') return '重试轻量化';
+  return '提交 / 查看';
+}
+
+function previewArtifactActionLoading(entry: FileBrowserEntry) {
+  if (!isRegisteredFile(entry.file) || entry.file.fileId == null) return false;
+  const preview = previewForFileEntry(entry);
+  if (preview.previewMode === 'BIM_LIGHTWEIGHT') return glandarOpeningFileId.value === entry.file.fileId;
+  return previewArtifactLoadingId.value === entry.file.fileId;
 }
 
 function previewForFileEntry(entry: FileBrowserEntry): PreviewStatusLike {
@@ -2010,9 +2229,71 @@ function isRegisteredFile(file: CatalogFile) {
   return file.registered !== false && Number.isFinite(Number(file.fileId));
 }
 
-function isObjectStoredFile(file: CatalogFile) {
+function normalizeStorageState(file: CatalogFile) {
+  if (!isRegisteredFile(file)) return 'UNREGISTERED';
+  const state = (file.storageState || '').toUpperCase();
+  if (state) return state;
   const provider = (file.storageProvider || '').toUpperCase();
-  return provider === 'OBJECT_STORAGE' || provider === 'MINIO' || provider === 'S3_COMPATIBLE';
+  return provider === 'OBJECT_STORAGE' || provider === 'MINIO' || provider === 'S3_COMPATIBLE'
+    ? 'OBJECT_STORED'
+    : 'NAS_ONLY';
+}
+
+function storageStateLabel(file: CatalogFile) {
+  switch (normalizeStorageState(file)) {
+    case 'OBJECT_STORED':
+      return '已对象化';
+    case 'MIGRATION_PENDING':
+      return '对象化中';
+    case 'MIGRATION_FAILED':
+      return '对象化失败';
+    case 'OBJECT_UNREADABLE':
+      return '对象异常';
+    case 'UNREGISTERED':
+      return '未登记';
+    default:
+      return '历史 NAS';
+  }
+}
+
+function accessSourceLabel(file: CatalogFile) {
+  if (!isRegisteredFile(file)) return '需扫描入库';
+  switch (normalizeStorageState(file)) {
+    case 'OBJECT_STORED':
+      return 'NAS 侧 MinIO';
+    case 'MIGRATION_PENDING':
+      return '等待平台处理';
+    case 'MIGRATION_FAILED':
+      return '仍按历史 NAS';
+    case 'OBJECT_UNREADABLE':
+      return '对象副本不可读';
+    default:
+      return '尚未对象化';
+  }
+}
+
+function storageStateTagType(file: CatalogFile) {
+  switch (normalizeStorageState(file)) {
+    case 'OBJECT_STORED':
+      return 'success';
+    case 'MIGRATION_PENDING':
+      return 'warning';
+    case 'MIGRATION_FAILED':
+    case 'OBJECT_UNREADABLE':
+      return 'danger';
+    case 'UNREGISTERED':
+      return 'info';
+    default:
+      return 'info';
+  }
+}
+
+function fileLocationLabel(file: CatalogFile) {
+  const path = normalizeProjectDirectoryPath(file.logicalPath || '');
+  if (!path) return '项目根目录';
+  const parts = splitPath(path);
+  if (parts.length <= 1) return '项目根目录';
+  return joinPath(parts.slice(0, -1), path.startsWith('/')) || '项目根目录';
 }
 
 async function renameEntry(entry: BrowserEntry) {
@@ -2917,6 +3198,19 @@ function ownershipStatusTag(value?: string | null) {
   return 'info';
 }
 
+function ownershipTypeLabel(value?: string | null) {
+  const map: Record<string, string> = {
+    DELIVERY: '正式交付',
+    PROCESS: '过程资料',
+    MODEL: '模型资料',
+    DRAWING_EXCHANGE: '图纸收发',
+    REFERENCE: '参考资料',
+    ARCHIVE: '归档资料',
+    PENDING_REVIEW: '待判定'
+  };
+  return map[value || ''] || '待判定';
+}
+
 function openOwnershipNode(file: CatalogFile) {
   if (!isRegisteredFile(file) || !file.ownershipNodePath) return;
   emit('open-ownership-node', file.ownershipNodePath);
@@ -3048,6 +3342,11 @@ function formatDate(value: string | null | undefined) {
   width: 240px;
 }
 
+.file-browser__search-scope-toggle {
+  margin-left: 0;
+  white-space: nowrap;
+}
+
 .file-browser__trial-alert {
   margin-bottom: var(--zy-sp-3);
   border-radius: var(--zy-radius-base);
@@ -3121,6 +3420,11 @@ function formatDate(value: string | null | undefined) {
   flex-wrap: wrap;
   gap: var(--zy-sp-2);
   justify-content: flex-end;
+}
+
+.file-browser__search-alert {
+  margin-bottom: var(--zy-sp-3);
+  border-radius: var(--zy-radius-base);
 }
 
 .file-browser__chevron {
@@ -3367,6 +3671,7 @@ function formatDate(value: string | null | undefined) {
 
 .file-browser__status-cell,
 .file-browser__artifact-cell,
+.file-browser__storage-cell,
 .file-browser__diagnostic-cell {
   display: grid;
   gap: 3px;
@@ -3375,6 +3680,7 @@ function formatDate(value: string | null | undefined) {
 
 .file-browser__status-cell span,
 .file-browser__artifact-cell span,
+.file-browser__storage-cell span,
 .file-browser__diagnostic-cell span {
   color: var(--zy-muted);
   font-size: var(--zy-fs-xs);

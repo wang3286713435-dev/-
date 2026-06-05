@@ -7,8 +7,18 @@ ADMIN_USER="${ADMIN_USER:-platform.admin}"
 ADMIN_PASS="${ADMIN_PASS:-Admin@123}"
 PROJECT_ID="${PROJECT_ID:-503}"
 READY_FILE_ID="${READY_FILE_ID:-1257}"
-SUBMIT_ONE_NOT_READY="${SUBMIT_ONE_NOT_READY:-true}"
-REQUIRE_ALL_READY="${REQUIRE_ALL_READY:-true}"
+if [[ -f "tmp/local-env/glandar.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "tmp/local-env/glandar.env"
+  set +a
+fi
+GLANDAR_CONFIGURED="false"
+if [[ "${BIM_ENGINE_PROVIDER:-}" == "GLANDAR" && -n "${GLANDAR_STATION_API_BASE:-}" && -n "${GLANDAR_STATION_WEB_BASE:-}" ]]; then
+  GLANDAR_CONFIGURED="true"
+fi
+SUBMIT_ONE_NOT_READY="${SUBMIT_ONE_NOT_READY:-${GLANDAR_CONFIGURED}}"
+REQUIRE_ALL_READY="${REQUIRE_ALL_READY:-${GLANDAR_CONFIGURED}}"
 
 EXPECTED_IDS=(1257 1261 1264 3730 1258 1251 1259 1262 3729 1243)
 PASS=0
@@ -139,6 +149,8 @@ PY
 )"
 if [ "${READY_STATUS}" = "READY" ]; then
   pass "基准 RVT ${READY_FILE_ID} 已轻量化 READY"
+elif [ "${REQUIRE_ALL_READY}" != "true" ]; then
+  pass "未注入 GLANDAR 真实配置时，基准 RVT ${READY_FILE_ID} 保持非 READY 业务状态：${READY_STATUS}"
 else
   fail "基准 RVT ${READY_FILE_ID} 未处于 READY: ${READY_STATUS}"
 fi
@@ -168,6 +180,13 @@ ENGINE_STATIC="$(echo "${TICKET_RESP}" | json_val "engineStaticBase")"
 MODEL_ACCESS="$(echo "${TICKET_RESP}" | json_val "modelAccessAddress")"
 if [ "${VIEWER_AVAILABLE}" = "true" ] && [[ "${ENGINE_STATIC}" == http://192.168.1.37:*ThreeJsEngine* ]] && [[ "${MODEL_ACCESS}" == http://192.168.1.37:*root.glt* ]]; then
   pass "基准模型 viewer ticket 可打开 Glendale 预览"
+elif [ "${REQUIRE_ALL_READY}" != "true" ]; then
+  BLOCKED_REASON="$(echo "${TICKET_RESP}" | json_val "blockedReason")"
+  if [ "${VIEWER_AVAILABLE}" = "false" ] && [ -n "${BLOCKED_REASON}" ]; then
+    pass "未注入 GLANDAR 真实配置时，viewer ticket 返回业务化阻断且不伪装成功"
+  else
+    fail "默认安全模式 viewer ticket 未返回清晰业务阻断: ${TICKET_RESP}"
+  fi
 else
   fail "基准模型 viewer ticket 异常: ${TICKET_RESP}"
 fi

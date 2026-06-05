@@ -8,6 +8,8 @@ import com.zhuoyu.delivery.visualization.application.VisualizationAdapterApplica
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ContextInjectRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ContextInjectResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.DigitalTwinDashboardResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.GlandarComponentPropertyResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.GlandarModelFileResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.GlandarRvtPilotFileResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightResponse;
@@ -136,11 +138,31 @@ public class VisualizationAdapterController {
             principal.userId(), projectId, jobId));
     }
 
+    @GetMapping("/lightweight-jobs/{jobId}/features/{featureId}/properties")
+    public ApiResponse<GlandarComponentPropertyResponse> glandarComponentProperties(
+        @PathVariable Long projectId,
+        @PathVariable String jobId,
+        @PathVariable String featureId,
+        @RequestParam(required = false) String revitId
+    ) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(visualizationAdapterApplicationService.glandarComponentProperties(
+            principal.userId(), projectId, jobId, featureId, revitId));
+    }
+
     @GetMapping("/glandar/rvt-pilot-files")
     public ApiResponse<List<GlandarRvtPilotFileResponse>> glandarRvtPilotFiles(@PathVariable Long projectId) {
         var principal = securityPrincipalAccessor.requireCurrentPrincipal();
         projectContextApplicationService.requireCurrentProject(principal, projectId);
         return ApiResponse.success(visualizationAdapterApplicationService.glandarRvtPilotFiles(projectId));
+    }
+
+    @GetMapping("/glandar/model-files")
+    public ApiResponse<List<GlandarModelFileResponse>> glandarModelFiles(@PathVariable Long projectId) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        projectContextApplicationService.requireCurrentProject(principal, projectId);
+        return ApiResponse.success(visualizationAdapterApplicationService.glandarModelFiles(projectId));
     }
 
     @PostMapping("/glandar/rvt-pilot-files:submit")

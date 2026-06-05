@@ -52,7 +52,26 @@
             <dd>{{ selectedFeatureBatchText }}</dd>
           </div>
         </dl>
-        <p>当前为引擎返回的构件基础信息；完整族、类型、材质和楼层属性需等后续构件属性接口接入。</p>
+        <section class="glandar-viewer__feature-properties" aria-label="构件属性">
+          <div class="glandar-viewer__feature-properties-head">
+            <span>构件属性</span>
+            <em v-if="featurePropertiesLoading">读取中</em>
+            <em v-else>{{ selectedFeaturePropertyCountText }}</em>
+          </div>
+          <p v-if="featurePropertiesError">{{ featurePropertiesError }}</p>
+          <template v-else-if="selectedFeatureProperties?.groups?.length">
+            <article v-for="group in selectedFeatureProperties.groups.slice(0, 4)" :key="`${group.groupName}-${group.setName}`">
+              <strong>{{ group.setName || group.groupName }}</strong>
+              <dl>
+                <div v-for="item in group.properties.slice(0, 6)" :key="`${group.groupName}-${group.setName}-${item.name}`">
+                  <dt>{{ item.name }}</dt>
+                  <dd>{{ item.value || '-' }}</dd>
+                </div>
+              </dl>
+            </article>
+          </template>
+          <p v-else>已拾取构件，暂无可展示属性；可能是该模型未生成属性库。</p>
+        </section>
         <div class="glandar-viewer__feature-actions">
           <button type="button" @click="runViewerAction('locate')">定位</button>
           <button type="button" @click="runViewerAction('hide')">隐藏</button>
@@ -105,7 +124,9 @@ import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, watch } 
 import { ElMessage } from 'element-plus';
 
 import {
+  fetchGlandarComponentProperties,
   issueLightweightViewerTicket,
+  type GlandarComponentPropertyResponse,
   type LightweightViewerTicketResponse
 } from '@/modules/visualization/api/visualization';
 import { useAuthStore } from '@/stores/auth';
@@ -113,6 +134,8 @@ import { useAuthStore } from '@/stores/auth';
 declare global {
   interface Window {
     GlendaleEngine?: (options: Record<string, unknown>) => Promise<GlendaleApi>;
+    __zhuoyuGlandarWorkerBridgeInstalled?: boolean;
+    __zhuoyuNativeWorker?: typeof Worker;
   }
 }
 
@@ -206,8 +229,16 @@ type NavigationDrag = {
 
 type GlandarFeature = {
   id?: string | number;
+  featureId?: string | number;
+  FeatureId?: string | number;
+  externalId?: string | number;
+  ExternalId?: string | number;
+  objectId?: string | number;
+  componentId?: string | number;
   batchId?: string | number | Array<string | number>;
+  BatchId?: string | number | Array<string | number>;
   revitId?: string | number;
+  RevitId?: string | number;
 };
 
 type ViewerAction =
@@ -277,6 +308,10 @@ const viewerReady = ref(false);
 const viewerRef = ref<HTMLElement | null>(null);
 const selectedFeatureId = ref('');
 const selectedFeature = ref<GlandarFeature | null>(null);
+const selectedFeatureProperties = ref<GlandarComponentPropertyResponse | null>(null);
+const featurePropertiesLoading = ref(false);
+const featurePropertiesError = ref('');
+const engineComponentApiReady = ref(false);
 const instance = getCurrentInstance();
 const containerId = computed(() => props.containerId || `glandar-viewer-canvas-${instance?.uid ?? 'inline'}`);
 const selectedFeatureBatchText = computed(() => {
@@ -294,16 +329,25 @@ const selectedFeatureRevitId = computed(() => {
 const modelFileIdText = computed(() => String(props.modelFileId || '见平台模型清单'));
 const componentInteractionAvailable = computed(() => {
   const currentTicket = ticket.value as (LightweightViewerTicketResponse & Record<string, unknown>) | null;
-  return currentTicket?.componentIndexAvailable === true
+  return (viewerReady.value && engineComponentApiReady.value)
+    || currentTicket?.componentIndexAvailable === true
     || currentTicket?.featureIndexAvailable === true
-    || currentTicket?.featurePickingAvailable === true;
+    || currentTicket?.featurePickingAvailable === true
+    || currentTicket?.modelExplosionAvailable === true;
 });
 const componentInteractionUnavailableReason = computed(() => (
-  '当前轻量化产物未包含构件索引，暂不支持构件拾取、构件隐藏/定位和模型爆炸。'
+  '当前 Viewer 尚未返回可用构件交互 API，暂不能拾取构件或执行模型爆炸。'
 ));
+const selectedFeaturePropertyCountText = computed(() => {
+  if (!selectedFeatureProperties.value) return '未读取';
+  return selectedFeatureProperties.value.propertyAvailable
+    ? `${selectedFeatureProperties.value.propertyCount} 项`
+    : '无属性';
+});
 const lastMeasurementText = ref('');
 let viewerApi: GlendaleApi | null = null;
 let currentModelTag = '';
+let modelTagAliases: string[] = [];
 let navigationDrag: NavigationDrag | null = null;
 let disposeViewerInteraction: (() => void) | null = null;
 let autoRotateFrame = 0;
@@ -374,6 +418,8 @@ async function loadViewer() {
     cleanupViewerInteraction();
     viewerApi = null;
     currentModelTag = '';
+    modelTagAliases = [];
+    engineComponentApiReady.value = false;
     currentBlowAmount = 0;
     currentBlowMode = 'SPHERE';
     modelVisible = true;
@@ -433,6 +479,107 @@ function postViewerCapabilities() {
   });
 }
 
+function updateEngineComponentCapability() {
+  engineComponentApiReady.value = Boolean(
+    viewerApi?.Model?.blow
+      || viewerApi?.Feature?.getByEvent
+      || viewerApi?.Feature?.zoomTo
+      || viewerApi?.Feature?.setVisible
+  );
+  postViewerCapabilities();
+}
+
+function rememberModelTag(tag: unknown) {
+  const value = String(tag || '').trim();
+  if (!value) return;
+  if (!currentModelTag) {
+    currentModelTag = value;
+  }
+  if (!modelTagAliases.includes(value)) {
+    modelTagAliases.push(value);
+  }
+}
+
+function rememberModelTagsFromPayload(payload: unknown, depth = 0) {
+  if (!payload || depth > 3) return;
+  if (typeof payload === 'string' || typeof payload === 'number') {
+    rememberModelTag(payload);
+    return;
+  }
+  if (Array.isArray(payload)) {
+    payload.forEach((item) => rememberModelTagsFromPayload(item, depth + 1));
+    return;
+  }
+  if (typeof payload !== 'object') return;
+  const record = payload as Record<string, unknown>;
+  [
+    record.tag,
+    record.modelTag,
+    record.ModelTag,
+    record.modelName,
+    record.ModelName,
+    record.name
+  ].forEach(rememberModelTag);
+  [
+    record.model,
+    record.Model,
+    record.data,
+    record.datas,
+    record.result,
+    record.info,
+    record.detail
+  ].forEach((item) => rememberModelTagsFromPayload(item, depth + 1));
+}
+
+function currentModelTags() {
+  const values = [currentModelTag, ...modelTagAliases]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return [...new Set(values)];
+}
+
+function modelTaggedPayloads(payload: Record<string, unknown>, options: { includeNoTag?: boolean } = {}) {
+  const tags = currentModelTags();
+  const payloads: Record<string, unknown>[] = [];
+  tags.forEach((tag) => {
+    payloads.push({ ...payload, tag });
+    payloads.push({ ...payload, modelTag: tag });
+  });
+  if (tags.length > 1) {
+    payloads.push({ ...payload, tags });
+    payloads.push({ ...payload, modelTags: tags });
+  }
+  if (options.includeNoTag !== false) {
+    payloads.push({ ...payload });
+  }
+  const seen = new Set<string>();
+  return payloads.filter((item) => {
+    const key = JSON.stringify(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+async function callCompatibleApi(
+  api: (options: Record<string, unknown>) => void | Promise<void>,
+  payload: Record<string, unknown>
+) {
+  const payloads = modelTaggedPayloads(payload);
+  let lastError: unknown = null;
+  for (const item of payloads) {
+    try {
+      await api(item);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+}
+
 async function ensureProjectContext(targetProjectId: number) {
   if (authStore.currentProjectId === targetProjectId) return;
   await authStore.changeProject(targetProjectId);
@@ -490,7 +637,9 @@ function waitForScript(script: HTMLScriptElement) {
 
 async function mountModel(nextTicket: LightweightViewerTicketResponse) {
   const engineStaticBase = normalizeEngineStaticBase(nextTicket.engineStaticBase || '');
+  const engineSitePath = resolveEngineSitePath(engineStaticBase);
   if (!viewerRef.value || !window.GlendaleEngine || !nextTicket.modelAccessAddress) return;
+  installGlandarWorkerUrlBridge();
   viewerRef.value.innerHTML = '';
   viewerApi = await window.GlendaleEngine({
     containerID: containerId.value,
@@ -500,34 +649,41 @@ async function mountModel(nextTicket: LightweightViewerTicketResponse) {
     backgroundColor: viewerBackgroundNumber(),
     selectedColor: 0xffff00,
     frameRate: false,
-    logarithmicDepthBuffer: false,
+    logarithmicDepthBuffer: true,
     showSide: 2,
-    sitePath: engineStaticBase,
+    sitePath: engineSitePath,
     serverIp: '',
     serverPort: 0,
     useHttps: false,
     modelList: [],
     renderFactor: 1,
+    renderMode: 1,
     mappingMode: 3,
     secretKey: nextTicket.viewerTicket || ''
   });
+  updateEngineComponentCapability();
   forceViewerSceneBackground();
   await applyMouseNavigation();
   bindViewerInteraction();
   currentModelTag = `glandar-${nextTicket.jobId}`;
+  rememberModelTag(currentModelTag);
   await viewerApi.Model?.add?.({
     url: nextTicket.modelAccessAddress,
     tag: currentModelTag,
+    flyTo: true,
     flyto: true,
     readyPromise: () => {
       requestViewerRender();
     },
-    callback: async () => {
+    callback: async (payload?: unknown) => {
+      rememberModelTagsFromPayload(payload);
       await applyMouseNavigation();
+      updateEngineComponentCapability();
       forceViewerSceneBackground();
       settleViewerCamera();
     }
   });
+  updateEngineComponentCapability();
   forceViewerSceneBackground();
   settleViewerCamera();
 }
@@ -956,8 +1112,14 @@ async function handleViewerPointerUp(event: PointerEvent) {
     endY: event.clientY
   });
   if (shouldPick) {
-    if (componentInteractionAvailable.value && !engineLeftClickPickRegistered) {
-      await pickFeatureFromPointer(event);
+    if (componentInteractionAvailable.value) {
+      const beforeFeatureId = selectedFeatureId.value;
+      if (engineLeftClickPickRegistered) {
+        await waitForEnginePickResult(beforeFeatureId);
+      }
+      if (selectedFeatureId.value === beforeFeatureId) {
+        await pickFeatureFromPointer(event);
+      }
     }
   }
   event.preventDefault();
@@ -976,7 +1138,12 @@ function handleViewerWheel(event: WheelEvent) {
 }
 
 async function pickFeatureFromPointer(event: PointerEvent) {
-  await pickFeatureFromEnginePosition(screenToEnginePickPosition(event), { missToast: true });
+  const positions = enginePickPositionCandidates(event);
+  for (const position of positions) {
+    const picked = await pickFeatureFromEnginePosition(position, { missToast: false });
+    if (picked) return;
+  }
+  await clearSelectedFeature({ toast: true, missToast: true });
 }
 
 async function pickFeatureFromEnginePosition(
@@ -988,16 +1155,18 @@ async function pickFeatureFromEnginePosition(
     const candidate = normalizePickPosition(position);
     if (!candidate) {
       await clearSelectedFeature({ toast: true, missToast: options.missToast });
-      return;
+      return false;
     }
     const feature = await getFeatureAtPosition(candidate);
     if (feature?.id) {
       await selectFeature(feature);
-      return;
+      return true;
     }
     await clearSelectedFeature({ toast: true, missToast: options.missToast });
+    return false;
   } catch (error) {
     ElMessage.warning(error instanceof Error ? error.message : '构件拾取暂不可用');
+    return false;
   }
 }
 
@@ -1011,15 +1180,33 @@ function getFeatureAtPosition(position: { x: number; y: number }) {
       }
     }, 320);
     try {
-      void viewerApi?.Feature?.getByEvent?.({
+      const result = viewerApi?.Feature?.getByEvent?.({
         position,
         callback: (feature: GlandarFeature | null) => {
           if (resolved) return;
+          const normalized = normalizePickedFeature(feature);
           resolved = true;
           window.clearTimeout(timer);
-          resolve(feature?.id ? feature : null);
+          resolve(normalized);
         }
       });
+      if (result && typeof (result as Promise<GlandarFeature | null>).then === 'function') {
+        void (result as Promise<GlandarFeature | null>).then((feature) => {
+          const normalized = normalizePickedFeature(feature);
+          if (resolved || !normalized?.id) return;
+          resolved = true;
+          window.clearTimeout(timer);
+          resolve(normalized);
+        }).catch(() => {
+          // callback mode remains the normal path; promise rejection is treated as miss.
+        });
+      } else {
+        const normalized = normalizePickedFeature(result as GlandarFeature | null);
+        if (!normalized?.id) return;
+        resolved = true;
+        window.clearTimeout(timer);
+        resolve(normalized);
+      }
     } catch (error) {
       if (!resolved) {
         resolved = true;
@@ -1031,6 +1218,49 @@ function getFeatureAtPosition(position: { x: number; y: number }) {
   });
 }
 
+function normalizePickedFeature(feature: GlandarFeature | null | undefined) {
+  if (!feature || typeof feature !== 'object') return null;
+  const id = firstFeatureText(
+    feature.id,
+    feature.featureId,
+    feature.FeatureId,
+    feature.externalId,
+    feature.ExternalId,
+    feature.objectId,
+    feature.componentId
+  );
+  if (!id) return null;
+  return {
+    ...feature,
+    id,
+    batchId: feature.batchId ?? feature.BatchId,
+    revitId: firstFeatureText(feature.revitId, feature.RevitId, feature.externalId, feature.ExternalId)
+  };
+}
+
+function firstFeatureText(...values: unknown[]) {
+  for (const value of values) {
+    if (value === undefined || value === null) continue;
+    const text = String(value).trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function waitForEnginePickResult(previousFeatureId: string) {
+  return new Promise<void>((resolve) => {
+    const startedAt = performance.now();
+    const tick = () => {
+      if (selectedFeatureId.value !== previousFeatureId || performance.now() - startedAt > 180) {
+        resolve();
+        return;
+      }
+      window.requestAnimationFrame(tick);
+    };
+    window.requestAnimationFrame(tick);
+  });
+}
+
 function normalizePickPosition(position: Record<string, unknown>) {
   const x = Number(position.x ?? position.clientX);
   const y = Number(position.y ?? position.clientY);
@@ -1039,7 +1269,7 @@ function normalizePickPosition(position: Record<string, unknown>) {
 }
 
 function registerDefaultFeaturePickHandler() {
-  if (!componentInteractionAvailable.value) {
+  if (!viewerApi?.Feature?.getByEvent) {
     engineLeftClickPickRegistered = false;
     return;
   }
@@ -1053,7 +1283,7 @@ function registerDefaultFeaturePickHandler() {
       event: 'LEFT_CLICK',
       callback: (click: { position?: Record<string, unknown> }) => {
         if (activeInteractionMode === 'measure' || activeInteractionMode === 'roam') return;
-        void pickFeatureFromEnginePosition(click.position, { missToast: true });
+        void pickFeatureFromEnginePosition(click.position, { missToast: false });
       }
     });
     engineLeftClickPickRegistered = true;
@@ -1064,26 +1294,20 @@ function registerDefaultFeaturePickHandler() {
 }
 
 async function enableFeaturePick() {
-  if (!componentInteractionAvailable.value) {
+  if (!viewerApi?.Feature?.getByEvent) {
     ElMessage.info(componentInteractionUnavailableReason.value);
     return;
   }
-  if (!viewerApi?.Public?.event) return;
+  if (!viewerApi?.Public?.event) {
+    activeInteractionMode = 'pick';
+    return;
+  }
   clearEngineLeftClickHandlers();
   await viewerApi.Public.event({
     event: 'LEFT_CLICK',
     callback: (click: { position?: Record<string, unknown> }) => {
       if (!viewerApi?.Feature?.getByEvent) return;
-      void viewerApi.Feature.getByEvent({
-        position: click.position,
-        callback: (feature: GlandarFeature | null) => {
-          if (feature?.id) {
-            void selectFeature(feature);
-          } else {
-            void clearSelectedFeature({ toast: true, missToast: true });
-          }
-        }
-      });
+      void pickFeatureFromEnginePosition(click.position, { missToast: false });
     }
   });
   engineLeftClickPickRegistered = true;
@@ -1107,15 +1331,45 @@ function stopBlowAnimation() {
 }
 
 async function applyModelBlow(mode: 'SPHERE' | 'LINEAR', amount: number) {
-  if (!viewerApi?.Model?.blow || !currentModelTag) {
+  if (!viewerApi?.Model?.blow) {
     throw new Error('当前引擎版本暂不支持模型爆炸');
   }
-  await viewerApi.Model.blow({
-    tag: currentModelTag,
-    type: mode,
-    value: amount
+  const payloads = buildExplosionPayloads(mode, amount);
+  let lastError: unknown = null;
+  for (const payload of payloads) {
+    try {
+      await viewerApi.Model.blow(payload);
+      requestViewerRender();
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('当前引擎版本暂不支持模型爆炸');
+}
+
+function buildExplosionPayloads(mode: 'SPHERE' | 'LINEAR', amount: number) {
+  const base = { type: mode, value: amount, showAxis: true };
+  const tags = currentModelTags();
+  const payloads: Record<string, unknown>[] = [];
+  tags.forEach((tag) => {
+    payloads.push({ ...base, tag });
+    payloads.push({ ...base, modelTag: tag });
   });
-  requestViewerRender();
+  if (tags.length > 0) {
+    payloads.push({ ...base, modelTags: tags });
+  }
+  if (tags.length > 1) {
+    payloads.push({ ...base, tags });
+  }
+  payloads.push({ ...base });
+  const seen = new Set<string>();
+  return payloads.filter((payload) => {
+    const key = JSON.stringify(payload);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function easeInOutCubic(value: number) {
@@ -1166,10 +1420,9 @@ function animateModelBlow(options: { mode: 'SPHERE' | 'LINEAR'; amount: number; 
 
 async function locateSelectedFeature() {
   if (!selectedFeatureId.value || !viewerApi?.Feature?.zoomTo) return;
-  await viewerApi.Feature.zoomTo({
+  await callCompatibleApi(viewerApi.Feature.zoomTo.bind(viewerApi.Feature), {
     featureIds: selectedFeatureId.value,
-    batchId: selectedFeature.value?.batchId,
-    tag: currentModelTag
+    batchId: selectedFeature.value?.batchId
   });
   ElMessage.success('已定位到选中构件');
 }
@@ -1197,10 +1450,9 @@ async function toggleSelectedFeatureVisibility() {
   if (!nextVisible) {
     await clearFeatureHighlight();
   }
-  await viewerApi.Feature.setVisible({
+  await callCompatibleApi(viewerApi.Feature.setVisible.bind(viewerApi.Feature), {
     featureIds: featureId,
-    visible: nextVisible,
-    tag: currentModelTag
+    visible: nextVisible
   });
   if (nextVisible) {
     hiddenFeatureIds.delete(featureId);
@@ -1218,10 +1470,9 @@ async function toggleSelectedFeatureVisibility() {
 async function restoreHiddenFeatures(options: { silent?: boolean } = {}) {
   if (!viewerApi?.Feature?.setVisible || hiddenFeatureIds.size === 0) return;
   const featureIds = [...hiddenFeatureIds].join('#');
-  await viewerApi.Feature.setVisible({
+  await callCompatibleApi(viewerApi.Feature.setVisible.bind(viewerApi.Feature), {
     featureIds,
-    visible: true,
-    tag: currentModelTag
+    visible: true
   });
   hiddenFeatureIds.clear();
   requestViewerRender();
@@ -1344,6 +1595,13 @@ function numberValue(value: unknown) {
 function setSelectedFeature(feature: GlandarFeature | null) {
   selectedFeature.value = feature;
   selectedFeatureId.value = feature?.id ? String(feature.id) : '';
+  if (feature?.id) {
+    void loadSelectedFeatureProperties(feature);
+  } else {
+    selectedFeatureProperties.value = null;
+    featurePropertiesError.value = '';
+    featurePropertiesLoading.value = false;
+  }
   postViewerEvent('feature-selected', {
     featureId: selectedFeatureId.value,
     revitId: selectedFeatureRevitId.value,
@@ -1353,15 +1611,55 @@ function setSelectedFeature(feature: GlandarFeature | null) {
   });
 }
 
+async function loadSelectedFeatureProperties(feature: GlandarFeature) {
+  const featureId = feature.id ? String(feature.id) : '';
+  if (!featureId || !ticket.value?.jobId) {
+    selectedFeatureProperties.value = null;
+    featurePropertiesError.value = '';
+    return;
+  }
+  const requestFeatureId = featureId;
+  featurePropertiesLoading.value = true;
+  featurePropertiesError.value = '';
+  selectedFeatureProperties.value = null;
+  try {
+    const response = await fetchGlandarComponentProperties(
+      props.projectId,
+      ticket.value.jobId,
+      requestFeatureId,
+      selectedFeatureRevitId.value || null
+    );
+    if (selectedFeatureId.value !== requestFeatureId) return;
+    selectedFeatureProperties.value = response;
+    featurePropertiesError.value = response.unavailableReason || '';
+    postViewerEvent('feature-properties', {
+      featureId: response.featureId,
+      propertyAvailable: response.propertyAvailable,
+      propertyCount: response.propertyCount
+    });
+  } catch (error) {
+    if (selectedFeatureId.value !== requestFeatureId) return;
+    featurePropertiesError.value = error instanceof Error ? error.message : '构件属性读取失败';
+    postViewerEvent('feature-properties', {
+      featureId: requestFeatureId,
+      propertyAvailable: false,
+      propertyCount: 0
+    });
+  } finally {
+    if (selectedFeatureId.value === requestFeatureId) {
+      featurePropertiesLoading.value = false;
+    }
+  }
+}
+
 async function clearFeatureHighlight() {
   const featureId = selectedFeatureId.value;
   if (!featureId || !viewerApi?.Feature) return;
   try {
     if (typeof viewerApi.Feature.setColor === 'function') {
-      await viewerApi.Feature.setColor({
+      await callCompatibleApi(viewerApi.Feature.setColor.bind(viewerApi.Feature), {
         featureIds: featureId,
-        color: 'rgb(255, 255, 255)',
-        tag: currentModelTag
+        color: 'rgb(255, 255, 255)'
       });
     }
   } catch (error) {
@@ -1390,16 +1688,14 @@ async function selectFeature(feature: GlandarFeature) {
   setSelectedFeature(feature);
   try {
     if (typeof viewerApi?.Feature?.setColor === 'function') {
-      await viewerApi.Feature.setColor({
+      await callCompatibleApi(viewerApi.Feature.setColor.bind(viewerApi.Feature), {
         featureIds: feature.id,
-        color: 'rgb(255, 210, 64)',
-        tag: currentModelTag
+        color: 'rgb(255, 210, 64)'
       });
     } else if (typeof viewerApi?.Feature?.highlight === 'function') {
-      await viewerApi.Feature.highlight({
+      await callCompatibleApi(viewerApi.Feature.highlight.bind(viewerApi.Feature), {
         featureIds: feature.id,
-        batchId: feature.batchId,
-        tag: currentModelTag
+        batchId: feature.batchId
       });
     }
     requestViewerRender();
@@ -1534,11 +1830,78 @@ function screenToEnginePickPosition(event: PointerEvent) {
   };
 }
 
+function enginePickPositionCandidates(event: PointerEvent) {
+  const candidates: Array<{ x: number; y: number }> = [];
+  const canvas = viewerRef.value?.querySelector('canvas') as HTMLCanvasElement | null;
+  const target = canvas || viewerRef.value;
+  const rect = target?.getBoundingClientRect();
+  pushUniquePosition(candidates, event.clientX, event.clientY);
+  if (rect) {
+    const canvasX = event.clientX - rect.left;
+    const canvasY = event.clientY - rect.top;
+    pushUniquePosition(candidates, canvasX, canvasY);
+    const renderWidth = canvas?.width || target?.clientWidth || 0;
+    const renderHeight = canvas?.height || target?.clientHeight || 0;
+    if (rect.width > 0 && rect.height > 0 && renderWidth > 0 && renderHeight > 0) {
+      pushUniquePosition(candidates, canvasX * (renderWidth / rect.width), canvasY * (renderHeight / rect.height));
+    }
+  }
+  return candidates;
+}
+
+function pushUniquePosition(list: Array<{ x: number; y: number }>, x: number, y: number) {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+  const position = {
+    x: Math.round(x * 1000) / 1000,
+    y: Math.round(y * 1000) / 1000
+  };
+  const key = `${position.x}:${position.y}`;
+  if (!list.some((item) => `${item.x}:${item.y}` === key)) {
+    list.push(position);
+  }
+}
+
 function normalizeEngineStaticBase(value: string) {
   const trimmed = value.replace(/\/$/, '');
   if (trimmed.endsWith('/static/ThreeJsEngine')) return trimmed;
   if (trimmed.endsWith('/ThreeJsEngine')) return trimmed;
   return `${trimmed}/static/ThreeJsEngine`;
+}
+
+function resolveEngineSitePath(engineStaticBase: string) {
+  if (props.embedded) {
+    return `${window.location.origin}/glandar-engine/`;
+  }
+  return `${engineStaticBase.replace(/\/$/, '')}/`;
+}
+
+function installGlandarWorkerUrlBridge() {
+  if (window.__zhuoyuGlandarWorkerBridgeInstalled || typeof window.Worker !== 'function') return;
+  const NativeWorker = window.Worker;
+  const BridgedWorker = function WorkerBridge(
+    this: Worker,
+    scriptURL: string | URL,
+    options?: WorkerOptions
+  ) {
+    return new NativeWorker(rewriteGlandarWorkerUrl(scriptURL), options);
+  } as unknown as typeof Worker;
+  BridgedWorker.prototype = NativeWorker.prototype;
+  window.__zhuoyuNativeWorker = NativeWorker;
+  window.Worker = BridgedWorker;
+  window.__zhuoyuGlandarWorkerBridgeInstalled = true;
+}
+
+function rewriteGlandarWorkerUrl(scriptURL: string | URL) {
+  const urlText = String(scriptURL);
+  const workerName = [
+    'gleBatchTextureWorker.js',
+    'gleEdgesWorker.js',
+    'PickWorker.js',
+    'RaycastWorker.js'
+  ].find((name) => urlText.includes(name));
+  if (!workerName) return scriptURL;
+  const workerFolder = urlText.includes('/third/worker/') ? 'third/worker' : 'worker';
+  return `${window.location.origin}/glandar-engine/${workerFolder}/${workerName}`;
 }
 
 function viewerBackgroundColor() {
@@ -1705,6 +2068,49 @@ function viewerBackgroundNumber() {
   font-size: 12px;
   line-height: 1.45;
   margin: 0;
+}
+
+.glandar-viewer__feature-properties {
+  background: rgb(8 20 36 / 0.72);
+  border: 1px solid rgb(125 211 252 / 0.2);
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  max-height: 210px;
+  overflow: auto;
+  padding: 10px;
+}
+
+.glandar-viewer__feature-properties-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.glandar-viewer__feature-properties-head em {
+  color: rgb(191 219 254 / 0.84);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.glandar-viewer__feature-properties article {
+  display: grid;
+  gap: 6px;
+}
+
+.glandar-viewer__feature-properties article strong {
+  color: #bfdbfe;
+  font-size: 12px;
+}
+
+.glandar-viewer__feature-properties article dl {
+  grid-template-columns: 1fr;
+}
+
+.glandar-viewer__feature-properties article dl div {
+  border-top: 1px solid rgb(125 211 252 / 0.12);
+  grid-template-columns: minmax(72px, 0.45fr) minmax(0, 1fr);
+  padding-top: 5px;
 }
 
 .glandar-viewer__feature-actions {

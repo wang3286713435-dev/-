@@ -114,6 +114,29 @@
   padding: 0 10px;
 }
 
+.sc-bim-window__kpis {
+  border: 1px solid var(--sc-panel-border);
+  background: color-mix(in oklch, var(--sc-panel-bg-strong) 74%, transparent);
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.sc-bim-window__kpis .sc-bim-metrics {
+  gap: 0;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.sc-bim-window__kpis .sc-bim-metrics article {
+  border-bottom: 0;
+  border-right: 1px solid color-mix(in oklch, var(--sc-panel-border) 58%, transparent);
+  min-height: 54px;
+  padding: 4px 10px;
+}
+
+.sc-bim-window__kpis .sc-bim-metrics article:last-child {
+  border-right: 0;
+}
+
 .sc-bim-module-nav {
   align-items: center;
   border: 1px solid var(--sc-panel-border);
@@ -483,11 +506,62 @@
   white-space: nowrap;
 }
 
+.sc-bim-model-list em.is-running,
+.sc-bim-model-list em.is-pending {
+  border-color: color-mix(in oklch, var(--sc-warning) 58%, var(--sc-panel-border));
+  color: var(--sc-warning);
+}
+
+.sc-bim-model-list em.is-failed {
+  border-color: color-mix(in oklch, var(--sc-danger) 58%, var(--sc-panel-border));
+  color: var(--sc-danger);
+}
+
+.sc-bim-model-list em.is-muted {
+  border-color: var(--sc-panel-border);
+  color: var(--sc-text-muted);
+}
+
+.sc-bim-model-list__hint {
+  color: var(--sc-text-muted);
+  font-size: 12px;
+  grid-column: 1 / -1;
+  line-height: 1.45;
+}
+
 .sc-bim-model-list__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
   grid-column: 1 / -1;
+}
+
+.sc-bim-model-list__pager {
+  align-items: center;
+  border: 1px solid color-mix(in oklch, var(--sc-panel-border) 56%, transparent);
+  background: color-mix(in oklch, var(--sc-panel-bg-strong) 48%, transparent);
+  display: flex;
+  gap: 10px;
+  grid-column: 1 / -1;
+  justify-content: space-between;
+  min-height: 36px;
+  min-width: 0;
+  padding: 6px 8px;
+}
+
+.sc-bim-model-list__pager > span {
+  color: var(--sc-text-muted);
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-bim-model-list__pager > div {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
 }
 
 .sc-bim-model-list__actions button {
@@ -501,9 +575,31 @@
   padding: 0 10px;
 }
 
+.sc-bim-model-list__pager button {
+  background: color-mix(in oklch, var(--sc-panel-bg) 78%, transparent);
+  border: 1px solid var(--sc-panel-border);
+  border-radius: 6px;
+  color: var(--sc-text-soft);
+  cursor: pointer;
+  font-size: 12px;
+  min-height: 26px;
+  padding: 0 9px;
+}
+
 .sc-bim-model-list__actions button:hover {
   background: color-mix(in oklch, var(--sc-accent) 24%, var(--sc-panel-bg));
   border-color: var(--sc-panel-border-strong);
+}
+
+.sc-bim-model-list__pager button:not(:disabled):hover {
+  background: color-mix(in oklch, var(--sc-accent) 18%, var(--sc-panel-bg));
+  border-color: var(--sc-panel-border-strong);
+  color: var(--sc-text-main);
+}
+
+.sc-bim-model-list__pager button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .sc-bim-note-list {
@@ -1464,6 +1560,19 @@
     min-height: 0;
   }
 
+  .sc-bim-window__kpis .sc-bim-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sc-bim-window__kpis .sc-bim-metrics article:nth-child(3n) {
+    border-right: 0;
+  }
+
+  .sc-bim-window__kpis .sc-bim-metrics article:nth-child(n + 4) {
+    border-top: 1px solid color-mix(in oklch, var(--sc-panel-border) 58%, transparent);
+    padding-top: 8px;
+  }
+
   .sc-bim-layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(620px, 72vh) auto auto;
@@ -1511,6 +1620,23 @@
 
   .sc-bim-module-page__hero .sc-bim-metrics {
     grid-template-columns: 1fr;
+  }
+
+  .sc-bim-window__kpis .sc-bim-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sc-bim-window__kpis .sc-bim-metrics article {
+    border-right: 1px solid color-mix(in oklch, var(--sc-panel-border) 58%, transparent);
+    border-top: 1px solid color-mix(in oklch, var(--sc-panel-border) 58%, transparent);
+  }
+
+  .sc-bim-window__kpis .sc-bim-metrics article:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .sc-bim-window__kpis .sc-bim-metrics article:nth-child(-n + 2) {
+    border-top: 0;
   }
 
   .sc-bim-model-selector {

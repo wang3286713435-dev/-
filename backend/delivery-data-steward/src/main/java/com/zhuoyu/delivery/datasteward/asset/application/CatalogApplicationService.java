@@ -51,6 +51,37 @@ public class CatalogApplicationService {
     private static final int MAX_PHYSICAL_DIRECTORY_COUNT = 2_000;
     private static final int MAX_PHYSICAL_DIRECTORY_DEPTH = 4;
     private static final int MAX_DIRECT_CHILD_COUNT = 5_000;
+    private static final String CATALOG_STORAGE_STATE_COLUMNS = """
+                   CASE
+                       WHEN obj.file_id IS NOT NULL THEN 'OBJECT_STORED'
+                       WHEN COALESCE(mig.pending, 0) = 1 THEN 'MIGRATION_PENDING'
+                       WHEN COALESCE(mig.failed, 0) = 1 THEN 'MIGRATION_FAILED'
+                       ELSE 'NAS_ONLY'
+                   END AS storage_state,
+                   CASE
+                       WHEN obj.file_id IS NOT NULL THEN 'NAS_SIDE_MINIO'
+                       WHEN COALESCE(mig.pending, 0) = 1 THEN 'MIGRATION_QUEUE'
+                       WHEN COALESCE(mig.failed, 0) = 1 THEN 'HISTORICAL_NAS_RETRY_REQUIRED'
+                       ELSE 'HISTORICAL_NAS'
+                   END AS access_source,
+        """;
+    private static final String CATALOG_STORAGE_STATE_JOINS = """
+            LEFT JOIN (
+                SELECT DISTINCT file_id
+                FROM data_file_object_versions
+                WHERE active = 1
+                  AND deleted = 0
+                  AND storage_state = 'OBJECT_STORED'
+            ) obj ON obj.file_id = f.id
+            LEFT JOIN (
+                SELECT file_id,
+                       MAX(CASE WHEN migration_status IN ('PENDING', 'RUNNING') THEN 1 ELSE 0 END) AS pending,
+                       MAX(CASE WHEN migration_status = 'FAILED' THEN 1 ELSE 0 END) AS failed
+                FROM data_object_migration_tasks
+                WHERE deleted = 0
+                GROUP BY file_id
+            ) mig ON mig.file_id = f.id
+        """;
 
     private final BimAssetRepository bimAssetRepository;
     private final AssetPathMappingRepository pathMappingRepository;
@@ -249,6 +280,7 @@ public class CatalogApplicationService {
             SELECT f.id AS file_id, f.asset_uuid AS asset_uuid, f.project_id, p.code AS project_code, p.name AS project_name,
                    f.original_name, f.file_kind, f.discipline AS discipline_code,
                    f.version_no, f.size_bytes, f.checksum, f.storage_provider,
+        """ + CATALOG_STORAGE_STATE_COLUMNS + """
                    f.storage_uri, f.logical_path, f.process_status, f.confidence_level,
                    f.last_verified_at, f.updated_at, f.source_type, f.review_status,
                    own.status AS ownership_status, own.ownership_type, own.node_key AS ownership_node_key,
@@ -258,6 +290,7 @@ public class CatalogApplicationService {
             JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
             JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0
             LEFT JOIN data_file_ownership_assignments own ON own.file_id = f.id AND own.deleted = 0
+        """ + CATALOG_STORAGE_STATE_JOINS + """
             WHERE upr.user_id = :userId AND upr.deleted = 0
             """);
         MapSqlParameterSource params = new MapSqlParameterSource("userId", userId);
@@ -267,7 +300,7 @@ public class CatalogApplicationService {
             params.addValue("projectId", projectId);
         }
         if (keyword != null && !keyword.isBlank()) {
-            sb.append(" AND (p.code LIKE :likeKw OR p.name LIKE :likeKw OR f.original_name LIKE :likeKw OR f.asset_uuid LIKE :likeKw OR f.storage_uri LIKE :likeKw)");
+            sb.append(" AND (p.code LIKE :likeKw OR p.name LIKE :likeKw OR f.original_name LIKE :likeKw OR f.asset_uuid LIKE :likeKw OR f.logical_path LIKE :likeKw)");
             params.addValue("likeKw", "%" + keyword.trim() + "%");
         }
         String normalizedDirectoryPath = normalizeCatalogDirectoryPath(directoryPath);
@@ -520,6 +553,8 @@ public class CatalogApplicationService {
                 status,
                 rs.getString("confidence_level"),
                 rs.getString("storage_provider"),
+                rs.getString("storage_state"),
+                rs.getString("access_source"),
                 safeLogicalPath,
                 pathVisibility.visible(), pathVisibility.reason(),
                 qualityFlags,
@@ -528,7 +563,7 @@ public class CatalogApplicationService {
                     true, "FORMAL_ASSET_IN_SCOPE",
                     List.of("assetUuid", "fileName", "fileExt", "fileKind", "disciplineCode", "disciplineName",
                         "version", "sizeBytes", "checksum", "status", "confidenceLevel",
-                    "storageProvider", "logicalPath", "qualityFlags", "lastVerifiedAt", "updatedAt",
+                    "storageProvider", "storageState", "accessSource", "logicalPath", "qualityFlags", "lastVerifiedAt", "updatedAt",
                     "ownershipStatus", "ownershipType", "ownershipNodeLabel", "ownershipNodePath"),
                     ownershipStatus(rs),
                     rs.getString("ownership_type"),
@@ -550,6 +585,7 @@ public class CatalogApplicationService {
             SELECT f.id AS file_id, f.asset_uuid AS asset_uuid, f.project_id, p.code AS project_code, p.name AS project_name,
                    f.original_name, f.file_kind, f.discipline AS discipline_code,
                    f.version_no, f.size_bytes, f.checksum, f.storage_provider,
+        """ + CATALOG_STORAGE_STATE_COLUMNS + """
                    f.storage_uri, f.logical_path, f.process_status, f.confidence_level,
                    f.last_verified_at, f.updated_at, f.source_type, f.review_status,
                    own.status AS ownership_status, own.ownership_type, own.node_key AS ownership_node_key,
@@ -559,14 +595,13 @@ public class CatalogApplicationService {
             JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
             JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0 AND f.id = :fileId
             LEFT JOIN data_file_ownership_assignments own ON own.file_id = f.id AND own.deleted = 0
+        """ + CATALOG_STORAGE_STATE_JOINS + """
             WHERE upr.user_id = :userId AND upr.deleted = 0
             """, new MapSqlParameterSource()
             .addValue("userId", userId)
             .addValue("fileId", fileId),
             (rs, rowNum) -> {
-                String storageUri = rs.getString("storage_uri");
                 Long pId = rs.getLong("project_id");
-                PathVisibility pathVisibility = pathVisibility(userId, pId, storageUri);
 
                 List<String> qualityFlags = buildQualityFlags(rs);
                 String status = deriveStatus(rs.getString("process_status"), rs.getString("review_status"));
@@ -592,15 +627,17 @@ public class CatalogApplicationService {
                     status,
                     rs.getString("confidence_level"),
                     rs.getString("storage_provider"),
+                    rs.getString("storage_state"),
+                    rs.getString("access_source"),
                     safeLogicalPath,
-                    pathVisibility.visible() ? storageUri : null,
-                    pathVisibility.visible(),
-                    pathVisibility.reason(),
+                    null,
+                    false,
+                    "RAW_STORAGE_PATH_NOT_EXPOSABLE",
                     qualityFlags,
                     toInstant(rs, "last_verified_at"),
                     toInstant(rs, "updated_at"),
                     true, "FORMAL_ASSET_IN_SCOPE",
-                    catalogContractFields(pathVisibility.visible()),
+                    catalogContractFields(false),
                     ownershipStatus(rs),
                     rs.getString("ownership_type"),
                     rs.getString("ownership_node_key"),
@@ -871,6 +908,7 @@ public class CatalogApplicationService {
             SELECT f.id AS file_id, f.asset_uuid AS asset_uuid, f.project_id, p.code AS project_code, p.name AS project_name,
                    f.original_name, f.file_kind, f.discipline AS discipline_code,
                    f.version_no, f.size_bytes, f.checksum, f.storage_provider,
+        """ + CATALOG_STORAGE_STATE_COLUMNS + """
                    f.storage_uri, f.logical_path, f.process_status, f.confidence_level,
                    f.last_verified_at, f.updated_at, f.source_type, f.review_status,
                    own.status AS ownership_status, own.ownership_type, own.node_key AS ownership_node_key,
@@ -880,6 +918,7 @@ public class CatalogApplicationService {
             JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
             JOIN data_file_resources f ON f.project_id = p.id AND f.deleted = 0
             LEFT JOIN data_file_ownership_assignments own ON own.file_id = f.id AND own.deleted = 0
+        """ + CATALOG_STORAGE_STATE_JOINS + """
             WHERE upr.user_id = :userId AND upr.deleted = 0
               AND f.project_id = :projectId
             """);
@@ -888,7 +927,7 @@ public class CatalogApplicationService {
             .addValue("projectId", projectId);
         appendDirectDirectoryFilter(sb, params, projectId, safeDirectoryPath);
         if (keyword != null && !keyword.isBlank()) {
-            sb.append(" AND (p.code LIKE :likeKw OR p.name LIKE :likeKw OR f.original_name LIKE :likeKw OR f.asset_uuid LIKE :likeKw OR f.storage_uri LIKE :likeKw)");
+            sb.append(" AND (p.code LIKE :likeKw OR p.name LIKE :likeKw OR f.original_name LIKE :likeKw OR f.asset_uuid LIKE :likeKw OR f.logical_path LIKE :likeKw)");
             params.addValue("likeKw", "%" + keyword.trim() + "%");
         }
         if (fileExt != null && !fileExt.isBlank()) {
@@ -982,6 +1021,8 @@ public class CatalogApplicationService {
             "UNREGISTERED",
             "LOW",
             "NAS",
+            "NAS_ONLY",
+            "UNREGISTERED_PHYSICAL_DIRECTORY",
             logicalPath,
             false,
             "UNREGISTERED_FILE_NEEDS_CATALOG_SCAN",
@@ -1537,7 +1578,7 @@ public class CatalogApplicationService {
     private List<String> catalogContractFields(boolean storagePathVisible) {
         List<String> fields = new ArrayList<>(List.of("assetUuid", "fileName", "fileExt", "fileKind",
             "disciplineCode", "disciplineName", "version", "sizeBytes", "checksum", "status",
-            "confidenceLevel", "storageProvider", "logicalPath", "qualityFlags",
+            "confidenceLevel", "storageProvider", "storageState", "accessSource", "logicalPath", "qualityFlags",
             "lastVerifiedAt", "updatedAt"));
         if (storagePathVisible) {
             fields.add("storagePath");

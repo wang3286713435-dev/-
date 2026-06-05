@@ -764,6 +764,9 @@ public class AssetApplicationService {
         validateFileLifecycle(file);
         PreviewDecision decision = decidePreview(normalizePreviewExt(file.fileExt(), file.fileName()), file.fileKind());
         ActiveObjectVersion activeObject = findActiveObjectVersion(file.fileId());
+        if ("BROWSER_NATIVE_PREVIEW".equals(artifactType(decision))) {
+            activeObject = ensureReadableNativePreviewObject(file, activeObject, userId);
+        }
         PreparedPreviewArtifact prepared = preparePreviewArtifactRecord(file, decision, activeObject, userId);
         auditLogApplicationService.record(file.projectId(), MODULE_CODE, "asset.file.preview_artifact.prepare",
             "FILE_RESOURCE", String.valueOf(file.fileId()), userId,
@@ -815,8 +818,9 @@ public class AssetApplicationService {
             throw new BusinessException("ASSET_FILE_DOWNLOAD_FORBIDDEN", "当前账号没有下载该文件的权限", HttpStatus.FORBIDDEN);
         }
 
+        StorageService.ReadDecision readDecision;
         try {
-            storageService.ensureReadable(file);
+            readDecision = storageService.ensureReadable(file);
         } catch (BusinessException exception) {
             recordFileAccessAudit(file, "asset.file.access.failed", userId, exception.getCode());
             throw exception;
@@ -827,7 +831,7 @@ public class AssetApplicationService {
         Long ticketId = fileAccessTicketRepository.insert(ticket, file.fileId(), file.projectId(), userId, action, expiresAt);
         recordFileAccessAudit(file,
             "PREVIEW".equals(action) ? "asset.file.preview.ticket.create" : "asset.file.download.ticket.create",
-            userId, "ticket=" + ticketId);
+            userId, "ticket=" + ticketId, readDecision);
         return new AccessTicketResponse(
             ticketId,
             ticket,
@@ -838,6 +842,13 @@ public class AssetApplicationService {
             file.fileName(),
             previewable,
             downloadable,
+            readDecision.storageStatus(),
+            readDecision.readSource(),
+            readDecision.fallbackUsed(),
+            readDecision.fallbackReason(),
+            readDecision.storageHealth(),
+            readDecision.objectReadable(),
+            readDecision.userMessage(),
             "PREVIEW".equals(action) ? "预览票据已创建，5分钟内有效。" : "下载票据已创建，5分钟内有效。"
         );
     }
@@ -875,13 +886,19 @@ public class AssetApplicationService {
         }
         fileAccessTicketRepository.markUsed(row.id());
         String actionCode = "PREVIEW".equalsIgnoreCase(row.action()) ? "asset.file.preview.open" : "asset.file.download.open";
-        recordFileAccessAudit(file, actionCode, row.userId(), "ticket=" + row.id());
+        recordFileAccessAudit(file, actionCode, row.userId(), "ticket=" + row.id(), storedResource);
         return new FileAccessResource(
             storedResource.resource(),
             storedResource.contentType(),
             "PREVIEW".equalsIgnoreCase(row.action()) ? "inline" : "attachment",
             file.fileName(),
-            storedResource.contentLength()
+            storedResource.contentLength(),
+            storedResource.storageStatus(),
+            storedResource.readSource(),
+            storedResource.fallbackUsed(),
+            storedResource.fallbackReason(),
+            storedResource.storageHealth(),
+            storedResource.objectReadable()
         );
     }
 
@@ -944,6 +961,132 @@ public class AssetApplicationService {
             previewStatus, storageState, null, userId);
         return new PreparedPreviewArtifact(artifactType, previewStatus, generationStatus, storageState,
             null, null, null, previewArtifactMessage(artifactType, previewStatus, storageState, generationStatus, decision));
+    }
+
+    private ActiveObjectVersion ensureReadableNativePreviewObject(
+        FileAssetResponse file,
+        ActiveObjectVersion activeObject,
+        Long userId
+    ) {
+        if (activeObject != null) {
+            try {
+                storageService.ensureReadable(file);
+                return activeObject;
+            } catch (BusinessException exception) {
+                if (!"ASSET_FILE_NOT_READABLE".equals(exception.getCode())) {
+                    throw exception;
+                }
+            }
+        }
+        StorageService.ObjectMirrorResult mirror = storageService.mirrorNasFileToObject(file, "MINIO");
+        Long objectId = upsertStorageObject(mirror, userId);
+        upsertFileObjectVersion(file, objectId, mirror, userId);
+        updateFileChecksum(file.fileId(), mirror.checksum(), userId);
+        auditLogApplicationService.record(file.projectId(), MODULE_CODE, "asset.file.preview_artifact.object_repaired",
+            "FILE_RESOURCE", String.valueOf(file.fileId()), userId,
+            Map.of("fileId", file.fileId(), "reason", activeObject == null ? "NO_ACTIVE_OBJECT" : "ACTIVE_OBJECT_NOT_READABLE"));
+        ActiveObjectVersion repaired = findActiveObjectVersion(file.fileId());
+        if (repaired == null) {
+            throw new BusinessException("ASSET_PREVIEW_OBJECT_REPAIR_FAILED",
+                "预览对象化准备失败，请检查受控文件状态", HttpStatus.PRECONDITION_FAILED);
+        }
+        return repaired;
+    }
+
+    private Long upsertStorageObject(StorageService.ObjectMirrorResult mirror, Long userId) {
+        jdbcTemplate.update("""
+            INSERT INTO data_storage_objects (
+                provider, bucket, object_key, etag, checksum, content_type, size_bytes,
+                source_provider, source_uri_digest, source_path_digest,
+                storage_state, migration_status, last_verified_at, created_by, updated_by
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?,
+                'OBJECT_STORED', 'COMPLETED', ?, ?, ?
+            )
+            ON DUPLICATE KEY UPDATE
+                etag = VALUES(etag),
+                checksum = VALUES(checksum),
+                content_type = VALUES(content_type),
+                size_bytes = VALUES(size_bytes),
+                source_provider = VALUES(source_provider),
+                source_uri_digest = VALUES(source_uri_digest),
+                source_path_digest = VALUES(source_path_digest),
+                storage_state = 'OBJECT_STORED',
+                migration_status = 'COMPLETED',
+                last_verified_at = VALUES(last_verified_at),
+                updated_by = VALUES(updated_by),
+                deleted = 0,
+                delete_token = 0
+            """,
+            mirror.provider(), mirror.bucket(), mirror.objectKey(), mirror.etag(), mirror.checksum(),
+            mirror.contentType(), mirror.sizeBytes(), mirror.sourceProvider(), mirror.sourceUriDigest(),
+            mirror.sourcePathDigest(), timestamp(mirror.verifiedAt()), userId, userId);
+        List<Long> rows = jdbcTemplate.query("""
+            SELECT id
+            FROM data_storage_objects
+            WHERE provider = ?
+              AND bucket = ?
+              AND object_key = ?
+              AND deleted = 0
+            ORDER BY id DESC
+            LIMIT 1
+            """, (rs, rowNum) -> rs.getLong("id"), mirror.provider(), mirror.bucket(), mirror.objectKey());
+        if (rows.isEmpty()) {
+            throw new BusinessException("ASSET_PREVIEW_OBJECT_RECORD_FAILED",
+                "预览对象存储记录写入失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        return rows.getFirst();
+    }
+
+    private void upsertFileObjectVersion(
+        FileAssetResponse file,
+        Long objectId,
+        StorageService.ObjectMirrorResult mirror,
+        Long userId
+    ) {
+        Integer existing = jdbcTemplate.queryForObject("""
+            SELECT COUNT(1)
+            FROM data_file_object_versions
+            WHERE file_id = ?
+              AND storage_object_id = ?
+              AND active = 1
+              AND deleted = 0
+            """, Integer.class, file.fileId(), objectId);
+        if (existing != null && existing > 0) {
+            return;
+        }
+        jdbcTemplate.update("""
+            UPDATE data_file_object_versions
+            SET active = 0,
+                updated_by = ?
+            WHERE file_id = ?
+              AND active = 1
+              AND deleted = 0
+            """, userId, file.fileId());
+        jdbcTemplate.update("""
+            INSERT INTO data_file_object_versions (
+                file_id, storage_object_id, version_no, active,
+                storage_state, migration_status, checksum, content_type, size_bytes,
+                last_verified_at, created_by, updated_by
+            ) VALUES (
+                ?, ?, ?, 1,
+                'OBJECT_STORED', 'COMPLETED', ?, ?, ?,
+                ?, ?, ?
+            )
+            """, file.fileId(), objectId, file.versionNo(), mirror.checksum(), mirror.contentType(),
+            mirror.sizeBytes(), timestamp(mirror.verifiedAt()), userId, userId);
+    }
+
+    private void updateFileChecksum(Long fileId, String checksum, Long userId) {
+        jdbcTemplate.update("""
+            UPDATE data_file_resources
+            SET checksum = COALESCE(checksum, ?),
+                last_verified_at = CURRENT_TIMESTAMP,
+                updated_by = ?
+            WHERE id = ?
+              AND deleted = 0
+            """, checksum, userId, fileId);
     }
 
     private Long upsertPreviewDerivative(
@@ -1377,6 +1520,44 @@ public class AssetApplicationService {
             ));
     }
 
+    private void recordFileAccessAudit(
+        FileAssetResponse file,
+        String actionCode,
+        Long userId,
+        String reason,
+        StorageService.ReadDecision decision
+    ) {
+        auditLogApplicationService.record(file.projectId(), MODULE_CODE, actionCode,
+            "FILE_RESOURCE", String.valueOf(file.fileId()), userId,
+            Map.of(
+                "fileName", valueOrDash(file.fileName()),
+                "reason", valueOrDash(reason),
+                "storageStatus", valueOrDash(decision == null ? null : decision.storageStatus()),
+                "readSource", valueOrDash(decision == null ? null : decision.readSource()),
+                "fallbackUsed", Boolean.TRUE.equals(decision != null && Boolean.TRUE.equals(decision.fallbackUsed())),
+                "fallbackReason", valueOrDash(decision == null ? null : decision.fallbackReason())
+            ));
+    }
+
+    private void recordFileAccessAudit(
+        FileAssetResponse file,
+        String actionCode,
+        Long userId,
+        String reason,
+        StorageService.StoredResource resource
+    ) {
+        auditLogApplicationService.record(file.projectId(), MODULE_CODE, actionCode,
+            "FILE_RESOURCE", String.valueOf(file.fileId()), userId,
+            Map.of(
+                "fileName", valueOrDash(file.fileName()),
+                "reason", valueOrDash(reason),
+                "storageStatus", valueOrDash(resource == null ? null : resource.storageStatus()),
+                "readSource", valueOrDash(resource == null ? null : resource.readSource()),
+                "fallbackUsed", Boolean.TRUE.equals(resource != null && Boolean.TRUE.equals(resource.fallbackUsed())),
+                "fallbackReason", valueOrDash(resource == null ? null : resource.fallbackReason())
+            ));
+    }
+
     private boolean canAccessScan(Long userId, java.util.Set<Long> allowedIds, ScanTaskResponse task) {
         if (task.projectId() != null) {
             return allowedIds.contains(task.projectId());
@@ -1637,7 +1818,13 @@ public class AssetApplicationService {
         String contentType,
         String dispositionType,
         String fileName,
-        Long contentLength
+        Long contentLength,
+        String storageStatus,
+        String readSource,
+        Boolean fallbackUsed,
+        String fallbackReason,
+        String storageHealth,
+        Boolean objectReadable
     ) {
     }
 

@@ -1,152 +1,559 @@
 # 主 Agent 项目状态
 
-## 2026-05-27 8B-GD0 启动：葛兰岱尔轻量化引擎对接握手
+## 当前状态快照
 
-- 用户确认：真实 BIM 轻量化引擎厂商为 `葛兰岱尔轻量化引擎`。
-- 对接方式：`HTTP API`。
-- 引擎部署：公司局域网另一台电脑。
-- 当前 3D 引擎支线独立 worktree：
+- 当前分支：`codex/m3g-nas-minio-real-project-object-storage`。
+- 当前 active 批次：`BASELINE-PREP：M3 与 8C-GD-F4 基线准备完成，等待用户批准后再插入平台交互逻辑优化批次`。
+- 当前执行门禁：`DOC-BASE` 已完成文档基线收口并暂存；`M3G-9` 已通过测试并已完成 `M3-CLOSE` 主 agent 收口判断；`8C-GD-F4` 已完成葛兰岱尔构件拾取、模型爆炸与构件属性代理极短验证。未经用户确认，不继续扩大 UX4 / 交互优化范围。
+- 说明：
+  - `M3G-6` 已打通 105 全量计划与连续分批推进机制。
+  - `M3G-6R` 已完成长跑执行、暂停、继续、重试、治理清单和前端进度展示。
+  - `M3G-6S` 已将 105 推进到 `2928 / 2928` 全量对象化。
+  - `M3G-6S-F1：105 历史 active object version 与当前 NAS 侧 MinIO 对齐修复` 已收口。
+  - `M3G-6T：对象化后文件业务视图与工程树交付映射` 已收口。
+  - `M3G-7：多真实项目对象化 Wave 1` 已收口。
+  - `M3G-7R：全项目对象化扩大跑批` 已收口。
+  - `M3G-8-F1：M3G-7R 回归脚本饱和环境修复` 已收口。
+  - `M3G-8：对象优先读取与 NAS fallback 收口` 已收口。
+  - `M3G-9：全项目对象化覆盖率报告与 M3 收口依据` 已通过测试。
+  - M3G-9 前置检查发现葛兰岱尔真实预览分支未无损合入，当前先插入 `DT-F1` 做 BIM 协同兼容收口。
+  - 2026-06-01 已确认 `origin/main` 最新为 `d69cbc2 feat: integrate Glandar RVT lightweight preview pilot...`，DT-F1 策略调整为：先 checkpoint 当前 M3G 工作区，再无损 merge `origin/main`。
+  - 2026-06-01 用户预览后确认：DT-F1 只能说明“代码合入和默认安全模式不报错”，不能证明真实葛兰岱尔主线能力已完成；当前升级为 `8C-GD-MAINLINE-FULL`。
+  - 2026-06-04 `8C-GD-F2` 正式验收通过：综合驾驶舱已恢复默认首屏，READY Viewer、轻量化分页、文件管理器模型入口、file-access 和 M3G-8 均未回归。
+  - 2026-06-04 `8C-GD-F3` 已修复葛兰岱尔 Viewer 可用性口径：105 可识别 READY Viewer 模型，看板不再停留“真实 Viewer 未接入”。
+  - 2026-06-04 用户要求开启 `DOC-BASE` 文档收口批次：更新 PRD、架构、路线、API 文档维护说明和后续任务图；全项目对象化后续单开批次。
+  - 2026-06-04 用户要求开启平台视觉与可用性修复：已形成 `UX4` 计划，但 2026-06-05 用户要求先完成基线准备，再经过批准插入交互优化批次。
+  - 2026-06-05 `CHECKPOINT-1` 已完成当前工作区归类，`M3-CLOSE` 已完成主 agent 收口判断，`8C-GD-F4` 极短验证通过。基线已准备完成，下一步等待用户批准是否启动平台交互逻辑优化批次。
 
-```text
-/Users/vc/Documents/数字化交付平台-8b-gd
-```
+## 2026-06-05 BASELINE-PREP：基线准备完成
 
-- 当前分支：
-
-```text
-codex/8b-gd-lightweight-engine-adapter
-```
-
-- 当前 active 批次：`8B-GD0：葛兰岱尔引擎对接握手`。
-- 8B-GD0 定位：
-  - 只做接口清单和边界冻结。
-  - 不写业务代码。
-  - 不提交真实转换任务。
-  - 不影响 M3G 对象存储主线。
-- 已写入：
-  - `handoff/main-agent/8b-gd-roadmap.md`
-  - `handoff/main-agent/8b-gd0-glandar-engine-handshake-plan.md`
-  - `handoff/main-agent/8b-gd0-glandar-engine-api-handoff-template.md`
-  - `handoff/main-agent/8b-gd0-glandar-api-review.md`
-  - `handoff/dev-agent/current-prompt.md`
-  - `handoff/test-agent/current-prompt.md`
-- 当前裁决：
-  - 引擎 API 文档已提供，主 agent 已完成初步评审。
-  - PoC 首选链路从“引擎主动拉取短时链接”调整为“平台后端通过 StorageService 读取文件流并分片上传 Station API”。
-  - 该调整不改变安全边界：引擎仍不直连 NAS / MinIO 底层目录，前端仍只拿平台 viewer ticket。
-  - 待开发 agent 报告确认无业务代码改动后，可安排 8B-GD0 极短验收。
-  - 验收通过后再判断是否进入 `8B-GD1：平台侧葛兰岱尔适配骨架`。
-  - 8B-GD1 仍必须默认 `BIM_ENGINE_PROVIDER=MOCK`，显式配置 `GLANDAR` 才启用真实引擎。
-  - 8B-GD 不得在 M3G 分支上开发。
-
-## 2026-05-27 8B-GD1 启动：平台侧葛兰岱尔适配骨架
-
-- 用户授权：在不影响 M3G 对象存储主线的前提下，推进葛兰岱尔引擎接入代码开发。
-- 当前分支仍为：
-
-```text
-codex/8b-gd-lightweight-engine-adapter
-```
-
-- 当前 worktree 仍为：
-
-```text
-/Users/vc/Documents/数字化交付平台-8b-gd
-```
-
-- 当前 active 批次切换为：`8B-GD1：平台侧葛兰岱尔适配骨架`。
-- 本批目标：
-  - 默认 `MOCK` 不回归。
-  - 增加 `GLANDAR` provider 配置骨架。
-  - 新增 lightweight job / viewer ticket 平台接口骨架。
-  - GLANDAR 未配置时业务化不可用，不 500。
-- 本批禁止：
-  - 不真实调用 Station `SplitUploadFile`。
-  - 不上传真实 RVT。
-  - 不新增迁移。
-  - 不修改 `docs/**`。
-  - 不改 M3G 对象存储主线。
-- 已写入：
-  - `handoff/main-agent/8b-gd-task-graph.md`
-  - `handoff/main-agent/8b-gd1-glandar-adapter-skeleton-plan.md`
-  - `handoff/dev-agent/current-prompt.md`
-  - `handoff/test-agent/current-prompt.md`
-- 当前裁决：
-  - 可交给 8B-GD 独立 Claude Code worker 开发。
-  - 开发完成后必须由测试 agent 按 8B-GD1 prompt 验收。
-
-## 2026-05-27 8B-GD1 开发完成：等待测试复核
-
-- CMUX Claude Code 已尝试启动，但因模型 API 报错中断；主 agent 按用户授权兜底开发。
 - 已完成：
-  - `GLANDAR` provider 配置骨架。
-  - 默认 `MOCK` 安全模式保持。
-  - lightweight job / viewer ticket 平台接口骨架。
-  - 8B-GD1 专项脚本。
-- 本批未做：
-  - 未真实调用 Station API。
-  - 未上传 RVT。
-  - 未签发真实 viewer ticket。
-  - 未新增数据库迁移。
-  - 未修改 `docs/**`。
-  - 未触碰 M3G 对象存储主线。
-- 自测：
-  - 后端构建通过。
-  - 前端构建通过。
-  - 8B-GD1 专项通过，`PASS=16 FAIL=0`。
-  - 8A 回归通过，`PASS=11 FAIL=0`。
-  - 文件访问安全回归通过，`PASS=18 FAIL=0`。
-  - `git diff --check` 通过。
-- 当前建议：安排测试 agent 复核 8B-GD1；通过后再准备 8B-GD2 的 105 RVT PoC。
-
-## 2026-05-28 8B-GD1 收口
-
-- 测试 agent 已完成 8B-GD1 完整验收与 P1 极短复验。
-- 当前无 P0 / P1。
-- P2 仅为既有前端 chunk size warning。
-- P1“关键新增文件未纳入 Git 跟踪”已关闭：
-  - `GlandarEngineSettings.java` 已进入 Git 索引。
-  - `scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh` 已进入 Git 索引。
-- 收口记录：
-
-```text
-handoff/main-agent/8b-gd1-glandar-adapter-skeleton-closure.md
-```
-
+  - `CHECKPOINT-1：主线基线准备与工作区归类报告`
+  - `M3 整体收口报告：对象存储主链路`
+  - `8C-GD-F4 极短验收记录：构件拾取、模型爆炸与属性代理`
+- 关键文件：
+  - `handoff/main-agent/checkpoint-1-mainline-baseline-report.md`
+  - `handoff/main-agent/m3-overall-closure-report.md`
+  - `handoff/main-agent/8c-gd-f4-short-verification-report.md`
+- 验证：
+  - 后端健康检查返回 `UP`。
+  - `scripts/dev/check-8c-gd-f4-component-pick-blow-properties.sh` 通过，`PASS=22 FAIL=0`。
 - 主 agent 裁决：
-  - `8B-GD1：平台侧葛兰岱尔适配骨架` 正式收口。
-  - 不自动进入 `8B-GD2`。
-  - 8B-GD2 启动前必须重新确认引擎安全凭据、105 RVT 样本和 Station API 实测规则。
+  - M3 对象存储主链路可以收口。
+  - 8C-GD-F4 可作为当前轻量化 Viewer 交互基线。
+  - 后续平台交互逻辑优化必须经用户批准后再启动，不自动继续扩大 UX4。
 
+## 2026-06-04 UX4 启动：平台视觉与员工使用效率修复
 
-## 2026-05-28 8B-GD2 启动准备
-
-- 已从 `codex/8b-gd-lightweight-engine-adapter` 新建真实转换 PoC 分支：
-
-```text
-codex/8b-gd2-rvt-poc
-```
-
-- 当前目标：`8B-GD2：105 RVT PoC 转换闭环`。
-- 前置检查：
-  - 葛兰岱尔 Station API 可达。
-  - 葛兰岱尔 Web / config 可达。
-  - 当前 shell 尚未注入 GLANDAR 安全配置。
-  - 105 项目存在 RVT 小样本，优先 `fileId=1257`。
+- 启动依据：
+  - DOC-BASE 已完成文档基线收口。
+  - 用户要求当前阶段开始平台视觉与可用性修复，明确视觉重点与员工使用效率。
+  - 当前平台核心功能较多，但员工首次进入后仍可能不知道先看什么、点什么、下一步怎么做。
+- 本批目标：
+  - 聚焦项目入口、项目工作台、文件管理器、工程树与交付工作中心、文件服务、BIM 协同。
+  - 修复页面层级混乱、技术字段过多、主操作不突出、对象存储状态不易理解、搜索/目录模式混淆等使用性问题。
+  - 让员工能围绕真实项目完成：选项目 -> 管文件 -> 看状态 -> 做交付 -> 看预览。
+- 本批边界：
+  - 只允许修改 `frontend/**` 和开发报告。
+  - 不修改 `backend/**`、数据库、权限、接口语义或 `docs/**`。
+  - 不执行对象化迁移。
+  - 不新增 Hermes、BIM、parser、documents/chunks、Qdrant、OpenSearch 能力。
 - 已写入：
-  - `handoff/main-agent/8b-gd2-glandar-rvt-poc-plan.md`
+  - 计划：`handoff/main-agent/ux4-visual-usability-fix-plan.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-06-01 8C-GD-MAINLINE-FULL 启动：葛兰岱尔轻量化引擎主线全量接入
+
+- 用户反馈：
+  - 仅完成 DT-F1 兼容合并仍不够。
+  - 当前需要证明主线真正具备葛兰岱尔完整接入能力，而不是停留在 10 个 RVT 试点和 MOCK / 未配置安全模式。
+- 启动依据：
+  - 当前分支已包含 `d69cbc2 feat: integrate Glandar RVT lightweight preview pilot...`。
+  - BIM 协同页可打开，105 项目可见 `轻量化模型列表` 和 `全楼层 / V1 · RVT`。
+  - M3G 对象存储、file-access 回归在 DT-F1 审计中未被冲坏。
+  - 真实 GLANDAR Station 配置尚未完成端到端验收，不能对外宣称真实轻量化主线完成。
+- 本批目标：
+  - 保留当前已合入的葛兰岱尔主线代码。
+  - 支持真实配置注入：
+    - `BIM_ENGINE_PROVIDER=GLANDAR`
+    - `GLANDAR_STATION_API_BASE=http://192.168.1.37:18086`
+    - `GLANDAR_STATION_WEB_BASE=http://192.168.1.37:18087`
+    - `GLANDAR_TOKEN=<本机安全注入>`
+  - 解除 105 项目 10 个 RVT 试点硬限制，让当前项目内有权限且格式支持的模型文件都能提交轻量化任务。
+  - BIM 协同页和文件管理器均展示轻量化状态、提交入口、失败原因和真实 Viewer 入口。
+  - 未配置 / 不可达 / 不支持格式时，返回清晰业务提示，不白屏、不伪造 READY。
+  - 不泄露 token、真实 NAS 路径、bucket、object key、`storage_uri`、SQL、raw row。
+- 本批禁止：
+  - 不写入或提交 `GLANDAR_TOKEN`。
+  - 不让前端直接接触 Station 长期 token。
+  - 不绕过平台权限让引擎直接读 NAS。
+  - 不改 M3 对象存储核心逻辑。
+  - 不触发 Hermes 正文问答，不写 documents / chunks / Qdrant / OpenSearch。
+  - 不声称构件拾取、模型爆炸、Revit 属性已完成，除非引擎团队提供真实能力并通过验收。
+- 已写入：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+- 主 agent 裁决：
+  - `DT-F1` 视为兼容合并前置，不再作为当前收口口径。
+  - 当前 active 批次统一改为 `8C-GD-MAINLINE-FULL`。
+  - 开发 agent 需按新的 current-prompt 执行；测试 agent 需同时验证未配置安全模式和真实 GLANDAR Station 模式。
+
+## 2026-06-03 8C-GD-F1 启动：BIM 协同首屏与轻量化列表体验修复
+
+- 启动依据：
+  - 10 个历史失败试点模型已重新提交并全部进入 `READY`。
+  - `viewerAvailable=10/10`，Viewer ticket 可签发。
+  - 用户反馈：BIM 协同页的轻量化模型列表不能一次性展示到底，必须分页。
+  - 用户反馈：BIM 协同管理页应作为首屏，`平台窗口 · sc-datav BIM 前端组件` 应展示在最上方。
+  - 用户要求：资产文件、模型文件、图纸文件、管理对象、质量风险、交付完成率等数据应融合进大屏，而不是独立散落展示。
+- 本批目标：
+  - BIM 协同页首屏聚焦大屏主体验。
+  - 大屏内部或大屏信息层展示核心指标。
+  - 轻量化模型列表分页展示。
+  - READY 模型优先可见，并可打开预览入口。
+- 本批边界：
+  - 只改前端体验。
+  - 不改后端葛兰岱尔提交 / 查询 / Viewer ticket 逻辑。
+  - 不改 M3 对象存储、file-access、Hermes、语义索引。
+  - 不修改 `docs/**`。
+- 已写入：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-06-03 8C-GD-F2 启动：BIM 协同综合驾驶舱首屏纠偏
+
+- 启动依据：
+  - 用户明确反馈：BIM 协同页首屏不应默认进入 `BIM 场景`。
+  - 当前首屏应回到 `综合驾驶舱`，用于展示项目整体状态。
+  - `BIM 场景` 应作为可点击进入的真实模型预览模块保留。
+  - 综合驾驶舱中的 `构件分类统计` 和 `问题趋势` 容易造成“已具备构件统计 / 真实问题趋势”的误解，需替换为当前真实项目指标。
+  - 页面底部 `下一步建议` 和 `安全边界` 不应继续作为视觉模块展示。
+- 本批目标：
+  - 默认模块改为 `综合驾驶舱`。
+  - 用资产文件、模型文件、图纸文件、管理对象、质量风险、交付完成 6 个真实指标替代旧演示统计块。
+  - 删除底部外层 `下一步建议` 和 `安全边界`。
+  - 保持 `BIM 场景`、READY Viewer、轻量化模型列表分页不回归。
+- 本批边界：
+  - 只改前端体验。
+  - 不改后端葛兰岱尔提交 / 查询 / Viewer ticket 逻辑。
+  - 不改 M3 对象存储、file-access、Hermes、语义索引。
+  - 不修改 `docs/**`。
+- 已写入：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-06-01 DT-F1 启动：BIM 协同 / 葛兰岱尔适配兼容收口
+
+- 用户确认当前批次先做：
+  - `DT-F1：BIM 协同 / 葛兰岱尔适配兼容收口`
+- 启动依据：
+  - `M3G-9` 前置检查确认当前 `5173` BIM 协同页可打开。
+  - 105 / `projectId=503` 的 `全楼层 / V1 · RVT` 可在 BIM 协同页以元数据方式显示。
+  - 当前默认引擎口径为 `METADATA_ADAPTER`，旧 8A 脚本仍期待 `MOCK`，存在兼容误报。
+  - 葛兰岱尔相关分支存在但未合入当前 M3G 分支，不能验证真实预览。
+  - 直接整分支 merge 旧葛兰岱尔分支存在冲坏 M3G 对象存储脚本和主线的风险。
+- 本批目标：
+  - 默认未配置葛兰岱尔时，BIM 协同页保持元数据适配，不报错。
+  - 修复 `MOCK` / `METADATA_ADAPTER` 兼容口径，旧 8A 回归不误失败。
+  - 摘取式接入葛兰岱尔配置入口，不直接整分支 merge。
+  - 105 模型在配置葛兰岱尔后至少能进入真实预览入口；不可用时返回清晰业务错误。
+  - 不破坏 M3G 对象存储、file-access 和安全禁出字段。
+- 本批禁止：
+  - 不直接 merge `codex/8b-gd-lightweight-engine-adapter` 或 `codex/8b-gd2-rvt-poc` 整分支。
+  - 不删除 M3G/M2/M1 回归脚本。
+  - 不改真实 NAS 文件，不读取正文，不写语义索引，不触发 Hermes 正文问答。
+  - 不修改 `docs/**`。
+- 已写入：
+  - 前置检查：`handoff/main-agent/m3g9-pre-bim-collab-compatibility-check.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-06-01 DT-F1 策略调整：origin/main 已含葛兰岱尔 PR
+
+- 主 agent 已执行 `git fetch origin main --prune`。
+- 已确认：
+  - `origin/main` 最新提交为 `d69cbc2 feat: integrate Glandar RVT lightweight preview pilot...`。
+  - `d69cbc2` 已在 `origin/main`。
+  - 当前本地分支仍是 `codex/m3g-nas-minio-real-project-object-storage`。
+  - 当前工作区仍有大量 M3G 未提交改动，不能覆盖或丢弃。
+- DT-F1 开发策略从“仅摘取旧分支能力”调整为：
+  1. 先做 M3G checkpoint commit，排除 `.claude/**`、`CLAUDE.md`、`tmp/**`、本地 jar / pid / log。
+  2. 再执行 `git merge origin/main`。
+  3. 冲突解决原则：M3G 对象存储 / file-access / 文件管理优先保留当前实现；BIM 协同 / 葛兰岱尔能力优先保留 `origin/main`。
+  4. 合并后必须验证 BIM 协同页、105 试点模型、Viewer、M3G 对象存储和 file-access。
+- 已更新：
   - `handoff/dev-agent/current-prompt.md`
   - `handoff/test-agent/current-prompt.md`
-- 真实转换执行前必须安全注入：
 
-```text
-BIM_ENGINE_PROVIDER=GLANDAR
-GLANDAR_STATION_API_BASE=http://192.168.1.37:18086
-GLANDAR_STATION_WEB_BASE=http://192.168.1.37:18087
-GLANDAR_TOKEN=<secure-injection-only>
-```
+## 2026-05-29 M3G-6 纠偏启动：105 项目全量对象化试运行
 
-- `GLANDAR_TOKEN` 不得进入聊天、handoff、Git、日志、前端或 API 响应。
+- 当前分支：`codex/m3g-nas-minio-real-project-object-storage`。
+- 当前 active 批次：`M3G-6：105 项目全量对象化试运行`。
+- 启动依据：
+  - `M3G-5-F1` 已收口并提交，文件管理器搜索 query 问题已关闭。
+  - 用户指出上一版 M3G-6 任务图应是“105 项目全量对象化试运行”，而不是“多真实项目 15 文件受控扩大”。
+  - 主 agent 确认上一版 prompt 写偏，当前开发 agent 已完成的多项目 15 文件能力不能作为 M3G-6 收口。
+  - 主 agent 纠偏：继续 M3G 对象存储主线，但 M3G-6 必须回到 105 / `projectId=503` 全量计划与分批执行。
+- 本批目标：
+  - 对 105 / `projectId=503` 生成全量对象化计划。
+  - 按批次推进 105 已登记文件对象化，不一次性硬冲。
+  - 支持暂停、继续、重试、失败原因和治理清单。
+  - 输出 105 对象化覆盖率报告：总数、成功、失败、跳过、容量、checksum 覆盖率。
+  - 验证已对象化文件通过 NAS 侧 MinIO + 受控 `file-access` 读取。
+- 本批禁止：
+  - 不做 NAS 根目录全量迁移。
+  - 不把其他项目对象化当成 M3G-6 完成标准。
+  - 不移动、删除、重命名、覆盖真实 NAS 原文件。
+  - 不读取正文。
+  - 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
+  - 不新增 Hermes 正文问答。
+  - 不接入或修改 BIM / 葛兰岱尔分支。
+  - 不修改 `docs/**`。
+- 已写入：
+  - 计划：`handoff/main-agent/m3g6-105-full-objectification-trial-plan.md`
+  - M3-M5 主任务图：`handoff/main-agent/m3-m5-storage-evidence-task-graph.md`
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+- 下一步：
+  - 交给开发 agent 按纠偏后的 M3G-6 prompt 继续实现。
+  - 开发完成后测试 agent 做轻量验收。
+  - M3 不在 M3G-6 后直接收口；还必须完成 M3G-7 / M3G-8 / M3G-9。
+
+## 2026-05-29 M3G-6R 启动：105 对象化长跑执行与进度控制
+
+- 启动依据：
+  - 开发 agent 已完成 M3G-6 纠偏开发，证明 105 全量计划、下一批执行、连续两批推进可用。
+  - 105 当前仍有大量 `NAS_ONLY` 文件，不能把“机制打通”误判为“105 全量对象化完成”。
+  - 用户确认继续补长跑执行与进度控制，避免后续全量升级因为文件数过多卡住。
+- 当前 active 批次：
+  - `M3G-6R：105 对象化长跑执行与进度控制`
+- 本批目标：
+  - 支持开始 / 继续 / 暂停 / 重试。
+  - 支持批大小、容量、连续批次数、失败后继续策略。
+  - 输出稳定的长跑状态和覆盖率。
+  - 治理项不阻塞后续可执行文件。
+  - 前端文件服务页展示当前长跑进度、剩余可执行项、治理项和最近失败原因。
+- 本批禁止：
+  - 不一次性无边界硬冲 2928 个文件。
+  - 不移动、删除、重命名、覆盖真实 NAS 原文件。
+  - 不读取正文，不写语义索引，不触发 Hermes。
+  - 不修改 `docs/**`。
+- 已写入：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-05-29 M3G-6R 正式收口
+
+- 测试 agent 已完成 M3G-6R P1 极短复验，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- 已确认：
+  - 5173 前端服务来自当前项目目录 `/Users/vc/Documents/数字化交付平台/frontend`。
+  - `handoff/main-agent/m3-m5-storage-evidence-task-graph.md` 已纳入 Git 跟踪。
+  - `handoff/main-agent/m3g6-105-full-objectification-trial-plan.md` 已纳入 Git 跟踪。
+  - 上一轮 M3G-6R 专项、M3G-6 回归、M3G-5 回归和文件访问安全回归均已通过。
+- 主 agent 裁决：
+  - `M3G-6R：105 对象化长跑执行与进度控制` 正式收口。
+  - M3 整体不收口。
+  - 下一批次待用户确认，可选 `M3G-6S` 或进入 `M3G-7`。
+
+## 2026-05-29 M3G-6S 启动：105 对象化持续跑批至治理边界
+
+- 用户确认：
+  - 尽快全量升级 105 项目为对象存储，存入 MinIO 服务，为后续所有 NAS 升级打基础。
+- 当前 active 批次：
+  - `M3G-6S：105 对象化持续跑批至治理边界`
+- 本批目标：
+  - 实际推进 105 对象化覆盖率。
+  - 持续跑批直到可执行文件基本清空，或剩余全部进入治理清单。
+  - 按小文件 / 中文件 / 大文件分层处理。
+  - 输出 105 最终覆盖率报告和治理项原因分组。
+- 本批禁止：
+  - 不迁移其他项目作为完成标准。
+  - 不迁移 NAS 根目录。
+  - 不移动、删除、重命名、覆盖真实 NAS 文件。
+  - 不读取正文，不写语义索引，不触发 Hermes。
+  - 不修改 `docs/**`。
+- 已写入：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-05-29 M3G-6S 正式收口
+
+- 测试 agent 已完成 M3G-6S 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- 已确认：
+  - 105 / `projectId=503` 总文件数 `2928`。
+  - 已对象化数量 `2928`。
+  - 未对象化数量 `0`。
+  - 剩余可执行数量 `0`。
+  - 迁移失败数量 `0`。
+  - 治理项数量 `0`。
+  - 对象化覆盖率 `100.0%`。
+  - checksum 覆盖率 `100.0%`。
+  - 已对象化文件可通过受控 `file-access` 读取。
+  - NAS 原文件抽样 `size / mtime` 未变化。
+  - 禁出字段扫描通过。
+- 主 agent 裁决：
+  - `M3G-6S：105 对象化持续跑批至治理边界` 正式收口。
+  - M3 整体不收口。
+  - 下一步建议先做 `M3G-6T：对象化后文件业务视图与工程树交付映射`，再进入 `M3G-7：多真实项目对象化 Wave 1`。
+
+## 2026-05-29 M3G-6T 启动：对象化后文件业务视图与工程树交付映射
+
+- 用户确认执行 M3G-6T。
+- 当前 active 批次：
+  - `M3G-6T：对象化后文件业务视图与工程树交付映射`
+- 启动依据：
+  - 105 / `projectId=503` 已完成 `2928 / 2928` 全量对象化。
+  - 用户明确反馈当前工程树和节点仍偏架空，不知道如何实际使用。
+  - 本批要让 105 对象化文件真正服务工程树、模型 / 图纸缺口和交付候选。
+- 本批目标：
+  - 生成工程树优化草案，草案必须人工确认后应用。
+  - 文件管理器默认展示所属工程节点、资料用途、交付状态等业务字段。
+  - 工程树节点显示文件、模型、图纸、交付候选和缺失项统计。
+  - 新增模型 / 图纸缺口分析：有图纸缺模型、有模型缺图纸、有模型有图纸、待人工判断。
+  - 新增待交付候选，用户确认后才调用现有批量挂接能力。
+- 本批禁止：
+  - 不读取 PDF / Office / DWG / RVT / IFC 正文。
+  - 不做 BIM 构件级解析。
+  - 不触发 Hermes 正文问答。
+  - 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
+  - 不移动、删除、重命名、覆盖真实 NAS 文件。
+  - 不自动覆盖工程树，不自动挂接，不自动审核，不自动整改。
+  - 不修改 `docs/**`。
+- 已写入：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-05-29 M3G-6S-F1 启动：105 历史对象版本与当前 NAS 侧 MinIO 对齐修复
+
+- 启动依据：
+  - 开发 agent 已完成 M3G-6T 功能开发，M3G-6T 专项、M2J / M2I / M2H / M2F / 文件访问安全自测通过。
+  - 但 M3G-6S 回归失败：105 数据库显示 `2928 / 2928` 已对象化，active object version 存在，但受控 `file-access` 抽查返回 `ASSET_FILE_NOT_READABLE`。
+  - 根因方向：历史 active object version 记录与当前 NAS 侧 MinIO 中真实对象实体不一致。
+- 当前 active 批次：
+  - `M3G-6S-F1：105 历史 active object version 与当前 NAS 侧 MinIO 对齐修复`
+- 本批目标：
+  - 校验 105 active object version 对应对象实体是否真实存在。
+  - 对缺失对象执行受控修复：从 NAS 台账原文件重新复制副本到当前 NAS 侧 MinIO，并校验 size / checksum / etag。
+  - 修复后 `file-access` 能读取对象化文件。
+  - active object version 不重复污染。
+  - 无法修复的文件进入可解释治理清单。
+- 本批禁止：
+  - 不通过 `file-access` 静默 fallback 读 NAS 来冒充对象读取成功。
+  - 不移动、删除、重命名、覆盖真实 NAS 原文件。
+  - 不读取文件正文，不写语义索引，不触发 Hermes。
+  - 不修改 `docs/**`。
+- M3G-6T 状态：
+  - 功能开发完成但暂不收口。
+  - 必须等 M3G-6S-F1 通过后，再继续 M3G-6T 验收判断。
+
+## 2026-05-31 M3G-6S-F1 与 M3G-6T 正式收口
+
+- 测试 agent 已完成 M3G-6S-F1 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- P2：
+  - 既有前端 Vite chunk size warning。
+- 已确认：
+  - 105 / `projectId=503` 的 active object version 与当前 NAS 侧 MinIO 对象实体已对齐。
+  - 完整性检查显示 `2928 / 2928` 可读。
+  - governance item 为 `0`。
+  - 受控 `file-access` 可读取抽样对象化文件。
+  - NAS 原文件抽样 `size / mtime` 未变化。
+  - M3G-6S 回归通过。
+  - M3G-6T 工程树交付映射专项通过，`PASS=30 FAIL=0`。
+  - 工程树草案仍为预览 / 显式确认，不自动覆盖正式树。
+  - 交付候选仍为 dry-run，未确认时拒绝，确认后仍走批量挂接护栏。
+  - 模型 / 图纸缺口分析保持 catalog-only 边界，未进入 BIM 构件级解析。
+  - 禁出字段扫描通过，未暴露真实 NAS 路径、bucket、object key、`storage_uri`、SQL、raw row、token、secret。
+- 主 agent 裁决：
+  - `M3G-6S-F1：105 历史 active object version 与当前 NAS 侧 MinIO 对齐修复` 正式收口。
+  - `M3G-6T：对象化后文件业务视图与工程树交付映射` 正式收口。
+  - M3 整体不收口。
+  - 下一步建议进入 `M3G-7：多真实项目对象化 Wave 1`。
+
+## 2026-05-31 M3G-7 启动：多真实项目对象化 Wave 1
+
+- 用户确认进入下一步。
+- 当前 active 批次：
+  - `M3G-7：多真实项目对象化 Wave 1`
+- 启动依据：
+  - 105 已完成全量对象化、对象实体对齐、工程树交付映射。
+  - M3G 下一目标是把 105 的对象化方法复制到更多真实项目。
+- 本批目标：
+  - 自动生成非 105 真实项目候选清单。
+  - 排除样例、测试、归档、未完成接入和明显不标准项目。
+  - 默认排除 95 / 98 / 99 等待治理项目，除非主 agent 后续单独授权。
+  - 对候选项目生成对象化 dry-run 计划。
+  - 对低风险项目执行小批对象化 Wave 1。
+  - 输出每项目覆盖率、成功数、跳过数、失败数和治理项。
+- 本批禁止：
+  - 不迁移 NAS 根目录。
+  - 不全量迁移所有项目。
+  - 不把 105 作为本批执行项目。
+  - 不移动、删除、重命名、覆盖真实 NAS 原文件。
+  - 不读取文件正文，不写语义索引，不触发 Hermes。
+  - 不修改 `docs/**`。
+- 已写入：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+
+## 2026-05-31 M3G-7R 启动：全项目对象化扩大跑批
+
+- 用户明确要求尽快将全项目文件对象化。
+- 当前 active 批次：
+  - `M3G-7R：全项目对象化扩大跑批`
+- 启动依据：
+  - M3G-7 只完成非 105 项目 507 / 96 的 5 个小文件对象化，仍不足以支撑“公司项目文件全面对象化”。
+  - M3G-8 原计划是对象优先读取与 NAS fallback 收口，但在大量项目仍未对象化前直接收口读取策略意义不足。
+- 本批目标：
+  - 生成全项目对象化队列。
+  - 将项目分为可执行、需治理、已完成、跳过。
+  - 支持按项目持续跑批。
+  - 支持暂停、继续、重试失败项。
+  - 输出全局覆盖率和每项目覆盖率。
+  - 失败文件进入治理清单，不阻塞其他项目继续推进。
+- 本批禁止：
+  - 不无边界全量硬冲。
+  - 不移动、删除、重命名、覆盖真实 NAS 原文件。
+  - 不读取正文，不写语义索引，不触发 Hermes。
+  - 不修改 `docs/**`。
+- 已写入：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-06-01 M3G-7R 正式收口
+
+- 测试 agent 已完成 M3G-7R 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- P2：
+  - 既有前端 Vite chunk size warning。
+- 已确认：
+  - M3G-7R 专项脚本通过，`PASS=48 FAIL=0`。
+  - 全项目 overview 可查，当前对象化覆盖率约 `7.22%`。
+  - 本轮实际推进 2 个非 105 真实项目：`projectId=519`、`projectId=520`。
+  - 6 个执行样本均进入 `OBJECT_STORED`，受控 `file-access` 可读。
+  - 105 保持已完成，不重复执行。
+  - 95 / 98 / 99 未进入可执行队列。
+  - dry-run 不写入；`start / continue confirmed=false` 被拒绝。
+  - NAS 原文件抽样 `size / mtime` 未变化。
+  - 禁出字段扫描通过，未暴露真实 NAS 路径、bucket、object key、`storage_uri`、SQL、raw row、token、secret。
+  - M3G-7、M3G-6S-F1、M3G-6T、file-access 回归均通过。
+- 主 agent 裁决：
+  - `M3G-7R：全项目对象化扩大跑批` 正式收口。
+  - M3 整体不收口。
+  - 当前 active 批次切换为 `待用户确认`。
+  - 下一步建议进入 `M3G-8：对象优先读取与 NAS fallback 收口`。
+
+## 2026-06-01 M3G-8 启动：对象优先读取与 NAS fallback 收口
+
+- 用户确认进入 M3G-8。
+- 当前 active 批次：
+  - `M3G-8：对象优先读取与 NAS fallback 收口`
+- 启动依据：
+  - 105 已完成全量对象化并完成对象实体一致性修复。
+  - M3G-7 / M3G-7R 已推进多真实项目对象化。
+  - 当前需要统一文件读取规则，避免“显示已对象化但实际仍读 NAS”或“对象读取失败却静默读 NAS 冒充成功”。
+- 本批目标：
+  - `OBJECT_STORED` 文件默认从 NAS 侧 MinIO active object version 读取。
+  - `NAS_ONLY` 文件仍可读，但必须明确显示“历史 NAS 链路 / 尚未对象化”。
+  - 对象读取失败不得静默 fallback 到 NAS 冒充成功。
+  - fallback 必须可配置、可审计、可提示。
+  - file-access、预览、下载、交付包清单中的存储状态口径一致。
+  - 大文件下载策略进入稳定形态，不能暴露 bucket / object key / raw path。
+- 本批禁止：
+  - 不扩大对象化迁移数量。
+  - 不移动、删除、重命名、覆盖真实 NAS 文件。
+  - 不读取正文，不写语义索引，不触发 Hermes。
+  - 不修改 `docs/**`。
+
+- 已写入：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-06-01 M3G-8-F1 启动：M3G-7R 回归脚本饱和环境修复
+
+- 测试 agent 已完成 M3G-8 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- M3G-8 主专项结论：
+  - `check-m3g8-object-first-read-fallback.sh` 通过。
+  - `OBJECT_STORED` 对象优先读取通过。
+  - `NAS_ONLY` 历史 NAS 链路通过。
+  - 对象不可读不静默 fallback 通过。
+  - file-access 与交付预检查读取口径通过。
+- 当前不收口原因：
+  - 必跑回归 `check-m3g7r-all-project-objectification-run.sh` 失败，`PASS=32 FAIL=3`。
+  - 失败原因是当前环境只找到 1 个可执行样本项目，未满足旧脚本“至少推进 2 个项目”的历史断言。
+- 主 agent 判断：
+  - 这是对象化持续推进后的“样本不足 / 饱和环境”回归脚本问题，不是 M3G-8 主功能失败。
+  - 但必跑回归失败仍按 P1 处理，M3G-8 暂不收口。
+- 当前 active 批次：
+  - `M3G-8-F1：M3G-7R 回归脚本饱和环境修复`
+- 本批目标：
+  - 修复 M3G-7R 回归脚本，让它能区分“样本充足需要实际推进”和“样本不足时验证队列解释与边界”。
+  - 样本不足时不能强行执行迁移，也不能直接跳过核心断言。
+  - 保持 M3G-8 主专项、M3G-6S-F1、M3G-6T、file-access 回归通过。
+- 本批禁止：
+  - 不扩大对象化迁移数量。
+  - 不移动、删除、重命名、覆盖真实 NAS 文件。
+  - 不读取正文，不写语义索引，不触发 Hermes。
+  - 不修改 `docs/**`。
+- 已写入：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-06-01 M3G-8 / M3G-8-F1 正式收口
+
+- 测试 agent 已完成 M3G-8-F1 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- 已确认：
+  - M3G-7R 回归脚本在当前可读执行样本不足 / 对象化接近饱和环境下进入安全分支，不再误判失败。
+  - 安全分支没有执行真实迁移；已验证 dry-run 不写入、`confirmed=false` 拒绝、已有对象可读、NAS 原文件 `size / mtime` 不变和禁出字段不泄露。
+  - M3G-8 主专项继续通过：`OBJECT_STORED` 默认对象存储读取，`NAS_ONLY` 作为历史 NAS 链路读取，对象不可读不静默 fallback。
+  - M3G-6S-F1、M3G-6T、Phase2 file-access 回归均通过。
+- 主 agent 裁决：
+  - `M3G-8-F1：M3G-7R 回归脚本饱和环境修复` 正式收口。
+  - `M3G-8：对象优先读取与 NAS fallback 收口` 正式收口。
+  - M3 整体不收口。
+  - 当前 active 批次切换为 `待用户确认`。
+  - 下一步建议进入 `M3G-9：全项目对象化覆盖率报告与 M3 收口`。
+
+## 2026-05-31 M3G-7 正式收口
+
+- 测试 agent 已完成 M3G-7 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- P2：
+  - 既有前端 Vite chunk size warning。
+  - 全局 `/data-steward/file-service` 会回资产总览，实际 Wave 1 入口在项目工作台文件服务页；该路由口径问题不阻塞 M3G-7 主链路，后续可作为 UX / 路由小修。
+- 已确认：
+  - 候选项目可查。
+  - 105 / 95 / 98 / 99 未进入可执行候选。
+  - dry-run 不写入。
+  - `confirmed=false` 被拒绝。
+  - 实际对非 105 项目 `507 / 96` 执行 5 个小文件对象化。
+  - 对象化文件均为 `OBJECT_STORED`。
+  - 受控 `file-access` 可读。
+  - 重复执行幂等跳过，未重复污染 active object version。
+  - NAS 原文件抽样 `size / mtime` 未变化。
+  - 禁出字段扫描通过。
+- 主 agent 裁决：
+  - `M3G-7：多真实项目对象化 Wave 1` 正式收口。
+  - M3 整体不收口。
+  - 当前 active 批次切换为 `待用户确认`。
+  - 下一步建议进入 `M3G-8：对象优先读取与 NAS fallback 收口`。
 
 ## 2026-05-27 M3F 启动：新文件对象存储优先写入
 
@@ -202,6 +609,69 @@ GLANDAR_TOKEN=<secure-injection-only>
 - 下一步候选：
   - `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`。
   - M3G 需要单独启动，不自动进入。
+
+## 2026-05-27 M3G-1 启动：NAS 侧 MinIO readiness 与对象化盘点
+
+- M3F 已合并回 `main` 并推送，`main` 最新进度为 M3F。
+- 已从最新 `main` 创建分支：
+  - `codex/m3g-nas-minio-real-project-object-storage`
+- 当前 active 批次：
+  - `M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划`
+- M3G 总目标：
+  - 将正式文件本体治理升级为 NAS 侧 MinIO 对象存储。
+  - 原 NAS 项目资料区冻结为只读备份和回滚来源。
+  - 平台通过 MySQL 台账管理业务关系、权限、版本、checksum 和交付关系。
+  - Hermes 后续只能通过平台授权，从 NAS 侧 MinIO 复制文件副本到本机工作区解析。
+- M3G-1 只做：
+  - NAS 侧 MinIO readiness。
+  - 全项目对象化覆盖率盘点。
+  - 单项目对象化 dry-run 计划。
+- M3G-1 不做：
+  - 不执行真实历史文件批量迁移。
+  - 不移动、删除、重命名真实 NAS 文件。
+  - 不做 Hermes 正文问答。
+  - 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
+- 已写入：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+  - M3G 计划：`handoff/main-agent/m3g-nas-minio-real-project-object-storage-plan.md`
+  - M3G-1 任务图：`handoff/main-agent/m3g1-task-graph.md`
+  - NAS 侧 MinIO 配置交接：`handoff/main-agent/m3g1-nas-minio-ops-preparation.md`
+- 当前 NAS 侧 MinIO 探测：
+  - 初次探测时 `192.168.1.181:9000/9001` 未响应。
+  - 用户已在 Synology NAS 上部署并启动 MinIO。
+  - 当前 `http://192.168.1.181:9000/minio/health/ready` 可达。
+  - 当前 `9001` MinIO Console 可达。
+  - bucket `zy-datahub-assets-prod` 已创建。
+  - 用户已在本机终端临时注入 NAS MinIO 环境变量并重启平台后端，后端健康检查 `UP`。
+  - 注意：当前为本机会话级环境变量注入，不代表生产持久化部署完成；开发 agent 仍需实现 readiness，明确区分 `LOCAL_DEV_MINIO` 与 `NAS_SIDE_MINIO`。
+- 当前裁决：
+  - M3G-1 已于 2026-05-27 正式收口。
+  - 当前 active 批次：`M3G-2：105 项目历史文件对象化上传灰度`。
+  - 本批只针对 105 / `projectId=503` 小批量执行真实历史文件对象化。
+  - 其他项目和全量迁移继续等待后续批次。
+
+## 2026-05-27 M3G-1 正式收口
+
+- 测试 agent 已完成 M3G-1 P1 修复复验，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- P2：
+  - 既有 Vite chunk size warning。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪项继续排除。
+- 已确认：
+  - readiness 为 `NAS_SIDE_MINIO / READY`。
+  - 全项目对象化覆盖率盘点可查。
+  - 503 / 105 单项目 dry-run 可生成计划。
+  - dry-run 不创建真实迁移任务、不复制文件、不修改 NAS。
+  - M3E 预览产物对象化回归已恢复。
+  - M3F 对象存储优先上传脚本已适配 NAS 侧 MinIO。
+  - M3C 与 file-access 回归通过。
+  - 未执行历史文件真实批量迁移。
+  - 未移动、删除、重命名或覆盖真实 NAS 原项目文件。
+  - 未新增 Hermes 正文问答、documents / chunks、Qdrant、OpenSearch、parser、真实 BIM 引擎。
+- 主 agent 裁决：`M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划` 正式收口。
 
 ## 2026-05-25 M3A 启动：对象存储与 StorageService 基线
 
@@ -2130,6 +2600,210 @@ GLANDAR_TOKEN=<secure-injection-only>
   - P2 返修：项目工作台顶栏已展示负责人；后端当前用户项目摘要已补充 `projectManagerName` 字段，空值显示为 `待维护`。
   - 验证通过：前端构建、后端构建、临时 `18080` 后端接口抽查、`git diff --check`。
   - 短回归入口：`handoff/test-agent/current-prompt.md`。
+
+## 2026-05-28 M3G-2 正式收口：105 项目历史文件对象化上传灰度
+
+- `M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划` 已正式收口。
+- `M3G-2：105 项目历史文件对象化上传灰度` 已正式收口。
+- 本批已完成：
+  - 开发 agent 首批对象化 `fileId=936/937/938`。
+  - 重复执行任务幂等跳过。
+  - 主 agent 复验时追加对象化 `fileId=939/940/941`。
+  - 当前 105 对象化状态约为 `OBJECT_STORED=9 / NAS_ONLY=2919 / coverage=0.31%`。
+- 当前读取降级策略已确认：
+  - 有 active object version 且 `OBJECT_STORED`：优先读取 NAS 侧 MinIO。
+  - 无 active object version：继续读取原 NAS 台账路径。
+  - 已标记对象化但对象副本不可读：fail-closed，不静默回退 NAS。
+- 已确认：
+  - NAS 原文件保留，未移动、未删除、未改名、未覆盖。
+  - 未读正文、未写语义索引、未做 Hermes 正文问答。
+  - 未修改 `docs/**`。
+- 收口记录：
+  - `handoff/main-agent/m3g2-105-objectification-gray-closure.md`
+- 当前 active 批次：`待用户确认`。
+- 下一步候选：`M3G-3：多真实项目分批对象化策略与任务中心增强`。
+
+## 2026-05-28 M3G-3 启动：多真实项目分批对象化策略与任务中心增强
+
+- 用户确认进入下一步。
+- 主 agent 裁决当前 active 批次：
+  - `M3G-3：多真实项目分批对象化策略与任务中心增强`
+- 本批定位：
+  - 不做全量迁移。
+  - 不默认执行多项目真实对象化。
+  - 先增强多项目盘点、dry-run、容量估算、限制条件和任务中心。
+- 本批边界：
+  - NAS 原文件保留，不移动、不删除、不改名。
+  - 不读正文、不写语义索引、不做 Hermes 正文问答。
+  - 不修改 `docs/**`。
+- 已写入：
+  - `handoff/main-agent/m3g3-multi-project-objectification-task-center-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+
+## 2026-05-28 M3G-3 正式收口：多真实项目分批对象化策略与任务中心增强
+
+- 测试 agent 已完成 `M3G-3：多真实项目分批对象化策略与任务中心增强` 正式验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- P2：
+  - 既有 Vite chunk size warning。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪项继续排除。
+- 已确认：
+  - readiness 为 `NAS_SIDE_MINIO / READY`。
+  - 全项目对象化盘点可查，并能区分真实项目与测试 / 样例项目。
+  - 多项目 dry-run 可生成按项目分组的计划。
+  - dry-run 支持项目范围、真实项目过滤、总量、单项目、并发和限速策略字段。
+  - dry-run 未创建迁移任务、未复制文件、未触碰真实 NAS 原文件。
+  - M3G-1 / M3E / M3F / M3C / file-access 回归通过。
+  - 未新增 Hermes 正文问答、documents / chunks、Qdrant、OpenSearch、parser、BIM 引擎或文件正文读取。
+- 主 agent 裁决：
+  - `M3G-3：多真实项目分批对象化策略与任务中心增强` 正式收口。
+  - 当前 active 批次：`待用户确认`。
+- 下一步候选：
+  - `M3G-4：受控多项目小批对象化执行`。
+  - 或先启动 `M4A：documents / chunks 语义证据契约`。
+
+## 2026-05-28 M3G-4 启动：受控多项目小批对象化执行
+
+- 用户确认进入下一步。
+- 主 agent 裁决当前 active 批次：
+  - `M3G-4：受控多项目小批对象化执行`
+- 本批定位：
+  - 从 M3G-3 dry-run 规划进入真实小批执行。
+  - 仅允许少量真实项目、少量文件、有限容量、人工确认、后端硬上限。
+  - 目标是验证多项目对象化真实执行闭环，不是全量迁移。
+- 本批默认硬上限：
+  - 单次最多 `3` 个真实项目。
+  - 单项目最多 `3` 个文件。
+  - 总文件数最多 `9` 个。
+  - 单项目容量最多 `50MB`。
+  - 总容量最多 `100MB`。
+  - 必须 `confirmed=true`。
+- 本批边界：
+  - NAS 原文件保留，不移动、不删除、不改名、不覆盖。
+  - 不迁移测试 / 样例 / 归档项目。
+  - 不读正文、不写语义索引、不做 Hermes 正文问答。
+  - 不修改 `docs/**`。
+- 已写入：
+  - `handoff/main-agent/m3g4-controlled-multi-project-objectification-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+
+## 2026-05-28 M3G-4 正式收口：受控多项目小批对象化执行
+
+- 测试 agent 已完成 `M3G-4：受控多项目小批对象化执行` 正式验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 收口结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- P2：
+  - 既有 Vite chunk size warning。
+  - `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪项继续排除。
+- 已确认：
+  - `confirmed=false` 被拒绝。
+  - 超限执行被拒绝。
+  - 小批真实对象化成功。
+  - 重复执行幂等。
+  - 已对象化文件 `storage-status=OBJECT_STORED`，并可通过受控 `file-access` 读取。
+  - NAS 原文件 `size/mtime` 未变化。
+  - M3G-3 / M3G-1 / M3F / M3E / M3C / file-access 回归通过。
+  - 响应未泄露真实 NAS 路径、bucket、object key、`storage_uri`、SQL、raw row、token、secret。
+  - 未新增 Hermes 正文问答、documents / chunks、Qdrant、OpenSearch、parser、BIM 引擎或文件正文读取。
+- 主 agent 裁决：
+  - `M3G-4：受控多项目小批对象化执行` 正式收口。
+  - 当前 active 批次：`待用户确认`。
+- 下一步建议：
+  - 优先修复文件管理器搜索与路径展示体验问题。
+  - 后续再决定是否继续扩大对象化执行范围，或进入 `M4A：documents / chunks 语义证据契约`。
+
+## 2026-05-28 M3G-5 启动：文件管理器项目全局搜索与存储展示修复
+
+- 用户确认可以开始修复文件管理器体验问题。
+- 主 agent 裁决当前 active 批次：
+  - `M3G-5：文件管理器项目全局搜索与存储展示修复`
+- 本批定位：
+  - 修复文件管理器搜索默认只在当前目录的问题。
+  - 明确展示 `OBJECT_STORED` 与 `NAS_ONLY`，避免用户误以为 105 已全量对象化。
+  - 主界面改用项目内路径、存储状态、访问来源，不直观暴露真实 NAS 路径。
+- 本批不做：
+  - 不执行对象化迁移。
+  - 不扩大对象化范围。
+  - 不移动、删除、重命名、覆盖真实 NAS 文件。
+  - 不读取正文、不写语义索引、不做 Hermes 正文问答。
+  - 不修改 `docs/**`。
+- 已写入：
+  - `handoff/main-agent/m3g5-file-manager-search-storage-display-plan.md`
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+
+## 2026-05-28 M3G-5 正式收口
+
+- 开发 agent 完成 M3G-5，报告写入 `handoff/dev-agent/latest-report.md`。
+- 测试 agent 完成 M3G-5 正式验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结果：
+  - 当前 P0：无。
+  - 当前 P1：无。
+  - M3G-5 专项脚本通过，`PASS=12 FAIL=0`。
+  - M3G-4 只读回归 / M3G-3 / M3E / file-access 回归全部通过。
+- 主 agent 审计确认：
+  - 关键词搜索默认在整个项目范围内搜索。
+  - “仅当前文件夹及子目录”作为可选收窄范围保留。
+  - 未搜索时仍保持当前目录 direct-only 浏览。
+  - 文件表和详情能区分 `OBJECT_STORED` 与 `NAS_ONLY`。
+  - 未创建对象化迁移任务。
+  - 未触碰真实 NAS 原文件。
+  - 未暴露真实 NAS 路径、bucket、object key、`storage_uri`、SQL、raw row、token、secret。
+  - 未新增 Hermes 正文问答、documents / chunks、Qdrant / OpenSearch、BIM 引擎、parser / indexing。
+- 主 agent 裁决：
+  - `M3G-5：文件管理器项目全局搜索与存储展示修复` 正式收口。
+  - 当前 active 批次切换为 `待用户确认`。
+  - 下一步建议先由用户手工确认文件管理器体验，再决定继续扩大 M3G 对象化覆盖率或进入 M4A 语义证据契约。
+
+## 2026-05-28 M3G-5-F1 启动：搜索模式仍显示文件夹返工
+
+- 用户在 105 / `projectId=503` 文件管理器中反馈：
+  - URL 为 `/data-steward/assets/503?tab=files&fileKeyword=宝安`。
+  - 搜索框显示 `宝安`。
+  - 右侧仍显示项目根目录文件夹，没有进入项目全局文件搜索结果。
+- 主 agent 定位为 M3G-5 返工问题，不作为新功能批次。
+- 当前 active 批次：
+  - `M3G-5-F1：文件管理器搜索模式仍显示文件夹返工`
+- 本批只修：
+  - 带 `fileKeyword` 的 URL 进入页面必须自动进入搜索模式。
+  - 搜索模式右侧只展示匹配文件，不展示目录直达子项。
+  - 清空关键词后恢复当前目录 direct-only 浏览。
+- 本批不做：
+  - 不执行对象化迁移。
+  - 不移动、删除、重命名、覆盖真实 NAS 文件。
+  - 不读取正文、不写语义索引、不做 Hermes 正文问答。
+  - 不修改 `docs/**`。
+- 已写入：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-05-29 M3G-5-F1 正式收口
+
+- 开发 agent 完成 M3G-5-F1，报告写入 `handoff/dev-agent/latest-report.md`。
+- 测试 agent 完成 M3G-5-F1 极短验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结果：
+  - 当前 P0：无。
+  - 当前 P1：无。
+  - M3G-5 专项脚本通过，`PASS=13 FAIL=0`。
+  - 前端构建、后端健康检查、`git diff --check` 均通过。
+- 主 agent 审计确认：
+  - 带 `fileKeyword=宝安` 进入页面会自动进入项目全局搜索模式。
+  - 右侧不再显示根目录文件夹。
+  - 搜索结果展示所在位置和存储状态。
+  - 清空关键词后目录 direct-only 浏览恢复。
+  - 未创建对象化迁移任务。
+  - 未触碰真实 NAS 原文件。
+  - 未暴露真实 NAS 路径、bucket、object key、`storage_uri`、SQL、raw row、token、secret。
+  - 未新增 Hermes 正文问答、documents / chunks、Qdrant / OpenSearch、BIM 引擎、parser / indexing。
+- 主 agent 裁决：
+  - `M3G-5-F1：文件管理器搜索模式仍显示文件夹返工` 正式收口。
+  - 当前 active 批次切换为 `待用户确认`。
+  - 下一步回到 M3G 主线，由用户确认继续扩大对象化覆盖率或进入 M4A 语义证据契约。
 
 ## 跨机器交接入口
 

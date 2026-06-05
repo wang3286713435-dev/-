@@ -135,7 +135,38 @@ public final class VisualizationDtos {
         String statusLabel,
         String blockedReason,
         List<String> supportedOperations,
-        List<String> forbiddenOperations
+        List<String> forbiddenOperations,
+        Boolean featurePickingAvailable,
+        Boolean modelExplosionAvailable,
+        Boolean componentPropertyAvailable
+    ) {
+    }
+
+    public record GlandarComponentPropertyResponse(
+        Long projectId,
+        String jobId,
+        String lightweightName,
+        String featureId,
+        String revitId,
+        String source,
+        Boolean propertyAvailable,
+        String unavailableReason,
+        Integer propertyCount,
+        List<GlandarComponentPropertyGroup> groups
+    ) {
+    }
+
+    public record GlandarComponentPropertyGroup(
+        String groupName,
+        String setName,
+        List<GlandarComponentPropertyItem> properties
+    ) {
+    }
+
+    public record GlandarComponentPropertyItem(
+        String name,
+        String value,
+        String typeName
     ) {
     }
 
@@ -156,6 +187,30 @@ public final class VisualizationDtos {
         String statusLabel,
         String actionHint,
         String blockedReason,
+        Instant updatedAt
+    ) {
+    }
+
+    public record GlandarModelFileResponse(
+        Long projectId,
+        Long fileId,
+        String assetUuid,
+        String fileName,
+        String extension,
+        String fileKind,
+        Long sizeBytes,
+        String versionNo,
+        String relativePathHint,
+        String lightweightStatus,
+        String latestJobId,
+        String taskStatus,
+        Integer progress,
+        String failureReason,
+        Boolean viewerAvailable,
+        Boolean supported,
+        String unsupportedReason,
+        String statusLabel,
+        String actionHint,
         Instant updatedAt
     ) {
     }

@@ -377,6 +377,12 @@ public class AssetController {
             .contentType(MediaType.parseMediaType(access.contentType()))
             .contentLength(access.contentLength())
             .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+            .header("X-Delivery-Storage-Status", safeHeader(access.storageStatus()))
+            .header("X-Delivery-Read-Source", safeHeader(access.readSource()))
+            .header("X-Delivery-Fallback-Used", String.valueOf(Boolean.TRUE.equals(access.fallbackUsed())))
+            .header("X-Delivery-Fallback-Reason", safeHeader(access.fallbackReason()))
+            .header("X-Delivery-Storage-Health", safeHeader(access.storageHealth()))
+            .header("X-Delivery-Object-Readable", String.valueOf(Boolean.TRUE.equals(access.objectReadable())))
             .body(access.resource());
     }
 
@@ -434,5 +440,12 @@ public class AssetController {
     private static String fileName(MultipartFile file) {
         String name = file.getOriginalFilename();
         return name != null && !name.isBlank() ? name : "UPLOAD";
+    }
+
+    private static String safeHeader(String value) {
+        if (value == null || value.isBlank()) {
+            return "UNKNOWN";
+        }
+        return value.replaceAll("[\\r\\n]+", " ").trim();
     }
 }

@@ -26,6 +26,7 @@ import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.BatchDeliveryBindingReq
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.BatchDeliveryBindingResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCompletenessResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCompletenessRow;
+import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryCandidatesResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.DeliveryPackageSummaryResponse;
 import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.ExportPrecheckResponse;
 import java.util.ArrayList;
@@ -121,6 +122,51 @@ public class AgentGovernanceApplicationService {
             rows.addAll(missingItemsForView(projectId, vt, normalizedTarget));
         }
         return new AgentGovernanceMissingItemsResponse(projectId, normalizedTarget, rows.size(), rows);
+    }
+
+    public DeliveryCandidatesResponse deliveryCandidates(Long userId, Long projectId, String viewType, String targetType) {
+        String normalizedTarget = normalizeTargetType(targetType);
+        List<String> viewTypes = viewType == null || viewType.isBlank() || "ALL".equalsIgnoreCase(viewType.trim())
+            ? List.of("DOCUMENT", "DRAWING")
+            : List.of(normalizeViewType(viewType));
+        List<AgentGovernanceMissingItem> missingRows = new ArrayList<>();
+        List<AgentBindingRecommendation> recommendations = new ArrayList<>();
+        for (String vt : viewTypes) {
+            List<AgentGovernanceMissingItem> missingForView = missingItemsForView(projectId, vt, normalizedTarget);
+            missingRows.addAll(missingForView);
+            List<AgentGovernanceCandidateFile> candidates = deliveryBindingRepository.findAgentCandidateFiles(
+                projectId, expectedFileKind(vt), 200);
+            Set<String> occupiedFileKeys = new LinkedHashSet<>(
+                deliveryBindingRepository.findBoundDeliverableTypeFileKeys(projectId, vt));
+            for (AgentGovernanceMissingItem missing : missingForView) {
+                recommendations.addAll(candidates.stream()
+                    .filter(file -> !occupiedFileKeys.contains(bindingFileKey(missing.deliverableTypeId(), file.fileResourceId())))
+                    .map(file -> recommend(projectId, missing, file))
+                    .sorted(Comparator.comparing(ScoredRecommendation::score).reversed())
+                    .limit(3)
+                    .map(ScoredRecommendation::recommendation)
+                    .toList());
+            }
+        }
+        String effectiveViewType = viewTypes.size() == 1 ? viewTypes.getFirst() : "ALL";
+        auditLogApplicationService.record(projectId, MODULE_CODE, "work.delivery-candidates.preview", "PROJECT",
+            String.valueOf(projectId), userId,
+            Map.of("viewType", effectiveViewType, "targetType", normalizedTarget,
+                "missingCount", missingRows.size(), "candidateCount", recommendations.size(),
+                "dryRun", true));
+        return new DeliveryCandidatesResponse(
+            projectId,
+            effectiveViewType,
+            normalizedTarget,
+            true,
+            false,
+            "catalog_metadata_only",
+            "候选文件只基于工程节点归属、文件类型、专业、版本和文件名推荐；不会自动挂接，不读取文件正文，不操作 NAS 文件。",
+            missingRows.size(),
+            recommendations.size(),
+            missingRows,
+            recommendations
+        );
     }
 
     public AgentBindingRecommendationResponse recommendBindings(Long userId, Long projectId, AgentBindingRecommendationRequest request) {

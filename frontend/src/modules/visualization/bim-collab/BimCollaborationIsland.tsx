@@ -14,7 +14,7 @@ import type {
   BimChartBar,
   BimCollaborationData,
   BimEmbeddedPreviewModel,
-  BimLegendItem,
+  BimLightweightModelItem,
   BimLightweightSummary,
   BimMetric,
   BimSceneNode,
@@ -28,6 +28,7 @@ interface BimCollaborationIslandProps {
   data: BimCollaborationData;
   embeddedPreviewModels?: BimEmbeddedPreviewModel[];
   lightweightSummary?: BimLightweightSummary;
+  heroMetrics?: BimMetric[];
   standardStatus?: StandardStatus | null;
   sectionTree?: SectionNode[];
   ownershipCoverage?: FileOwnershipCoverage | null;
@@ -71,6 +72,8 @@ type ViewerSelectedFeature = {
   batchId?: unknown;
   modelFileId?: number | string | null;
   fileName?: string;
+  propertyAvailable?: boolean;
+  propertyCount?: number;
 };
 type ViewerCapabilities = {
   componentIndexAvailable: boolean;
@@ -99,6 +102,7 @@ export default function BimCollaborationIsland({
   data,
   embeddedPreviewModels = [],
   lightweightSummary,
+  heroMetrics = [],
   standardStatus,
   sectionTree = [],
   ownershipCoverage,
@@ -140,6 +144,8 @@ export default function BimCollaborationIsland({
       .slice(0, 8)
   ), [ownershipNodes]);
   const ownershipRate = Math.round(Number(ownershipCoverage?.assignmentCoverageRate ?? 0));
+  const assetStatusMetrics = heroMetrics.slice(0, 3);
+  const governanceDeliveryMetrics = heroMetrics.slice(3, 6);
   const masterOverviewMetrics: BimMetric[] = [
     {
       label: '工程部位',
@@ -165,6 +171,21 @@ export default function BimCollaborationIsland({
     readyCount: embeddedPreviewModels.length,
     pendingCount: Math.max(data.sceneNodes.length - embeddedPreviewModels.length, 0),
     failedCount: 0,
+    allModels: embeddedPreviewModels.map((item) => ({
+      id: item.id,
+      fileId: Number(item.modelFileId) || 0,
+      assetUuid: '',
+      fileName: item.label,
+      extension: item.modelFormat,
+      sizeLabel: item.sizeLabel || item.meta,
+      versionNo: item.versionNo,
+      statusLabel: item.statusLabel,
+      actionHint: item.actionHint,
+      lightweightStatus: item.conversionStatus,
+      viewerAvailable: item.viewerAvailable,
+      supported: true,
+      fileManagerUrl: item.fileManagerUrl || projectHref('?tab=files&fileKind=MODEL')
+    })),
     readyModels: embeddedPreviewModels
   };
   useEffect(() => {
@@ -201,6 +222,17 @@ export default function BimCollaborationIsland({
       }
       if (message.event === 'measurement') {
         setMeasurementText(message.payload?.label ? String(message.payload.label) : '');
+      }
+      if (message.event === 'feature-properties') {
+        const featureId = String(message.payload?.featureId || '');
+        setSelectedFeature((current) => {
+          if (!current || current.featureId !== featureId) return current;
+          return {
+            ...current,
+            propertyAvailable: message.payload?.propertyAvailable === true,
+            propertyCount: Number(message.payload?.propertyCount || 0)
+          };
+        });
       }
       if (message.event === 'capabilities') {
         setViewerCapabilities({
@@ -360,7 +392,11 @@ export default function BimCollaborationIsland({
                     <dd>已拾取，可定位、隐藏和测量</dd>
                   </div>
                 </dl>
-                <p>当前显示引擎返回的构件基础信息；完整 BIM 属性等待葛兰岱尔属性接口或后续构件索引接入。</p>
+                <p>
+                  {selectedFeature.propertyAvailable
+                    ? `已通过平台后端读取葛兰岱尔构件属性，共 ${selectedFeature.propertyCount || 0} 项。`
+                    : '已选中构件；属性明细会在模型窗口内通过平台后端受控读取。'}
+                </p>
                 <div>
                   <button type="button" onClick={() => sendViewerCommand('locate')}>定位构件</button>
                   <button type="button" onClick={() => sendViewerCommand('feature-visible-toggle')}>隐藏构件</button>
@@ -466,15 +502,12 @@ export default function BimCollaborationIsland({
                 <BarChart bars={data.modelBars} />
               </Panel>
 
-              <Panel title="构件分类统计">
-                <div className="sc-bim-legend-block">
-                  <Donut value={shareDonutValue(data.objectShares)} color="var(--sc-warning)" label={data.overviewMetrics[1]?.value ?? '0'} />
-                  <LegendList items={data.objectShares} />
-                </div>
+              <Panel title="项目资产状态" meta="目录级真实资产">
+                <MetricList metrics={assetStatusMetrics} />
               </Panel>
 
-              <Panel title="问题趋势">
-                <BarChart bars={data.issueBars} />
+              <Panel title="治理与交付状态" meta="平台治理闭环">
+                <MetricList metrics={governanceDeliveryMetrics} />
               </Panel>
             </aside>
 
@@ -679,10 +712,10 @@ export default function BimCollaborationIsland({
           { label: '待轻量化', value: formatShort(modelSummary.pendingCount), hint: modelSummary.failedCount > 0 ? `${formatShort(modelSummary.failedCount)} 个失败` : '等待转换', tone: modelSummary.pendingCount > 0 ? 'warning' : 'muted' }
         ]}
       >
-        <Panel title="已轻量化模型">
-          {modelSummary.readyModels.length > 0
-            ? <LightweightModelList items={modelSummary.readyModels} onPreview={openPreviewModel} />
-            : <EmptyState title="暂无可预览模型" description="当前项目还没有完成轻量化的模型。" actions={[{ label: '查看模型文件', href: projectHref('?tab=files&fileKind=MODEL'), tone: 'primary' }]} />}
+        <Panel title="全项目模型轻量化状态">
+          {modelSummary.allModels && modelSummary.allModels.length > 0
+            ? <LightweightCatalogList items={modelSummary.allModels} onPreview={openPreviewModel} />
+            : <EmptyState title="暂无模型文件" description="当前项目还没有可识别的模型资产。" actions={[{ label: '查看模型文件', href: projectHref('?tab=files&fileKind=MODEL'), tone: 'primary' }]} />}
         </Panel>
         <Panel title="轻量化状态">
           <Rows rows={[
@@ -792,6 +825,12 @@ export default function BimCollaborationIsland({
         </div>
       </div>
 
+      {heroMetrics.length > 0 ? (
+        <div className="sc-bim-window__kpis" aria-label="项目核心指标">
+          <MetricList metrics={heroMetrics} compact />
+        </div>
+      ) : null}
+
       <nav className="sc-bim-module-nav" aria-label="BIM 协同模块">
         {moduleItems.map((item) => (
           <button
@@ -807,13 +846,6 @@ export default function BimCollaborationIsland({
       </nav>
 
       {renderActiveModule()}
-
-      <div className="sc-bim-boundary" aria-label="安全边界">
-        <span>安全边界</span>
-        {data.safetyNotes.slice(0, 3).map((item) => (
-          <em key={item}>{item}</em>
-        ))}
-      </div>
     </section>
   );
 }
@@ -898,19 +930,6 @@ function BarChart({ bars }: { bars: BimChartBar[] }) {
           <span key={item.label}>{item.label}</span>
         ))}
       </div>
-    </div>
-  );
-}
-
-function LegendList({ items }: { items: BimLegendItem[] }) {
-  return (
-    <div className="sc-bim-legend-list">
-      {items.map((item) => (
-        <div key={item.label}>
-          <span><i style={{ background: item.color }} />{item.label}</span>
-          <strong>{item.value}</strong>
-        </div>
-      ))}
     </div>
   );
 }
@@ -1065,6 +1084,76 @@ function LightweightModelList({
   );
 }
 
+function LightweightCatalogList({
+  items,
+  onPreview
+}: {
+  items: BimLightweightModelItem[];
+  onPreview: (modelId: string) => void;
+}) {
+  const pageSize = 10;
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const pageItems = useMemo(() => (
+    items.slice((safePage - 1) * pageSize, safePage * pageSize)
+  ), [items, safePage]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [items.map((item) => item.id).join('|')]);
+
+  return (
+    <div className="sc-bim-model-list">
+      {pageItems.map((item) => (
+        <article key={item.id}>
+          <div>
+            <strong>{item.fileName}</strong>
+            <span>文件 {item.fileId} · {item.extension} · {item.sizeLabel} · {item.versionNo}</span>
+          </div>
+          <em className={lightweightBadgeClass(item)}>
+            {item.statusLabel}
+          </em>
+          <div className="sc-bim-model-list__hint">{item.actionHint}</div>
+          <div className="sc-bim-model-list__actions">
+            {item.viewerAvailable ? (
+              <button type="button" onClick={() => onPreview(item.id)}>打开预览</button>
+            ) : null}
+            <button type="button" onClick={() => { window.location.href = item.fileManagerUrl; }}>文件管理定位</button>
+          </div>
+        </article>
+      ))}
+      <div className="sc-bim-model-list__pager" aria-label="轻量化模型列表分页">
+        <span>第 {safePage} / {pageCount} 页 · 共 {formatShort(items.length)} 个模型 · 每页 {pageSize} 个</span>
+        <div>
+          <button
+            type="button"
+            disabled={safePage <= 1}
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+          >
+            上一页
+          </button>
+          <button
+            type="button"
+            disabled={safePage >= pageCount}
+            onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+          >
+            下一页
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function lightweightBadgeClass(item: BimLightweightModelItem) {
+  if (item.viewerAvailable || item.lightweightStatus === 'READY') return 'is-ready';
+  if (item.lightweightStatus === 'RUNNING' || item.lightweightStatus === 'SUBMITTED' || item.lightweightStatus === 'UPLOADED') return 'is-running';
+  if (item.lightweightStatus === 'FAILED') return 'is-failed';
+  if (!item.supported || item.lightweightStatus === 'UNSUPPORTED') return 'is-muted';
+  return 'is-pending';
+}
+
 function WorkItemList({ items }: { items: BimWorkItem[] }) {
   return (
     <div className="sc-bim-row-list">
@@ -1089,11 +1178,6 @@ function NoteList({ notes }: { notes: string[] }) {
       ))}
     </ul>
   );
-}
-
-function shareDonutValue(items: BimLegendItem[]) {
-  const first = Number.parseInt(items[0]?.value ?? '0', 10);
-  return Number.isFinite(first) ? first : 0;
 }
 
 function formatShort(value: number) {

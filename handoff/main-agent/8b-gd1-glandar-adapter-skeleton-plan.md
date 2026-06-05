@@ -170,4 +170,3 @@ scripts/dev/check-8b-gd1-glandar-adapter-skeleton.sh
 - 不修改 `docs/**`。
 - 不新增迁移。
 - 不触发真实 Station 转换。
-

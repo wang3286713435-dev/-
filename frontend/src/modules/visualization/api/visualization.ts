@@ -255,6 +255,34 @@ export interface LightweightViewerTicketResponse {
   blockedReason: string | null;
   supportedOperations: string[];
   forbiddenOperations: string[];
+  featurePickingAvailable?: boolean;
+  modelExplosionAvailable?: boolean;
+  componentPropertyAvailable?: boolean;
+}
+
+export interface GlandarComponentPropertyItem {
+  name: string;
+  value: string;
+  typeName: string;
+}
+
+export interface GlandarComponentPropertyGroup {
+  groupName: string;
+  setName: string;
+  properties: GlandarComponentPropertyItem[];
+}
+
+export interface GlandarComponentPropertyResponse {
+  projectId: number;
+  jobId: string;
+  lightweightName: string | null;
+  featureId: string;
+  revitId: string | null;
+  source: string;
+  propertyAvailable: boolean;
+  unavailableReason: string | null;
+  propertyCount: number;
+  groups: GlandarComponentPropertyGroup[];
 }
 
 export interface GlandarRvtPilotFile {
@@ -274,6 +302,29 @@ export interface GlandarRvtPilotFile {
   statusLabel: string;
   actionHint: string;
   blockedReason: string | null;
+  updatedAt: string | null;
+}
+
+export interface GlandarModelFile {
+  projectId: number;
+  fileId: number;
+  assetUuid: string;
+  fileName: string;
+  extension: string;
+  fileKind: string;
+  sizeBytes: number;
+  versionNo: string;
+  relativePathHint: string | null;
+  lightweightStatus: string;
+  latestJobId: string | null;
+  taskStatus: string;
+  progress: number;
+  failureReason: string | null;
+  viewerAvailable: boolean;
+  supported: boolean;
+  unsupportedReason: string | null;
+  statusLabel: string;
+  actionHint: string;
   updatedAt: string | null;
 }
 
@@ -328,6 +379,13 @@ export async function fetchGlandarRvtPilotFiles(projectId: number) {
   return data.data;
 }
 
+export async function fetchGlandarModelFiles(projectId: number) {
+  const { data } = await http.get<ApiResponse<GlandarModelFile[]>>(
+    `/api/visualization-adapter/projects/${projectId}/glandar/model-files`
+  );
+  return data.data;
+}
+
 export async function submitGlandarRvtPilotFiles(projectId: number, force = false) {
   const { data } = await http.post<ApiResponse<GlandarRvtPilotFile[]>>(
     `/api/visualization-adapter/projects/${projectId}/glandar/rvt-pilot-files:submit`,
@@ -357,6 +415,19 @@ export async function issueLightweightViewerTicket(projectId: number, jobId: str
   const { data } = await http.post<ApiResponse<LightweightViewerTicketResponse>>(
     `/api/visualization-adapter/projects/${projectId}/lightweight-jobs/${jobId}:viewer-ticket`,
     {}
+  );
+  return data.data;
+}
+
+export async function fetchGlandarComponentProperties(
+  projectId: number,
+  jobId: string,
+  featureId: string,
+  revitId?: string | null
+) {
+  const { data } = await http.get<ApiResponse<GlandarComponentPropertyResponse>>(
+    `/api/visualization-adapter/projects/${projectId}/lightweight-jobs/${jobId}/features/${encodeURIComponent(featureId)}/properties`,
+    { params: { revitId: revitId || undefined } }
   );
   return data.data;
 }
