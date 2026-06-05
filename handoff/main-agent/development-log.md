@@ -5080,3 +5080,32 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - `M3-CLOSE` 通过，对象存储主链路可收口。
   - `8C-GD-F4` 可作为当前葛兰岱尔 Viewer 交互基线。
   - 平台交互逻辑优化批次暂不自动启动，等待用户批准。
+
+## 2026-06-05 UX4-A 启动：前端壳层与项目工作台导航重构
+
+- 用户要求：
+  - 正式进入 `UX4`，参考 5 张 SaaS 项目管理仪表盘预览图，重构卓羽智能数据中台前端骨架和交互逻辑。
+  - 本轮进入下一步时，必须让开发 agent 查看预览图，避免只按文字想象 UI。
+- 当前分支：
+  - `codex/ux4-frontend-shell-routing`
+- 已写入开发 prompt：
+  - `handoff/dev-agent/current-prompt.md`
+- 开发 agent 必须查看的参考图：
+  - `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_44 AM.png`
+  - `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_41 AM.png`
+  - `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_38 AM.png`
+  - `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_36 AM.png`
+  - `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_31 AM.png`
+- 本批目标：
+  - 只做 `UX4-A：壳层和路由基线`。
+  - 重构全局壳层、左侧导航、顶部栏、项目身份区、项目内一级 tab、旧路由兼容。
+  - 暂不迁移具体业务页面主体，后续 `UX4-B` 到 `UX4-F` 再逐页重做。
+- 边界：
+  - 允许修改 `frontend/**` 和 `handoff/dev-agent/latest-report.md`。
+  - 禁止修改 `backend/**`、数据库迁移、接口语义、权限规则、对象存储读取规则、Hermes evidence、BIM 引擎能力。
+  - 旧链接必须兼容跳转，不能删除导致白屏。
+  - 前端不得泄露真实 NAS 路径、bucket、object key、`storage_uri`、SQL、token、secret。
+- 主 agent 后续审计重点：
+  - 开发报告中必须写清实际查看了哪些预览图、复用了哪些结构、哪些未照搬及原因。
+  - 检查 `git diff --name-only`，确认无后端、docs、数据库迁移越界。
+  - 检查 fresh login、503/105 项目工作台、旧链接、BIM 协同入口、1280/1440/1920 宽度。
