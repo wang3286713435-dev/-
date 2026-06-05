@@ -98,7 +98,24 @@ export interface BimLightweightSummary {
   readyCount: number;
   pendingCount: number;
   failedCount: number;
+  allModels?: BimLightweightModelItem[];
   readyModels: BimEmbeddedPreviewModel[];
+}
+
+export interface BimLightweightModelItem {
+  id: string;
+  fileId: number;
+  assetUuid: string;
+  fileName: string;
+  extension: string;
+  sizeLabel: string;
+  versionNo: string;
+  statusLabel: string;
+  actionHint: string;
+  lightweightStatus: string;
+  viewerAvailable: boolean;
+  supported: boolean;
+  fileManagerUrl: string;
 }
 
 export interface BimTimelineEvent {

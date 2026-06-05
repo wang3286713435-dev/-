@@ -1,5 +1,8 @@
 package com.zhuoyu.delivery.visualization.engine;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -21,7 +24,10 @@ public class GlandarEngineSettings {
     public String provider() {
         String value = firstNonBlank(
             environment.getProperty("BIM_ENGINE_PROVIDER"),
-            environment.getProperty("delivery.bim.engine.provider")
+            environment.getProperty("bim.engine.provider"),
+            environment.getProperty("delivery.bim.engine.provider"),
+            System.getenv("BIM_ENGINE_PROVIDER"),
+            localGlandarEnv("BIM_ENGINE_PROVIDER")
         );
         if (value == null) {
             return PROVIDER_MOCK;
@@ -37,28 +43,40 @@ public class GlandarEngineSettings {
     public String stationApiBase() {
         return stripTrailingSlash(trimToNull(firstNonBlank(
             environment.getProperty("GLANDAR_STATION_API_BASE"),
-            environment.getProperty("delivery.bim.engine.glandar.station-api-base")
+            environment.getProperty("glandar.station.api.base"),
+            environment.getProperty("delivery.bim.engine.glandar.station-api-base"),
+            System.getenv("GLANDAR_STATION_API_BASE"),
+            localGlandarEnv("GLANDAR_STATION_API_BASE")
         )));
     }
 
     public String stationWebBase() {
         return stripTrailingSlash(trimToNull(firstNonBlank(
             environment.getProperty("GLANDAR_STATION_WEB_BASE"),
-            environment.getProperty("delivery.bim.engine.glandar.station-web-base")
+            environment.getProperty("glandar.station.web.base"),
+            environment.getProperty("delivery.bim.engine.glandar.station-web-base"),
+            System.getenv("GLANDAR_STATION_WEB_BASE"),
+            localGlandarEnv("GLANDAR_STATION_WEB_BASE")
         )));
     }
 
     public String stationToken() {
         return trimToNull(firstNonBlank(
             environment.getProperty("GLANDAR_TOKEN"),
-            environment.getProperty("delivery.bim.engine.glandar.token")
+            environment.getProperty("glandar.token"),
+            environment.getProperty("delivery.bim.engine.glandar.token"),
+            System.getenv("GLANDAR_TOKEN"),
+            localGlandarEnv("GLANDAR_TOKEN")
         ));
     }
 
     public int uploadChunkSizeBytes() {
         String value = firstNonBlank(
             environment.getProperty("GLANDAR_UPLOAD_CHUNK_SIZE_MB"),
-            environment.getProperty("delivery.bim.engine.glandar.upload-chunk-size-mb")
+            environment.getProperty("glandar.upload.chunk.size.mb"),
+            environment.getProperty("delivery.bim.engine.glandar.upload-chunk-size-mb"),
+            System.getenv("GLANDAR_UPLOAD_CHUNK_SIZE_MB"),
+            localGlandarEnv("GLANDAR_UPLOAD_CHUNK_SIZE_MB")
         );
         if (value == null) {
             return 2 * 1024 * 1024;
@@ -99,9 +117,17 @@ public class GlandarEngineSettings {
         return missing;
     }
 
-    private String firstNonBlank(String first, String second) {
-        String value = trimToNull(first);
-        return value != null ? value : trimToNull(second);
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String candidate : values) {
+            String value = trimToNull(candidate);
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private String trimToNull(String value) {
@@ -120,5 +146,46 @@ public class GlandarEngineSettings {
             result = result.substring(0, result.length() - 1);
         }
         return result;
+    }
+
+    private String localGlandarEnv(String key) {
+        Path path = Path.of(System.getProperty("user.home"), ".zhuoyu-delivery", "glandar.env");
+        if (!Files.isRegularFile(path)) {
+            return null;
+        }
+        try {
+            for (String rawLine : Files.readAllLines(path)) {
+                String line = rawLine.trim();
+                if (line.isEmpty() || line.startsWith("#")) {
+                    continue;
+                }
+                if (line.startsWith("export ")) {
+                    line = line.substring("export ".length()).trim();
+                }
+                int delimiter = line.indexOf('=');
+                if (delimiter <= 0) {
+                    continue;
+                }
+                String name = line.substring(0, delimiter).trim();
+                if (!key.equals(name)) {
+                    continue;
+                }
+                return unquote(line.substring(delimiter + 1).trim());
+            }
+        } catch (IOException ignored) {
+            return null;
+        }
+        return null;
+    }
+
+    private String unquote(String value) {
+        if (value == null || value.length() < 2) {
+            return value;
+        }
+        if ((value.startsWith("\"") && value.endsWith("\""))
+            || (value.startsWith("'") && value.endsWith("'"))) {
+            return value.substring(1, value.length() - 1);
+        }
+        return value;
     }
 }

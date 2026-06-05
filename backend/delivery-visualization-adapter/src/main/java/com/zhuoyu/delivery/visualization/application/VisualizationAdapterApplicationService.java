@@ -31,6 +31,10 @@ import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.ContextInjectResp
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.DeliverySummary;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.DigitalTwinDashboardResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.DistributionItem;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.GlandarComponentPropertyGroup;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.GlandarComponentPropertyItem;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.GlandarComponentPropertyResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.GlandarModelFileResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.GlandarRvtPilotFileResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightResponse;
@@ -59,6 +63,8 @@ import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.VisualizationCont
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.WorkItemSummary;
 import com.zhuoyu.delivery.visualization.engine.GlandarEngineSettings;
 import com.zhuoyu.delivery.visualization.engine.GlandarStationClient;
+import com.zhuoyu.delivery.visualization.engine.GlandarStationClient.ComponentPropertyResult;
+import com.zhuoyu.delivery.visualization.engine.GlandarStationClient.ComponentPropertyRow;
 import com.zhuoyu.delivery.visualization.engine.GlandarStationClient.QueryResult;
 import com.zhuoyu.delivery.visualization.engine.GlandarStationClient.UploadCommand;
 import com.zhuoyu.delivery.visualization.engine.GlandarStationClient.UploadResult;
@@ -70,9 +76,12 @@ import com.zhuoyu.delivery.workcenter.dto.WorkCenterDtos.RectificationResponse;
 import com.zhuoyu.delivery.workcenter.rectification.RectificationApplicationService;
 import com.zhuoyu.delivery.shared.preview.FilePreviewPolicy;
 import com.zhuoyu.delivery.shared.preview.PreviewDecision;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -105,7 +114,10 @@ public class VisualizationAdapterApplicationService {
         "CREATE_RVT_CONVERSION_TASK",
         "CALL_STATION_SPLIT_UPLOAD",
         "QUERY_STATION_TASK",
-        "ISSUE_CONTROLLED_VIEWER_ENTRY"
+        "ISSUE_CONTROLLED_VIEWER_ENTRY",
+        "PICK_FEATURE",
+        "BLOW_MODEL",
+        "QUERY_COMPONENT_PROPERTIES"
     );
     private static final List<String> GLANDAR_FORBIDDEN_OPERATIONS = List.of(
         "TOUCH_NAS_FILE",
@@ -119,6 +131,8 @@ public class VisualizationAdapterApplicationService {
     private static final List<Long> GLANDAR_RVT_PILOT_FILE_IDS = List.of(
         1257L, 1261L, 1264L, 3730L, 1258L, 1251L, 1259L, 1262L, 3729L, 1243L
     );
+    private static final List<String> GLANDAR_MODEL_EXTENSIONS = List.of("RVT", "IFC", "NWD", "NWC", "GLB", "GLTF");
+    private static final List<String> GLANDAR_SUBMIT_SUPPORTED_EXTENSIONS = List.of("RVT");
 
     private final ModelIntegrationApplicationService modelIntegrationApplicationService;
     private final ManagedObjectApplicationService managedObjectApplicationService;
@@ -201,7 +215,7 @@ public class VisualizationAdapterApplicationService {
             .toList();
         DeliverySummary deliverySummary = toDeliverySummary(documentCompleteness, drawingCompleteness, rectifications);
         QualitySummary qualitySummary = toQualitySummary(qualityOverview);
-        ModelSummary modelSummary = toModelSummary(models, objects);
+        ModelSummary modelSummary = toModelSummary(projectId, models, objects);
         ActivitySummary activitySummary = toActivitySummary(qualityOverview, scans);
 
         return new DigitalTwinDashboardResponse(
@@ -299,10 +313,11 @@ public class VisualizationAdapterApplicationService {
 
     public LightweightJobCreateResponse createLightweightJobForFile(Long userId, Long projectId, Long fileId, Boolean force) {
         FileResourceResponse modelFile = fileResourceApplicationService.requireFile(projectId, fileId);
+        requireSupportedGlandarModel(modelFile);
         if (!glandarRealModeReady()) {
-            return lightweightJobSkeleton(userId, projectId, null, modelFile);
+            throw new BusinessException("GLANDAR_ENGINE_NOT_CONFIGURED",
+                "葛兰岱尔 Station 未完整配置，平台未提交真实轻量化任务", HttpStatus.PRECONDITION_FAILED);
         }
-        requireGlandarRvtPilotFile(projectId, fileId);
         return submitGlandarJob(userId, projectId, null, modelFile, Boolean.TRUE.equals(force));
     }
 
@@ -315,11 +330,26 @@ public class VisualizationAdapterApplicationService {
             Long fileId = GLANDAR_RVT_PILOT_FILE_IDS.get(index);
             FileResourceResponse file = fileResourceApplicationService.requireFile(projectId, fileId);
             LightweightJobRecord latest = lightweightJobRepository.findLatest(projectId, fileId)
-                .map(this::refreshGlandarJob)
+                .map(this::refreshGlandarJobForList)
                 .orElse(null);
             rows.add(toGlandarRvtPilotFileResponse(projectId, file, latest, index + 1));
         }
         return rows;
+    }
+
+    public List<GlandarModelFileResponse> glandarModelFiles(Long projectId) {
+        return fileResourceApplicationService.list(projectId, "MODEL").stream()
+            .filter(this::isGlandarModelCandidate)
+            .sorted(Comparator
+                .comparing((FileResourceResponse file) -> !isSubmitSupportedGlandarFormat(modelFormat(file.originalName())))
+                .thenComparing(FileResourceResponse::id))
+            .map(file -> {
+                LightweightJobRecord latest = lightweightJobRepository.findLatest(projectId, file.id())
+                    .map(this::refreshGlandarJobForList)
+                    .orElse(null);
+                return toGlandarModelFileResponse(projectId, file, latest);
+            })
+            .toList();
     }
 
     public List<GlandarRvtPilotFileResponse> submitGlandarRvtPilotFiles(Long userId, Long projectId, Boolean force) {
@@ -372,8 +402,10 @@ public class VisualizationAdapterApplicationService {
                 .orElseThrow(() -> new BusinessException("LIGHTWEIGHT_JOB_NOT_FOUND", "轻量化任务不存在",
                     HttpStatus.NOT_FOUND));
             LightweightJobRecord refreshed = refreshGlandarJob(record);
-            boolean ready = "READY".equals(refreshed.status()) && Boolean.TRUE.equals(refreshed.viewerAvailable())
+            String engineStaticBase = glandarEngineStaticBase(refreshed.modelAccessAddress());
+            boolean stationModelReady = "READY".equals(refreshed.status()) && Boolean.TRUE.equals(refreshed.viewerAvailable())
                 && hasText(refreshed.modelAccessAddress());
+            boolean ready = stationModelReady && hasText(engineStaticBase);
             auditLogApplicationService.record(projectId, MODULE_CODE, "visualization.lightweight.viewer-ticket.issue",
                 "LIGHTWEIGHT_JOB", String.valueOf(refreshed.id()), userId, Map.of(
                     "engineMode", "GLANDAR",
@@ -391,11 +423,14 @@ public class VisualizationAdapterApplicationService {
                 ready ? refreshed.modelAccessAddress() : null,
                 refreshed.lightweightName(),
                 ready ? refreshed.modelAccessAddress() : null,
-                glandarEngineStaticBase(),
+                ready ? engineStaticBase : null,
                 ready ? "Viewer 可打开" : "Viewer 暂不可用",
-                ready ? null : defaultText(refreshed.lastErrorMessage(), "模型仍在转换或引擎尚未返回 Viewer 地址"),
+                ready ? null : viewerTicketBlockedReason(refreshed, engineStaticBase),
                 GLANDAR_SUPPORTED_OPERATIONS,
-                GLANDAR_FORBIDDEN_OPERATIONS
+                GLANDAR_FORBIDDEN_OPERATIONS,
+                ready,
+                ready,
+                ready
             );
         }
         auditLogApplicationService.record(projectId, MODULE_CODE, "visualization.lightweight.viewer-ticket.prepare", "PROJECT",
@@ -415,7 +450,65 @@ public class VisualizationAdapterApplicationService {
             "Viewer 未开放",
             "8B-GD1 仅提供平台接口骨架；真实葛兰岱尔 Viewer ticket 留到 8B-GD2/8C-GD。",
             LIGHTWEIGHT_SUPPORTED_OPERATIONS,
-            LIGHTWEIGHT_FORBIDDEN_OPERATIONS
+            LIGHTWEIGHT_FORBIDDEN_OPERATIONS,
+            false,
+            false,
+            false
+        );
+    }
+
+    public GlandarComponentPropertyResponse glandarComponentProperties(
+        Long userId,
+        Long projectId,
+        String jobId,
+        String featureId,
+        String revitId
+    ) {
+        Long numericJobId = parseJobId(jobId);
+        if (numericJobId == null) {
+            throw new BusinessException("LIGHTWEIGHT_JOB_NOT_FOUND", "轻量化任务不存在", HttpStatus.NOT_FOUND);
+        }
+        LightweightJobRecord record = lightweightJobRepository.findById(projectId, numericJobId)
+            .orElseThrow(() -> new BusinessException("LIGHTWEIGHT_JOB_NOT_FOUND", "轻量化任务不存在",
+                HttpStatus.NOT_FOUND));
+        LightweightJobRecord refreshed = refreshGlandarJob(record);
+        if (!"GLANDAR".equals(refreshed.engineProvider()) || !"READY".equals(refreshed.status())
+            || !Boolean.TRUE.equals(refreshed.viewerAvailable()) || !hasText(refreshed.lightweightName())) {
+            return new GlandarComponentPropertyResponse(
+                projectId,
+                String.valueOf(refreshed.id()),
+                refreshed.lightweightName(),
+                safeExternalId(featureId),
+                safeExternalId(revitId),
+                "GLANDAR_COMPONENT_PROPERTY_API",
+                false,
+                "模型尚未达到可查询构件属性的 READY 状态",
+                0,
+                List.of()
+            );
+        }
+        String externalId = firstNonBlank(safeExternalId(featureId), safeExternalId(revitId));
+        if (!hasText(externalId)) {
+            throw new BusinessException("FEATURE_ID_REQUIRED", "缺少构件 ID，无法查询构件属性", HttpStatus.BAD_REQUEST);
+        }
+        ComponentPropertyResult result = glandarStationClient.componentProperties(refreshed.lightweightName(), externalId);
+        List<GlandarComponentPropertyGroup> groups = toPropertyGroups(result.rows());
+        auditLogApplicationService.record(projectId, MODULE_CODE, "visualization.glandar.component-properties.query",
+            "LIGHTWEIGHT_JOB", String.valueOf(refreshed.id()), userId, Map.of(
+                "featureId", externalId,
+                "propertyCount", result.rows().size()
+            ));
+        return new GlandarComponentPropertyResponse(
+            projectId,
+            String.valueOf(refreshed.id()),
+            refreshed.lightweightName(),
+            externalId,
+            safeExternalId(revitId),
+            "GLANDAR_COMPONENT_PROPERTY_API",
+            !groups.isEmpty(),
+            groups.isEmpty() ? "葛兰岱尔未返回该构件属性，可能是当前模型未生成属性库或构件 ID 不匹配" : null,
+            result.rows().size(),
+            groups
         );
     }
 
@@ -449,12 +542,45 @@ public class VisualizationAdapterApplicationService {
         );
     }
 
-    private void requireGlandarRvtPilotFile(Long projectId, Long fileId) {
-        if (!GLANDAR_RVT_PILOT_PROJECT_ID.equals(projectId)
-            || !GLANDAR_RVT_PILOT_FILE_IDS.contains(fileId)) {
-            throw new BusinessException("GLANDAR_PILOT_FILE_NOT_ALLOWED",
-                "当前仅开放 105 项目 10 个 RVT 试点文件的葛兰岱尔轻量化转换", HttpStatus.BAD_REQUEST);
+    private GlandarModelFileResponse toGlandarModelFileResponse(
+        Long projectId,
+        FileResourceResponse file,
+        LightweightJobRecord latest
+    ) {
+        String format = modelFormat(file.originalName());
+        boolean supported = isSubmitSupportedGlandarFormat(format);
+        String taskStatus = latest == null ? "NOT_STARTED" : latest.status();
+        String lightweightStatus = lightweightStatus(latest, supported);
+        String unsupportedReason = supported ? null : unsupportedGlandarReason(format);
+        return new GlandarModelFileResponse(
+            projectId,
+            file.id(),
+            file.assetUuid(),
+            file.originalName(),
+            format,
+            file.fileKind(),
+            file.sizeBytes(),
+            defaultText(file.versionNo(), "V1"),
+            relativePathHint(file),
+            lightweightStatus,
+            latest == null ? null : String.valueOf(latest.id()),
+            taskStatus,
+            latest == null ? 0 : latest.progressPercent(),
+            latest == null ? null : failedReason(latest),
+            latest != null && "READY".equals(latest.status()) && Boolean.TRUE.equals(latest.viewerAvailable()),
+            supported,
+            unsupportedReason,
+            glandarModelStatusLabel(latest, supported),
+            glandarModelActionHint(latest, supported, unsupportedReason),
+            latest == null ? null : latest.updatedAt()
+        );
+    }
+
+    private LightweightJobRecord refreshGlandarJobForList(LightweightJobRecord record) {
+        if (!glandarRealModeReady()) {
+            return record;
         }
+        return refreshGlandarJob(record);
     }
 
     private String glandarPilotStatusLabel(LightweightJobRecord latest) {
@@ -476,8 +602,51 @@ public class VisualizationAdapterApplicationService {
         };
     }
 
-    private String glandarEngineStaticBase() {
+    private String lightweightStatus(LightweightJobRecord latest, boolean supported) {
+        if (!supported) {
+            return "UNSUPPORTED";
+        }
+        if (latest == null) {
+            return "CONVERSION_REQUIRED";
+        }
+        return switch (defaultText(latest.status(), "RUNNING")) {
+            case "READY" -> "READY";
+            case "FAILED" -> "FAILED";
+            case "SUBMITTED", "UPLOADED", "RUNNING" -> "RUNNING";
+            default -> "CONVERSION_REQUIRED";
+        };
+    }
+
+    private String glandarModelStatusLabel(LightweightJobRecord latest, boolean supported) {
+        if (!supported) {
+            return "暂不支持轻量化";
+        }
+        if (latest == null) {
+            return "未轻量化";
+        }
+        return lightweightRecordStatusLabel(latest);
+    }
+
+    private String glandarModelActionHint(LightweightJobRecord latest, boolean supported, String unsupportedReason) {
+        if (!supported) {
+            return unsupportedReason;
+        }
+        if (latest == null) {
+            return "可由有权限用户提交葛兰岱尔轻量化任务；平台不会暴露 NAS 路径或引擎凭据。";
+        }
+        return switch (defaultText(latest.status(), "RUNNING")) {
+            case "READY" -> "已轻量化，READY 状态可申请短期 Viewer 入口。";
+            case "FAILED" -> "轻量化失败，可查看失败原因后人工重试。";
+            case "SUBMITTED", "UPLOADED", "RUNNING" -> "轻量化任务处理中，可刷新状态。";
+            default -> "可继续查看轻量化任务状态。";
+        };
+    }
+
+    private String glandarEngineStaticBase(String modelAccessAddress) {
         String stationWebBase = glandarEngineSettings.stationWebBase();
+        if (!hasText(stationWebBase)) {
+            stationWebBase = inferGlandarStationWebBase(modelAccessAddress);
+        }
         if (!hasText(stationWebBase)) {
             return null;
         }
@@ -486,6 +655,37 @@ public class VisualizationAdapterApplicationService {
             return trimmed;
         }
         return trimmed + "/static/ThreeJsEngine";
+    }
+
+    private String inferGlandarStationWebBase(String modelAccessAddress) {
+        if (!hasText(modelAccessAddress)) {
+            return null;
+        }
+        try {
+            URI uri = new URI(modelAccessAddress);
+            if (!hasText(uri.getScheme()) || !hasText(uri.getHost())) {
+                return null;
+            }
+            int port = uri.getPort();
+            int webPort = port == 18086 ? 18087 : port;
+            if (webPort <= 0) {
+                return null;
+            }
+            return uri.getScheme() + "://" + uri.getHost() + ":" + webPort;
+        } catch (URISyntaxException ignored) {
+            return null;
+        }
+    }
+
+    private String viewerTicketBlockedReason(LightweightJobRecord record, String engineStaticBase) {
+        if (!"READY".equals(record.status()) || !Boolean.TRUE.equals(record.viewerAvailable())
+            || !hasText(record.modelAccessAddress())) {
+            return defaultText(record.lastErrorMessage(), "模型仍在转换或引擎尚未返回 Viewer 地址");
+        }
+        if (!hasText(engineStaticBase)) {
+            return "葛兰岱尔 Viewer 静态资源地址未配置，请检查 GLANDAR_STATION_WEB_BASE。";
+        }
+        return defaultText(record.lastErrorMessage(), "Viewer 暂不可用，请刷新后重试。");
     }
 
     private LightweightJobCreateResponse lightweightJobSkeleton(
@@ -537,7 +737,7 @@ public class VisualizationAdapterApplicationService {
         boolean force
     ) {
         String format = modelFormat(modelFile.originalName());
-        requireRvt(format);
+        requireSupportedGlandarModel(modelFile);
         if (force) {
             lightweightJobRepository.markSuperseded(projectId, modelFile.id(), userId);
         }
@@ -600,7 +800,7 @@ public class VisualizationAdapterApplicationService {
 
     private LightweightJobRecord refreshGlandarJob(LightweightJobRecord record) {
         if (!"GLANDAR".equals(record.engineProvider()) || !hasText(record.lightweightName())
-            || "FAILED".equals(record.status())) {
+            || "FAILED".equals(record.status()) || !glandarRealModeReady()) {
             return record;
         }
         try {
@@ -720,10 +920,11 @@ public class VisualizationAdapterApplicationService {
         );
     }
 
-    private void requireRvt(String format) {
-        if (!"RVT".equals(format)) {
-            throw new BusinessException("UNSUPPORTED_FILE_TYPE", "当前 PoC 只开放 RVT 模型转换",
-                HttpStatus.BAD_REQUEST);
+    private void requireSupportedGlandarModel(FileResourceResponse file) {
+        String format = modelFormat(file.originalName());
+        if (!"MODEL".equalsIgnoreCase(defaultText(file.fileKind(), "")) || !isSubmitSupportedGlandarFormat(format)) {
+            throw new BusinessException("UNSUPPORTED_FILE_TYPE",
+                "当前葛兰岱尔接入只开放已登记 RVT 模型轻量化，其他模型格式仅展示状态", HttpStatus.BAD_REQUEST);
         }
     }
 
@@ -740,6 +941,60 @@ public class VisualizationAdapterApplicationService {
         } catch (NumberFormatException ignored) {
             return null;
         }
+    }
+
+    private List<GlandarComponentPropertyGroup> toPropertyGroups(List<ComponentPropertyRow> rows) {
+        Map<String, List<GlandarComponentPropertyItem>> grouped = new LinkedHashMap<>();
+        for (ComponentPropertyRow row : rows) {
+            String groupName = defaultText(safePropertyText(row.propertyTypeName()), "基础属性");
+            String setName = defaultText(safePropertyText(row.propertySetName()), defaultText(safePropertyText(row.groupName()), "默认分组"));
+            String propertyName = safePropertyText(row.propertyName());
+            String propertyValue = safePropertyText(row.value());
+            if (!hasText(propertyName) && !hasText(propertyValue)) {
+                continue;
+            }
+            String key = groupName + "\u0000" + setName;
+            grouped.computeIfAbsent(key, ignored -> new ArrayList<>())
+                .add(new GlandarComponentPropertyItem(
+                    defaultText(propertyName, "未命名属性"),
+                    defaultText(propertyValue, "-"),
+                    groupName
+                ));
+        }
+        return grouped.entrySet().stream()
+            .map(entry -> {
+                String[] parts = entry.getKey().split("\u0000", 2);
+                return new GlandarComponentPropertyGroup(parts[0], parts.length > 1 ? parts[1] : "默认分组", entry.getValue());
+            })
+            .toList();
+    }
+
+    private String safeExternalId(String value) {
+        if (!hasText(value)) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() > 256) {
+            trimmed = trimmed.substring(0, 256);
+        }
+        return trimmed.replaceAll("[\\r\\n\\t]", "");
+    }
+
+    private String safePropertyText(String value) {
+        if (!hasText(value)) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() > 500) {
+            trimmed = trimmed.substring(0, 500) + "...";
+        }
+        return trimmed
+            .replaceAll("(?i)(/Volumes|smb://|nas://|minio://|s3://|oss://)[^\\s,，;；]*", "[已脱敏]")
+            .replaceAll("[\\r\\n\\t]", " ");
+    }
+
+    private String firstNonBlank(String first, String second) {
+        return hasText(first) ? first : second;
     }
 
     private String lightweightName(FileResourceResponse file) {
@@ -853,7 +1108,7 @@ public class VisualizationAdapterApplicationService {
     private String lightweightActionHint(String engineMode) {
         if ("GLANDAR".equals(engineMode)) {
             if (glandarEngineSettings.readyForHandshake()) {
-                return "葛兰岱尔 HTTP API 配置已具备握手条件；8B-GD1 不上传模型，真实分片上传和转换留到 8B-GD2。";
+                return "葛兰岱尔 Station 配置已具备真实提交条件；平台仍只通过受控接口上传模型流，不暴露路径或凭据。";
             }
             return "葛兰岱尔适配器未完整配置，当前仅返回平台侧安全骨架；不会调用 Station 上传或转换接口。";
         }
@@ -865,12 +1120,12 @@ public class VisualizationAdapterApplicationService {
             return "BIM_ENGINE_PROVIDER 未启用 GLANDAR，当前保持 Mock 安全模式";
         }
         List<String> missing = glandarEngineSettings.missingConfiguration();
-        return missing.isEmpty() ? "8B-GD1 禁止执行真实上传和转换" : String.join("；", missing);
+        return missing.isEmpty() ? "葛兰岱尔 Station 当前不可用" : String.join("；", missing);
     }
 
     private String lightweightJobStatusLabel(String engineMode) {
         if ("GLANDAR".equals(engineMode) && glandarEngineSettings.readyForHandshake()) {
-            return "葛兰岱尔任务骨架可创建，真实转换未执行";
+            return "可提交葛兰岱尔轻量化任务";
         }
         if ("GLANDAR".equals(engineMode)) {
             return "葛兰岱尔任务被配置拦截";
@@ -880,7 +1135,7 @@ public class VisualizationAdapterApplicationService {
 
     private String lightweightJobActionHint(String engineMode) {
         if ("GLANDAR".equals(engineMode) && glandarEngineSettings.readyForHandshake()) {
-            return "下一批次会把平台受控模型流分片上传到 Station；本批只验证平台接口、权限和禁区。";
+            return "平台将通过受控 StorageService 读取模型流并提交 Station；不会返回 NAS 路径、对象定位符或凭据。";
         }
         return lightweightActionHint(engineMode);
     }
@@ -898,6 +1153,30 @@ public class VisualizationAdapterApplicationService {
             return "UNKNOWN";
         }
         return originalName.substring(index + 1).toUpperCase();
+    }
+
+    private boolean isGlandarModelCandidate(FileResourceResponse file) {
+        return "MODEL".equalsIgnoreCase(defaultText(file.fileKind(), ""))
+            && GLANDAR_MODEL_EXTENSIONS.contains(modelFormat(file.originalName()));
+    }
+
+    private boolean isSubmitSupportedGlandarFormat(String format) {
+        return GLANDAR_SUBMIT_SUPPORTED_EXTENSIONS.contains(defaultText(format, "UNKNOWN").toUpperCase(Locale.ROOT));
+    }
+
+    private String unsupportedGlandarReason(String format) {
+        String normalized = defaultText(format, "UNKNOWN").toUpperCase(Locale.ROOT);
+        if (GLANDAR_MODEL_EXTENSIONS.contains(normalized)) {
+            return "%s 模型已识别，但当前葛兰岱尔 Station 接入只开放 RVT 轻量化提交。".formatted(normalized);
+        }
+        return "当前文件格式未纳入葛兰岱尔轻量化支持矩阵。";
+    }
+
+    private String relativePathHint(FileResourceResponse file) {
+        if (!hasText(file.originalName())) {
+            return "项目模型资产";
+        }
+        return "项目模型资产 / " + file.originalName();
     }
 
     private ProjectSnapshot toProjectSnapshot(Long projectId, AssetProjectResponse project) {
@@ -1004,21 +1283,29 @@ public class VisualizationAdapterApplicationService {
         return new QualityMetricItem(metric.code(), metric.label(), metric.severity(), metric.count());
     }
 
-    private ModelSummary toModelSummary(List<ModelIntegrationResponse> models, List<ManagedObjectResponse> objects) {
+    private ModelSummary toModelSummary(
+        Long projectId,
+        List<ModelIntegrationResponse> models,
+        List<ManagedObjectResponse> objects
+    ) {
         int published = (int) models.stream().filter(model -> "PUBLISHED".equals(model.status())).count();
-        String lightweightStatus = models.isEmpty() ? "NOT_STARTED" : "NOT_CONNECTED";
-        String statusLabel = models.isEmpty() ? "暂无模型集成" : "真实 Viewer 未接入";
-        String actionHint = models.isEmpty()
-            ? "当前项目还没有模型集成元数据，可先在数据管家登记模型。"
-            : "当前只展示模型元数据和适配状态，未执行真实轻量化转换。";
+        long readyViewerCount = lightweightJobRepository.countViewerReady(projectId);
+        boolean viewerAvailable = readyViewerCount > 0;
+        String lightweightStatus = viewerAvailable ? "READY" : (models.isEmpty() ? "NOT_STARTED" : "NOT_CONNECTED");
+        String statusLabel = viewerAvailable ? "真实 Viewer 可用" : (models.isEmpty() ? "暂无模型集成" : "真实 Viewer 未接入");
+        String actionHint = viewerAvailable
+            ? "已检测到 " + readyViewerCount + " 个葛兰岱尔 READY 模型，可在 BIM 协同窗口中打开。"
+            : (models.isEmpty()
+                ? "当前项目还没有模型集成元数据，可先在数据管家登记模型。"
+                : "当前只展示模型元数据和适配状态，未执行真实轻量化转换。");
         return new ModelSummary(
             models.size(),
-            published,
+            Math.max(published, (int) Math.min(readyViewerCount, Integer.MAX_VALUE)),
             objects.size(),
-            "METADATA_ADAPTER",
-            false,
+            viewerAvailable ? "GLANDAR" : "METADATA_ADAPTER",
+            viewerAvailable,
             lightweightStatus,
-            false,
+            viewerAvailable,
             statusLabel,
             actionHint,
             models.stream()

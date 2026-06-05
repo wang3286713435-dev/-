@@ -71,6 +71,22 @@ public class LightweightJobRepository {
         return rows.stream().findFirst();
     }
 
+    public long countViewerReady(Long projectId) {
+        String sql = """
+            SELECT COUNT(1)
+            FROM visualization_lightweight_jobs
+            WHERE project_id = :projectId
+              AND deleted = 0
+              AND status = 'READY'
+              AND viewer_available = 1
+              AND model_access_address IS NOT NULL
+              AND model_access_address <> ''
+            """;
+        Long count = jdbcTemplate.queryForObject(sql, new MapSqlParameterSource()
+            .addValue("projectId", projectId), Long.class);
+        return count == null ? 0L : count;
+    }
+
     public Long insertSubmitting(
         Long projectId,
         Long integrationId,

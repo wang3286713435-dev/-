@@ -346,11 +346,11 @@
             <template #default="{ row }">
               <div v-if="row.kind === 'FILE'" class="file-browser__artifact-cell">
                 <el-tag
-                  v-if="glandarPilotStatus(row.file)"
-                  :type="glandarPilotTag(row.file)"
+                  v-if="glandarModelStatus(row.file)"
+                  :type="glandarModelTag(row.file)"
                   size="small"
                 >
-                  {{ glandarPilotStatus(row.file)?.statusLabel }}
+                  {{ glandarModelStatus(row.file)?.statusLabel }}
                 </el-tag>
                 <el-tag :type="previewArtifactTag(row)" size="small">
                   {{ previewArtifactLabel(row) }}
@@ -361,10 +361,10 @@
                   link
                   type="primary"
                   size="small"
-                  :loading="previewArtifactLoadingId === row.file.fileId"
+                  :loading="previewArtifactActionLoading(row)"
                   @click.stop="handlePreparePreviewArtifact(row)"
                 >
-                  准备状态
+                  {{ previewArtifactActionLabel(row) }}
                 </el-button>
               </div>
               <span v-else class="file-browser__muted">-</span>
@@ -612,9 +612,9 @@ import {
 } from '@/modules/data-steward/utils/previewStatus';
 import {
   createFileLightweightJob,
-  fetchGlandarRvtPilotFiles,
+  fetchGlandarModelFiles,
   issueLightweightViewerTicket,
-  type GlandarRvtPilotFile,
+  type GlandarModelFile,
   type LightweightJobCreateResponse
 } from '@/modules/visualization/api/visualization';
 import { useAuthStore } from '@/stores/auth';
@@ -674,7 +674,7 @@ const nasOperations = ref<NasOperationRecord[]>([]);
 const nasQuarantine = ref<NasQuarantineRecord[]>([]);
 const nasTrialStatus = ref<NasWriteTrialStatus | null>(null);
 const previewArtifacts = ref<Record<number, PreviewArtifact>>({});
-const glandarPilotFiles = ref<GlandarRvtPilotFile[]>([]);
+const glandarModelFiles = ref<GlandarModelFile[]>([]);
 const activeDir = ref('');
 const expandedDirs = ref<string[]>([]);
 const lastFileId = ref<number | null>(null);
@@ -1019,9 +1019,9 @@ const browserEntries = computed<BrowserEntry[]>(() => {
   ];
 });
 
-const glandarPilotByFileId = computed(() => {
-  const map = new Map<number, GlandarRvtPilotFile>();
-  glandarPilotFiles.value.forEach((item) => map.set(item.fileId, item));
+const glandarModelByFileId = computed(() => {
+  const map = new Map<number, GlandarModelFile>();
+  glandarModelFiles.value.forEach((item) => map.set(item.fileId, item));
   return map;
 });
 
@@ -1086,7 +1086,7 @@ watch(
     void loadNasWriteTrialStatus();
     void loadDirectories();
     void loadFiles();
-    void loadGlandarPilotFiles();
+    void loadGlandarModelFiles();
   },
   { immediate: true }
 );
@@ -1610,12 +1610,12 @@ async function loadFiles() {
   }
 }
 
-async function loadGlandarPilotFiles() {
+async function loadGlandarModelFiles() {
   if (!Number.isFinite(props.projectId)) return;
   try {
-    glandarPilotFiles.value = await fetchGlandarRvtPilotFiles(props.projectId);
+    glandarModelFiles.value = await fetchGlandarModelFiles(props.projectId);
   } catch {
-    glandarPilotFiles.value = [];
+    glandarModelFiles.value = [];
   }
 }
 
@@ -1639,7 +1639,7 @@ async function refreshBrowserViews(showSuccess = false) {
     loadNasWriteTrialStatus(),
     loadDirectories(),
     loadFiles(),
-    loadGlandarPilotFiles()
+    loadGlandarModelFiles()
   ];
   if (operationsDrawerVisible.value) loaders.push(loadNasOperations(false));
   if (quarantineDrawerVisible.value) loaders.push(loadNasQuarantine(false));
@@ -1761,28 +1761,30 @@ function buildContextMenuItems(entries: BrowserEntry[]): ContextMenuItem[] {
 
   const preview = previewForFileEntry(entry);
   const isModel = preview.previewMode === 'BIM_LIGHTWEIGHT';
-  const pilotStatus = isModel ? glandarPilotStatus(entry.file) : null;
+  const modelStatus = isModel ? glandarModelStatus(entry.file) : null;
   const unregisteredReason = isRegisteredFile(entry.file) ? '' : '未登记文件需先扫描入库后治理';
   return [
     {
       command: 'open',
       label: isModel
-        ? pilotStatus?.taskStatus === 'READY'
+        ? modelStatus?.taskStatus === 'READY'
           ? '打开轻量化模型'
-          : pilotStatus
+          : modelStatus?.supported
             ? '提交 / 查看轻量化'
-            : '模型预览占位'
+            : '模型暂不支持轻量化'
         : '打开 / 预览',
       disabled: Boolean(unregisteredReason),
-      reason: unregisteredReason || (isModel && !pilotStatus ? '当前模型未纳入 10 个 RVT 试点' : undefined)
+      reason: unregisteredReason || (isModel && modelStatus && !modelStatus.supported ? modelStatus.unsupportedReason || '当前模型格式暂不支持轻量化' : undefined)
     },
     { command: 'detail', label: '详情', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined },
-    {
-      command: 'prepare-preview-artifact',
-      label: '准备预览产物状态',
-      disabled: Boolean(unregisteredReason),
-      reason: unregisteredReason || '仅登记对象化状态或转换占位，不读取文件正文'
-    },
+    ...(!isModel
+      ? [{
+          command: 'prepare-preview-artifact' as const,
+          label: '准备预览产物状态',
+          disabled: Boolean(unregisteredReason),
+          reason: unregisteredReason || '仅登记对象化状态或转换占位，不读取文件正文'
+        }]
+      : []),
     { command: 'metadata', label: '治理', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined },
     { command: 'hermes-ownership', label: '询问 Hermes 归属建议', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined },
     { command: 'checksum', label: '补 checksum', disabled: Boolean(unregisteredReason), reason: unregisteredReason || undefined },
@@ -1896,26 +1898,31 @@ async function openGlandarPreviewOrSubmit(entry: FileBrowserEntry) {
     openModelPreviewPlaceholder(entry);
     return;
   }
-  const pilotStatus = glandarPilotStatus(entry.file);
-  if (!pilotStatus) {
+  const modelStatus = glandarModelStatus(entry.file);
+  if (!modelStatus) {
     openModelPreviewPlaceholder(entry);
-    ElMessage.info('当前模型未纳入 105 项目 10 个 RVT 轻量化试点，暂时保留占位预览。');
+    ElMessage.info('当前模型尚未进入葛兰岱尔轻量化清单，暂时保留占位预览。');
+    return;
+  }
+  if (!modelStatus.supported) {
+    openModelPreviewPlaceholder(entry);
+    ElMessage.warning(modelStatus.unsupportedReason || '当前模型格式暂不支持葛兰岱尔轻量化。');
     return;
   }
   if (glandarOpeningFileId.value) return;
   glandarOpeningFileId.value = entry.file.fileId;
   try {
-    let jobId = pilotStatus.latestJobId;
-    let status = pilotStatus.taskStatus;
+    let jobId = modelStatus.latestJobId;
+    let status = modelStatus.taskStatus;
     if (!jobId || status === 'NOT_STARTED' || status === 'FAILED') {
       const created = await createFileLightweightJob(props.projectId, entry.file.fileId, false);
       jobId = created.jobId;
       status = created.taskStatus;
-      upsertGlandarPilotStatus(entry.file, created);
+      upsertGlandarModelStatus(entry.file, created);
     }
     if (status !== 'READY') {
       ElMessage.info('葛兰岱尔轻量化任务已提交或正在处理，稍后刷新后即可预览。');
-      await loadGlandarPilotFiles();
+      await loadGlandarModelFiles();
       return;
     }
     if (!jobId) {
@@ -1925,7 +1932,7 @@ async function openGlandarPreviewOrSubmit(entry: FileBrowserEntry) {
     const ticket = await issueLightweightViewerTicket(props.projectId, jobId);
     if (!ticket.viewerAvailable || !ticket.ticketIssued) {
       ElMessage.warning(ticket.blockedReason || 'Viewer 暂不可用，请稍后刷新。');
-      await loadGlandarPilotFiles();
+      await loadGlandarModelFiles();
       return;
     }
     const routeLocation = router.resolve({
@@ -1944,40 +1951,68 @@ async function openGlandarPreviewOrSubmit(entry: FileBrowserEntry) {
   }
 }
 
-function glandarPilotStatus(file: CatalogFile) {
+function glandarModelStatus(file: CatalogFile) {
   if (!isRegisteredFile(file) || file.fileId == null) return null;
-  return glandarPilotByFileId.value.get(file.fileId) ?? null;
+  return glandarModelByFileId.value.get(file.fileId) ?? null;
 }
 
-function glandarPilotTag(file: CatalogFile) {
-  const status = glandarPilotStatus(file)?.taskStatus;
+function glandarModelTag(file: CatalogFile) {
+  const modelStatus = glandarModelStatus(file);
+  if (modelStatus && !modelStatus.supported) return 'info';
+  const status = modelStatus?.taskStatus;
   if (status === 'READY') return 'success';
   if (status === 'FAILED') return 'danger';
   if (status === 'RUNNING' || status === 'UPLOADED' || status === 'SUBMITTED') return 'warning';
   return 'info';
 }
 
-function upsertGlandarPilotStatus(file: CatalogFile, created: LightweightJobCreateResponse) {
+function upsertGlandarModelStatus(file: CatalogFile, created: LightweightJobCreateResponse) {
   if (!isRegisteredFile(file) || file.fileId == null) return;
-  const current = glandarPilotByFileId.value.get(file.fileId);
-  if (!current) return;
-  glandarPilotFiles.value = glandarPilotFiles.value.map((item) => item.fileId === file.fileId
+  const current = glandarModelByFileId.value.get(file.fileId);
+  const next: GlandarModelFile = {
+    projectId: props.projectId,
+    fileId: file.fileId,
+    assetUuid: file.assetUuid || '',
+    fileName: file.fileName,
+    extension: file.fileExt || created.modelFormat,
+    fileKind: file.fileKind,
+    sizeBytes: file.sizeBytes,
+    versionNo: file.version || 'V1',
+    relativePathHint: '项目模型资产',
+    lightweightStatus: created.taskStatus === 'READY'
+      ? 'READY'
+      : created.taskStatus === 'FAILED'
+        ? 'FAILED'
+        : 'RUNNING',
+    latestJobId: created.jobId,
+    taskStatus: created.taskStatus,
+    progress: created.progressPercent,
+    failureReason: created.blockedReason,
+    viewerAvailable: created.viewerAvailable,
+    supported: true,
+    unsupportedReason: null,
+    statusLabel: created.statusLabel,
+    actionHint: created.actionHint,
+    updatedAt: new Date().toISOString()
+  };
+  if (!current) {
+    glandarModelFiles.value = [...glandarModelFiles.value, next];
+    return;
+  }
+  glandarModelFiles.value = glandarModelFiles.value.map((item) => item.fileId === file.fileId
     ? {
         ...item,
-        latestJobId: created.jobId,
-        lightweightName: created.lightweightName,
-        taskStatus: created.taskStatus,
-        progressPercent: created.progressPercent,
-        viewerAvailable: created.viewerAvailable,
-        statusLabel: created.statusLabel,
-        actionHint: created.actionHint,
-        blockedReason: created.blockedReason,
-        updatedAt: new Date().toISOString()
+        ...next
       }
     : item);
 }
 
 function handlePreparePreviewArtifact(entry: FileBrowserEntry) {
+  const preview = previewForFileEntry(entry);
+  if (preview.previewMode === 'BIM_LIGHTWEIGHT') {
+    runAsyncAction(() => openGlandarPreviewOrSubmit(entry), 'BIM 轻量化状态处理失败');
+    return;
+  }
   runAsyncAction(() => preparePreviewArtifactForEntry(entry), '预览产物状态准备失败，平台未读取文件正文');
 }
 
@@ -2106,6 +2141,8 @@ function previewArtifactForEntry(entry: FileBrowserEntry): PreviewArtifact | nul
 
 function previewArtifactTag(entry: FileBrowserEntry) {
   if (!isRegisteredFile(entry.file)) return 'warning';
+  const preview = previewForFileEntry(entry);
+  if (preview.previewMode === 'BIM_LIGHTWEIGHT') return glandarModelTag(entry.file);
   const artifact = previewArtifactForEntry(entry);
   if (artifact) {
     if (artifact.previewStatus === 'AVAILABLE' && artifact.storageState === 'OBJECT_STORED') return 'success';
@@ -2113,7 +2150,6 @@ function previewArtifactTag(entry: FileBrowserEntry) {
     if (artifact.previewStatus === 'BLOCKED' || artifact.generationStatus === 'FAILED') return 'danger';
     return 'info';
   }
-  const preview = previewForFileEntry(entry);
   if (preview.previewStatus === 'AVAILABLE') return 'success';
   if (preview.previewStatus === 'NEEDS_CONVERSION') return 'warning';
   if (preview.previewStatus === 'BLOCKED') return 'danger';
@@ -2122,6 +2158,19 @@ function previewArtifactTag(entry: FileBrowserEntry) {
 
 function previewArtifactLabel(entry: FileBrowserEntry) {
   if (!isRegisteredFile(entry.file)) return '未登记';
+  const preview = previewForFileEntry(entry);
+  if (preview.previewMode === 'BIM_LIGHTWEIGHT') {
+    const modelStatus = glandarModelStatus(entry.file);
+    if (!modelStatus) return '待轻量化';
+    if (!modelStatus.supported) return '不支持轻量化';
+    if (modelStatus.taskStatus === 'READY' && modelStatus.viewerAvailable) return '可在线预览';
+    if (modelStatus.taskStatus === 'READY') return '已轻量化';
+    if (modelStatus.taskStatus === 'FAILED') return '轻量化失败';
+    if (modelStatus.taskStatus === 'RUNNING' || modelStatus.taskStatus === 'UPLOADED' || modelStatus.taskStatus === 'SUBMITTED') {
+      return '轻量化中';
+    }
+    return '待轻量化';
+  }
   const artifact = previewArtifactForEntry(entry);
   if (artifact) {
     if (artifact.previewStatus === 'AVAILABLE' && artifact.storageState === 'OBJECT_STORED') return '对象化预览';
@@ -2130,7 +2179,6 @@ function previewArtifactLabel(entry: FileBrowserEntry) {
     if (artifact.previewStatus === 'NOT_STARTED') return '待准备';
     return artifact.previewStatus || '-';
   }
-  const preview = previewForFileEntry(entry);
   if (preview.previewMode === 'BROWSER_NATIVE') return '可对象化';
   if (preview.conversionRequired) return '需转换占位';
   if (preview.downloadOnly) return '仅原文件';
@@ -2139,14 +2187,38 @@ function previewArtifactLabel(entry: FileBrowserEntry) {
 
 function previewArtifactHint(entry: FileBrowserEntry) {
   if (!isRegisteredFile(entry.file)) return '需扫描入库';
+  const preview = previewForFileEntry(entry);
+  if (preview.previewMode === 'BIM_LIGHTWEIGHT') {
+    const modelStatus = glandarModelStatus(entry.file);
+    if (!modelStatus) return '从模型入口提交或查看轻量化任务';
+    if (!modelStatus.supported) return modelStatus.unsupportedReason || '当前模型格式暂不支持轻量化';
+    if (modelStatus.taskStatus === 'READY' && modelStatus.viewerAvailable) return '已完成轻量化，可打开 Viewer';
+    if (modelStatus.taskStatus === 'FAILED') return modelStatus.failureReason || '轻量化失败，可重试';
+    return modelStatus.actionHint || '轻量化任务提交后可在线预览';
+  }
   const artifact = previewArtifactForEntry(entry);
   if (artifact?.message) {
     return artifact.message;
   }
-  const preview = previewForFileEntry(entry);
   if (preview.previewMode === 'BROWSER_NATIVE') return '通过受控预览票据打开';
   if (preview.conversionRequired) return '当前只登记占位';
   return previewActionHint(preview);
+}
+
+function previewArtifactActionLabel(entry: FileBrowserEntry) {
+  const preview = previewForFileEntry(entry);
+  if (preview.previewMode !== 'BIM_LIGHTWEIGHT') return '准备状态';
+  const modelStatus = glandarModelStatus(entry.file);
+  if (modelStatus?.taskStatus === 'READY' && modelStatus.viewerAvailable) return '打开预览';
+  if (modelStatus?.taskStatus === 'FAILED') return '重试轻量化';
+  return '提交 / 查看';
+}
+
+function previewArtifactActionLoading(entry: FileBrowserEntry) {
+  if (!isRegisteredFile(entry.file) || entry.file.fileId == null) return false;
+  const preview = previewForFileEntry(entry);
+  if (preview.previewMode === 'BIM_LIGHTWEIGHT') return glandarOpeningFileId.value === entry.file.fileId;
+  return previewArtifactLoadingId.value === entry.file.fileId;
 }
 
 function previewForFileEntry(entry: FileBrowserEntry): PreviewStatusLike {
