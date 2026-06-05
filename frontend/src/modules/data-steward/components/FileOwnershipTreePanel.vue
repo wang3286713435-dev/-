@@ -797,6 +797,15 @@ function formatCount(value?: number | null) {
 .ownership-panel {
   display: grid;
   gap: 18px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  contain: inline-size;
+}
+
+.ownership-panel > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .ownership-panel__header,
@@ -816,8 +825,13 @@ function formatCount(value?: number | null) {
   justify-content: space-between;
   gap: 18px;
   align-items: center;
+  min-width: 0;
   border-radius: 20px;
   padding: 22px;
+}
+
+.ownership-panel__header > div:first-child {
+  min-width: 0;
 }
 
 .ownership-panel__header h2 {
@@ -840,6 +854,7 @@ function formatCount(value?: number | null) {
   gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
+  min-width: 0;
 }
 
 .ownership-kpis,
@@ -867,6 +882,10 @@ function formatCount(value?: number | null) {
 }
 
 .ownership-business-tabs {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  contain: inline-size;
   padding: 16px;
   border: 1px solid rgba(91, 124, 255, 0.16);
   border-radius: 18px;
@@ -879,12 +898,14 @@ function formatCount(value?: number | null) {
   justify-content: space-between;
   gap: 12px;
   align-items: flex-start;
+  min-width: 0;
   margin-bottom: 12px;
 }
 
 .ownership-business__header > div {
   display: grid;
   gap: 4px;
+  min-width: 0;
 }
 
 .ownership-business__header span {
@@ -895,10 +916,13 @@ function formatCount(value?: number | null) {
 
 .ownership-layout {
   display: grid;
-  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
   min-height: 560px;
   overflow: hidden;
   border-radius: 22px;
+  contain: inline-size;
 }
 
 .ownership-tree {
@@ -942,6 +966,8 @@ function formatCount(value?: number | null) {
   align-content: start;
   gap: 16px;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   padding: 18px;
 }
 
@@ -950,6 +976,8 @@ function formatCount(value?: number | null) {
   justify-content: space-between;
   gap: 14px;
   align-items: center;
+  min-width: 0;
+  max-width: 100%;
   border-radius: 18px;
   padding: 16px;
 }
@@ -957,11 +985,17 @@ function formatCount(value?: number | null) {
 .ownership-detail__summary strong {
   display: block;
   margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ownership-recommendations,
 .ownership-node-files {
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  contain: inline-size;
   border-radius: 18px;
   padding: 16px;
 }
@@ -991,6 +1025,46 @@ function formatCount(value?: number | null) {
 .ownership-file-cell {
   display: grid;
   gap: 4px;
+  min-width: 0;
+}
+
+.ownership-file-cell strong,
+.ownership-file-cell span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ownership-panel :deep(.el-tabs),
+.ownership-panel :deep(.el-tabs__content),
+.ownership-panel :deep(.el-tab-pane),
+.ownership-panel :deep(.el-table),
+.ownership-panel :deep(.el-table__inner-wrapper),
+.ownership-panel :deep(.el-table__header-wrapper),
+.ownership-panel :deep(.el-table__body-wrapper),
+.ownership-panel :deep(.el-scrollbar),
+.ownership-panel :deep(.el-scrollbar__wrap) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ownership-panel :deep(.el-table) {
+  width: 100%;
+}
+
+.ownership-panel :deep(.el-table__inner-wrapper) {
+  overflow: hidden;
+}
+
+.ownership-panel :deep(.cell) {
+  min-width: 0;
+}
+
+.ownership-panel :deep(.el-alert__title),
+.ownership-panel :deep(.el-select__placeholder),
+.ownership-panel :deep(.el-select__selected-item) {
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 1180px) {

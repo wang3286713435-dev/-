@@ -96,13 +96,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { Close, Search } from '@element-plus/icons-vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import DigitalTwinDashboardPage from '@/modules/visualization/pages/DigitalTwinDashboardPage.vue';
 import { useAuthStore } from '@/stores/auth';
 
 const authStore = useAuthStore();
 const route = useRoute();
+const router = useRouter();
 const keyword = ref('');
 const projectPanelOpen = ref(false);
 const switchingProjectId = ref<number | null>(null);
@@ -113,7 +114,7 @@ const requestedProjectId = computed(() => {
   const id = routeProjectId.value;
   return Number.isFinite(id) && id > 0 ? id : null;
 });
-const activeProjectId = computed(() => requestedProjectId.value ?? authStore.currentProjectId);
+const activeProjectId = computed(() => requestedProjectId.value);
 const portalProjectReady = computed(() => {
   const requestedId = requestedProjectId.value;
   return !requestedId || authStore.currentProjectId === requestedId;
@@ -141,11 +142,14 @@ watch(requestedProjectId, (projectId) => {
 }, { immediate: true });
 
 async function selectProject(projectId: number) {
-  if (projectId === authStore.currentProjectId) {
+  if (projectId === activeProjectId.value && projectId === authStore.currentProjectId) {
     projectPanelOpen.value = false;
     return;
   }
-  await switchProject(projectId, true);
+  const switched = await switchProject(projectId, true);
+  if (switched) {
+    await router.push({ name: 'bim-collaboration', query: { projectId } });
+  }
 }
 
 async function ensureRouteProjectContext(projectId: number) {
@@ -154,14 +158,16 @@ async function ensureRouteProjectContext(projectId: number) {
 }
 
 async function switchProject(projectId: number, closePanel: boolean) {
-  if (switchingProjectId.value) return;
+  if (switchingProjectId.value) return false;
   switchingProjectId.value = projectId;
   switchError.value = '';
   try {
     await authStore.changeProject(projectId);
     if (closePanel) projectPanelOpen.value = false;
+    return true;
   } catch (error) {
     switchError.value = error instanceof Error ? error.message : '项目切换失败';
+    return false;
   } finally {
     switchingProjectId.value = null;
   }

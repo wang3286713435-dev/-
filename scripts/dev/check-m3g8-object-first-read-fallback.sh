@@ -255,6 +255,35 @@ open_ticket_and_headers() {
     -H "Authorization: Bearer ${TOKEN}"
 }
 
+prepare_readable_object_sample() {
+  local sample_path="${TMP_DIR}/m3g8-object-readable.pdf"
+  printf 'M3G-8 synthetic object-first sample. No production NAS mutation.\n' >"${sample_path}"
+  local sample_size
+  sample_size="$(wc -c <"${sample_path}" | tr -d ' ')"
+  local sample_file_id
+  sample_file_id="$(create_file_resource "m3g8-object-readable-$(date +%s).pdf" "${sample_path}" "${sample_size}")"
+
+  local task_response
+  task_response="$(api_post "/api/data-steward/projects/${PROJECT_ID}/storage-migration-tasks" \
+    "{\"fileIds\":[${sample_file_id}],\"targetProvider\":\"MINIO\"}")"
+  assert_no_forbidden "m3g8 synthetic objectification task" "${task_response}"
+  if [[ "$(json_expr "${task_response}" "data.get('code') == 'OK' and int(data['data']['successCount']) == 1 and data['data']['taskStatus'] == 'COMPLETED'")" != "true" ]]; then
+    fail "无法通过受控对象化任务准备 M3G-8 临时可读样本"
+    return
+  fi
+
+  local sample_ticket
+  sample_ticket="$(create_ticket "${sample_file_id}" "DOWNLOAD")"
+  assert_no_forbidden "m3g8 synthetic object ticket" "${sample_ticket}"
+  if [[ "$(json_expr "${sample_ticket}" "data.get('code') == 'OK' and data['data']['storageStatus'] == 'OBJECT_STORED' and data['data']['readSource'] == 'OBJECT_STORAGE' and data['data']['fallbackUsed'] is False and data['data']['objectReadable'] is True")" == "true" ]]; then
+    object_file_id="${sample_file_id}"
+    object_ticket="${sample_ticket}"
+    pass "历史 OBJECT_STORED 样本不可读时，已通过受控对象化任务准备临时可读对象样本"
+  else
+    fail "M3G-8 临时对象样本未满足对象优先读取口径"
+  fi
+}
+
 printf '== M3G-8 object-first read / fallback smoke ==\n'
 
 login
@@ -274,7 +303,7 @@ object_file_id=""
 object_ticket=""
 object_candidate_ids="$(object_stored_sample_file_ids || true)"
 if [[ -z "${object_candidate_ids}" ]]; then
-  fail "没有找到可用于受控读取验证的小型 OBJECT_STORED 文件"
+  prepare_readable_object_sample
 else
   while IFS= read -r candidate_file_id; do
     [[ -n "${candidate_file_id}" ]] || continue
@@ -288,7 +317,7 @@ else
     fi
   done <<<"${object_candidate_ids}"
   if [[ -z "${object_file_id}" ]]; then
-    fail "OBJECT_STORED 候选存在，但当前未找到 MinIO 副本可读的小文件"
+    prepare_readable_object_sample
   elif [[ "$(json_expr "${object_ticket}" "data['data']['storageStatus'] == 'OBJECT_STORED' and data['data']['readSource'] == 'OBJECT_STORAGE' and data['data']['fallbackUsed'] is False and data['data']['objectReadable'] is True")" == "true" ]]; then
     pass "OBJECT_STORED 文件访问票据明确标记 OBJECT_STORAGE 且未 fallback"
   else

@@ -1,128 +1,148 @@
-# 测试 Agent 当前任务：UX4 平台视觉与员工使用效率修复验收
+# 测试 Agent 当前任务：UX4-B-R3 前端体验修复验收
 
 你是卓羽智能数据中台的测试 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
-当前验收批次：
+本轮验收开发 agent 最新报告中的 `UX4-B-R3`。
 
-`UX4：平台视觉与员工使用效率修复`
+重点不是重新全量设计 UX4，而是确认这次三类修复是否真的可用，并且没有破坏 UX4-A-R1 主工作台结构。
 
-本批是前端体验修复，不是后端新功能批次。测试目标是确认：
+## 0. 本轮验收重点
 
-- 员工主路径是否更清楚。
-- 关键页面是否可用、无明显视觉/交互问题。
-- 旧功能、旧路由和安全边界没有被破坏。
-- 开发 agent 没有越界修改后端、数据库、docs 或新增业务能力。
+开发 agent 报告声称本轮修复了：
+
+1. 项目启动台“项目总体状态”圆环内数字与说明文字重叠。
+2. 任意项目进入工程主数据页后，卡片 / 表格横向无限延长。
+3. 项目工作台 BIM 协同区域仍使用静态占位，没有读取葛兰岱尔轻量化 Viewer 状态。
+
+同时保留：
+
+- 项目启动台作为平台级父入口，不绑定具体项目。
+- BIM 协同作为平台级父入口，不自动绑定当前项目。
+- 文件详情面板不侵占文件列表，可调整大小。
+- UX4-A-R1 的项目工作台结构不回退。
 
 ## 1. 必读文件
 
-- `handoff/dev-agent/current-prompt.md`
 - `handoff/dev-agent/latest-report.md`
-- `handoff/main-agent/status.md`
-- `docs/11-current-baseline-and-next-roadmap.md`
+- `handoff/dev-agent/current-prompt.md`
+- `handoff/main-agent/development-log.md`
 
 ## 2. 必跑命令
 
-执行并记录结果：
+执行并记录：
 
 ```bash
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-m3g9-objectification-coverage-report.sh
 bash scripts/dev/check-m3g8-object-first-read-fallback.sh
 bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
 
-如果本批没有改后端，可以不跑后端构建；如发现后端文件被改动，直接判 P1 或 P0，并补跑后端构建。
-
-## 3. 越界检查
+## 3. Git 与文件跟踪检查
 
 必须检查：
 
-- 不应修改 `backend/**`。
-- 不应新增 Flyway / 数据库迁移。
-- 不应修改 `docs/**`。
-- 不应新增 Hermes 正文问答。
-- 不应新增 BIM 构件级能力。
-- 不应新增 parser、documents/chunks、Qdrant、OpenSearch。
-- 不应执行真实对象化迁移或真实 NAS 文件破坏性操作。
+```bash
+git status --short
+git diff --name-status
+git ls-files --others --exclude-standard
+```
 
-如出现后端业务逻辑、权限或数据库改动，按 P1 起判；如导致权限泄露、路径泄露或真实文件风险，按 P0 判。
+重点确认：
 
-## 4. 浏览器轻验
+- 新增 `frontend/src/modules/core/components/workspace/*.vue` 如被代码引用，不能保持 `??`。
+- 新增 `frontend/src/assets/ux4/project-cover-reference.png` 如被代码引用，不能保持 `??`。
+- 不得修改 `backend/**`。
+- 不得新增数据库迁移。
+- 不得修改 `docs/**`。
 
-本轮不要求逐页深度点击，但必须覆盖主路径。
+如果运行期需要的前端组件或图片仍是未跟踪文件，判 P1。
 
-### A. 资产总览
+## 4. 浏览器页面检查
 
-打开：
+确认 5173 来自当前项目目录：
 
-`http://127.0.0.1:5173/data-steward/assets`
+`/Users/vc/Documents/数字化交付平台/frontend`
 
-检查：
+至少检查：
 
-- 用户能清楚知道先选项目。
-- 真实项目、推荐项目、最近项目或项目列表入口清楚。
-- 不应被大段教程文字和技术标签淹没。
-- 搜索、刷新、进入项目入口可见。
+1. `http://127.0.0.1:5173/data-steward/assets`
+2. `http://127.0.0.1:5173/data-steward/assets/503`
+3. `http://127.0.0.1:5173/data-steward/assets/503?tab=files`
+4. `http://127.0.0.1:5173/data-steward/assets/503?tab=master-data`
+5. `http://127.0.0.1:5173/data-steward/assets/503?tab=delivery`
+6. `http://127.0.0.1:5173/data-steward/assets/503?tab=bim`
+7. `http://127.0.0.1:5173/bim-collaboration?projectId=503`
 
-### B. 105 文件管理
+## 5. 专项验收点
 
-打开：
+### A. 项目启动台状态圆环
 
-`http://127.0.0.1:5173/data-steward/assets/503?tab=files`
+检查 `/data-steward/assets`：
 
-检查：
+- “项目总体状态”或同类状态圆环内数字与说明文字不得重叠。
+- 项目数量变大时，数字和说明仍居中、可读。
+- 入口仍然聚焦项目选择，不回退成旧资产列表。
 
-- 目录浏览和搜索模式能区分。
-- 当前目录、选中数量、存储状态说明清楚。
-- 右键菜单 / 顶部工具栏 / 行内操作没有明显重复混乱。
-- 不展示真实 NAS 路径、bucket、object key、`storage_uri`。
-- PDF 受控预览、模型 Viewer 入口不回归。
-
-### C. 文件服务 / 对象存储
-
-打开：
-
-`http://127.0.0.1:5173/data-steward/assets/503?tab=file-service`
+### B. 工程主数据横向撑宽
 
 检查：
 
-- 105 对象化完成状态清楚。
-- 非 105 项目仍未全部完成的口径清楚。
-- 对象存储状态不应误导为“AI 已理解文件”。
-- 不展示底层路径和对象 key。
+- `/data-steward/assets/503?tab=master-data`
+- 至少再抽一个非 503 项目，如 `/data-steward/assets/505?tab=master-data`
 
-### D. 交付工作中心
+要求：
 
-打开：
+- 页面级 `document.documentElement.scrollWidth - window.innerWidth` 应接近 0。
+- 工程树、表格、节点属性不能把整页无限向右撑开。
+- 宽表格只能在局部容器内处理，不影响整个项目工作台。
 
-- `http://127.0.0.1:5173/data-steward/assets/503/work/document-delivery`
-- `http://127.0.0.1:5173/data-steward/assets/503/work/drawing-delivery`
+### C. 葛兰岱尔 Viewer 状态
 
-检查：
+检查 `/data-steward/assets/503?tab=bim`：
 
-- 文档/图纸交付、缺失项、补交、审核、预检查关系更清楚。
-- 页面不应出现横向溢出。
-- 关键操作没有被隐藏到找不到。
+- 页面必须调用现有葛兰岱尔模型清单接口或展示其真实结果。
+- 如果当前清单 `count=0`，页面必须显示清楚的空状态：
+  - “暂无可嵌入轻量化 Viewer”
+  - 或等价说明。
+- 不得显示假的模型示意图冒充可用 Viewer。
+- “打开独立 Viewer”在没有 `activeGlandarModel/latestJobId` 时应禁用或给出明确提示。
+- 如果环境存在可用葛兰岱尔模型，则 Viewer iframe 应正常嵌入，不暴露 token。
 
-### E. BIM 协同
+### D. 文件详情浮窗
 
-打开：
+检查 `/data-steward/assets/503?tab=files`：
 
-`http://127.0.0.1:5173/bim-collaboration?projectId=503&preview=glandar`
+- 文件详情面板不应压缩或遮挡主文件列表到不可用。
+- 如支持调整大小，调整过程中页面不应横向撑爆。
+- 关闭后文件列表应恢复正常。
 
-检查：
+### E. UX4-A-R1 结构不回退
 
-- 默认首屏为综合驾驶舱。
-- READY Viewer 状态清楚。
-- 轻量化模型列表分页和打开预览入口不回归。
-- 不展示“构件级能力已完成”的误导性内容。
+确认：
 
-### F. 多分辨率
+- 项目概览仍是项目工作台，不是旧页面加壳。
+- 文件管理仍有左目录树 / 中间文件区 / 右详情或浮窗详情。
+- 工程主数据仍有流程、完成度、阻塞项、工程树语义。
+- 交付闭环仍有交付状态、待交付、审核进度和风险提醒。
+- BIM 协同仍有 KPI、Viewer 状态、模型列表、轻量化状态。
+
+## 6. 旧链接兼容
+
+检查旧链接不白屏、不丢项目上下文：
+
+- `/master-data/sections`
+- `/work/document-delivery`
+- `/work/drawing-delivery`
+- `/data-steward/models`
+- `/data-steward/objects`
+- `/bim-collaboration?projectId=503`
+
+## 7. 多分辨率
 
 至少检查：
 
@@ -130,51 +150,64 @@ git diff --check
 - 1440
 - 1920
 
-重点看：
+不得出现：
 
-- 无横向撑爆。
-- 主操作不丢失。
-- 文字不严重挤压。
-- 侧边栏、顶部栏和表格区域不互相覆盖。
+- 页面级横向溢出
+- 主按钮不可见
+- 右侧详情面板遮挡主体
+- 文字严重挤压
+- 表格撑爆整页
 
-## 5. 旧链接兼容
+## 8. 安全与越界
 
-抽查以下旧链接不白屏、不丢项目上下文：
+不得泄露：
 
-- `/master-data/sections`
-- `/work/document-delivery`
-- `/data-steward/models`
-- `/data-steward/objects`
+- 真实 NAS 路径
+- `/Volumes`
+- `smb://`
+- `nas://`
+- bucket
+- object key
+- `storage_uri`
+- SQL
+- raw row
+- token / secret
 
-允许它们跳转到当前项目工作台内对应页面。
+不得发生：
 
-## 6. P0 / P1 / P2 判定
+- 修改后端
+- 修改数据库迁移
+- 修改 `docs/**`
+- 触碰真实 NAS 文件
+- 读取文件正文
+- 新增 Hermes evidence
+- 新增 BIM 后端能力
+- 写 parser / documents / chunks / Qdrant / OpenSearch
+
+## 9. P0 / P1 / P2
 
 P0：
 
-- 权限泄露。
-- 真实 NAS 路径、bucket、object key、token、secret 泄露。
-- 后端业务逻辑或数据库被改坏。
-- 主路径白屏，项目进不去，文件管理器无法使用。
-- file-access 受控访问回归失败。
+- 任一主路径白屏。
+- 修改 `backend/**` / DB / `docs/**` / 权限 / 对象存储 / Hermes / BIM 后端能力。
+- M3G-8 或 file-access 回归失败。
+- 泄露真实路径、bucket、object key、token、secret。
 
 P1：
 
-- 开发 agent 修改了后端或 docs，但未说明必要性。
-- 旧链接白屏或项目上下文丢失。
-- 文件管理器搜索/目录浏览明显错乱。
-- BIM 协同 READY Viewer 入口回归。
-- 对象化状态展示误导用户。
-- 页面主要操作不可见或严重挤压。
+- 项目启动台状态圆环仍重叠。
+- 工程主数据页仍有页面级横向无限延长。
+- BIM 协同仍显示静态假 Viewer，未读取真实葛兰岱尔状态。
+- 运行期需要的新增前端组件或图片未纳入 Git 跟踪。
+- UX4-A-R1 项目工作台结构明显回退。
+- 旧链接丢项目上下文。
 
 P2：
 
-- 少量文案粗糙。
-- 轻微间距问题。
 - 既有 Vite chunk warning。
-- 个别低频页面仍有技术字段偏显眼，但不影响主路径。
+- 局部文案、间距、阴影、动效仍可优化但不阻塞主路径。
 
-## 7. 报告要求
+## 10. 报告要求
 
 完成后写入：
 
@@ -183,8 +216,12 @@ P2：
 报告必须包含：
 
 1. 结论：通过 / 不通过。
-2. P0 / P1 / P2 列表。
+2. 三类修复是否关闭。
 3. 必跑命令结果。
-4. 越界检查结果。
-5. 浏览器轻验结果。
-6. 是否建议主 agent 收口 UX4。
+4. 浏览器页面结果。
+5. Git 跟踪检查结果。
+6. 旧链接兼容结果。
+7. 多分辨率结果。
+8. 越界和禁出字段检查结果。
+9. P0 / P1 / P2 列表。
+10. 是否建议主 agent 收口 UX4-B-R3。

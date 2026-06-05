@@ -1,4 +1,4 @@
-# 开发 Agent 当前任务：UX4-A 前端壳层与项目工作台导航重构
+# 开发 Agent 当前任务：UX4-A-R1 参考图驱动前端返工
 
 你是卓羽智能数据中台的开发 agent。工作目录：
 
@@ -8,182 +8,208 @@
 
 `codex/ux4-frontend-shell-routing`
 
-## 0. 本批定位
+## 0. 返工结论
 
-本批是 `UX4-A：壳层和路由基线`。
+上一版 `UX4-A` 不能收口。
 
-本批不是新增业务功能，不是重做后端，不是继续对象化迁移，不是新增 Hermes / BIM 能力。
+主 agent 已检查当前页面和用户提供的 5 张参考图，结论是：
 
-目标是把当前平台前端从“早期 MVP 功能堆叠”升级为“成熟 SaaS 项目管理仪表盘”的壳层与导航基线。
+- 当前实现只是“旧页面 + 新壳层”。
+- 参考图要的是“项目级 SaaS 工作台重构”。
+- 本轮必须返工为 `UX4-A-R1`。
 
-一句话目标：
+你不能继续在旧页面上方添加新的标题区、导航区或说明区。你需要把旧业务能力重新组织进新的项目工作台模板里。
 
-> 员工进入平台后，能清楚知道：先选项目，再进入项目工作台，然后在当前项目内做文件管理、工程主数据、交付闭环、BIM 协同和档案目录。
+## 1. 本轮目标
 
-## 1. 必须先读
+本轮只做前端交互逻辑和视觉重构，不改后端接口结构。
 
-开始前必须阅读：
+核心目标：
 
-- `docs/13-ux4-frontend-architecture-baseline.md`
-- `docs/11-current-baseline-and-next-roadmap.md`
-- `docs/12-api-contract-and-maintenance.md`
-- `handoff/main-agent/status.md`
-- `handoff/main-agent/development-log.md`
-- `handoff/dev-agent/latest-report.md`
-- `handoff/test-agent/latest-report.md`
+1. 建立统一的项目工作台页面骨架。
+2. 按参考图重构项目启动台、项目概览、文件管理、工程主数据、交付闭环、BIM 协同的一级结构。
+3. 复用现有 API 和现有业务组件能力，但不能原样堆回旧页面。
+4. 让当前页面第一眼接近用户提供的 SaaS 项目管理仪表盘参考图。
 
-重点检查当前前端：
+## 2. 必须先查看的参考图
 
-- `frontend/src/router/index.ts`
-- `frontend/src/modules/core/layout/AppLayout.vue`
-- `frontend/src/modules/core/components/SidebarMenu.vue`
-- `frontend/src/modules/core/components/ProjectWorkspaceNav.vue`
-- `frontend/src/modules/core/composables/useProjectWorkspaceContext.ts`
-- `frontend/src/modules/data-steward/pages/AssetOverviewPage.vue`
-- `frontend/src/modules/data-steward/pages/AssetProjectDetailPage.vue`
-- `frontend/src/styles/index.css`
+开始开发前必须实际打开并查看以下图片，在报告里写清你看了哪些图，以及每张图借鉴了什么结构：
 
-## 2. 必须看视觉参考图
+- `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_44 AM.png`
+- `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_41 AM.png`
+- `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_38 AM.png`
+- `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_36 AM.png`
+- `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_31 AM.png`
 
-用户明确要求：开发 agent 必须看预览图，不允许只按文字想象。
+## 3. 当前失败原因
 
-请打开并查看以下 5 张参考图：
+你需要先理解上一版为什么失败：
 
-1. `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_44 AM.png`
-2. `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_41 AM.png`
-3. `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_38 AM.png`
-4. `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_36 AM.png`
-5. `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_31 AM.png`
+1. `AssetProjectDetailPage.vue` 仍然保留旧 `el-tabs` 和旧资产总览卡片，只是在上方加了新项目身份区。
+2. 文件管理仍然是旧组件嵌在旧页内，没有形成参考图里的“左目录树 + 中文件列表 + 右详情面板”的清晰工作区。
+3. BIM 协同没有和项目工作台真正融合，缺少参考图里的 Viewer、模型列表、轻量化状态、问题/协同信息区域组合。
+4. 项目启动台没有真正重做成项目入口台。
+5. 顶部、项目身份区、一级 tab、主体内容之间仍然割裂。
 
-你需要从图中提炼，而不是照抄品牌视觉：
+本轮必须修这些结构问题，而不是继续修边角样式。
 
-- 左侧深色品牌导航。
-- 顶部项目上下文、项目选择、搜索、通知、用户区。
-- 项目身份区：项目封面、项目名、编码、负责人、当前角色、当前阶段。
-- 项目内一级 tab：概览、文件管理、工程主数据、交付闭环、BIM 协同、档案目录。
-- 页面主体按当前 tab 展示，不再重复堆多个导航模块。
-- 右侧辅助栏用于进度、风险、快捷操作、最近动态。
-- 表格和卡片保持企业中后台可读性。
+## 4. 允许修改范围
 
-报告中必须写明：
-
-- 你实际查看了哪些参考图。
-- 从参考图复用了哪些结构。
-- 哪些地方没有照搬，原因是什么。
-
-## 3. 本批允许范围
-
-只允许修改：
+允许：
 
 - `frontend/**`
 - `handoff/dev-agent/latest-report.md`
 
-如确实需要改 `docs/**`、`backend/**`、数据库迁移、接口语义、权限规则，必须停止并报告，不得自行修改。
+禁止：
 
-## 4. 本批严禁
+- 修改 `backend/**`
+- 修改数据库迁移
+- 修改接口语义
+- 修改权限规则
+- 修改对象存储读取规则
+- 修改 Hermes evidence / 语义问答
+- 修改 BIM 引擎后端能力
+- 修改 `docs/**`
+- 读取文件正文
+- 写 parser / documents / chunks / Qdrant / OpenSearch
+- 暴露真实 NAS 路径、bucket、object key、`storage_uri`、SQL、token、secret
 
-严禁：
+如果你认为必须改后端才能完成，请停止并写入报告，不要自行改。
 
-- 修改 `backend/**`。
-- 修改数据库迁移。
-- 新增后端接口。
-- 修改权限或 file-access 规则。
-- 修改对象存储读取规则。
-- 新增 Hermes evidence 能力。
-- 新增 BIM 引擎能力。
-- 读取文件正文。
-- 暴露真实 NAS 路径、bucket、object key、`storage_uri`、SQL、token、secret。
-- 删除旧路由导致旧链接白屏。
+## 5. 必须建立的前端结构
 
-## 5. 本批必须完成
+### A. 统一项目工作台模板
 
-### A. 全局壳层重构
+建议新增或重构为一个统一项目工作台壳层，例如：
 
-参考图方向重构 `AppLayout.vue`：
+- `ProjectWorkspaceShell.vue`
+- 或在现有 `AssetProjectDetailPage.vue` 内彻底重排，但必须达到同等效果
 
-- 左侧保留深色品牌导航。
-- 顶部栏改成成熟 SaaS 项目管理布局：
-  - 面包屑。
-  - 当前项目选择器或项目上下文。
-  - 全局搜索入口。
-  - 通知 / 帮助占位。
-  - 当前用户信息。
-- 顶部栏左侧的“返回资产总览”保留，但必须融入面包屑或返回区域，不要像临时按钮。
-- 去掉“当前项目工作台”这类技术胶囊。
-- 左侧与顶部在 1280 / 1440 / 1920 宽度下不能挤压、不能横向溢出。
+它必须包含：
 
-### B. 左侧导航收敛
+1. 顶部全局栏：
+   - 面包屑
+   - 当前项目选择
+   - 全局搜索入口
+   - 用户信息
+2. 项目身份区：
+   - 项目图片或清晰项目视觉占位
+   - 项目名
+   - 项目编码
+   - 负责人
+   - 当前角色
+   - 当前阶段
+   - 收藏 / 刷新 / 设置类轻操作
+3. 项目一级 tab：
+   - 概览
+   - 文件管理
+   - 工程主数据
+   - 交付闭环
+   - BIM 协同
+   - 档案目录
+4. 当前 tab 专属工作区：
+   - 每个 tab 都要有自己的页面布局，不能继续显示旧页面堆叠。
 
-重构 `SidebarMenu.vue` 和菜单展示逻辑：
+### B. 项目启动台
 
-左侧只保留全局入口：
+`/data-steward/assets` 需要更像参考图的“我的项目 / 项目启动台”：
 
-```text
-项目启动台
-资产治理
-BIM 协同
-管理中心
-我的项目
-帮助中心
-Hermes 助手
-```
+- 左侧全局导航保留。
+- 主区域突出项目搜索、当前推荐项目、真实项目列表。
+- 不要大段教程文字。
+- 不要铺满无关统计。
+- 用户应能快速判断：先选项目，然后进入文件管理 / 项目可视化 / 交付状态。
 
-要求：
+### C. 项目概览
 
-- 项目内功能不要继续作为左侧一级入口铺满。
-- `我的项目` 用于展示最近/常用项目入口，如当前数据不足，可先用用户授权项目列表。
-- 管理中心只对有权限用户展示。
-- 旧菜单权限不能被破坏。
+`/data-steward/assets/:projectId` 的默认概览要参考第 5 张图：
 
-### C. 项目工作台一级 tab 基线
+- 用流程条表达：资产接入 -> 工程主数据 -> 交付闭环 -> BIM 协同 -> 档案目录。
+- 主卡片突出：
+  - 文件管理
+  - 工程主数据
+  - 交付状态
+  - Viewer 状态
+- 右侧可以有项目健康度、风险提醒、最近动态。
+- 不要继续展示大量旧技术统计卡作为主视觉。
 
-项目内一级 tab 固定为：
+### D. 文件管理
 
-```text
-概览
-文件管理
-工程主数据
-交付闭环
-BIM 协同
-档案目录
-```
+文件管理必须参考第 4 张图，形成三栏结构：
 
-要求：
+1. 左侧：目录树 + 存储使用 / 对象化状态摘要。
+2. 中间：文件列表。
+   - 默认列只保留业务用户最常用字段：
+     - 文件名
+     - 版本
+     - 类型
+     - 专业
+     - 状态
+     - 大小
+     - 更新时间
+   - 平台文件 ID、checksum、对象版本、迁移状态等放入右侧详情或技术信息折叠区。
+3. 右侧：文件详情面板。
+   - 文件预览缩略 / 占位
+   - 文件归属
+   - 对象存储状态
+   - 版本信息
+   - 安全边界说明
 
-- 在项目详情页顶部只保留一套项目内 tab，不再重复显示多个项目工作台导航模块。
-- tab 样式参考图，轻量、清晰、有当前选中状态。
-- tab 点击规则：
-  - 概览 -> `/data-steward/assets/:projectId?tab=dashboard`
-  - 文件管理 -> `/data-steward/assets/:projectId?tab=files`
-  - 工程主数据 -> `/data-steward/assets/:projectId?tab=ownership`
-  - 交付闭环 -> `/data-steward/assets/:projectId/work/document-delivery`
-  - BIM 协同 -> `/bim-collaboration?projectId=:projectId`
-  - 档案目录 -> `/data-steward/assets/:projectId/work/delivery-package`
+搜索时仍按 M3G-5-F1 口径：全项目搜索文件，不混入文件夹。
 
-### D. 项目身份区重构
+### E. 工程主数据
 
-重构 `AssetProjectDetailPage.vue` 项目头部：
+工程主数据必须参考第 3 张图：
 
-必须展示：
+- 顶部展示主数据完成度。
+- 中间展示步骤：
+  - 确认部位树
+  - 锁定节点类型
+  - 配置交付物标准
+  - 生成规则草案
+- 左侧展示阻塞项 / 待处理。
+- 中间展示部位树。
+- 右侧展示当前节点属性、最近更新、相关文档。
 
-- 项目封面图或默认建筑封面。
-- 项目名称。
-- 项目编码。
-- 负责人。
-- 当前角色。
-- 当前阶段。
-- 当前主状态。
-- 收藏或标记图标可占位。
+不能让用户感觉工程主数据是架空模板。
 
-必须隐藏到折叠区：
+### F. 交付闭环
 
-- 平台内部 ID。
-- assetSource。
-- assetStatus。
-- 复杂技术标签。
-- 对象存储 provider。
+交付闭环必须参考第 2 张图：
 
-### E. 旧链接兼容
+- 顶部是交付状态 tab：
+  - 交付状态
+  - 文档交付
+  - 图纸交付
+  - 整改闭环
+  - 交付包草案
+- 主区域展示待交付清单、状态卡、下一步行动。
+- 右侧展示审核进度、风险提醒、快捷操作。
+- 现有文档/图纸交付能力可以复用，但必须重排在这个结构里。
+
+### G. BIM 协同
+
+BIM 协同必须参考第 1 张图：
+
+- 顶部 KPI：模型数量、READY 状态、轻量化任务、问题票据。
+- 主区域左侧是 Viewer 或 Viewer 占位。
+- 右侧是模型列表、轻量化状态、最近协同动态。
+- 支持当前已接入的 MOCK / 葛兰岱尔状态展示。
+- 不新增后端能力，不改变引擎接口。
+
+## 6. 明确禁止的伪完成
+
+以下情况一律视为不通过：
+
+1. 只在旧页面上方加一个新 header。
+2. 旧 `el-tabs` 和旧 dashboard 原样保留，作为主体继续使用。
+3. 文件管理仍然只是旧文件浏览器全宽铺开，没有右侧详情面板。
+4. BIM 协同只是跳转旧页面，没有项目工作台化。
+5. 工程主数据仍是旧页面入口堆叠，没有步骤感和完成度。
+6. 页面文字解释很多，但交互结构没有变。
+7. 旧路由被删除导致历史链接白屏。
+
+## 7. 旧路由兼容
 
 必须保留旧链接兼容跳转：
 
@@ -191,88 +217,46 @@ BIM 协同
 - `/work/*`
 - `/data-steward/models`
 - `/data-steward/objects`
-- `/digital-twin`
+- `/bim-collaboration?projectId=503`
 
-旧链接不能白屏。
+旧链接可以跳到项目工作台内对应 tab，但不能白屏、不能丢项目上下文。
 
-如果没有当前项目上下文：
+## 8. 验收页面
 
-- 跳回 `/data-steward/assets`
-- 提示“请先选择项目”
+至少必须完成这些页面的浏览器可见效果：
 
-### F. 样式基线
+1. `/data-steward/assets`
+2. `/data-steward/assets/503`
+3. `/data-steward/assets/503?tab=files`
+4. `/data-steward/assets/503?tab=master-data`
+5. `/data-steward/assets/503?tab=delivery`
+6. `/data-steward/assets/503?tab=bim`
+7. `/bim-collaboration?projectId=503`
 
-样式方向：
+## 9. 必跑验证
 
-- 精致企业 SaaS。
-- 左侧深蓝导航。
-- 浅色内容背景。
-- 白色卡片。
-- 细边框。
-- 柔和阴影。
-- 蓝色主色。
-- 绿 / 橙 / 红用于状态。
-
-禁止：
-
-- 大面积毛玻璃影响可读性。
-- 营销风 hero。
-- 大面积深色内容区。
-- 过度动画。
-- 多套不同风格混用。
-
-## 6. 当前批次不做
-
-本批不迁移具体业务页面主体，不重做完整文件管理器表格，不重做工程主数据内容，不重做交付闭环表格。
-
-本批只做：
-
-- 壳层。
-- 左侧导航。
-- 顶部栏。
-- 项目身份区。
-- 项目内一级 tab。
-- 旧路由兼容。
-
-后续 `UX4-B` 到 `UX4-F` 再逐页重做业务页面。
-
-## 7. 验收标准
-
-必须满足：
-
-1. Fresh login 后仍进入 `/data-steward/assets`。
-2. 左侧导航更接近参考图，不再铺满项目内细碎功能。
-3. 顶部栏包含项目上下文、搜索、用户区，视觉上不再像临时开发页。
-4. 进入 `503 / 105` 项目，项目身份区清楚展示项目名称、编码、负责人、阶段、角色。
-5. 项目内一级 tab 清楚展示：概览、文件管理、工程主数据、交付闭环、BIM 协同、档案目录。
-6. 页面不再出现重复项目工作台大导航模块。
-7. 旧链接兼容跳转不白屏。
-8. 1280 / 1440 / 1920 宽度无横向溢出。
-9. 不泄露真实 NAS 路径、bucket、object key。
-10. 不修改后端、docs、数据库迁移。
-
-## 8. 自测要求
-
-至少执行：
+完成后执行：
 
 ```bash
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-m3g8-object-first-read-fallback.sh
+bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
 
-浏览器自测：
+## 10. 浏览器自测要求
 
-- 打开 `http://127.0.0.1:5173/data-steward/assets`
-- 进入 `105 / projectId=503`
-- 检查顶部栏、左侧导航、项目身份区、项目内 tab
-- 打开旧链接 `/master-data/sections`
-- 打开旧链接 `/work/document-delivery`
-- 打开 `/bim-collaboration?projectId=503`
-- 分别在 1280 / 1440 / 1920 宽度检查无横向溢出
+你必须用浏览器实际查看页面，并在报告里说明：
 
-## 9. 报告要求
+1. 参考图和当前页面分别对照了哪些模块。
+2. 哪些旧页面结构被替换。
+3. 哪些旧组件只是复用数据能力，不再原样堆叠。
+4. 1280 / 1440 / 1920 宽度是否有横向溢出。
+5. 旧链接是否兼容。
+
+## 11. 报告要求
 
 完成后写入：
 
@@ -280,24 +264,24 @@ git diff --check
 
 报告必须包含：
 
-1. 实际查看了哪些参考图。
-2. 从参考图复用了哪些结构。
-3. 修改了哪些文件。
-4. 全局壳层如何变化。
-5. 左侧导航如何变化。
-6. 项目内 tab 如何变化。
-7. 旧链接兼容策略。
-8. 自测结果。
-9. 是否改动后端 / docs / 数据库。
-10. 未完成项和风险。
+1. UX4-A-R1 返工摘要。
+2. 5 张参考图逐图借鉴点。
+3. 修改文件列表。
+4. 新项目工作台结构说明。
+5. 项目启动台、项目概览、文件管理、工程主数据、交付闭环、BIM 协同分别如何变化。
+6. 保留的接口和能力。
+7. 没有改后端 / docs / DB / 权限 / 对象存储 / Hermes / BIM 后端能力的确认。
+8. 必跑验证结果。
+9. 浏览器截图或浏览器检查结果。
+10. 未完成事项和风险。
 
-## 10. 完成定义
+## 12. 完成定义
 
-只有同时满足以下条件，才能认为 UX4-A 完成：
+只有同时满足以下条件，才可以标记完成：
 
-- 平台壳层明显从 MVP 形态升级为成熟 SaaS 项目管理界面。
-- 项目工作台不再重复导航。
-- 用户能清楚从左侧、顶部、项目 tab 理解自己在哪里。
-- 旧链接不白屏。
-- 前端构建通过。
-- `handoff/dev-agent/latest-report.md` 已写。
+1. 当前页面不再像旧页面加新壳。
+2. 项目工作台整体结构接近参考图。
+3. 文件管理、工程主数据、交付闭环、BIM 协同至少具备参考图级别的信息层级。
+4. 旧路由兼容。
+5. 前端构建、健康检查、M3G-8、file-access、`git diff --check` 通过。
+6. 报告已写入 `handoff/dev-agent/latest-report.md`。

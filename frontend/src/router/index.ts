@@ -139,7 +139,8 @@ const router = createRouter({
         },
         {
           path: 'digital-twin',
-          redirect: '/bim-collaboration',
+          name: 'digital-twin',
+          component: () => import('@/modules/visualization/pages/DigitalTwinPortalPage.vue'),
           meta: { requiresAuth: true }
         },
         {
@@ -364,13 +365,21 @@ router.beforeEach(async (to) => {
     return { name: 'data-steward-assets' };
   }
 
+  if (to.name === 'bim-collaboration') {
+    return true;
+  }
+
   const legacyTargetName = legacyProjectRouteMap[String(to.name ?? '')];
   if (legacyTargetName) {
     const projectId = authStore.currentProjectId;
     if (projectId) {
       return { name: legacyTargetName, params: { projectId } };
     }
-    return { name: 'data-steward-assets' };
+    return { name: 'data-steward-assets', query: { selectProject: '1' } };
+  }
+
+  if (to.name === 'digital-twin') {
+    return { name: 'bim-collaboration', query: to.query };
   }
 
   const routeProjectId = Number(to.params.projectId);

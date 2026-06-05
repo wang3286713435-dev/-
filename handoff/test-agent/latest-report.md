@@ -1,151 +1,43 @@
-# 测试 Agent 报告：M3G-9 全项目对象化覆盖率报告与 M3 收口验收
+# UX4-B-R3 P1 极短复验报告
 
-时间：2026-06-04 11:16 CST
+测试时间：2026-06-05
 
 ## 1. 结论
 
-M3G-9 验收通过。
+UX4-B-R3 上一轮唯一 P1 已关闭。
 
-本轮确认平台已能基于真实业务台账和当前对象版本状态生成全项目对象化覆盖率只读报告。报告能够说明平台总体覆盖率、105 样板项目完成状态、非 105 项目状态分布、剩余治理与后续动作，并且查询报告不会创建迁移任务或触碰真实项目文件。
+本轮只复验运行期文件是否已纳入 Git、前端构建和 Git 格式检查。5 个运行期文件均已显示为 `A`，不再是 `??` 未跟踪状态。
 
-建议主 agent 收口 M3G-9，并建议主 agent 进入 M3 整体收口判断。
+建议主 agent 可以进入 UX4-B-R3 收口判断。
 
-## 2. P0 / P1 / P2
+## 2. P1 复验结果
 
-- P0：无。
-- P1：无。
-- P2：既有前端构建大包 warning；本地非交付未跟踪项仍存在但未纳入 Git。
+以下文件均已纳入 Git 暂存 / 跟踪范围：
 
-## 3. 构建和脚本结果
+- `frontend/src/assets/ux4/project-cover-reference.png`
+- `frontend/src/modules/core/components/workspace/WorkspaceBoundaryStrip.vue`
+- `frontend/src/modules/core/components/workspace/WorkspaceCard.vue`
+- `frontend/src/modules/core/components/workspace/WorkspaceFlow.vue`
+- `frontend/src/modules/core/components/workspace/WorkspaceMetricCard.vue`
 
-- 后端构建：通过，`BUILD SUCCESS`。
-- 前端构建：通过，仅既有大包 warning。
-- 后端健康检查：通过，返回 `UP`。
-- M3G-9 专项脚本：通过，`PASS=11 FAIL=0`。
-- M3G-8 对象优先读取回归：通过，`PASS=7 FAIL=0`。
-- M3G-6S-F1 对象版本一致性回归：通过，`PASS=13 FAIL=0`。
-- 文件访问安全回归：通过，`PASS=18 FAIL=0`。
-- 工作区空白字符检查：通过。
-- 暂存区空白字符检查：通过。
+`git status --short` 结果均为 `A`，未再出现 `??`。
 
-## 4. 105 覆盖率结果
+`git diff --cached --name-status` 结果也均为 `A`。
 
-接口抽查确认 105 / `projectId=503`：
+## 3. 命令结果
 
-- 项目编码：`105`。
-- 项目名称：启航华居项目。
-- 总文件数：`2928`。
-- 已对象化文件数：`2928`。
-- 仍在历史 NAS 链路的文件数：`0`。
-- 迁移失败数：`0`。
-- 治理项数：`0`。
-- checksum 覆盖率：`100.0%`。
-- 对象化覆盖率：`100.0%`。
-- 读取策略：`OBJECT_FIRST`。
-- 状态：`COMPLETED`。
+- `corepack pnpm --dir frontend build`：通过。仍有既有 Vite chunk size warning，不影响本轮判断。
+- `git diff --check`：通过。
+- `git diff --cached --check`：通过。
 
-M3G-6S-F1 回归进一步确认：
+## 4. P0 / P1 / P2
 
-- 105 active object version 全部可从当前 NAS 侧 MinIO 读取。
-- 105 对象化覆盖仍完整。
-- active object version 未重复污染。
-- 受控 file-access 可读取对象化文件。
-- 抽样 NAS 原文件 size / mtime 未变化。
+P0：无。
 
-## 5. 非 105 项目状态分布
+P1：无。
 
-接口抽查状态分布：
+P2：既有 Vite chunk size warning，非本轮阻塞项。
 
-- `PARTIAL`：`13` 个项目。
-- `NAS_ONLY`：`2` 个项目。
-- `COMPLETED`：`1` 个项目。
-- `EXCLUDED`：`81` 个项目。
-- `FAILED_NEEDS_GOVERNANCE`：`0` 个项目。
+## 5. 收口建议
 
-读取策略分布：
-
-- `MIXED`：`13` 个项目。
-- `LEGACY_NAS`：`2` 个项目。
-- `OBJECT_FIRST`：`1` 个项目。
-- `EXCLUDED`：`81` 个项目。
-
-结论：非 105 项目没有被伪装成全部完成，平台能明确区分部分对象化、仍为历史 NAS 链路、已排除和已完成项目。
-
-## 6. M3 收口判断字段验证
-
-覆盖率报告返回：
-
-- `dryRun=true`。
-- `reportCode=M3G-9`。
-- `m3ClosureReady=true`。
-- `blockingReasons=[]`。
-- `warnings` 存在，并说明仍有部分对象化项目、历史 NAS 链路项目和排除项目。
-- `nextActions` 存在，并给出 PARTIAL 项目继续分批规划、NAS_ONLY 项目先做 dry-run 后按低风险推进的后续动作。
-
-平台级摘要：
-
-- 项目总数：`97`。
-- 文件总数：`41214`。
-- 已对象化文件数：`2994`。
-- 仍在历史 NAS 链路文件数：`38220`。
-- 失败文件数：`0`。
-- 平台对象化覆盖率：`7.26%`。
-- checksum 覆盖率：`10.72%`。
-
-补充核对：数据库中的 active 对象化文件数为 `2994`，与接口摘要一致；105 文件总数和对象化数均为 `2928`，与接口一致。全局原始文件总数高于报告总数，原因是报告按 M3 收口口径过滤真实项目与可解释项目，不把排除范围外数据混入收口口径。
-
-## 7. 禁出字段扫描结果
-
-M3G-9 专项脚本对接口响应完成禁出字段扫描，结果通过。
-
-浏览器轻验文件服务页时，未发现真实底层路径、对象桶名、对象键、真实查询语句、密钥类字段或底层行数据泄露。
-
-说明：页面出现“基于数据库台账和对象版本状态生成”这类业务说明，不属于底层查询语句泄露。
-
-## 8. 前端轻验结果
-
-打开文件服务 / 对象存储页面：
-
-`http://127.0.0.1:5173/data-steward/assets/503/data-steward/file-service`
-
-验证结果：
-
-- 页面不白屏。
-- 页面无横向溢出。
-- 能看到 `M3G-9 全项目对象化报告`。
-- 能看到全项目对象化覆盖率 `7.26%`。
-- 能看到 97 个项目、41214 个文件、已对象化 2994 个。
-- 能看到完成项目、部分对象化项目、历史 NAS 链路项目、需治理项目、容量、checksum 覆盖等摘要。
-- 能看到 105 为已完成，文件数 `2928`、已对象化 `2928`、剩余 `0`、治理项 `0`、对象化率 `100%`。
-- 能看到非 105 项目状态表，包含部分对象化和历史 NAS 链路项目。
-- 页面未展示真实底层路径、对象桶名、对象键或密钥类字段。
-
-## 9. 是否触碰真实 NAS
-
-未发现真实 NAS 原文件被移动、删除、重命名或覆盖。
-
-本轮 M3G-9 查询是只读报告口径：
-
-- 专项脚本确认查询前后迁移任务数量未增加。
-- M3G-6S-F1 回归确认抽样 NAS 原文件 size / mtime 未变化。
-- M3G-8 回归确认对象读取异常不会静默回退伪装成功。
-
-## 10. 边界检查
-
-本轮未发现：
-
-- 执行全量迁移。
-- 读取 PDF / Office / DWG / RVT / IFC 正文。
-- 写入语义文档或向量索引。
-- 写入 Hermes 记忆。
-- 新增 Hermes 正文问答。
-- 新增 BIM 构件级能力。
-- 修改 `docs/**`。
-
-新增关键脚本 `scripts/dev/check-m3g9-objectification-coverage-report.sh` 已纳入 Git 跟踪。
-
-## 11. 是否建议收口
-
-建议主 agent 收口 M3G-9。
-
-同时建议主 agent 进入 M3 整体收口判断。测试侧依据是：105 完整样板已完成，对象优先读取稳定，全项目覆盖率报告可查，非 105 状态可解释，file-access 与 M3G-8 回归通过，当前无 P0 / P1。
+建议主 agent 收口 UX4-B-R3。

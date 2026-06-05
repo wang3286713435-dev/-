@@ -779,6 +779,8 @@ function formatDate(value: string | null | undefined) {
   display: grid;
   gap: var(--zy-sp-4);
   min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .initialization-page__header,
@@ -788,6 +790,15 @@ function formatDate(value: string | null | undefined) {
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--zy-sp-4);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.initialization-page__header > div,
+.initialization-panel__header > div,
+.initialization-result > div,
+.initialization-hero > div,
+.masterdata-next-action > div {
   min-width: 0;
 }
 
@@ -822,6 +833,8 @@ function formatDate(value: string | null | undefined) {
 .initialization-panel,
 .initialization-result {
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   padding: var(--zy-sp-5);
   border: var(--zy-border);
   border-radius: var(--zy-radius-base);
@@ -880,6 +893,7 @@ function formatDate(value: string | null | undefined) {
   display: grid;
   gap: 4px;
   min-width: 0;
+  max-width: 100%;
   padding: var(--zy-sp-3) var(--zy-sp-4);
   border: 1px solid rgba(245, 158, 11, 0.28);
   border-left: 3px solid var(--zy-amber-500);
@@ -905,6 +919,7 @@ function formatDate(value: string | null | undefined) {
   font-weight: var(--zy-fw-bold);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
 }
 
 .onboarding-summary {
@@ -919,6 +934,7 @@ function formatDate(value: string | null | undefined) {
   display: grid;
   gap: 4px;
   min-width: 0;
+  max-width: 100%;
   padding: var(--zy-sp-3) var(--zy-sp-4);
   border: var(--zy-border-soft);
   border-radius: var(--zy-radius-base);
@@ -936,6 +952,7 @@ function formatDate(value: string | null | undefined) {
   font-size: var(--zy-fs-xl);
   font-weight: var(--zy-fw-bold);
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .onboarding-clue-grid {
@@ -952,6 +969,12 @@ function formatDate(value: string | null | undefined) {
   gap: var(--zy-sp-3);
   margin-top: var(--zy-sp-3);
   min-width: 0;
+}
+
+.onboarding-distribution-grid article,
+.onboarding-columns section {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .onboarding-clue-grid article {
@@ -1037,6 +1060,8 @@ function formatDate(value: string | null | undefined) {
   color: var(--zy-ink);
   font-size: var(--zy-fs-sm);
   font-weight: var(--zy-fw-semi);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .onboarding-list span {
@@ -1057,6 +1082,7 @@ function formatDate(value: string | null | undefined) {
   grid-template-columns: minmax(260px, 0.75fr) minmax(0, 1.25fr);
   gap: var(--zy-sp-4);
   min-width: 0;
+  max-width: 100%;
 }
 
 .template-list {
@@ -1069,6 +1095,7 @@ function formatDate(value: string | null | undefined) {
   display: grid;
   gap: 6px;
   min-width: 0;
+  max-width: 100%;
   padding: var(--zy-sp-3) var(--zy-sp-4);
   text-align: left;
   border: var(--zy-border-soft);
@@ -1109,6 +1136,19 @@ function formatDate(value: string | null | undefined) {
 .initialization-table {
   width: 100%;
   min-width: 0;
+  max-width: 100%;
+}
+
+.initialization-table :deep(.el-table__inner-wrapper),
+.initialization-table :deep(.el-scrollbar),
+.initialization-table :deep(.el-scrollbar__wrap) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.initialization-table :deep(.cell) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .preview-summary {
@@ -1166,6 +1206,8 @@ function formatDate(value: string | null | undefined) {
   align-items: center;
   justify-content: space-between;
   gap: var(--zy-sp-2);
+  min-width: 0;
+  max-width: 100%;
   padding: var(--zy-sp-3);
   border: var(--zy-border-soft);
   border-radius: var(--zy-radius-base);

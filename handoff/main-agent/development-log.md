@@ -5109,3 +5109,121 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - 开发报告中必须写清实际查看了哪些预览图、复用了哪些结构、哪些未照搬及原因。
   - 检查 `git diff --name-only`，确认无后端、docs、数据库迁移越界。
   - 检查 fresh login、503/105 项目工作台、旧链接、BIM 协同入口、1280/1440/1920 宽度。
+
+## 2026-06-05 UX4-A 开发报告初审与测试安排
+
+- 开发 agent 已完成 `UX4-A` 并写回 `handoff/dev-agent/latest-report.md`。
+- 主 agent 初审：
+  - 开发报告已明确列出 5 张参考图，并说明复用结构和未照搬原因。
+  - 当前未发现 `backend/**`、`docs/**`、数据库迁移被修改。
+  - 当前改动集中在前端壳层、左侧导航、项目身份区、项目一级 tab、路由兼容和开发报告。
+  - 前端构建通过，健康检查 `UP`，`git diff --check` 通过。
+  - 前端代码 diff 未发现新增真实 NAS 路径、bucket、object key、`storage_uri`、SQL、token、secret 展示。
+  - 5173 前端服务确认来自当前项目目录 `/Users/vc/Documents/数字化交付平台/frontend`。
+  - HTTP 抽查 `/data-steward/assets`、`/data-steward/assets/503`、`/master-data/sections`、`/work/document-delivery`、`/bim-collaboration?projectId=503` 均返回 200。
+- 已更新测试 prompt：
+  - `handoff/test-agent/current-prompt.md`
+- 本轮暂不收口：
+  - 需要测试 agent 继续做浏览器视觉验收、多分辨率、旧链接兼容和项目 tab 跳转验证。
+
+## 2026-06-05 UX4-A 测试不通过：P0 修复安排
+
+- 测试 agent 已完成 `UX4-A` 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：不通过，不建议收口。
+- P0：
+  - `AppLayout.vue` 运行时报错 `ReferenceError: hasEmployeeManagementPermission is not defined`，导致项目启动台、503 项目工作台、旧链接页、BIM 协同页登录后白屏。
+  - `scripts/dev/check-m3g8-object-first-read-fallback.sh` 失败，当前存在 `OBJECT_STORED` 候选但未找到可读的 MinIO 副本小文件。
+- 主 agent 裁决：
+  - 不进入 `UX4-B`。
+  - 开发 agent 当前任务改为 `UX4-A P0 修复`。
+  - P0-1 必须先修复壳层白屏。
+  - P0-2 必须先定位是环境样本、历史对象版本、脚本选择还是业务逻辑回归；不得为了通过脚本放宽对象优先读取安全边界。
+- 已更新：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试短复验 prompt：`handoff/test-agent/current-prompt.md`
+
+## 2026-06-05 UX4-A P0 修复开发报告初审
+
+- 开发 agent 已完成 `UX4-A P0 修复` 并写回 `handoff/dev-agent/latest-report.md`。
+- 主 agent 初审：
+  - `P0-1` 白屏根因明确：`AppLayout.vue` 调用了未定义的 `hasEmployeeManagementPermission()`。
+  - 修复方式为在 `AppLayout.vue` 内补本地权限判断，权限码仍为 `CORE_USER_MANAGE` / `CORE_PROJECT_ROLE_MANAGE`，未改 router 的 `adminOnly` 拦截。
+  - `P0-2` 根因判定为历史 `OBJECT_STORED` 记录与当前 MinIO 副本不可读/未对齐；后端对象优先读取“不可读不静默 fallback NAS”的边界没有放宽。
+  - `check-m3g8-object-first-read-fallback.sh` 改为优先用历史可读对象样本；没有可读样本时，通过平台受控对象化任务创建临时小文件样本继续验证对象优先读取语义。
+  - 当前未发现后端源码、docs 或数据库迁移改动。
+- 主 agent 复跑结果：
+  - 前端构建通过，仅保留既有 Vite chunk warning。
+  - 健康检查 `UP`。
+  - `scripts/dev/check-m3g8-object-first-read-fallback.sh` 通过，`PASS=7 FAIL=0`。
+  - `scripts/dev/check-phase2-batch4-file-access.sh` 通过，`PASS=18 FAIL=0`。
+  - `git diff --check` 通过。
+- 当前裁决：
+  - 可以交给测试 agent 按 `handoff/test-agent/current-prompt.md` 做 UX4-A P0 极短复验。
+  - 主 agent 仍不收口 UX4-A，等待测试 agent 确认浏览器白屏已关闭。
+
+## 2026-06-05 UX4-A 不收口：进入 UX4-A-R1 参考图驱动返工
+
+- 用户反馈：
+  - 当前开发 agent 的实现与参考图差距很大。
+  - 用户要的是“重构当前 demo，但不改变接口结构，仅优化前端交互逻辑和视觉效果”。
+  - 当前实现仍然是在旧页面基础上添加新壳层。
+- 主 agent 自查结论：
+  - 当前 `/data-steward/assets/503` 页面仍是旧资产详情页加新项目身份区。
+  - `AssetProjectDetailPage.vue` 仍保留旧 `el-tabs`、旧资产总览、旧治理风险、旧文件类型等主体结构。
+  - 文件管理、工程主数据、交付闭环、BIM 协同没有形成参考图级别的统一项目工作台结构。
+  - `AssetOverviewPage.vue` 对项目启动台的重构不充分。
+- 裁决：
+  - `UX4-A` 不收口。
+  - 当前实现降级为 `UX4-A0：壳层探索稿`。
+  - 新增返工批次 `UX4-A-R1：参考图驱动前端返工`。
+- 已更新：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+- UX4-A-R1 核心要求：
+  - 不改后端接口、不改数据库、不改权限、不改对象存储、不改 Hermes、不改 BIM 后端能力。
+  - 必须实际查看 5 张参考图。
+  - 建立统一项目工作台模板。
+  - 项目启动台、项目概览、文件管理、工程主数据、交付闭环、BIM 协同都要按参考图重新组织。
+  - 旧组件只能复用数据能力，不能原样堆回页面。
+  - 文件管理必须形成左目录树、中间文件列表、右侧详情面板。
+  - 旧链接必须兼容。
+
+## 2026-06-05 UX4-B-R3 开发报告初审
+
+- 开发 agent 已完成一轮 UX4 后续功能和小 bug 修复，并写回 `handoff/dev-agent/latest-report.md`。
+- 报告批次名为 `UX4-B-R3：启动台状态卡片、主数据布局与葛兰岱尔 Viewer 接入修复`。
+- 本轮开发 agent 声称修复：
+  - 项目启动台“项目总体状态”圆环内数字与说明文字重叠。
+  - 工程主数据页卡片 / 表格横向无限延长。
+  - 项目工作台 BIM 协同区域只显示静态占位，未读取葛兰岱尔轻量化 Viewer 状态。
+- 主 agent 初审：
+  - 当前改动仍集中在前端、handoff 和既有 M3G-8 脚本；未看到 `backend/**`、数据库迁移或 `docs/**` 修改。
+  - 新增运行期文件仍为未跟踪状态：`frontend/src/assets/ux4/project-cover-reference.png` 与 `frontend/src/modules/core/components/workspace/*.vue`，测试和收口前必须确认纳入 Git。
+  - BIM 协同已读取 `fetchGlandarModelFiles(projectId)`，并只在存在 `viewerAvailable=true` 且 `latestJobId` 时嵌入 Viewer。
+  - 当前 503 若葛兰岱尔模型清单为 0，页面应显示真实空状态，而不是伪造 Viewer。
+- 已更新测试 prompt：
+  - `handoff/test-agent/current-prompt.md`
+- 测试重点：
+  - 检查启动台圆环重叠是否关闭。
+  - 检查 503 / 505 工程主数据页是否仍页面级横向撑宽。
+  - 检查 BIM 协同是否读取真实葛兰岱尔状态，且无可用 Viewer 时不误导用户。
+  - 检查新增前端组件和图片是否纳入 Git 跟踪。
+
+## 2026-06-05 UX4-B-R3 收口
+
+- 测试 agent 已完成 `UX4-B-R3` P1 极短复验，报告写入 `handoff/test-agent/latest-report.md`。
+- 上轮唯一 P1 已关闭：
+  - `frontend/src/assets/ux4/project-cover-reference.png` 已纳入 Git 暂存。
+  - `frontend/src/modules/core/components/workspace/WorkspaceBoundaryStrip.vue` 已纳入 Git 暂存。
+  - `frontend/src/modules/core/components/workspace/WorkspaceCard.vue` 已纳入 Git 暂存。
+  - `frontend/src/modules/core/components/workspace/WorkspaceFlow.vue` 已纳入 Git 暂存。
+  - `frontend/src/modules/core/components/workspace/WorkspaceMetricCard.vue` 已纳入 Git 暂存。
+- 复验结果：
+  - 前端构建通过。
+  - `git diff --check` 通过。
+  - `git diff --cached --check` 通过。
+  - 当前无 P0 / P1。
+- 主 agent 收口判断：
+  - `UX4-B-R3` 可以收口。
+  - 仅保留既有 P2：Vite chunk size warning。
+  - 后续进入下一批前，需要根据用户优先级决定是继续 UX4 视觉/交互精修，还是先整理当前 UX4 分支提交。
