@@ -28,6 +28,8 @@
    当前真实开发基线与后续路线，说明平台已经完成什么、不能承诺什么，以及 M3/M4/M5/8D/9A 的下一步顺序。
 12. [12-api-contract-and-maintenance.md](/Users/vc/Documents/数字化交付平台/docs/12-api-contract-and-maintenance.md)
    API 契约与文档维护说明，保留运行期 OpenAPI 入口、接口分组、禁出字段和后续 API 同步规则。
+13. [13-ux4-frontend-architecture-baseline.md](/Users/vc/Documents/数字化交付平台/docs/13-ux4-frontend-architecture-baseline.md)
+   UX4 前端信息架构与交互基线，明确全局壳层、项目启动台、项目工作台、文件管理、工程主数据、交付闭环、BIM 协同和旧链接兼容规则。
 
 ## 当前版本结论
 
@@ -66,6 +68,7 @@
 - [10-phase2-development-roadmap.md](/Users/vc/Documents/数字化交付平台/docs/10-phase2-development-roadmap.md)
 - [11-current-baseline-and-next-roadmap.md](/Users/vc/Documents/数字化交付平台/docs/11-current-baseline-and-next-roadmap.md)
 - [12-api-contract-and-maintenance.md](/Users/vc/Documents/数字化交付平台/docs/12-api-contract-and-maintenance.md)
+- [13-ux4-frontend-architecture-baseline.md](/Users/vc/Documents/数字化交付平台/docs/13-ux4-frontend-architecture-baseline.md)
 - [phase2-current-roadmap.md](/Users/vc/Documents/数字化交付平台/handoff/main-agent/phase2-current-roadmap.md)
 - [hermes-jarvis-coupling-roadmap.md](/Users/vc/Documents/数字化交付平台/handoff/main-agent/hermes-jarvis-coupling-roadmap.md)
 
