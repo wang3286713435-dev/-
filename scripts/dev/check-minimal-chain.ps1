@@ -1,7 +1,7 @@
 param(
   [string]$BaseUrl = "http://localhost:8080",
-  [string]$Username = "platform.admin",
-  [string]$Password = "Admin@123",
+  [string]$Username = "admin",
+  [string]$Password = "123456",
   [string]$TargetProjectId = "2"
 )
 

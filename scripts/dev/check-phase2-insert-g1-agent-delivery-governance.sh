@@ -6,8 +6,8 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8080}"
-ADMIN_USER="${ADMIN_USER:-platform.admin}"
-ADMIN_PASS="${ADMIN_PASS:-Admin@123}"
+ADMIN_USER="${ADMIN_USER:-admin}"
+ADMIN_PASS="${ADMIN_PASS:-123456}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d%H%M%S)-$$}"
 RUN_CODE="PHASE2-G1-${RUN_ID}"
 

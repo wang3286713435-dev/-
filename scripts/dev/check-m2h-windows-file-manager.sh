@@ -3,8 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BASE_URL="${BASE_URL:-http://127.0.0.1:8080}"
-ADMIN_USER="${ADMIN_USER:-platform.admin}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-Admin@123}"
+ADMIN_USER="${ADMIN_USER:-admin}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-123456}"
 DB_CONTAINER="${DB_CONTAINER:-delivery-mysql}"
 DB_NAME="${DB_NAME:-delivery_platform}"
 DB_USER="${DB_USER:-root}"

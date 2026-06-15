@@ -2,8 +2,8 @@
 set -euo pipefail
 
 BASE_URL="${1:-http://localhost:8080}"
-ADMIN_USER="${2:-platform.admin}"
-ADMIN_PASSWORD="${3:-Admin@123}"
+ADMIN_USER="${2:-admin}"
+ADMIN_PASSWORD="${3:-123456}"
 PROJECT_ID="${4:-1}"
 OTHER_PROJECT_ID="${5:-2}"
 VIEWER_USER="${VIEWER_USER:-phase2.viewer}"
