@@ -328,6 +328,16 @@ export interface GlandarModelFile {
   updatedAt: string | null;
 }
 
+export interface GlandarReadyModelProject {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  projectManagerName: string | null;
+  roleName: string | null;
+  readyModelCount: number;
+  models: GlandarModelFile[];
+}
+
 export async function fetchVisualizationContext(projectId: number) {
   const { data } = await http.get<ApiResponse<VisualizationContext>>(
     `/api/visualization-adapter/projects/${projectId}/context`
@@ -382,6 +392,13 @@ export async function fetchGlandarRvtPilotFiles(projectId: number) {
 export async function fetchGlandarModelFiles(projectId: number) {
   const { data } = await http.get<ApiResponse<GlandarModelFile[]>>(
     `/api/visualization-adapter/projects/${projectId}/glandar/model-files`
+  );
+  return data.data;
+}
+
+export async function fetchGlandarReadyModelCatalog() {
+  const { data } = await http.get<ApiResponse<GlandarReadyModelProject[]>>(
+    '/api/visualization-adapter/glandar/ready-model-catalog'
   );
   return data.data;
 }

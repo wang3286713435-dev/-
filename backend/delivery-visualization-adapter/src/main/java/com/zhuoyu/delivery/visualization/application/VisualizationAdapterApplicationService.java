@@ -1,6 +1,8 @@
 package com.zhuoyu.delivery.visualization.application;
 
 import com.zhuoyu.delivery.core.audit.application.AuditLogApplicationService;
+import com.zhuoyu.delivery.core.project.application.ProjectAccessApplicationService;
+import com.zhuoyu.delivery.core.project.domain.AccessibleProject;
 import com.zhuoyu.delivery.datasteward.asset.application.AssetApplicationService;
 import com.zhuoyu.delivery.datasteward.asset.application.AssetQualityApplicationService;
 import com.zhuoyu.delivery.datasteward.asset.application.StatisticsApplicationService;
@@ -35,6 +37,7 @@ import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.GlandarComponentP
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.GlandarComponentPropertyItem;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.GlandarComponentPropertyResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.GlandarModelFileResponse;
+import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.GlandarReadyModelProjectResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.GlandarRvtPilotFileResponse;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightRequest;
 import com.zhuoyu.delivery.visualization.dto.VisualizationDtos.HighlightResponse;
@@ -65,6 +68,7 @@ import com.zhuoyu.delivery.visualization.engine.GlandarEngineSettings;
 import com.zhuoyu.delivery.visualization.engine.GlandarStationClient;
 import com.zhuoyu.delivery.visualization.engine.GlandarStationClient.ComponentPropertyResult;
 import com.zhuoyu.delivery.visualization.engine.GlandarStationClient.ComponentPropertyRow;
+import com.zhuoyu.delivery.visualization.engine.GlandarStationClient.ModelOutputProbe;
 import com.zhuoyu.delivery.visualization.engine.GlandarStationClient.QueryResult;
 import com.zhuoyu.delivery.visualization.engine.GlandarStationClient.UploadCommand;
 import com.zhuoyu.delivery.visualization.engine.GlandarStationClient.UploadResult;
@@ -144,6 +148,7 @@ public class VisualizationAdapterApplicationService {
     private final RectificationApplicationService rectificationApplicationService;
     private final AuditLogApplicationService auditLogApplicationService;
     private final SectionNodeApplicationService sectionNodeApplicationService;
+    private final ProjectAccessApplicationService projectAccessApplicationService;
     private final GlandarEngineSettings glandarEngineSettings;
     private final GlandarStationClient glandarStationClient;
     private final LightweightJobRepository lightweightJobRepository;
@@ -160,6 +165,7 @@ public class VisualizationAdapterApplicationService {
         RectificationApplicationService rectificationApplicationService,
         AuditLogApplicationService auditLogApplicationService,
         SectionNodeApplicationService sectionNodeApplicationService,
+        ProjectAccessApplicationService projectAccessApplicationService,
         GlandarEngineSettings glandarEngineSettings,
         GlandarStationClient glandarStationClient,
         LightweightJobRepository lightweightJobRepository,
@@ -175,6 +181,7 @@ public class VisualizationAdapterApplicationService {
         this.rectificationApplicationService = rectificationApplicationService;
         this.auditLogApplicationService = auditLogApplicationService;
         this.sectionNodeApplicationService = sectionNodeApplicationService;
+        this.projectAccessApplicationService = projectAccessApplicationService;
         this.glandarEngineSettings = glandarEngineSettings;
         this.glandarStationClient = glandarStationClient;
         this.lightweightJobRepository = lightweightJobRepository;
@@ -352,6 +359,69 @@ public class VisualizationAdapterApplicationService {
             .toList();
     }
 
+    public List<GlandarReadyModelProjectResponse> glandarReadyModelCatalog(Long userId) {
+        List<AccessibleProject> projects = projectAccessApplicationService.listAccessibleProjects(userId);
+        if (projects.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, List<GlandarModelFileResponse>> readyByProject = lightweightJobRepository
+            .findReadyModels(projects.stream().map(AccessibleProject::id).toList())
+            .stream()
+            .collect(Collectors.groupingBy(
+                LightweightJobRepository.ReadyModelRecord::projectId,
+                LinkedHashMap::new,
+                Collectors.mapping(this::toReadyModelFileResponse, Collectors.toList())
+            ));
+        return projects.stream()
+            .map(project -> {
+                List<GlandarModelFileResponse> readyModels = readyByProject.getOrDefault(project.id(), List.of());
+                return readyModels.isEmpty() ? null : toReadyModelProject(project, readyModels);
+            })
+            .filter(Objects::nonNull)
+            .toList();
+    }
+
+    private GlandarModelFileResponse toReadyModelFileResponse(LightweightJobRepository.ReadyModelRecord record) {
+        String extension = modelFormat(record.fileName());
+        return new GlandarModelFileResponse(
+            record.projectId(),
+            record.fileId(),
+            record.assetUuid(),
+            record.fileName(),
+            extension,
+            record.fileKind(),
+            record.sizeBytes(),
+            defaultText(record.versionNo(), "V1"),
+            null,
+            record.status(),
+            String.valueOf(record.jobId()),
+            record.status(),
+            record.progressPercent(),
+            null,
+            record.viewerAvailable(),
+            true,
+            null,
+            lightweightRecordStatusLabel(record.status(), record.viewerAvailable()),
+            "模型已轻量化，可打开受控 Viewer",
+            record.updatedAt()
+        );
+    }
+
+    private GlandarReadyModelProjectResponse toReadyModelProject(
+        AccessibleProject project,
+        List<GlandarModelFileResponse> readyModels
+    ) {
+        return new GlandarReadyModelProjectResponse(
+            project.id(),
+            project.code(),
+            project.name(),
+            project.projectManagerName(),
+            project.roleName(),
+            readyModels.size(),
+            readyModels
+        );
+    }
+
     public List<GlandarRvtPilotFileResponse> submitGlandarRvtPilotFiles(Long userId, Long projectId, Boolean force) {
         if (!GLANDAR_RVT_PILOT_PROJECT_ID.equals(projectId)) {
             throw new BusinessException("GLANDAR_PILOT_PROJECT_NOT_ALLOWED", "当前项目未纳入葛兰岱尔 RVT 试点",
@@ -405,7 +475,11 @@ public class VisualizationAdapterApplicationService {
             String engineStaticBase = glandarEngineStaticBase(refreshed.modelAccessAddress());
             boolean stationModelReady = "READY".equals(refreshed.status()) && Boolean.TRUE.equals(refreshed.viewerAvailable())
                 && hasText(refreshed.modelAccessAddress());
-            boolean ready = stationModelReady && hasText(engineStaticBase);
+            ModelOutputProbe outputProbe = stationModelReady
+                ? glandarStationClient.probeModelOutput(refreshed.modelAccessAddress())
+                : null;
+            boolean ready = stationModelReady && hasText(engineStaticBase)
+                && outputProbe != null && Boolean.TRUE.equals(outputProbe.readable());
             auditLogApplicationService.record(projectId, MODULE_CODE, "visualization.lightweight.viewer-ticket.issue",
                 "LIGHTWEIGHT_JOB", String.valueOf(refreshed.id()), userId, Map.of(
                     "engineMode", "GLANDAR",
@@ -425,7 +499,7 @@ public class VisualizationAdapterApplicationService {
                 ready ? refreshed.modelAccessAddress() : null,
                 ready ? engineStaticBase : null,
                 ready ? "Viewer 可打开" : "Viewer 暂不可用",
-                ready ? null : viewerTicketBlockedReason(refreshed, engineStaticBase),
+                ready ? null : viewerTicketBlockedReason(refreshed, engineStaticBase, outputProbe),
                 GLANDAR_SUPPORTED_OPERATIONS,
                 GLANDAR_FORBIDDEN_OPERATIONS,
                 ready,
@@ -677,13 +751,20 @@ public class VisualizationAdapterApplicationService {
         }
     }
 
-    private String viewerTicketBlockedReason(LightweightJobRecord record, String engineStaticBase) {
+    private String viewerTicketBlockedReason(
+        LightweightJobRecord record,
+        String engineStaticBase,
+        ModelOutputProbe outputProbe
+    ) {
         if (!"READY".equals(record.status()) || !Boolean.TRUE.equals(record.viewerAvailable())
             || !hasText(record.modelAccessAddress())) {
             return defaultText(record.lastErrorMessage(), "模型仍在转换或引擎尚未返回 Viewer 地址");
         }
         if (!hasText(engineStaticBase)) {
             return "葛兰岱尔 Viewer 静态资源地址未配置，请检查 GLANDAR_STATION_WEB_BASE。";
+        }
+        if (outputProbe != null && !Boolean.TRUE.equals(outputProbe.readable())) {
+            return defaultText(outputProbe.message(), "葛兰岱尔模型输出服务暂不可用，请检查 Station 模型输出服务。");
         }
         return defaultText(record.lastErrorMessage(), "Viewer 暂不可用，请刷新后重试。");
     }
@@ -1013,6 +1094,19 @@ public class VisualizationAdapterApplicationService {
     private String lightweightRecordStatusLabel(LightweightJobRecord record) {
         return switch (defaultText(record.status(), "RUNNING")) {
             case "READY" -> "模型轻量化完成";
+            case "FAILED" -> "模型轻量化失败";
+            case "UPLOADED" -> "模型已提交，等待引擎处理";
+            case "RUNNING" -> "模型轻量化处理中";
+            default -> "模型轻量化任务已创建";
+        };
+    }
+
+    private String lightweightRecordStatusLabel(String status, Boolean viewerAvailable) {
+        if ("READY".equals(defaultText(status, "RUNNING")) && Boolean.TRUE.equals(viewerAvailable)) {
+            return "模型轻量化完成";
+        }
+        return switch (defaultText(status, "RUNNING")) {
+            case "READY" -> "模型轻量化完成，等待 Viewer 确认";
             case "FAILED" -> "模型轻量化失败";
             case "UPLOADED" -> "模型已提交，等待引擎处理";
             case "RUNNING" -> "模型轻量化处理中";

@@ -87,6 +87,64 @@ public class LightweightJobRepository {
         return count == null ? 0L : count;
     }
 
+    public List<ReadyModelRecord> findReadyModels(List<Long> projectIds) {
+        if (projectIds == null || projectIds.isEmpty()) {
+            return List.of();
+        }
+        String sql = """
+            WITH latest_jobs AS (
+                SELECT MAX(id) AS id
+                FROM visualization_lightweight_jobs
+                WHERE deleted = 0
+                  AND project_id IN (:projectIds)
+                GROUP BY project_id, file_id
+            )
+            SELECT j.id AS job_id,
+                   j.project_id,
+                   j.file_id,
+                   j.asset_uuid,
+                   j.lightweight_name,
+                   j.unique_code,
+                   j.status,
+                   j.progress_percent,
+                   j.viewer_available,
+                   j.updated_at,
+                   f.original_name,
+                   f.file_kind,
+                   f.size_bytes,
+                   f.version_no
+            FROM latest_jobs lj
+            JOIN visualization_lightweight_jobs j ON j.id = lj.id
+            JOIN data_file_resources f ON f.id = j.file_id
+                                      AND f.project_id = j.project_id
+                                      AND f.deleted = 0
+            WHERE j.status = 'READY'
+              AND j.viewer_available = 1
+              AND j.model_access_address IS NOT NULL
+              AND j.model_access_address <> ''
+            ORDER BY j.project_id, j.updated_at DESC, j.id DESC
+            """;
+        return jdbcTemplate.query(sql, new MapSqlParameterSource("projectIds", projectIds), (rs, rowNum) -> {
+            Timestamp updatedAt = rs.getTimestamp("updated_at");
+            return new ReadyModelRecord(
+                rs.getLong("project_id"),
+                rs.getLong("file_id"),
+                rs.getString("asset_uuid"),
+                rs.getString("original_name"),
+                rs.getString("file_kind"),
+                rs.getLong("size_bytes"),
+                rs.getString("version_no"),
+                rs.getLong("job_id"),
+                rs.getString("lightweight_name"),
+                rs.getString("unique_code"),
+                rs.getString("status"),
+                rs.getInt("progress_percent"),
+                rs.getBoolean("viewer_available"),
+                updatedAt == null ? null : updatedAt.toInstant()
+            );
+        });
+    }
+
     public Long insertSubmitting(
         Long projectId,
         Long integrationId,
@@ -267,6 +325,24 @@ public class LightweightJobRepository {
         String stationRecordJson,
         Long createdBy,
         Instant createdAt,
+        Instant updatedAt
+    ) {
+    }
+
+    public record ReadyModelRecord(
+        Long projectId,
+        Long fileId,
+        String assetUuid,
+        String fileName,
+        String fileKind,
+        Long sizeBytes,
+        String versionNo,
+        Long jobId,
+        String lightweightName,
+        String uniqueCode,
+        String status,
+        Integer progressPercent,
+        Boolean viewerAvailable,
         Instant updatedAt
     ) {
     }

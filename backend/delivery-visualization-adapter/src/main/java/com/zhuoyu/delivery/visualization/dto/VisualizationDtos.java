@@ -215,6 +215,17 @@ public final class VisualizationDtos {
     ) {
     }
 
+    public record GlandarReadyModelProjectResponse(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        String projectManagerName,
+        String roleName,
+        Integer readyModelCount,
+        List<GlandarModelFileResponse> models
+    ) {
+    }
+
     public record ManagedObjectContextItem(
         Long id,
         String code,
