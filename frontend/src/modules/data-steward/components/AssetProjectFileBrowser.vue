@@ -108,30 +108,6 @@
       </div>
 
       <el-alert
-        class="file-browser__trial-alert"
-        :type="nasTrialAlertType"
-        show-icon
-        :closable="false"
-      >
-        <template #title>
-          <strong>{{ nasTrialTitle }}</strong>
-          <span>{{ nasTrialSummary }}</span>
-        </template>
-      </el-alert>
-
-      <section class="file-browser__current-dir" aria-label="当前文件夹状态">
-        <div>
-          <span>当前文件夹</span>
-          <strong>{{ activeDirectoryLabel }}</strong>
-          <em>{{ activeDirectoryHelper }}</em>
-        </div>
-        <div class="file-browser__current-dir-status">
-          <el-tag :type="directoryWriteStatusType" effect="plain">{{ directoryWriteStatusLabel }}</el-tag>
-          <el-tag v-if="currentProjectMismatch" type="info" effect="plain">按本页面项目执行</el-tag>
-        </div>
-      </section>
-
-      <el-alert
         v-if="hasKeyword"
         class="file-browser__search-alert"
         type="info"
@@ -631,6 +607,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   'open-preview': [fileId: number];
   'open-detail': [fileId: number];
+  'select-file': [file: CatalogFile, origin: { clientX: number; clientY: number }];
+  'blank-click': [];
   'open-metadata': [fileId: number];
   'create-checksum': [fileId: number];
   'create-batch-checksum': [];
@@ -675,6 +653,8 @@ const nasQuarantine = ref<NasQuarantineRecord[]>([]);
 const nasTrialStatus = ref<NasWriteTrialStatus | null>(null);
 const previewArtifacts = ref<Record<number, PreviewArtifact>>({});
 const glandarModelFiles = ref<GlandarModelFile[]>([]);
+const glandarModelFilesLoaded = ref(false);
+let glandarModelFilesPromise: Promise<void> | null = null;
 const activeDir = ref('');
 const expandedDirs = ref<string[]>([]);
 const lastFileId = ref<number | null>(null);
@@ -893,30 +873,6 @@ const activeDirectoryActionTip = computed(() => {
   return '将直接操作当前文件夹，平台会校验路径不越出项目。';
 });
 
-const nasTrialAlertType = computed(() => {
-  if (nasTrialLoadFailed.value) return 'error';
-  if (!nasTrialStatus.value?.enabled) return 'info';
-  return canWriteNas.value ? 'warning' : 'info';
-});
-
-const nasTrialTitle = computed(() => {
-  if (nasTrialLoadFailed.value) return '真实 NAS 写入灰度状态加载失败';
-  if (!nasTrialStatus.value?.enabled) return '真实 NAS 写入灰度未开启';
-  return '真实 NAS 写入灰度已开启';
-});
-
-const nasTrialSummary = computed(() => {
-  if (nasTrialLoadFailed.value) return '为避免误操作，当前页面已禁用真实 NAS 写按钮；请稍后刷新。';
-  if (!nasTrialStatus.value) return '正在确认当前项目的灰度开关、可写目录和账号边界。';
-  const roots = nasTrialStatus.value.allowedRelativeRoots.length
-    ? nasTrialStatus.value.allowedRelativeRoots.map(formatAllowedRoot).join('、')
-    : '未配置可写目录';
-  const roles = nasTrialStatus.value.allowedRoleCodes.join('、') || '未配置角色';
-  const reason = nasTrialStatus.value.canWrite ? '当前目录允许操作。' : nasTrialStatus.value.disabledReason;
-  const projectHint = currentProjectMismatch.value ? '当前页面按项目工作台项目执行，不受全局当前项目显示影响；' : '';
-  return `${projectHint}可写范围：${roots}；允许角色：${roles}；${reason}`;
-});
-
 const activeDirectoryLabel = computed(() => activeDir.value || '项目根目录');
 const hasKeyword = computed(() => filters.keyword.trim().length > 0);
 const searchScopeHint = computed(() => {
@@ -930,27 +886,6 @@ const fileTableEmptyText = computed(() => {
   if (!hasKeyword.value) return '当前文件夹暂无文件或直接子文件夹';
   return filters.searchCurrentFolderOnly ? '当前文件夹及子目录没有匹配文件' : '整个项目没有匹配文件';
 });
-const activeDirectoryHelper = computed(() => {
-  if (nasTrialLoadFailed.value) return '暂时无法确认灰度状态，页面已停用真实写按钮。';
-  if (!hasRouteProjectAccess.value) return '当前账号没有本项目权限，不能查看或操作这个项目的文件。';
-  if (!nasTrialStatus.value) return '正在检查项目权限、灰度开关和可写目录。';
-  if (canWriteNas.value) {
-    return '可以上传、新建、重命名和移动；删除会进入回收站，不会永久删除。';
-  }
-  return nasTrialStatus.value.disabledReason || '当前目录暂不可写。';
-});
-
-const directoryWriteStatusType = computed(() => {
-  if (nasTrialLoadFailed.value) return 'danger';
-  if (canWriteNas.value) return 'success';
-  return 'info';
-});
-
-const directoryWriteStatusLabel = computed(() => {
-  if (nasTrialLoadFailed.value) return '状态未知';
-  return canWriteNas.value ? '当前目录可写' : '当前目录不可写';
-});
-
 const continuityTitle = computed(() => lastFileId.value ? '已恢复项目文件管理位置' : '文件管理会记住本项目位置');
 const continuitySummary = computed(() => {
   const parts = [
@@ -1083,10 +1018,12 @@ watch(
   () => [props.projectId, props.initialQualityIssue] as const,
   () => {
     initializeBrowserState();
+    glandarModelFiles.value = [];
+    glandarModelFilesLoaded.value = false;
+    glandarModelFilesPromise = null;
     void loadNasWriteTrialStatus();
     void loadDirectories();
     void loadFiles();
-    void loadGlandarModelFiles();
   },
   { immediate: true }
 );
@@ -1361,6 +1298,9 @@ function handleEntryClick(row: BrowserEntry, _column: unknown, event: MouseEvent
 
 function selectEntryByMouse(row: BrowserEntry, event: MouseEvent) {
   closeContextMenu();
+  if (row.kind === 'FILE') {
+    emit('select-file', row.file, { clientX: event.clientX, clientY: event.clientY });
+  }
   const keys = browserEntries.value.map((entry) => entry.key);
   if (event.shiftKey && lastSelectionAnchorKey.value) {
     const anchorIndex = keys.indexOf(lastSelectionAnchorKey.value);
@@ -1464,6 +1404,7 @@ function handleTableSurfaceClick(event: MouseEvent) {
   if (!target) return;
   if (target.closest('.el-table__row') || target.closest('.file-browser__context-menu')) return;
   clearSelection();
+  emit('blank-click');
 }
 
 function handleEmptyContextMenu(event: MouseEvent) {
@@ -1616,7 +1557,19 @@ async function loadGlandarModelFiles() {
     glandarModelFiles.value = await fetchGlandarModelFiles(props.projectId);
   } catch {
     glandarModelFiles.value = [];
+  } finally {
+    glandarModelFilesLoaded.value = true;
   }
+}
+
+async function ensureGlandarModelFilesLoaded() {
+  if (glandarModelFilesLoaded.value) return;
+  if (!glandarModelFilesPromise) {
+    glandarModelFilesPromise = loadGlandarModelFiles().finally(() => {
+      glandarModelFilesPromise = null;
+    });
+  }
+  await glandarModelFilesPromise;
 }
 
 async function loadDirectoryChildrenForTree(dirPath: string) {
@@ -1638,8 +1591,7 @@ async function refreshBrowserViews(showSuccess = false) {
   const loaders: Promise<unknown>[] = [
     loadNasWriteTrialStatus(),
     loadDirectories(),
-    loadFiles(),
-    loadGlandarModelFiles()
+    loadFiles()
   ];
   if (operationsDrawerVisible.value) loaders.push(loadNasOperations(false));
   if (quarantineDrawerVisible.value) loaders.push(loadNasQuarantine(false));
@@ -1898,6 +1850,7 @@ async function openGlandarPreviewOrSubmit(entry: FileBrowserEntry) {
     openModelPreviewPlaceholder(entry);
     return;
   }
+  await ensureGlandarModelFilesLoaded();
   const modelStatus = glandarModelStatus(entry.file);
   if (!modelStatus) {
     openModelPreviewPlaceholder(entry);
@@ -3031,10 +2984,6 @@ function pathLeaf(path: string) {
   return parts.at(-1) ?? '项目根目录';
 }
 
-function formatAllowedRoot(path: string) {
-  return path ? path : '项目根目录';
-}
-
 function joinDirectoryPath(parent: string, child: string) {
   const safeParent = normalizeDirectoryPath(parent);
   const safeChild = normalizeDirectoryPath(child);
@@ -3345,81 +3294,6 @@ function formatDate(value: string | null | undefined) {
 .file-browser__search-scope-toggle {
   margin-left: 0;
   white-space: nowrap;
-}
-
-.file-browser__trial-alert {
-  margin-bottom: var(--zy-sp-3);
-  border-radius: var(--zy-radius-base);
-}
-
-.file-browser__trial-alert :deep(.el-alert) {
-  border: var(--zy-border-soft);
-  border-left-width: 3px;
-}
-
-.file-browser__trial-alert :deep(.el-alert__title) {
-  display: grid;
-  gap: 4px;
-  line-height: 1.55;
-}
-
-.file-browser__trial-alert strong {
-  color: var(--zy-ink);
-  font-size: var(--zy-fs-sm);
-  font-weight: var(--zy-fw-semi);
-}
-
-.file-browser__trial-alert span {
-  color: var(--zy-text-soft);
-  font-size: var(--zy-fs-xs);
-}
-
-.file-browser__current-dir {
-  display: flex;
-  gap: var(--zy-sp-3);
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--zy-sp-3);
-  padding: var(--zy-sp-3);
-  border: var(--zy-border-soft);
-  border-radius: var(--zy-radius-base);
-  background: var(--zy-surface);
-}
-
-.file-browser__current-dir > div:first-child {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.file-browser__current-dir span {
-  color: var(--zy-muted);
-  font-size: var(--zy-fs-xs);
-}
-
-.file-browser__current-dir strong {
-  min-width: 0;
-  color: var(--zy-ink);
-  font-size: var(--zy-fs-sm);
-  font-weight: var(--zy-fw-semi);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.file-browser__current-dir em {
-  color: var(--zy-text-soft);
-  font-size: var(--zy-fs-xs);
-  font-style: normal;
-  line-height: 1.55;
-}
-
-.file-browser__current-dir-status {
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  gap: var(--zy-sp-2);
-  justify-content: flex-end;
 }
 
 .file-browser__search-alert {

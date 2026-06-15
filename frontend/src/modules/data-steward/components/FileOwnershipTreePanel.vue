@@ -1,10 +1,10 @@
 <template>
-  <section class="ownership-panel">
+  <section class="ownership-panel" :class="{ 'ownership-panel--primary': primaryView }">
     <header class="ownership-panel__header">
       <div>
-        <span class="zy-code-chip">M2J</span>
-        <h2>工程树人工复核</h2>
-        <p>在资产推导结果上批量复核、调整归属节点和资料类型；不会移动或修改 NAS 文件。</p>
+        <span class="zy-code-chip">工程树</span>
+        <h2>工程树可视化</h2>
+        <p>按真实项目结构查看文件归属、节点缺口和待交付候选；这里只更新平台归属记录，不移动 NAS 文件。</p>
       </div>
       <div class="ownership-panel__actions">
         <el-button :loading="loading" @click="loadAll">刷新</el-button>
@@ -15,97 +15,34 @@
       </div>
     </header>
 
-    <section class="ownership-kpis">
-      <article>
-        <span>项目文件</span>
-        <strong>{{ formatCount(displayTotalFiles) }}</strong>
-        <em>{{ projectScopeLabel }}</em>
-      </article>
-      <article>
-        <span>已有归属</span>
-        <strong>{{ formatCount(displayAssignedFiles) }}</strong>
-        <em>{{ displayAssignmentRate }}%</em>
-      </article>
-      <article>
-        <span>未归属</span>
-        <strong>{{ formatCount(displayUnassignedFiles) }}</strong>
-        <em>{{ displayUnassignedFiles > 0 ? '待建立归属' : '目标已达成' }}</em>
-      </article>
-      <article>
-        <span>已确认</span>
-        <strong>{{ formatCount(coverage?.confirmedFiles) }}</strong>
-        <em>人工确认口径</em>
-      </article>
-    </section>
-
-    <el-alert
-      class="ownership-panel__notice"
-      type="info"
-      show-icon
-      :closable="false"
-      title="这是资产推导树，不是最终工程结构。文件归属不是正式交付完成；过程文件、参考资料和待判定资料也必须有归属，但只有人工确认的正式应交资料才会进入文档/图纸交付挂接。"
-    />
-
-    <section class="ownership-business-tabs">
-      <el-tabs v-model="businessTab">
-        <el-tab-pane label="工程树草案" name="draft">
-          <div class="ownership-business__header">
-            <div>
-              <strong>对象化后工程树优化草案</strong>
-              <span>{{ treeDraft?.analysisBoundary || '只按目录、文件名和元数据生成草案。' }}</span>
-            </div>
-            <el-button size="small" :loading="draftApplyLoading" :disabled="!treeDraft?.nodes?.length" @click="confirmApplyTreeDraft">
-              确认草案
-            </el-button>
-          </div>
-          <el-table v-loading="draftLoading" :data="treeDraft?.nodes ?? []" class="master-table" empty-text="暂无工程树草案">
-            <el-table-column prop="nodeLabel" label="草案节点" min-width="140" />
-            <el-table-column prop="fileCount" label="文件" width="80" />
-            <el-table-column prop="modelCount" label="模型" width="80" />
-            <el-table-column prop="drawingCount" label="图纸" width="80" />
-            <el-table-column prop="formalDeliveryCandidateCount" label="候选" width="90" />
-            <el-table-column prop="currentMissingDeliverableCount" label="缺口" width="90" />
-            <el-table-column prop="recommendationReason" label="推荐原因" min-width="260" show-overflow-tooltip />
-          </el-table>
-        </el-tab-pane>
-        <el-tab-pane label="模型/图纸缺口" name="gap">
-          <div class="ownership-business__header">
-            <div>
-              <strong>目录级模型 / 图纸缺口</strong>
-              <span>{{ modelDrawingGap?.analysisBoundary || '不是 BIM 构件级解析，不能证明模型内部内容。' }}</span>
-            </div>
-            <el-tag type="warning" effect="plain">catalog-only</el-tag>
-          </div>
-          <el-table v-loading="gapLoading" :data="modelDrawingGap?.rows ?? []" class="master-table" empty-text="暂无缺口分析">
-            <el-table-column prop="nodeLabel" label="节点" min-width="130" />
-            <el-table-column label="状态" min-width="150">
-              <template #default="{ row }">
-                <el-tag :type="gapStatusTag(row.gapStatus)" size="small">{{ gapStatusLabel(row.gapStatus) }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="modelCount" label="模型" width="80" />
-            <el-table-column prop="drawingCount" label="图纸" width="80" />
-            <el-table-column prop="processCount" label="过程" width="80" />
-            <el-table-column prop="recommendation" label="建议" min-width="300" show-overflow-tooltip />
-          </el-table>
-        </el-tab-pane>
-        <el-tab-pane label="待交付候选" name="candidates">
-          <div class="ownership-business__header">
-            <div>
-              <strong>缺失应交项候选文件</strong>
-              <span>{{ deliveryCandidates?.analysisBoundary || '候选不会自动挂接，必须人工确认。' }}</span>
-            </div>
-            <el-tag type="info" effect="plain">缺失 {{ deliveryCandidates?.missingCount ?? 0 }} / 候选 {{ deliveryCandidates?.candidateCount ?? 0 }}</el-tag>
-          </div>
-          <el-table v-loading="candidatesLoading" :data="deliveryCandidates?.rows ?? []" class="master-table" empty-text="暂无候选文件">
-            <el-table-column prop="targetName" label="交付目标" min-width="130" show-overflow-tooltip />
-            <el-table-column prop="deliverableTypeName" label="交付类型" min-width="140" show-overflow-tooltip />
-            <el-table-column prop="fileName" label="推荐文件" min-width="220" show-overflow-tooltip />
-            <el-table-column prop="confidence" label="置信度" width="90" />
-            <el-table-column prop="recommendationReason" label="推荐依据" min-width="260" show-overflow-tooltip />
-          </el-table>
-        </el-tab-pane>
-      </el-tabs>
+    <section class="ownership-overview">
+      <div class="ownership-overview__copy">
+        <span>当前项目</span>
+        <strong>{{ projectScopeLabel }}</strong>
+        <p>工程树用于说明每个文件属于项目的哪个位置。过程资料、参考资料和待判定资料也需要归属，但不会自动变成正式交付。</p>
+      </div>
+      <section class="ownership-kpis">
+        <article>
+          <span>项目文件</span>
+          <strong>{{ formatCount(displayTotalFiles) }}</strong>
+          <em>已登记资产</em>
+        </article>
+        <article>
+          <span>已有归属</span>
+          <strong>{{ formatCount(displayAssignedFiles) }}</strong>
+          <em>{{ displayAssignmentRate }}%</em>
+        </article>
+        <article>
+          <span>未归属</span>
+          <strong>{{ formatCount(displayUnassignedFiles) }}</strong>
+          <em>{{ displayUnassignedFiles > 0 ? '待处理' : '已清零' }}</em>
+        </article>
+        <article>
+          <span>已确认</span>
+          <strong>{{ formatCount(coverage?.confirmedFiles) }}</strong>
+          <em>人工口径</em>
+        </article>
+      </section>
     </section>
 
     <section class="ownership-layout">
@@ -289,6 +226,68 @@
       </main>
     </section>
 
+    <section class="ownership-business-tabs">
+      <el-tabs v-model="businessTab">
+        <el-tab-pane label="工程树草案" name="draft">
+          <div class="ownership-business__header">
+            <div>
+              <strong>对象化后工程树优化草案</strong>
+              <span>{{ treeDraft?.analysisBoundary || '只按目录、文件名和元数据生成草案。' }}</span>
+            </div>
+            <el-button size="small" :loading="draftApplyLoading" :disabled="!treeDraft?.nodes?.length" @click="confirmApplyTreeDraft">
+              确认草案
+            </el-button>
+          </div>
+          <el-table v-loading="draftLoading" :data="treeDraft?.nodes ?? []" class="master-table" empty-text="暂无工程树草案">
+            <el-table-column prop="nodeLabel" label="草案节点" min-width="140" />
+            <el-table-column prop="fileCount" label="文件" width="80" />
+            <el-table-column prop="modelCount" label="模型" width="80" />
+            <el-table-column prop="drawingCount" label="图纸" width="80" />
+            <el-table-column prop="formalDeliveryCandidateCount" label="候选" width="90" />
+            <el-table-column prop="currentMissingDeliverableCount" label="缺口" width="90" />
+            <el-table-column prop="recommendationReason" label="推荐原因" min-width="260" show-overflow-tooltip />
+          </el-table>
+        </el-tab-pane>
+        <el-tab-pane label="模型/图纸缺口" name="gap">
+          <div class="ownership-business__header">
+            <div>
+              <strong>目录级模型 / 图纸缺口</strong>
+              <span>{{ modelDrawingGap?.analysisBoundary || '不是 BIM 构件级解析，不能证明模型内部内容。' }}</span>
+            </div>
+            <el-tag type="warning" effect="plain">catalog-only</el-tag>
+          </div>
+          <el-table v-loading="gapLoading" :data="modelDrawingGap?.rows ?? []" class="master-table" empty-text="暂无缺口分析">
+            <el-table-column prop="nodeLabel" label="节点" min-width="130" />
+            <el-table-column label="状态" min-width="150">
+              <template #default="{ row }">
+                <el-tag :type="gapStatusTag(row.gapStatus)" size="small">{{ gapStatusLabel(row.gapStatus) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="modelCount" label="模型" width="80" />
+            <el-table-column prop="drawingCount" label="图纸" width="80" />
+            <el-table-column prop="processCount" label="过程" width="80" />
+            <el-table-column prop="recommendation" label="建议" min-width="300" show-overflow-tooltip />
+          </el-table>
+        </el-tab-pane>
+        <el-tab-pane label="待交付候选" name="candidates">
+          <div class="ownership-business__header">
+            <div>
+              <strong>缺失应交项候选文件</strong>
+              <span>{{ deliveryCandidates?.analysisBoundary || '候选不会自动挂接，必须人工确认。' }}</span>
+            </div>
+            <el-tag type="info" effect="plain">缺失 {{ deliveryCandidates?.missingCount ?? 0 }} / 候选 {{ deliveryCandidates?.candidateCount ?? 0 }}</el-tag>
+          </div>
+          <el-table v-loading="candidatesLoading" :data="deliveryCandidates?.rows ?? []" class="master-table" empty-text="暂无候选文件">
+            <el-table-column prop="targetName" label="交付目标" min-width="130" show-overflow-tooltip />
+            <el-table-column prop="deliverableTypeName" label="交付类型" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="fileName" label="推荐文件" min-width="220" show-overflow-tooltip />
+            <el-table-column prop="confidence" label="置信度" width="90" />
+            <el-table-column prop="recommendationReason" label="推荐依据" min-width="260" show-overflow-tooltip />
+          </el-table>
+        </el-tab-pane>
+      </el-tabs>
+    </section>
+
     <el-dialog v-model="typeDialogVisible" title="批量修改归属类型" width="420px">
       <el-form label-position="top">
         <el-form-item label="目标资料类型">
@@ -370,6 +369,7 @@ const props = defineProps<{
   projectId: number;
   active?: boolean;
   focusNodePath?: string;
+  primaryView?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -796,7 +796,7 @@ function formatCount(value?: number | null) {
 <style scoped>
 .ownership-panel {
   display: grid;
-  gap: 18px;
+  gap: 16px;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -809,6 +809,7 @@ function formatCount(value?: number | null) {
 }
 
 .ownership-panel__header,
+.ownership-overview,
 .ownership-layout,
 .ownership-kpis article,
 .ownership-recommendations,
@@ -816,8 +817,8 @@ function formatCount(value?: number | null) {
 .ownership-detail__summary,
 .ownership-node-metrics article {
   border: 1px solid rgba(91, 124, 255, 0.16);
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 20px 48px rgba(42, 55, 104, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 18px 42px rgba(42, 55, 104, 0.07);
 }
 
 .ownership-panel__header {
@@ -826,8 +827,8 @@ function formatCount(value?: number | null) {
   gap: 18px;
   align-items: center;
   min-width: 0;
-  border-radius: 20px;
-  padding: 22px;
+  border-radius: 18px;
+  padding: 20px 22px;
 }
 
 .ownership-panel__header > div:first-child {
@@ -835,12 +836,15 @@ function formatCount(value?: number | null) {
 }
 
 .ownership-panel__header h2 {
-  margin: 8px 0 4px;
+  margin: 8px 0 5px;
   font-size: 24px;
+  line-height: 1.2;
 }
 
 .ownership-panel__header p,
 .ownership-panel__header span,
+.ownership-overview__copy p,
+.ownership-overview__copy span,
 .ownership-kpis span,
 .ownership-kpis em,
 .ownership-detail__summary span,
@@ -857,24 +861,103 @@ function formatCount(value?: number | null) {
   min-width: 0;
 }
 
+.ownership-panel--primary {
+  gap: 14px;
+}
+
+.ownership-panel--primary .ownership-panel__header {
+  order: 1;
+  padding: 14px 16px;
+  border-radius: 16px;
+}
+
+.ownership-panel--primary .ownership-panel__header h2 {
+  margin: 6px 0 0;
+  font-size: 20px;
+}
+
+.ownership-panel--primary .ownership-panel__header p {
+  display: none;
+}
+
+.ownership-panel--primary .ownership-layout {
+  order: 2;
+}
+
+.ownership-panel--primary .ownership-overview {
+  order: 3;
+}
+
+.ownership-panel--primary .ownership-business-tabs {
+  order: 4;
+}
+
+.ownership-panel--primary .ownership-layout {
+  min-height: 690px;
+}
+
+.ownership-overview {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.72fr) minmax(0, 1.28fr);
+  gap: 14px;
+  align-items: stretch;
+  padding: 16px;
+  border-radius: 18px;
+}
+
+.ownership-overview__copy {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 4px 8px;
+}
+
+.ownership-overview__copy span {
+  color: #1d5fd7;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.ownership-overview__copy strong {
+  color: #101828;
+  font-size: 18px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ownership-overview__copy p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .ownership-kpis,
 .ownership-node-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: 10px;
 }
 
 .ownership-kpis article,
 .ownership-node-metrics article {
-  border-radius: 18px;
-  padding: 18px;
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(248, 251, 255, 0.92);
+  box-shadow: none;
 }
 
 .ownership-kpis strong,
 .ownership-node-metrics strong {
   display: block;
-  margin: 8px 0;
-  font-size: 26px;
+  margin: 6px 0;
+  color: #101828;
+  font-size: 24px;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
 }
 
 .ownership-panel__notice {
@@ -889,8 +972,8 @@ function formatCount(value?: number | null) {
   padding: 16px;
   border: 1px solid rgba(91, 124, 255, 0.16);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 20px 48px rgba(42, 55, 104, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 18px 42px rgba(42, 55, 104, 0.07);
 }
 
 .ownership-business__header {
@@ -916,20 +999,21 @@ function formatCount(value?: number | null) {
 
 .ownership-layout {
   display: grid;
-  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
   min-width: 0;
   max-width: 100%;
-  min-height: 560px;
+  min-height: 620px;
   overflow: hidden;
-  border-radius: 22px;
+  border-radius: 20px;
   contain: inline-size;
 }
 
 .ownership-tree {
   min-width: 0;
-  padding: 18px;
+  padding: 18px 16px;
   border-right: 1px solid rgba(91, 124, 255, 0.14);
   overflow: auto;
+  background: rgba(248, 251, 255, 0.62);
 }
 
 .ownership-tree header,
@@ -952,6 +1036,7 @@ function formatCount(value?: number | null) {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  min-height: 30px;
 }
 
 .ownership-tree__node span {
@@ -964,11 +1049,11 @@ function formatCount(value?: number | null) {
 .ownership-detail {
   display: grid;
   align-content: start;
-  gap: 16px;
+  gap: 14px;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
-  padding: 18px;
+  padding: 16px;
 }
 
 .ownership-detail__summary {
@@ -978,8 +1063,8 @@ function formatCount(value?: number | null) {
   align-items: center;
   min-width: 0;
   max-width: 100%;
-  border-radius: 18px;
-  padding: 16px;
+  border-radius: 16px;
+  padding: 14px 16px;
 }
 
 .ownership-detail__summary strong {
@@ -996,8 +1081,8 @@ function formatCount(value?: number | null) {
   max-width: 100%;
   overflow: hidden;
   contain: inline-size;
-  border-radius: 18px;
-  padding: 16px;
+  border-radius: 16px;
+  padding: 14px 16px;
 }
 
 .ownership-node-toolbar {
@@ -1069,6 +1154,7 @@ function formatCount(value?: number | null) {
 
 @media (max-width: 1180px) {
   .ownership-layout,
+  .ownership-overview,
   .ownership-kpis,
   .ownership-node-metrics {
     grid-template-columns: 1fr;

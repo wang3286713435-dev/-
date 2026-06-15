@@ -2,42 +2,33 @@
   <section class="initialization-page">
     <div class="initialization-page__header">
       <div>
-        <h1>真实项目接入向导</h1>
-        <p>{{ projectLabel }}</p>
+        <span class="master-data-page__eyebrow">工程主数据</span>
+        <h1>接入向导</h1>
+        <p>{{ projectLabel }} · 从真实资产线索生成可复核的工程主数据草案。</p>
       </div>
       <el-button :icon="Refresh" :loading="loading" @click="loadPage">刷新</el-button>
     </div>
+
+    <MasterDataStepNav active="initialization" />
 
     <section class="initialization-hero">
       <div>
         <span class="initialization-hero__eyebrow">{{ heroEyebrow }}</span>
         <h2>{{ heroTitle }}</h2>
-        <p>
-          接入向导只读取 catalog metadata、项目来源、扫描记录和受控路径映射状态，不读取文件正文，不解析 BIM 构件，不访问或复制 NAS 文件。模板内容只是参考骨架，真实项目需要人工确认部位树、节点类型和交付物标准。
-        </p>
+        <p>接入向导只根据资产目录、文件类型和项目线索生成草案。真正生效前，仍需要人工确认部位树、节点类型和交付物标准。</p>
       </div>
       <el-tag size="large" :type="status?.ready ? 'success' : 'warning'">
         {{ status?.ready ? '标准已就绪' : '待初始化' }}
       </el-tag>
     </section>
 
-    <el-alert
-      v-if="realProjectManualMode"
-      class="initialization-alert"
-      type="warning"
-      :closable="false"
-      show-icon
-      title="真实项目不会通过一键模板直接变成就绪标准"
-      :description="status?.ready ? '工程主数据已生成，但仍需进入部位树、节点类型、交付物标准继续人工复核和维护。' : '当前页面只展示真实资产目录线索和标准草案。下一步请进入部位树、节点类型、交付物标准逐项确认。'"
-    />
-
-    <section class="masterdata-next-action">
+    <section class="master-workspace-callout">
       <div>
         <span>先定义规则</span>
         <strong>接入向导只生成草案，真正交付前还要复核三类规则</strong>
         <p>先确认部位树，再锁定节点类型，最后配置交付物标准。规则稳定后，文档 / 图纸交付页面才会准确计算应交和缺失。</p>
       </div>
-      <div class="masterdata-next-action__actions">
+      <div class="master-workspace-callout__actions">
         <el-button type="primary" @click="router.push({ name: 'project-master-data-sections', params: { projectId } })">查看部位树</el-button>
         <el-button @click="router.push({ name: 'project-master-data-node-types', params: { projectId } })">查看节点类型</el-button>
         <el-button @click="router.push({ name: 'project-master-data-deliverable-standard', params: { projectId } })">查看交付物标准</el-button>
@@ -388,6 +379,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Refresh } from '@element-plus/icons-vue';
 
+import MasterDataStepNav from '@/modules/master-data/components/MasterDataStepNav.vue';
 import {
   applyOnboardingDraft,
   confirmOnboardingDraft,

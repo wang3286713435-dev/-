@@ -161,11 +161,15 @@
 
       <section v-else-if="workspaceViewKey === 'files'" class="workspace-view workspace-files">
         <nav class="workspace-subtabs" aria-label="文件管理二级导航">
-          <button class="is-active" type="button">全部文件</button>
-          <button type="button">目录浏览</button>
-          <button type="button">待归属</button>
-          <button type="button">对象存储</button>
-          <button type="button">质量异常</button>
+          <button
+            v-for="item in fileWorkspaceSubtabs"
+            :key="item.key"
+            type="button"
+            :class="{ 'is-active': activeFileSubtabKey === item.key }"
+            @click="openFileWorkspaceSubtab(item.key)"
+          >
+            {{ item.label }}
+          </button>
         </nav>
         <div class="workspace-section-head">
           <div>
@@ -181,9 +185,9 @@
         </div>
 
         <section class="workspace-files-layout">
-          <div class="workspace-files-layout__browser">
+          <div class="workspace-files-layout__browser" @pointerdown="handleFileWorkspacePointerDown">
             <AssetProjectFileBrowser
-              v-if="Number.isFinite(projectId)"
+              v-if="Number.isFinite(projectId) && activeFileSubtabKey === 'all'"
               :key="`${projectId}-${fileBrowserRefreshKey}-${catalogInitialQualityIssue}`"
               :project-id="projectId"
               :root-label="projectRootLabel"
@@ -193,15 +197,187 @@
               :active="workspaceViewKey === 'files'"
               @open-preview="openPreviewById"
               @open-detail="openFileDetailById"
+              @select-file="showFileInspector"
+              @blank-click="closeFileInspector"
               @open-metadata="openMetadataById"
               @create-checksum="createChecksumById"
               @create-batch-checksum="createBatchChecksumForProject"
               @ask-hermes-ownership="openHermesForFile"
               @open-ownership-node="openOwnershipNodeFromFile"
             />
-            <el-empty v-else description="请先选择项目" :image-size="56" />
+            <section v-else-if="Number.isFinite(projectId)" class="project-quality-list">
+              <div class="project-quality-list__header">
+                <div>
+                  <span class="project-quality-list__eyebrow">QUALITY</span>
+                  <h3>当前项目质量异常文件</h3>
+                  <p>这里汇总整个项目中需要治理的文件，不按当前目录筛选，也不展示目录树。</p>
+                </div>
+                <div class="project-quality-list__actions">
+                  <el-tag effect="plain">{{ activeQualityIssueLabel }}</el-tag>
+                  <el-button :loading="qualityFilesLoading" @click="loadQualityFiles">刷新</el-button>
+                </div>
+              </div>
+              <div class="project-quality-list__summary">
+                <article>
+                  <span>缺 checksum</span>
+                  <strong>{{ formatCount(qualityOverview?.missingChecksumCount) }}</strong>
+                </article>
+                <article>
+                  <span>专业待完善</span>
+                  <strong>{{ formatCount(qualityOverview?.missingDisciplineCount) }}</strong>
+                </article>
+                <article>
+                  <span>置信度待确认</span>
+                  <strong>{{ formatCount(qualityOverview?.missingConfidenceCount) }}</strong>
+                </article>
+                <article>
+                  <span>当前清单</span>
+                  <strong>{{ formatCount(qualityFilesPage.total) }}</strong>
+                </article>
+              </div>
+              <el-table
+                v-loading="qualityFilesLoading"
+                :data="qualityFiles"
+                class="master-table project-quality-table"
+                empty-text="当前项目暂无质量异常文件"
+              >
+                <el-table-column label="文件" min-width="260" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <div class="project-quality-file">
+                      <strong>{{ row.fileName }}</strong>
+                      <span>{{ row.ownershipNodeLabel || row.logicalPath || '项目内已登记文件' }}</span>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="异常项" min-width="220">
+                  <template #default="{ row }">
+                    <div class="project-quality-tags">
+                      <el-tag
+                        v-for="flag in qualityFlagsForCatalog(row)"
+                        :key="flag"
+                        size="small"
+                        type="warning"
+                        effect="plain"
+                      >
+                        {{ qualityFlagLabel(flag) }}
+                      </el-tag>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="类型" width="100">
+                  <template #default="{ row }">{{ fileKindLabel(row.fileKind) }}</template>
+                </el-table-column>
+                <el-table-column label="专业" width="120">
+                  <template #default="{ row }">{{ row.disciplineName || disciplineLabel(row.disciplineCode) }}</template>
+                </el-table-column>
+                <el-table-column label="版本" width="90">
+                  <template #default="{ row }">{{ row.version || '-' }}</template>
+                </el-table-column>
+                <el-table-column label="大小" width="110">
+                  <template #default="{ row }">{{ formatBytes(row.sizeBytes) }}</template>
+                </el-table-column>
+                <el-table-column label="存储" width="150">
+                  <template #default="{ row }">{{ fileStorageModeLabel(row) }}</template>
+                </el-table-column>
+                <el-table-column label="更新时间" width="160">
+                  <template #default="{ row }">{{ formatDate(row.updatedAt) }}</template>
+                </el-table-column>
+                <el-table-column label="操作" width="140" fixed="right">
+                  <template #default="{ row }">
+                    <el-button size="small" text :disabled="!row.fileId" @click="row.fileId && openFileDetailById(row.fileId)">详情</el-button>
+                    <el-button size="small" text :disabled="!row.fileId" @click="row.fileId && openMetadataById(row.fileId)">治理</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div class="project-quality-list__footer">
+                <el-pagination
+                  v-model:current-page="qualityFilesPage.page"
+                  v-model:page-size="qualityFilesPage.pageSize"
+                  layout="total, sizes, prev, pager, next"
+                  :page-sizes="[10, 20, 50]"
+                  :total="qualityFilesPage.total"
+                  @current-change="loadQualityFiles"
+                  @size-change="handleQualityPageSizeChange"
+                />
+              </div>
+            </section>
+            <section
+              v-if="fileInspector && activeFileSubtabKey === 'all'"
+              :key="fileInspectorKey"
+              class="workspace-file-inspector workspace-file-inspector--float"
+              :class="{ 'is-dragging': fileInspectorDrag.active }"
+              :style="fileInspectorStyle"
+              role="dialog"
+              aria-label="文件详情预览"
+            >
+              <div class="workspace-panel__header workspace-file-inspector__dragbar" @pointerdown="startFileInspectorDrag">
+                <div>
+                  <span>DETAIL</span>
+                  <strong>{{ fileInspector.fileName }}</strong>
+                </div>
+                <div class="workspace-file-inspector__window-actions" @pointerdown.stop>
+                  <el-button circle text :icon="Close" aria-label="关闭文件详情面板" @click="closeFileInspector" />
+                </div>
+              </div>
+              <div class="workspace-file-preview">
+                <div v-loading="inspectorPreviewLoading" class="workspace-file-preview__thumb">
+                  <template v-if="inspectorPreviewEmbedUrl && isInspectorImagePreview">
+                    <img :src="inspectorPreviewEmbedUrl" :alt="fileInspector.fileName" />
+                  </template>
+                  <template v-else-if="inspectorPdfPreviewUrl && isInspectorPdfPreview">
+                    <iframe :src="inspectorPdfPreviewUrl" :title="`${fileInspector.fileName} 缩略预览`" />
+                  </template>
+                  <div v-else class="workspace-file-preview__thumb-placeholder">
+                    <strong>{{ inspectorPreviewThumbnailLabel }}</strong>
+                    <span>{{ inspectorPreviewThumbnailHint }}</span>
+                  </div>
+                </div>
+                <div class="workspace-file-preview__summary">
+                  <span>{{ fileKindLabel(fileInspector.fileKind) }}</span>
+                  <strong>{{ formatBytes(fileInspector.sizeBytes) }}</strong>
+                  <small>{{ inspectorPreviewSummary }}</small>
+                </div>
+              </div>
+              <dl class="workspace-detail-list">
+                <div>
+                  <dt>项目内路径</dt>
+                  <dd>{{ fileInspectorDisplayPath }}</dd>
+                </div>
+                <div>
+                  <dt>文件大小</dt>
+                  <dd>{{ formatBytes(fileInspector.sizeBytes) }}</dd>
+                </div>
+                <div>
+                  <dt>归属</dt>
+                  <dd>{{ fileInspector.ownershipNodeLabel || '待确认归属' }}</dd>
+                </div>
+                <div>
+                  <dt>对象存储</dt>
+                  <dd>{{ fileStorageModeLabel(fileInspector) }}</dd>
+                </div>
+                <div>
+                  <dt>版本</dt>
+                  <dd>{{ fileInspector.version || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>更新时间</dt>
+                  <dd>{{ formatDate(fileInspector.updatedAt) }}</dd>
+                </div>
+              </dl>
+              <div class="workspace-file-inspector__actions">
+                <el-button type="primary" :disabled="!fileInspector.fileId" @click="fileInspector.fileId && openFileDetailById(fileInspector.fileId)">查看详情</el-button>
+                <el-button :disabled="!fileInspector.fileId" @click="fileInspector.fileId && openPreviewById(fileInspector.fileId)">预览状态</el-button>
+              </div>
+              <el-alert
+                title="安全边界：不展示真实 NAS 路径，预览和下载必须走 file-access 受控票据。"
+                type="warning"
+                show-icon
+                :closable="false"
+              />
+            </section>
+            <el-empty v-if="!Number.isFinite(projectId)" description="请先选择项目" :image-size="56" />
 
-            <section v-if="Number.isFinite(projectId)" class="asset-job-panel" data-m1e-checksum-jobs>
+            <section v-if="Number.isFinite(projectId) && activeFileSubtabKey === 'all'" class="asset-job-panel" data-m1e-checksum-jobs>
               <div class="asset-job-panel__header">
                 <div>
                   <h2>checksum 后台任务</h2>
@@ -268,80 +444,44 @@
             </section>
           </div>
 
-          <aside class="workspace-file-inspector">
-            <div class="workspace-panel__header">
-              <div>
-                <span>DETAIL</span>
-                <strong>文件详情面板</strong>
-              </div>
-            </div>
-            <template v-if="fileInspector">
-              <div class="workspace-file-preview">
-                <span>{{ fileKindLabel(fileInspector.fileKind) }}</span>
-                <strong>{{ fileInspector.fileName }}</strong>
-              </div>
-              <dl class="workspace-detail-list">
-                <div>
-                  <dt>归属</dt>
-                  <dd>{{ fileInspector.ownershipNodeLabel || '待确认归属' }}</dd>
-                </div>
-                <div>
-                  <dt>对象存储</dt>
-                  <dd>{{ fileStorageModeLabel(fileInspector) }}</dd>
-                </div>
-                <div>
-                  <dt>版本</dt>
-                  <dd>{{ fileInspector.version || '-' }}</dd>
-                </div>
-                <div>
-                  <dt>更新时间</dt>
-                  <dd>{{ formatDate(fileInspector.updatedAt) }}</dd>
-                </div>
-              </dl>
-              <div class="workspace-file-inspector__actions">
-                <el-button type="primary" :disabled="!fileInspector.fileId" @click="fileInspector.fileId && openFileDetailById(fileInspector.fileId)">查看详情</el-button>
-                <el-button :disabled="!fileInspector.fileId" @click="fileInspector.fileId && openPreviewById(fileInspector.fileId)">预览状态</el-button>
-              </div>
-            </template>
-            <el-empty v-else description="选择文件后查看详情；底层 NAS 路径不会展示" :image-size="54" />
-            <el-alert
-              title="安全边界：不展示真实 NAS 路径，预览和下载必须走 file-access 受控票据。"
-              type="warning"
-              show-icon
-              :closable="false"
-            />
-          </aside>
         </section>
       </section>
 
       <section v-else-if="workspaceViewKey === 'master-data'" class="workspace-view workspace-master-data">
         <nav class="workspace-subtabs" aria-label="工程主数据二级导航">
-          <button class="is-active" type="button">接入向导</button>
-          <button type="button">部位树</button>
-          <button type="button">节点类型</button>
-          <button type="button">交付物标准</button>
+          <button
+            v-for="item in masterDataWorkspaceSubtabs"
+            :key="item.key"
+            type="button"
+            :class="{ 'is-active': item.key === 'tree' }"
+            @click="openMasterDataWorkspaceSubtab(item.key)"
+          >
+            {{ item.label }}
+          </button>
         </nav>
-        <div class="workspace-section-head">
-          <div>
-            <h2>工程主数据</h2>
-            <p>先定义部位、节点类型和交付标准，再驱动后续缺失项、审核和归档。</p>
-          </div>
-          <div class="workspace-completion">
-            <strong>{{ masterDataCompletion }}%</strong>
-            <span>完成度</span>
-          </div>
-        </div>
 
-        <div class="workspace-master-steps">
-          <article v-for="item in masterDataSteps" :key="item.title" :class="{ 'is-done': item.done, 'is-current': item.current }">
-            <span>{{ item.index }}</span>
-            <strong>{{ item.title }}</strong>
-            <em>{{ item.status }}</em>
-          </article>
-        </div>
+        <section class="workspace-master-primary">
+          <FileOwnershipTreePanel
+            v-if="Number.isFinite(projectId)"
+            :project-id="projectId"
+            :active="workspaceViewKey === 'master-data'"
+            :focus-node-path="ownershipFocusNodePath"
+            primary-view
+            @updated="handleOwnershipUpdated"
+          />
+          <el-empty v-else description="请先选择项目" :image-size="56" />
+        </section>
 
-        <section class="workspace-master-layout">
-          <aside class="workspace-panel">
+        <section class="workspace-master-support" aria-label="工程主数据辅助信息">
+          <div class="workspace-master-steps workspace-master-steps--compact">
+            <article v-for="item in masterDataSteps" :key="item.title" :class="{ 'is-done': item.done, 'is-current': item.current }">
+              <span>{{ item.index }}</span>
+              <strong>{{ item.title }}</strong>
+              <em>{{ item.status }}</em>
+            </article>
+          </div>
+
+          <aside class="workspace-panel workspace-panel--compact">
             <div class="workspace-panel__header">
               <div>
                 <span>BLOCKERS</span>
@@ -357,18 +497,7 @@
             </div>
           </aside>
 
-          <div class="workspace-master-layout__tree">
-            <FileOwnershipTreePanel
-              v-if="Number.isFinite(projectId)"
-              :project-id="projectId"
-              :active="workspaceViewKey === 'master-data'"
-              :focus-node-path="ownershipFocusNodePath"
-              @updated="handleOwnershipUpdated"
-            />
-            <el-empty v-else description="请先选择项目" :image-size="56" />
-          </div>
-
-          <aside class="workspace-panel">
+          <aside class="workspace-panel workspace-panel--compact">
             <div class="workspace-panel__header">
               <div>
                 <span>NODE INFO</span>
@@ -733,16 +862,16 @@
             <el-button :icon="View" :loading="previewLoading" @click="openPreview(selectedFile)">查看预览状态</el-button>
             <el-button
               type="success"
-              :disabled="!canOpenPreview(currentPreview)"
+              :disabled="!selectedFile"
               :loading="accessActionLoading === 'PREVIEW'"
-              @click="openFileAccess('PREVIEW')"
+              @click="selectedFile && openFileAccess('PREVIEW', selectedFile.fileId)"
             >
               打开预览
             </el-button>
             <el-button
               :disabled="!currentPreview?.downloadAllowed"
               :loading="accessActionLoading === 'DOWNLOAD'"
-              @click="openFileAccess('DOWNLOAD')"
+              @click="selectedFile && openFileAccess('DOWNLOAD', selectedFile.fileId)"
             >
               下载文件
             </el-button>
@@ -813,14 +942,14 @@
               type="primary"
               :disabled="!canOpenPreview(selectedPreview)"
               :loading="accessActionLoading === 'PREVIEW'"
-              @click="openFileAccess('PREVIEW')"
+              @click="openFileAccess('PREVIEW', selectedPreview.fileId)"
             >
               打开预览
             </el-button>
             <el-button
               :disabled="!selectedPreview.downloadAllowed"
               :loading="accessActionLoading === 'DOWNLOAD'"
-              @click="openFileAccess('DOWNLOAD')"
+              @click="openFileAccess('DOWNLOAD', selectedPreview.fileId)"
             >
               下载文件
             </el-button>
@@ -964,6 +1093,7 @@ import {
   fetchCatalogFiles,
   fetchFileAsset,
   fetchFilePreview,
+  preparePreviewArtifact,
   createFileAccessTicket,
   retryAssetJob,
   updateFileAssetMetadata,
@@ -976,6 +1106,7 @@ import {
   type AssetStatistics,
   type CatalogFile,
   type FileAsset,
+  type FileAccessTicket,
   type FilePreview
 } from '@/modules/data-steward/api/dataSteward';
 import AssetProjectFileBrowser from '@/modules/data-steward/components/AssetProjectFileBrowser.vue';
@@ -1015,6 +1146,37 @@ const pathMappings = ref<AssetPathMapping[]>([]);
 const disciplineOptions = ref<AssetDiscipline[]>([]);
 const initializationStatus = ref<InitializationStatus | null>(null);
 const recentFiles = ref<CatalogFile[]>([]);
+const fileInspector = ref<CatalogFile | null>(null);
+const fileInspectorOpenSeed = ref(0);
+const fileInspectorPosition = reactive({
+  left: 0,
+  top: 0,
+  originX: 24,
+  originY: 24
+});
+const fileInspectorDimensions = reactive({
+  width: 560,
+  minHeight: 560
+});
+const fileInspectorDrag = reactive({
+  active: false,
+  startX: 0,
+  startY: 0,
+  startLeft: 0,
+  startTop: 0
+});
+const inspectorPreview = ref<FilePreview | null>(null);
+const inspectorPreviewTicket = ref<FileAccessTicket | null>(null);
+const inspectorPreviewObjectUrl = ref('');
+const inspectorPreviewLoading = ref(false);
+const inspectorPreviewError = ref('');
+const qualityFiles = ref<CatalogFile[]>([]);
+const qualityFilesLoading = ref(false);
+const qualityFilesPage = reactive({
+  page: 1,
+  pageSize: 20,
+  total: 0
+});
 const glandarModelFiles = ref<GlandarModelFile[]>([]);
 const detailDrawerVisible = ref(false);
 const selectedFile = ref<FileAsset | null>(null);
@@ -1041,7 +1203,9 @@ const fileBrowserRefreshKey = ref(0);
 const ownershipFocusNodePath = ref('');
 let pageLoadRequestId = 0;
 let previewRequestId = 0;
+let inspectorPreviewRequestId = 0;
 let checksumJobRequestId = 0;
+let qualityFilesRequestId = 0;
 let checksumJobTimer: ReturnType<typeof window.setInterval> | null = null;
 const metadataForm = reactive({
   fileId: undefined as number | undefined,
@@ -1078,6 +1242,8 @@ type WorkspaceFlowStepItem = {
   state: 'done' | 'current' | 'pending' | 'locked' | 'blocked';
 };
 type WorkspaceMetricTone = 'default' | 'accent' | 'success' | 'warning' | 'danger';
+type FileWorkspaceSubtabKey = 'all' | 'quality';
+type MasterDataWorkspaceSubtabKey = 'tree' | 'onboarding' | 'sections' | 'node-types' | 'standard';
 const projectWorkspaceTabs: ProjectWorkspaceTab[] = [
   { key: 'dashboard', label: '概览', tab: 'dashboard' },
   { key: 'files', label: '文件管理', tab: 'files' },
@@ -1085,6 +1251,17 @@ const projectWorkspaceTabs: ProjectWorkspaceTab[] = [
   { key: 'delivery', label: '交付闭环', tab: 'delivery' },
   { key: 'bim', label: 'BIM 协同', tab: 'bim' },
   { key: 'archive', label: '档案目录', tab: 'archive' }
+];
+const fileWorkspaceSubtabs: Array<{ key: FileWorkspaceSubtabKey; label: string }> = [
+  { key: 'all', label: '全部文件' },
+  { key: 'quality', label: '质量异常' }
+];
+const masterDataWorkspaceSubtabs: Array<{ key: MasterDataWorkspaceSubtabKey; label: string }> = [
+  { key: 'tree', label: '工程树' },
+  { key: 'onboarding', label: '接入向导' },
+  { key: 'sections', label: '部位树' },
+  { key: 'node-types', label: '节点类型' },
+  { key: 'standard', label: '交付物标准' }
 ];
 const currentUserProject = computed(() =>
   authStore.currentUser?.projects.find((item) => item.id === projectId.value) ?? null
@@ -1115,6 +1292,13 @@ const projectPrimaryStatusTag = computed(() => {
 });
 const workspaceViewKey = computed(() => normalizeWorkspaceTab(activeTab.value));
 const activeWorkspaceTabKey = computed(() => workspaceViewKey.value);
+const activeFileSubtabKey = computed<FileWorkspaceSubtabKey>(() => {
+  const fileView = queryString(route.query.fileView);
+  if (fileView === 'quality') return 'quality';
+  const qualityIssue = queryString(route.query.qualityIssue);
+  if (qualityIssue && qualityIssue !== 'ALL') return 'quality';
+  return 'all';
+});
 const masterDataReady = computed(() =>
   Boolean(initializationStatus.value?.ready || initializationStatus.value?.standardStatus?.deliverableStandardReady)
 );
@@ -1125,6 +1309,77 @@ const currentPreview = computed(() => {
   return selectedPreview.value;
 });
 const catalogInitialQualityIssue = computed(() => queryString(route.query.qualityIssue) ?? 'ALL');
+const activeQualityIssue = computed(() => {
+  if (activeFileSubtabKey.value !== 'quality') return 'ALL';
+  const issue = queryString(route.query.qualityIssue);
+  if (!issue || issue === 'ALL') return 'ANY_QUALITY_ISSUE';
+  return issue;
+});
+const activeQualityIssueLabel = computed(() => {
+  if (activeQualityIssue.value === 'ANY_QUALITY_ISSUE') return '全部质量异常';
+  return qualityFlagLabel(activeQualityIssue.value);
+});
+const fileInspectorKey = computed(() => {
+  if (!fileInspector.value) return 'file-inspector-empty';
+  return `${fileInspector.value.fileId ?? fileInspector.value.fileName}-${fileInspectorOpenSeed.value}`;
+});
+const fileInspectorStyle = computed(() => {
+  return {
+    left: `${fileInspectorPosition.left}px`,
+    top: `${fileInspectorPosition.top}px`,
+    width: `${fileInspectorDimensions.width}px`,
+    minHeight: `${fileInspectorDimensions.minHeight}px`,
+    '--inspector-origin-x': `${fileInspectorPosition.originX}px`,
+    '--inspector-origin-y': `${fileInspectorPosition.originY}px`
+  };
+});
+const inspectorFileExt = computed(() => normalizeFileExt(fileInspector.value?.fileExt || fileInspector.value?.fileName || ''));
+const inspectorPreviewUrl = computed(() => inspectorPreviewTicket.value?.accessUrl ?? '');
+const inspectorPreviewEmbedUrl = computed(() => inspectorPreviewObjectUrl.value || inspectorPreviewUrl.value);
+const inspectorPdfPreviewUrl = computed(() => inspectorPreviewEmbedUrl.value ? `${inspectorPreviewEmbedUrl.value}#toolbar=0&navpanes=0&scrollbar=0&page=1&view=FitH` : '');
+const isInspectorPdfPreview = computed(() => inspectorFileExt.value === 'pdf');
+const isInspectorImagePreview = computed(() => ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(inspectorFileExt.value));
+const inspectorPreviewThumbnailLabel = computed(() => {
+  if (!fileInspector.value?.fileId) return '未登记';
+  if (inspectorPreviewError.value) return '不可预览';
+  if (inspectorFileExt.value) return inspectorFileExt.value.toUpperCase();
+  return fileKindLabel(fileInspector.value?.fileKind);
+});
+const inspectorPreviewThumbnailHint = computed(() => {
+  if (!fileInspector.value?.fileId) return '无缩略图';
+  if (inspectorPreviewError.value) return inspectorPreviewErrorHint.value;
+  if (['dwg', 'dxf'].includes(inspectorFileExt.value)) return '待图纸解析';
+  if (['rvt', 'ifc', 'nwd', 'nwc', 'glb', 'gltf'].includes(inspectorFileExt.value)) return '进入 Viewer';
+  if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(inspectorFileExt.value)) return '待转换预览';
+  if (['7z', 'zip', 'rar', 'tar', 'gz'].includes(inspectorFileExt.value)) return '归档包';
+  return '暂无缩略图';
+});
+const inspectorPreviewErrorHint = computed(() => {
+  const message = inspectorPreviewError.value;
+  if (!message) return '';
+  if (message.includes('对象存储') || message.includes('对象副本') || message.includes('文件不存在或不可读取')) {
+    return '对象副本或源文件不可读';
+  }
+  if (message.includes('权限')) return '当前账号无预览权限';
+  return '预览准备失败';
+});
+const inspectorPreviewSummary = computed(() => {
+  if (inspectorPreviewEmbedUrl.value && (isInspectorImagePreview.value || isInspectorPdfPreview.value)) return '已生成受控缩略预览';
+  if (!fileInspector.value?.fileId) return '未登记文件，无法生成缩略预览';
+  if (inspectorPreviewError.value) return inspectorPreviewError.value;
+  if (['dwg', 'dxf'].includes(inspectorFileExt.value)) return 'DWG 解析接入后将在此显示图纸缩略图';
+  if (['rvt', 'ifc', 'nwd', 'nwc', 'glb', 'gltf'].includes(inspectorFileExt.value)) return '模型文件通过 BIM Viewer 查看';
+  if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(inspectorFileExt.value)) return 'Office 转换产物接入后将在此显示缩略预览';
+  return '当前格式暂无缩略图';
+});
+const fileInspectorDisplayPath = computed(() => {
+  const file = fileInspector.value;
+  if (!file) return '-';
+  const raw = file.logicalPath || file.ownershipNodePath || '';
+  const safe = safePathText(raw);
+  if (safe && safe !== '-') return safe;
+  return `${file.projectName || file.projectCode || '当前项目'} / ${file.fileName}`;
+});
 const checksumJobTargetLabel = computed(() => {
   const file = selectedChecksumJobFile.value;
   const job = selectedChecksumJob.value;
@@ -1262,7 +1517,6 @@ const healthTiles = computed(() => [
   { label: '活跃成员', value: '项目组', helper: currentRoleName.value, tone: 'accent' }
 ]);
 const riskReminderRows = computed(() => riskCards.value.slice(0, 3));
-const fileInspector = computed(() => recentFiles.value[0] ?? null);
 const nextActionTab = computed<ProjectWorkspaceTab>(() => {
   if (!masterDataReady.value) return { key: 'master-data', label: '工程主数据', tab: 'master-data' };
   if (riskSignalCount.value > 0) return { key: 'files', label: '文件管理', tab: 'files' };
@@ -1480,7 +1734,7 @@ const archiveSummaryRows = computed(() => [
 ]);
 
 watch(
-  () => [route.params.projectId, route.query.qualityIssue, route.query.tab, route.query.ownershipNode],
+  () => [route.params.projectId, route.query.qualityIssue, route.query.fileView, route.query.tab, route.query.ownershipNode],
   () => {
     const nextTab = queryString(route.query.tab);
     if (nextTab && assetTabs.has(nextTab)) {
@@ -1496,8 +1750,20 @@ watch(
   { immediate: true }
 );
 
+watch(
+  () => [projectId.value, activeFileSubtabKey.value, activeQualityIssue.value, qualityFilesPage.page, qualityFilesPage.pageSize],
+  () => {
+    if (activeFileSubtabKey.value === 'quality') {
+      void loadQualityFiles();
+    }
+  },
+  { immediate: true }
+);
+
 onUnmounted(() => {
   stopChecksumJobPolling();
+  stopFileInspectorDrag();
+  unbindFileInspectorOutsideClose();
 });
 
 async function loadPage() {
@@ -1509,23 +1775,17 @@ async function loadPage() {
       projectsResult,
       statisticsResult,
       qualityResult,
-      scansResult,
-      mappingsResult,
       disciplinesResult,
       recentFilesResult,
-      initStatusResult,
-      glandarModelsResult
+      initStatusResult
     ] =
       await Promise.allSettled([
       fetchAssetProjects(),
       fetchAssetStatistics(projectId.value),
       fetchAssetQualityOverview(projectId.value),
-      fetchAssetScanTasks(),
-      fetchAssetPathMappings(projectId.value),
       fetchAssetDisciplines(projectId.value),
       fetchCatalogFiles({ projectId: projectId.value, page: 1, pageSize: 6 }),
-      fetchInitializationStatus(projectId.value),
-      fetchGlandarModelFiles(projectId.value)
+      fetchInitializationStatus(projectId.value)
     ]);
     if (requestId !== pageLoadRequestId) return;
     if (projectsResult.status === 'rejected' || statisticsResult.status === 'rejected') {
@@ -1535,12 +1795,10 @@ async function loadPage() {
     project.value = projects.find((item) => item.projectId === projectId.value) ?? null;
     statistics.value = statisticsResult.value;
     qualityOverview.value = qualityResult.status === 'fulfilled' ? qualityResult.value : null;
-    scanTasks.value = scansResult.status === 'fulfilled' ? scansResult.value : [];
-    pathMappings.value = mappingsResult.status === 'fulfilled' ? mappingsResult.value : [];
     disciplineOptions.value = disciplinesResult.status === 'fulfilled' ? disciplinesResult.value : [];
     recentFiles.value = recentFilesResult.status === 'fulfilled' ? recentFilesResult.value.rows : [];
     initializationStatus.value = initStatusResult.status === 'fulfilled' ? initStatusResult.value : null;
-    glandarModelFiles.value = glandarModelsResult.status === 'fulfilled' ? glandarModelsResult.value : [];
+    void loadSupplementalProjectData(requestId);
     void loadChecksumJobs(false);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '项目资产加载失败');
@@ -1549,6 +1807,49 @@ async function loadPage() {
       loading.value = false;
     }
   }
+}
+
+async function loadSupplementalProjectData(requestId: number) {
+  const [scansResult, mappingsResult, glandarModelsResult] = await Promise.allSettled([
+    fetchAssetScanTasks(),
+    fetchAssetPathMappings(projectId.value),
+    fetchGlandarModelFiles(projectId.value)
+  ]);
+  if (requestId !== pageLoadRequestId) return;
+  scanTasks.value = scansResult.status === 'fulfilled' ? scansResult.value : [];
+  pathMappings.value = mappingsResult.status === 'fulfilled' ? mappingsResult.value : [];
+  glandarModelFiles.value = glandarModelsResult.status === 'fulfilled' ? glandarModelsResult.value : [];
+}
+
+async function loadQualityFiles() {
+  if (!Number.isFinite(projectId.value) || activeFileSubtabKey.value !== 'quality') return;
+  const requestId = ++qualityFilesRequestId;
+  qualityFilesLoading.value = true;
+  try {
+    const result = await fetchCatalogFiles({
+      projectId: projectId.value,
+      qualityIssue: activeQualityIssue.value,
+      page: qualityFilesPage.page,
+      pageSize: qualityFilesPage.pageSize
+    });
+    if (requestId !== qualityFilesRequestId) return;
+    qualityFiles.value = result.rows;
+    qualityFilesPage.total = result.total;
+  } catch (error) {
+    if (requestId !== qualityFilesRequestId) return;
+    qualityFiles.value = [];
+    qualityFilesPage.total = 0;
+    ElMessage.error(error instanceof Error ? error.message : '质量异常文件加载失败');
+  } finally {
+    if (requestId === qualityFilesRequestId) {
+      qualityFilesLoading.value = false;
+    }
+  }
+}
+
+function handleQualityPageSizeChange() {
+  qualityFilesPage.page = 1;
+  void loadQualityFiles();
 }
 
 function resetProjectData() {
@@ -1560,6 +1861,10 @@ function resetProjectData() {
   disciplineOptions.value = [];
   initializationStatus.value = null;
   recentFiles.value = [];
+  fileInspector.value = null;
+  qualityFiles.value = [];
+  qualityFilesPage.page = 1;
+  qualityFilesPage.total = 0;
   glandarModelFiles.value = [];
   selectedFile.value = null;
   selectedPreview.value = null;
@@ -1573,6 +1878,189 @@ function resetProjectData() {
   hermesAssetId.value = undefined;
   checksumJobDialogVisible.value = false;
   stopChecksumJobPolling();
+}
+
+function showFileInspector(file: CatalogFile, origin?: { clientX: number; clientY: number }) {
+  fileInspector.value = file;
+  resetInspectorPreview();
+  positionFileInspector(origin);
+  fileInspectorOpenSeed.value += 1;
+  bindFileInspectorOutsideClose();
+  void loadInspectorPreview(file);
+}
+
+function closeFileInspector() {
+  fileInspector.value = null;
+  resetInspectorPreview();
+  stopFileInspectorDrag();
+  unbindFileInspectorOutsideClose();
+}
+
+function handleFileWorkspacePointerDown(event: PointerEvent) {
+  if (!fileInspector.value) return;
+  const target = event.target as HTMLElement | null;
+  if (!target) return;
+  if (target.closest('.workspace-file-inspector--float') || target.closest('.file-browser')) return;
+  closeFileInspector();
+}
+
+function positionFileInspector(origin?: { clientX: number; clientY: number }) {
+  if (typeof window === 'undefined') return;
+  const margin = 18;
+  const topSafeMargin = 72;
+  const clickX = origin?.clientX ?? Math.round(window.innerWidth * 0.62);
+  const clickY = origin?.clientY ?? Math.round(window.innerHeight * 0.38);
+  const placeRight = clickX + fileInspectorDimensions.width + 24 <= window.innerWidth - margin;
+  const nextLeft = placeRight ? clickX + 18 : clickX - fileInspectorDimensions.width - 18;
+  const nextTop = clickY - 42;
+  fileInspectorPosition.left = clampNumber(nextLeft, margin, Math.max(margin, window.innerWidth - fileInspectorDimensions.width - margin));
+  fileInspectorPosition.top = clampNumber(nextTop, topSafeMargin, maxFileInspectorTop());
+  fileInspectorPosition.originX = clampNumber(clickX - fileInspectorPosition.left, 16, fileInspectorDimensions.width - 16);
+  fileInspectorPosition.originY = clampNumber(clickY - fileInspectorPosition.top, 16, Math.max(32, fileInspectorDimensions.minHeight - 16));
+}
+
+function clampFileInspectorPosition() {
+  if (typeof window === 'undefined') return;
+  const margin = 18;
+  fileInspectorPosition.left = clampNumber(fileInspectorPosition.left, margin, Math.max(margin, window.innerWidth - fileInspectorDimensions.width - margin));
+  fileInspectorPosition.top = clampNumber(fileInspectorPosition.top, 72, maxFileInspectorTop());
+}
+
+function maxFileInspectorTop() {
+  if (typeof window === 'undefined') return 72;
+  const margin = 18;
+  const estimatedHeight = Math.min(fileInspectorDimensions.minHeight, Math.max(360, window.innerHeight - 96));
+  return Math.max(72, window.innerHeight - estimatedHeight - margin);
+}
+
+function startFileInspectorDrag(event: PointerEvent) {
+  const target = event.target as HTMLElement | null;
+  if (target?.closest('button')) return;
+  event.preventDefault();
+  fileInspectorDrag.active = true;
+  fileInspectorDrag.startX = event.clientX;
+  fileInspectorDrag.startY = event.clientY;
+  fileInspectorDrag.startLeft = fileInspectorPosition.left;
+  fileInspectorDrag.startTop = fileInspectorPosition.top;
+  window.addEventListener('pointermove', moveFileInspectorDrag);
+  window.addEventListener('pointerup', stopFileInspectorDrag, { once: true });
+}
+
+function moveFileInspectorDrag(event: PointerEvent) {
+  if (!fileInspectorDrag.active) return;
+  const margin = 18;
+  const nextLeft = fileInspectorDrag.startLeft + event.clientX - fileInspectorDrag.startX;
+  const nextTop = fileInspectorDrag.startTop + event.clientY - fileInspectorDrag.startY;
+  fileInspectorPosition.left = clampNumber(nextLeft, margin, Math.max(margin, window.innerWidth - fileInspectorDimensions.width - margin));
+  fileInspectorPosition.top = clampNumber(nextTop, 72, Math.max(72, window.innerHeight - 180));
+}
+
+function stopFileInspectorDrag() {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('pointermove', moveFileInspectorDrag);
+    window.removeEventListener('pointerup', stopFileInspectorDrag);
+  }
+  fileInspectorDrag.active = false;
+}
+
+function bindFileInspectorOutsideClose() {
+  if (typeof window === 'undefined') return;
+  window.removeEventListener('pointerdown', handleFileInspectorOutsidePointerDown, true);
+  window.addEventListener('pointerdown', handleFileInspectorOutsidePointerDown, true);
+}
+
+function unbindFileInspectorOutsideClose() {
+  if (typeof window === 'undefined') return;
+  window.removeEventListener('pointerdown', handleFileInspectorOutsidePointerDown, true);
+}
+
+function handleFileInspectorOutsidePointerDown(event: PointerEvent) {
+  if (!fileInspector.value) return;
+  const target = event.target as HTMLElement | null;
+  if (!target) return;
+  if (target.closest('.workspace-file-inspector--float')) return;
+  if (target.closest('.file-browser__entry-table .el-table__row')) return;
+  if (target.closest('.file-browser__context-menu') || target.closest('.el-popper')) return;
+  closeFileInspector();
+}
+
+function resetInspectorPreview() {
+  inspectorPreviewRequestId += 1;
+  revokeInspectorPreviewObjectUrl();
+  inspectorPreview.value = null;
+  inspectorPreviewTicket.value = null;
+  inspectorPreviewError.value = '';
+  inspectorPreviewLoading.value = false;
+}
+
+async function loadInspectorPreview(file: CatalogFile) {
+  if (!file.fileId) {
+    inspectorPreviewError.value = '未登记文件无法创建预览票据。';
+    return;
+  }
+  const requestId = ++inspectorPreviewRequestId;
+  inspectorPreviewLoading.value = true;
+  inspectorPreviewError.value = '';
+  inspectorPreviewTicket.value = null;
+  try {
+    const preview = await fetchFilePreview(file.fileId);
+    if (requestId !== inspectorPreviewRequestId) return;
+    inspectorPreview.value = preview;
+    if (canOpenPreview(preview) && isInlinePreviewExt(file.fileExt || file.fileName)) {
+      await preparePreviewArtifact(file.fileId);
+      if (requestId !== inspectorPreviewRequestId) return;
+      const ticket = await createFileAccessTicket(file.fileId, 'PREVIEW');
+      if (requestId !== inspectorPreviewRequestId) return;
+      inspectorPreviewTicket.value = ticket;
+      if (normalizeFileExt(file.fileExt || file.fileName) === 'pdf') {
+        const objectUrl = await createInspectorPdfObjectUrl(ticket.accessUrl);
+        if (requestId !== inspectorPreviewRequestId) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        inspectorPreviewObjectUrl.value = objectUrl;
+      }
+    }
+  } catch (error) {
+    if (requestId !== inspectorPreviewRequestId) return;
+    inspectorPreviewError.value = error instanceof Error ? error.message : '预览状态加载失败';
+  } finally {
+    if (requestId === inspectorPreviewRequestId) {
+      inspectorPreviewLoading.value = false;
+    }
+  }
+}
+
+async function createInspectorPdfObjectUrl(accessUrl: string) {
+  revokeInspectorPreviewObjectUrl();
+  const response = await fetch(accessUrl, { credentials: 'same-origin' });
+  if (!response.ok) {
+    throw new Error('PDF 缩略预览读取失败');
+  }
+  const blob = await response.blob();
+  return URL.createObjectURL(blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' }));
+}
+
+function revokeInspectorPreviewObjectUrl() {
+  if (inspectorPreviewObjectUrl.value) {
+    URL.revokeObjectURL(inspectorPreviewObjectUrl.value);
+    inspectorPreviewObjectUrl.value = '';
+  }
+}
+
+function normalizeFileExt(value: string) {
+  const name = value.toLowerCase().trim();
+  const rawExt = name.includes('.') ? name.split('.').pop() ?? name : name;
+  return rawExt.replace(/^\./, '');
+}
+
+function isInlinePreviewExt(value: string | null | undefined) {
+  const ext = normalizeFileExt(value || '');
+  return ext === 'pdf' || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext);
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
 }
 
 async function openFileDetail(row: FileAsset) {
@@ -1617,11 +2105,20 @@ function canOpenPreview(preview: FilePreview | null) {
   return Boolean(preview?.previewAvailable && preview.previewAllowed);
 }
 
-async function openFileAccess(action: 'PREVIEW' | 'DOWNLOAD') {
-  const preview = selectedPreview.value ?? currentPreview.value;
-  if (!preview) {
-    ElMessage.warning('请先加载文件预览状态');
+async function openFileAccess(action: 'PREVIEW' | 'DOWNLOAD', fileId?: number) {
+  const targetFileId = fileId ?? selectedPreview.value?.fileId ?? currentPreview.value?.fileId ?? selectedFile.value?.fileId;
+  if (!targetFileId) {
+    ElMessage.warning('请先选择文件');
     return;
+  }
+  let preview = selectedPreview.value?.fileId === targetFileId
+    ? selectedPreview.value
+    : currentPreview.value?.fileId === targetFileId
+      ? currentPreview.value
+      : null;
+  if (!preview) {
+    preview = await fetchFilePreview(targetFileId);
+    selectedPreview.value = preview;
   }
   if (action === 'PREVIEW' && !canOpenPreview(preview)) {
     ElMessage.warning(previewActionHint(preview) || preview.accessPolicyMessage || '当前文件暂不可预览');
@@ -1634,6 +2131,9 @@ async function openFileAccess(action: 'PREVIEW' | 'DOWNLOAD') {
   const popup = window.open('', '_blank', 'noopener');
   accessActionLoading.value = action;
   try {
+    if (action === 'PREVIEW') {
+      await preparePreviewArtifact(targetFileId);
+    }
     const ticket = await createFileAccessTicket(preview.fileId, action);
     if (popup) {
       popup.location.href = ticket.accessUrl;
@@ -1643,10 +2143,21 @@ async function openFileAccess(action: 'PREVIEW' | 'DOWNLOAD') {
     ElMessage.success(action === 'PREVIEW' ? '预览入口已打开' : '下载入口已打开');
   } catch (error) {
     popup?.close();
-    ElMessage.error(error instanceof Error ? error.message : '文件访问票据创建失败');
+    ElMessage.error(normalizeFileAccessError(error));
   } finally {
     accessActionLoading.value = null;
   }
+}
+
+function normalizeFileAccessError(error: unknown) {
+  const message = error instanceof Error ? error.message : '文件访问票据创建失败';
+  if (message.includes('对象存储副本') || message.includes('对象副本')) {
+    return '对象存储副本暂不可读，请先在文件服务中修复对象副本后再预览。';
+  }
+  if (message.includes('文件不存在或不可读取')) {
+    return '源文件暂不可读取，请确认 NAS 已挂载或对象副本已完成修复。';
+  }
+  return message;
 }
 
 function openMetadataDialog(row: FileAsset) {
@@ -1900,7 +2411,7 @@ function openRiskCard(risk: { tab: string; qualityIssue?: string }) {
     void router.replace({
       name: String(route.name),
       params: route.params,
-      query: { ...route.query, qualityIssue: risk.qualityIssue }
+      query: { ...route.query, tab: 'files', fileView: 'quality', qualityIssue: risk.qualityIssue }
     });
   }
 }
@@ -1940,6 +2451,41 @@ function openAssetTab(tab: string) {
     name: 'data-steward-asset-detail',
     params: { projectId: projectId.value },
     query: { ...route.query, tab: nextTab }
+  });
+}
+
+function openFileWorkspaceSubtab(key: FileWorkspaceSubtabKey) {
+  const nextQuery: Record<string, string> = { tab: 'files', filePage: '1' };
+  if (key === 'all') {
+    nextQuery.fileView = 'all';
+    nextQuery.qualityIssue = 'ALL';
+  }
+  if (key === 'quality') {
+    nextQuery.fileView = 'quality';
+    nextQuery.qualityIssue = 'ANY_QUALITY_ISSUE';
+  }
+  activeTab.value = 'files';
+  void router.replace({
+    name: 'data-steward-asset-detail',
+    params: { projectId: projectId.value },
+    query: nextQuery
+  });
+}
+
+function openMasterDataWorkspaceSubtab(key: MasterDataWorkspaceSubtabKey) {
+  const routeNames: Record<Exclude<MasterDataWorkspaceSubtabKey, 'tree'>, string> = {
+    onboarding: 'project-master-data-initialization',
+    sections: 'project-master-data-sections',
+    'node-types': 'project-master-data-node-types',
+    standard: 'project-master-data-deliverable-standard'
+  };
+  if (key === 'tree') {
+    openAssetTab('master-data');
+    return;
+  }
+  void router.push({
+    name: routeNames[key],
+    params: { projectId: projectId.value }
   });
 }
 
@@ -2019,8 +2565,22 @@ function qualityFlags(file: FileAsset) {
   return flags;
 }
 
+function qualityFlagsForCatalog(file: CatalogFile) {
+  const visibleFlags = new Set(['MISSING_CHECKSUM', 'MISSING_CONFIDENCE', 'MISSING_DISCIPLINE']);
+  const knownFlags = Array.isArray(file.qualityFlags)
+    ? file.qualityFlags.filter((flag) => flag && visibleFlags.has(flag))
+    : [];
+  if (knownFlags.length > 0) return knownFlags;
+  const flags: string[] = [];
+  if (!file.checksum) flags.push('MISSING_CHECKSUM');
+  if (!file.confidenceLevel) flags.push('MISSING_CONFIDENCE');
+  if (!file.disciplineCode || file.disciplineCode === 'OTHER') flags.push('MISSING_DISCIPLINE');
+  return flags;
+}
+
 function qualityFlagLabel(value: string) {
   const labels: Record<string, string> = {
+    ANY_QUALITY_ISSUE: '全部质量异常',
     MISSING_CHECKSUM: '缺 checksum',
     MISSING_CONFIDENCE: '缺置信度',
     MISSING_DISCIPLINE: '专业待完善',
@@ -2620,7 +3180,14 @@ function scanProgressValue(task: AssetScanTask) {
   min-width: 0;
 }
 
-.workspace-files-layout,
+.workspace-files-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  min-width: 0;
+  align-items: start;
+}
+
 .workspace-master-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 330px;
@@ -2639,6 +3206,14 @@ function scanProgressValue(task: AssetScanTask) {
 .workspace-master-layout__tree {
   min-width: 0;
   max-width: 100%;
+}
+
+.workspace-files-layout__browser {
+  position: relative;
+  overflow: visible;
+}
+
+.workspace-master-layout__tree {
   overflow: hidden;
   contain: inline-size;
 }
@@ -2654,8 +3229,139 @@ function scanProgressValue(task: AssetScanTask) {
   overflow: hidden;
 }
 
+.workspace-master-primary {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.workspace-master-support {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+  gap: 16px;
+  min-width: 0;
+  max-width: 100%;
+  align-items: start;
+}
+
+.workspace-master-support > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.workspace-master-support .workspace-master-steps {
+  grid-column: 1 / -1;
+}
+
+.workspace-panel--compact {
+  min-height: 0;
+}
+
 .workspace-files-layout__browser :deep(.file-browser) {
   min-height: 620px;
+}
+
+.project-quality-list {
+  display: grid;
+  gap: var(--zy-sp-4);
+  min-height: 620px;
+  padding: var(--zy-sp-4);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-lg);
+  background: var(--zy-surface-base);
+  box-shadow: var(--zy-shadow-soft);
+}
+
+.project-quality-list__header,
+.project-quality-list__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zy-sp-4);
+  min-width: 0;
+}
+
+.project-quality-list__eyebrow {
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: oklch(0.965 0.026 255);
+  color: var(--zy-blue-700);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-semi);
+}
+
+.project-quality-list__header h3 {
+  margin: var(--zy-sp-2) 0 var(--zy-sp-1);
+  font-size: var(--zy-fs-xl);
+}
+
+.project-quality-list__header p {
+  margin: 0;
+  color: var(--zy-text-secondary);
+  font-size: var(--zy-fs-sm);
+}
+
+.project-quality-list__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zy-sp-2);
+  flex: 0 0 auto;
+}
+
+.project-quality-list__summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--zy-sp-3);
+}
+
+.project-quality-list__summary article {
+  display: grid;
+  gap: var(--zy-sp-1);
+  padding: var(--zy-sp-3);
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface-soft);
+}
+
+.project-quality-list__summary span {
+  color: var(--zy-text-secondary);
+  font-size: var(--zy-fs-sm);
+}
+
+.project-quality-list__summary strong {
+  font-size: var(--zy-fs-2xl);
+}
+
+.project-quality-table {
+  min-width: 0;
+}
+
+.project-quality-file,
+.project-quality-tags {
+  display: flex;
+  min-width: 0;
+}
+
+.project-quality-file {
+  flex-direction: column;
+  gap: 3px;
+}
+
+.project-quality-file strong,
+.project-quality-file span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-quality-file span {
+  color: var(--zy-text-secondary);
+  font-size: var(--zy-fs-xs);
+}
+
+.project-quality-tags {
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .workspace-file-inspector {
@@ -2663,20 +3369,131 @@ function scanProgressValue(task: AssetScanTask) {
   top: 84px;
 }
 
+.workspace-file-inspector--float {
+  position: fixed;
+  z-index: 14;
+  min-width: 320px;
+  max-width: calc(100vw - 36px);
+  max-height: min(72vh, 760px);
+  overflow: auto;
+  background: oklch(0.998 0.003 255 / 0.96);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 22px 50px rgba(15, 23, 42, 0.16);
+  transform-origin: var(--inspector-origin-x) var(--inspector-origin-y);
+  animation: file-inspector-pop 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+}
+
+.workspace-file-inspector--float.is-dragging {
+  user-select: none;
+  box-shadow: 0 26px 60px rgba(15, 23, 42, 0.2);
+}
+
+.workspace-file-inspector__dragbar {
+  cursor: grab;
+}
+
+.workspace-file-inspector__dragbar > div:first-child {
+  min-width: 0;
+}
+
+.workspace-file-inspector__dragbar strong {
+  display: block;
+  max-width: 42ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-file-inspector--float.is-dragging .workspace-file-inspector__dragbar {
+  cursor: grabbing;
+}
+
+.workspace-file-inspector__window-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+@keyframes file-inspector-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.88) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 .workspace-file-preview {
   display: grid;
-  gap: var(--zy-sp-2);
-  min-height: 160px;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: var(--zy-sp-3);
+  align-items: stretch;
   padding: var(--zy-sp-4);
   border: var(--zy-border-soft);
-  border-radius: var(--zy-radius-base);
+  border-radius: var(--zy-radius-lg);
   background:
-    linear-gradient(135deg, rgba(239, 246, 255, 0.96), rgba(248, 250, 252, 0.98)),
+    linear-gradient(135deg, oklch(0.988 0.008 255 / 0.96), oklch(0.998 0.003 255 / 0.98)),
     var(--zy-surface-soft);
 }
 
-.workspace-file-preview span {
-  align-self: start;
+.workspace-file-preview__thumb {
+  display: grid;
+  place-items: center;
+  min-height: 104px;
+  overflow: hidden;
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background:
+    linear-gradient(135deg, oklch(0.985 0.01 255), oklch(0.998 0.003 255)),
+    var(--zy-surface-soft);
+}
+
+.workspace-file-preview__thumb iframe,
+.workspace-file-preview__thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 104px;
+  border: 0;
+  pointer-events: none;
+}
+
+.workspace-file-preview__thumb img {
+  object-fit: contain;
+  padding: var(--zy-sp-2);
+}
+
+.workspace-file-preview__thumb-placeholder {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: var(--zy-sp-3);
+  color: var(--zy-text-secondary);
+  text-align: center;
+}
+
+.workspace-file-preview__thumb-placeholder strong {
+  color: var(--zy-blue-700);
+  font-size: var(--zy-fs-lg);
+  letter-spacing: 0.04em;
+}
+
+.workspace-file-preview__thumb-placeholder span {
+  font-size: var(--zy-fs-xs);
+}
+
+.workspace-file-preview__summary {
+  display: grid;
+  align-content: center;
+  gap: var(--zy-sp-2);
+  min-width: 0;
+}
+
+.workspace-file-preview__summary span {
   justify-self: start;
   padding: 4px 8px;
   border-radius: var(--zy-radius-sm);
@@ -2686,12 +3503,17 @@ function scanProgressValue(task: AssetScanTask) {
   font-weight: var(--zy-fw-bold);
 }
 
-.workspace-file-preview strong {
-  align-self: end;
+.workspace-file-preview__summary strong {
   color: var(--zy-ink);
   font-size: var(--zy-fs-lg);
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+.workspace-file-preview__summary small {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  line-height: 1.5;
 }
 
 .workspace-detail-list {
@@ -2794,6 +3616,20 @@ function scanProgressValue(task: AssetScanTask) {
 
 .workspace-master-steps article.is-current {
   border-color: rgba(245, 158, 11, 0.34);
+}
+
+.workspace-master-steps--compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.workspace-master-steps--compact article {
+  padding: 12px 14px;
+  border-radius: 10px;
+}
+
+.workspace-master-steps--compact span {
+  width: 22px;
+  height: 22px;
 }
 
 .workspace-delivery-tabs {
@@ -3052,16 +3888,24 @@ function scanProgressValue(task: AssetScanTask) {
   .workspace-delivery-layout,
   .workspace-bim-layout,
   .workspace-files-layout,
-  .workspace-master-layout {
+  .workspace-master-layout,
+  .workspace-master-support {
     grid-template-columns: 1fr;
   }
 
-  .workspace-file-inspector {
+  .workspace-file-inspector:not(.workspace-file-inspector--float) {
     position: static;
   }
 
+  .workspace-file-inspector--float {
+    width: min(380px, calc(100% - 24px));
+    min-width: 280px;
+    max-height: min(78vh, 680px);
+  }
+
   .workspace-bim-kpis,
-  .workspace-master-steps {
+  .workspace-master-steps,
+  .project-quality-list__summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

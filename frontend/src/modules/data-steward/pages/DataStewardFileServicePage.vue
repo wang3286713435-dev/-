@@ -283,7 +283,7 @@
           </el-table>
         </section>
 
-        <section class="service-section">
+        <section v-if="projectId === 503" class="service-section">
           <div class="service-section__header">
             <div>
               <h2>105 全量对象化试运行</h2>
@@ -389,7 +389,7 @@
           </template>
         </section>
 
-        <section class="service-section">
+        <section v-if="projectScoped" class="service-section">
           <div class="service-section__header">
             <div>
               <h2>105 对象化长跑控制</h2>
@@ -1288,7 +1288,7 @@
           </template>
         </section>
 
-        <section class="service-section">
+        <section v-if="projectScoped" class="service-section">
           <div class="service-section__header">
             <div>
               <h2>单项目对象化 dry-run</h2>
@@ -1374,7 +1374,7 @@
           </template>
         </section>
 
-        <section class="migration-summary">
+        <section v-if="projectScoped" class="migration-summary">
           <div class="migration-metric">
             <span>文件总数</span>
             <strong>{{ formatCount(summary?.totalFileCount) }}</strong>
@@ -1397,7 +1397,7 @@
           </div>
         </section>
 
-        <section class="service-section">
+        <section v-if="projectScoped" class="service-section">
           <div class="service-section__header">
             <div>
               <h2>创建迁移任务</h2>
@@ -1436,7 +1436,7 @@
           </div>
         </section>
 
-        <section class="service-section">
+        <section v-if="projectScoped" class="service-section">
           <div class="service-section__header">
             <div>
               <h2>选择项目文件</h2>
@@ -1487,7 +1487,7 @@
           </el-table>
         </section>
 
-        <section class="service-section">
+        <section v-if="projectScoped" class="service-section">
           <div class="service-section__header">
             <div>
               <h2>迁移任务</h2>
@@ -1522,7 +1522,7 @@
         </section>
       </el-tab-pane>
 
-      <el-tab-pane label="文件访问安全" name="access">
+      <el-tab-pane v-if="projectScoped" label="文件访问安全" name="access">
         <section class="service-grid">
           <article v-for="item in enabledServices" :key="item.title" class="service-card">
             <el-tag type="success" effect="plain">已开放</el-tag>
@@ -1780,10 +1780,13 @@ const targetProviderOptions = [
 
 const projectId = computed(() => {
   const routeId = Number(route.params.projectId);
-  return Number.isFinite(routeId) && routeId > 0 ? routeId : authStore.currentProjectId;
+  return Number.isFinite(routeId) && routeId > 0 ? routeId : null;
 });
 
+const projectScoped = computed(() => Boolean(projectId.value));
+
 const projectLabel = computed(() => {
+  if (!projectScoped.value) return '全平台对象存储治理';
   const current = authStore.currentUser?.projects.find((item) => item.id === projectId.value);
   return current ? `${current.code} ${current.name}` : '等待项目上下文';
 });
@@ -1854,8 +1857,6 @@ const coverageRows = computed<ProjectStorageObjectificationCoverage[]>(() => {
     EXCLUDED: 4
   };
   return rows.sort((a, b) => {
-    if (Number(a.projectId) === 503) return -1;
-    if (Number(b.projectId) === 503) return 1;
     const statusCompare = (statusWeight[a.status] ?? 9) - (statusWeight[b.status] ?? 9);
     if (statusCompare !== 0) return statusCompare;
     return Number(b.totalFiles || 0) - Number(a.totalFiles || 0);
@@ -2067,7 +2068,11 @@ const disabledActions = [
 watch(
   () => route.name,
   () => {
-    activeTab.value = route.name === 'project-data-steward-file-service' ? 'access' : 'migration';
+    if (!projectScoped.value || route.name !== 'project-data-steward-file-service') {
+      activeTab.value = 'migration';
+      return;
+    }
+    activeTab.value = 'access';
   }
 );
 
@@ -2083,26 +2088,45 @@ onMounted(() => {
 });
 
 async function refresh() {
-  if (!projectId.value) return;
   loading.value = true;
   try {
-    await Promise.all([
+    const requests: Array<Promise<unknown>> = [
       loadReadiness(),
       loadReadPolicy(),
       loadInventory(),
       loadCoverageReport(),
-      loadSummary(),
-      loadFullPlan(),
-      loadLongRunStatus(),
       loadRunOverview(),
       loadWaveCandidates(),
-      loadWaveReports(),
-      loadTasks(),
-      loadCandidates()
-    ]);
+      loadWaveReports()
+    ];
+    if (projectScoped.value) {
+      requests.push(
+        loadSummary(),
+        loadFullPlan(),
+        loadLongRunStatus(),
+        loadTasks(),
+        loadCandidates()
+      );
+    } else {
+      clearProjectScopedState();
+    }
+    await Promise.all(requests);
   } finally {
     loading.value = false;
   }
+}
+
+function clearProjectScopedState() {
+  summary.value = null;
+  dryRunResult.value = null;
+  fullPlan.value = null;
+  fullPlanExecutionResult.value = null;
+  longRunStatus.value = null;
+  tasks.value = [];
+  selectedTask.value = null;
+  candidateRows.value = [];
+  candidateSelection.value = [];
+  createForm.fileIdsText = '';
 }
 
 async function loadReadiness() {

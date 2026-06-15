@@ -2,8 +2,9 @@
   <section class="master-data-page">
     <div class="master-data-page__header">
       <div>
+        <span class="master-data-page__eyebrow">工程主数据</span>
         <h1>节点类型</h1>
-        <p>{{ projectLabel }}</p>
+        <p>{{ projectLabel }} · 锁定哪些部位层级可以生成交付规则。</p>
       </div>
       <div class="master-data-page__actions">
         <el-button :icon="Refresh" @click="loadPage">刷新</el-button>
@@ -12,56 +13,17 @@
       </div>
     </div>
 
+    <MasterDataStepNav active="nodeTypes" />
+
     <StandardStatusPanel :status="standardStatus" />
 
-    <el-alert
-      class="masterdata-review-alert"
-      type="info"
-      :closable="false"
-      show-icon
-      title="如果节点类型来自接入草案，它只是标准配置建议。锁定前请确认这些类型确实适用于当前真实项目。"
-    />
-
-    <section class="workflow-guide">
-      <div class="workflow-guide__main">
-        <span class="workflow-guide__step">第 2 步</span>
-        <h2>确认哪些部位层级可以承载交付标准</h2>
-        <p>
-          节点类型用于说明部位树里哪些层级会参与交付，例如楼层、系统或机房。锁定后，平台会把这些类型作为后续交付物标准和缺失项计算的稳定依据。
-        </p>
-      </div>
-      <ol class="workflow-guide__steps">
-        <li>先确认名称和适用层级是否符合项目拆分方式。</li>
-        <li>确认无误后锁定。锁定后不建议频繁调整结构，避免影响已配置标准。</li>
-        <li>全部锁定后，进入交付物标准页面，配置要交什么资料。</li>
-      </ol>
-    </section>
-
-    <el-alert
-      class="node-type-lock"
-      :type="lockStatus?.allNodeTypesLocked ? 'success' : 'info'"
-      :closable="false"
-      show-icon
-    >
-      <template #title>
-        节点类型锁定状态：{{ lockStatus?.allNodeTypesLocked ? '全部锁定' : '仍可维护' }}
-      </template>
-      <p class="status-helper">
-        {{
-          lockStatus?.allNodeTypesLocked
-            ? '当前节点类型已冻结，可以继续配置交付物标准。'
-            : '锁定前仍可调整。锁定后才能作为交付标准配置的前置条件。'
-        }}
-      </p>
-    </el-alert>
-
-    <section class="masterdata-next-action">
+    <section class="master-workspace-callout" :class="{ 'is-ready': lockStatus?.allNodeTypesLocked }">
       <div>
-        <span>下一步</span>
+        <span>{{ lockStatus?.allNodeTypesLocked ? '已锁定' : '当前任务' }}</span>
         <strong>{{ lockStatus?.allNodeTypesLocked ? '继续配置交付物标准' : '先锁定节点类型，再配置交付标准' }}</strong>
         <p>节点类型锁定后，平台才会把部位树当作稳定规则，用来计算文档/图纸页面的应交和缺失。</p>
       </div>
-      <div class="masterdata-next-action__actions">
+      <div class="master-workspace-callout__actions">
         <el-button type="primary" :disabled="!lockStatus?.allNodeTypesLocked" @click="goDeliverableStandard">
           去交付物标准
         </el-button>
@@ -69,28 +31,36 @@
       </div>
     </section>
 
-    <el-table v-loading="loading" :data="nodeTypes" class="master-table" empty-text="暂无节点类型">
-      <el-table-column prop="name" label="名称" min-width="180" />
-      <el-table-column prop="code" label="编码" width="180" />
-      <el-table-column prop="scopeLevel" label="适用层级" width="110" />
-      <el-table-column prop="sortOrder" label="排序" width="90" />
-      <el-table-column prop="status" label="状态" width="110">
-        <template #default="{ row }">
-          <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ row.status }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="locked" label="锁定" width="110">
-        <template #default="{ row }">
-          <el-tag :type="row.locked ? 'success' : 'warning'">{{ row.locked ? '已锁定' : '未锁定' }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="190" fixed="right">
-        <template #default="{ row }">
-          <el-button text :disabled="row.locked" @click="openEditDialog(row)">编辑</el-button>
-          <el-button text type="primary" :disabled="row.locked" @click="handleLock(row)">锁定</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <section class="master-workspace-panel">
+      <div class="master-workspace-panel__header">
+        <div>
+          <h2>类型清单</h2>
+          <p>把“楼栋、楼层、系统、专业部位”等层级固定下来，后续标准会绑定到这些类型。</p>
+        </div>
+      </div>
+      <el-table v-loading="loading" :data="nodeTypes" class="master-table" empty-text="暂无节点类型">
+        <el-table-column prop="name" label="名称" min-width="180" />
+        <el-table-column prop="code" label="编码" width="180" />
+        <el-table-column prop="scopeLevel" label="适用层级" width="110" />
+        <el-table-column prop="sortOrder" label="排序" width="90" />
+        <el-table-column prop="status" label="状态" width="110">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ row.status === 'ACTIVE' ? '启用' : '停用' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="locked" label="锁定" width="110">
+          <template #default="{ row }">
+            <el-tag :type="row.locked ? 'success' : 'warning'">{{ row.locked ? '已锁定' : '未锁定' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="190" fixed="right">
+          <template #default="{ row }">
+            <el-button text :disabled="row.locked" @click="openEditDialog(row)">编辑</el-button>
+            <el-button text type="primary" :disabled="row.locked" @click="handleLock(row)">锁定</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
 
     <el-dialog v-model="dialogVisible" :title="editingNodeType ? '编辑节点类型' : '新增节点类型'" width="520px">
       <el-form label-position="top" class="master-form">
@@ -125,6 +95,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Refresh } from '@element-plus/icons-vue';
 
+import MasterDataStepNav from '@/modules/master-data/components/MasterDataStepNav.vue';
 import StandardStatusPanel from '@/modules/master-data/components/StandardStatusPanel.vue';
 import {
   createNodeType,
@@ -139,9 +110,11 @@ import {
   type StandardStatus
 } from '@/modules/master-data/api/masterData';
 import { useAuthStore } from '@/stores/auth';
+import { useProjectWorkspaceContext } from '@/modules/core/composables/useProjectWorkspaceContext';
 
 const authStore = useAuthStore();
 const router = useRouter();
+const { workspaceProjectId } = useProjectWorkspaceContext();
 const loading = ref(false);
 const saving = ref(false);
 const dialogVisible = ref(false);
@@ -163,9 +136,10 @@ const statusOptions = [
   { label: '停用', value: 'DISABLED' }
 ];
 
-const currentProjectId = computed(() => authStore.currentProjectId);
+const currentProjectId = computed(() => workspaceProjectId.value ?? authStore.currentProjectId);
 const projectLabel = computed(() => {
-  const project = authStore.currentUser?.currentProject;
+  const project = authStore.currentUser?.projects.find((item) => item.id === currentProjectId.value)
+    ?? authStore.currentUser?.currentProject;
   return project ? `${project.code} | ${project.name}` : '等待项目上下文';
 });
 

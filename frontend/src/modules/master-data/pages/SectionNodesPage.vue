@@ -2,8 +2,9 @@
   <section class="master-data-page">
     <div class="master-data-page__header">
       <div>
-        <h1>工程管理部位树</h1>
-        <p>{{ projectLabel }}</p>
+        <span class="master-data-page__eyebrow">工程主数据</span>
+        <h1>部位树</h1>
+        <p>{{ projectLabel }} · 把真实项目拆成可归属、可交付的工程节点。</p>
       </div>
       <div class="master-data-page__actions">
         <el-button :icon="Refresh" @click="loadPage">刷新</el-button>
@@ -11,69 +12,56 @@
       </div>
     </div>
 
+    <MasterDataStepNav active="sections" />
+
     <StandardStatusPanel :status="standardStatus" />
 
-    <el-alert
-      class="masterdata-review-alert"
-      type="info"
-      :closable="false"
-      show-icon
-      title="如果部位树来自接入草案，它只是建筑机电/BIM交付基础骨架，仍需项目负责人按真实楼栋、楼层、系统和专业范围复核。"
-    />
-
-    <section class="workflow-guide">
-      <div class="workflow-guide__main">
-        <span class="workflow-guide__step">第 1 步</span>
-        <h2>先把项目拆成可交付的工程部位</h2>
-        <p>
-          部位树决定后续交付资料按哪些区域、楼层或系统生成缺失项。根节点通常代表楼栋、区域或系统，下级节点可以是楼层、房间、机房或专业部位。
-        </p>
-      </div>
-      <ol class="workflow-guide__steps">
-        <li>先新增根节点，例如“地下室”“塔楼”“机电系统”。</li>
-        <li>再添加下级，把真实项目范围拆到能挂接资料的层级。</li>
-        <li>部位树稳定后，进入节点类型页面，锁定后再配置交付物标准。</li>
-      </ol>
-    </section>
-
-    <section class="masterdata-next-action">
+    <section class="master-workspace-callout">
       <div>
-        <span>下一步</span>
-        <strong>部位树确认后，去锁定节点类型</strong>
-        <p>节点类型会告诉平台哪些层级可以生成应交项。部位树还没稳定时，先不要急着进入文档/图纸交付。</p>
+        <span>当前任务</span>
+        <strong>确认项目真实结构，再进入节点类型</strong>
+        <p>部位树来自资产目录和人工维护，它决定文件归属、缺失项和交付状态按什么项目结构展开。</p>
       </div>
-      <div class="masterdata-next-action__actions">
+      <div class="master-workspace-callout__actions">
         <el-button type="primary" @click="goNodeTypes">去节点类型</el-button>
         <el-button @click="goDeliverableStandard">查看交付物标准</el-button>
       </div>
     </section>
 
-    <el-table
-      v-loading="loading"
-      :data="sectionTree"
-      row-key="id"
-      default-expand-all
-      class="master-table"
-      empty-text="暂无部位节点"
-    >
-      <el-table-column prop="name" label="部位名称" min-width="220" />
-      <el-table-column prop="code" label="编码" width="180" />
-      <el-table-column prop="level" label="层级" width="90" />
-      <el-table-column prop="path" label="路径" min-width="180" />
-      <el-table-column prop="sortOrder" label="排序" width="90" />
-      <el-table-column prop="status" label="状态" width="110">
-        <template #default="{ row }">
-          <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ row.status }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="260" fixed="right">
-        <template #default="{ row }">
-          <el-button text type="primary" @click="openCreateDialog(row)">添加下级</el-button>
-          <el-button text @click="openEditDialog(row)">编辑</el-button>
-          <el-button text type="danger" @click="handleDelete(row)">停用</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <section class="master-workspace-panel">
+      <div class="master-workspace-panel__header">
+        <div>
+          <h2>项目结构</h2>
+          <p>按楼栋、楼层、区域或系统维护。不要在这里表达文件夹路径，文件归属会单独记录。</p>
+        </div>
+      </div>
+      <el-table
+        v-loading="loading"
+        :data="sectionTree"
+        row-key="id"
+        default-expand-all
+        class="master-table"
+        empty-text="暂无部位节点"
+      >
+        <el-table-column prop="name" label="部位名称" min-width="220" />
+        <el-table-column prop="code" label="编码" width="180" />
+        <el-table-column prop="level" label="层级" width="90" />
+        <el-table-column prop="path" label="路径" min-width="180" />
+        <el-table-column prop="sortOrder" label="排序" width="90" />
+        <el-table-column prop="status" label="状态" width="110">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ row.status === 'ACTIVE' ? '启用' : '停用' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="260" fixed="right">
+          <template #default="{ row }">
+            <el-button text type="primary" @click="openCreateDialog(row)">添加下级</el-button>
+            <el-button text @click="openEditDialog(row)">编辑</el-button>
+            <el-button text type="danger" @click="handleDelete(row)">停用</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
 
     <el-dialog v-model="dialogVisible" :title="editingNode ? '编辑部位节点' : '新增部位节点'" width="520px">
       <el-form label-position="top" class="master-form">
@@ -109,6 +97,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Refresh } from '@element-plus/icons-vue';
 
+import MasterDataStepNav from '@/modules/master-data/components/MasterDataStepNav.vue';
 import StandardStatusPanel from '@/modules/master-data/components/StandardStatusPanel.vue';
 import {
   createSectionNode,
@@ -120,9 +109,11 @@ import {
   type StandardStatus
 } from '@/modules/master-data/api/masterData';
 import { useAuthStore } from '@/stores/auth';
+import { useProjectWorkspaceContext } from '@/modules/core/composables/useProjectWorkspaceContext';
 
 const authStore = useAuthStore();
 const router = useRouter();
+const { workspaceProjectId } = useProjectWorkspaceContext();
 const loading = ref(false);
 const saving = ref(false);
 const sectionTree = ref<SectionNode[]>([]);
@@ -143,9 +134,10 @@ const statusOptions = [
   { label: '停用', value: 'DISABLED' }
 ];
 
-const currentProjectId = computed(() => authStore.currentProjectId);
+const currentProjectId = computed(() => workspaceProjectId.value ?? authStore.currentProjectId);
 const projectLabel = computed(() => {
-  const project = authStore.currentUser?.currentProject;
+  const project = authStore.currentUser?.projects.find((item) => item.id === currentProjectId.value)
+    ?? authStore.currentUser?.currentProject;
   return project ? `${project.code} | ${project.name}` : '等待项目上下文';
 });
 

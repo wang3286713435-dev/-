@@ -31,6 +31,19 @@
         {{ item.label }}
       </button>
     </div>
+
+    <div v-if="secondaryTabs.length" class="project-workspace-nav__subtabs" role="list" aria-label="项目内二级导航">
+      <button
+        v-for="item in secondaryTabs"
+        :key="item.key"
+        type="button"
+        role="listitem"
+        :class="{ 'is-active': item.key === activeSecondaryTabKey }"
+        @click="openSecondaryTab(item)"
+      >
+        {{ item.label }}
+      </button>
+    </div>
   </nav>
 </template>
 
@@ -51,6 +64,13 @@ type WorkspaceTab = {
   query?: Record<string, string | number>;
 };
 
+type SecondaryWorkspaceTab = {
+  key: string;
+  label: string;
+  name: RouteRecordName;
+  tab?: string;
+};
+
 const props = defineProps<{
   projectId: number;
 }>();
@@ -67,6 +87,14 @@ const tabs: WorkspaceTab[] = [
   { key: 'delivery', label: '交付闭环', name: 'project-work-document-delivery' },
   { key: 'bim', label: 'BIM 协同', name: 'bim-collaboration', query: { projectId: props.projectId } },
   { key: 'archive', label: '档案目录', name: 'project-work-delivery-package' }
+];
+
+const masterDataSecondaryTabs: SecondaryWorkspaceTab[] = [
+  { key: 'tree', label: '工程树', name: 'data-steward-asset-detail', tab: 'master-data' },
+  { key: 'onboarding', label: '接入向导', name: 'project-master-data-initialization' },
+  { key: 'sections', label: '部位树', name: 'project-master-data-sections' },
+  { key: 'node-types', label: '节点类型', name: 'project-master-data-node-types' },
+  { key: 'standard', label: '交付物标准', name: 'project-master-data-deliverable-standard' }
 ];
 
 const project = computed(() =>
@@ -90,6 +118,21 @@ const activeTabKey = computed(() => {
   if (routeName === 'project-work-delivery-package') return 'archive';
   if (routeName.startsWith('project-work-')) return 'delivery';
   if (routeName.startsWith('project-master-data-')) return 'ownership';
+  return '';
+});
+
+const secondaryTabs = computed(() => (activeTabKey.value === 'ownership' ? masterDataSecondaryTabs : []));
+
+const activeSecondaryTabKey = computed(() => {
+  const routeName = String(route.name ?? '');
+  if (routeName === 'project-master-data-initialization') return 'onboarding';
+  if (routeName === 'project-master-data-sections') return 'sections';
+  if (routeName === 'project-master-data-node-types') return 'node-types';
+  if (routeName === 'project-master-data-deliverable-standard') return 'standard';
+  if (routeName === 'data-steward-asset-detail') {
+    const current = typeof route.query.tab === 'string' ? route.query.tab : 'dashboard';
+    if (current === 'master-data' || current === 'ownership') return 'tree';
+  }
   return '';
 });
 
@@ -126,6 +169,18 @@ function openTab(item: WorkspaceTab) {
   if (item.name) {
     router.push({ name: item.name, params: { projectId: props.projectId }, query: item.query });
   }
+}
+
+function openSecondaryTab(item: SecondaryWorkspaceTab) {
+  if (item.name === 'data-steward-asset-detail') {
+    router.push({
+      name: item.name,
+      params: { projectId: props.projectId },
+      query: { tab: item.tab ?? 'master-data' }
+    });
+    return;
+  }
+  router.push({ name: item.name, params: { projectId: props.projectId } });
 }
 </script>
 
@@ -217,6 +272,45 @@ function openTab(item: WorkspaceTab) {
   background: var(--zy-surface);
   color: var(--zy-blue-700);
   box-shadow: var(--zy-shadow-xs);
+}
+
+.project-workspace-nav__subtabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0 2px;
+}
+
+.project-workspace-nav__subtabs button {
+  appearance: none;
+  border: var(--zy-border);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-surface);
+  color: var(--zy-muted);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-family: inherit;
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-semi);
+  min-height: 28px;
+  padding: 0 var(--zy-sp-3);
+  transition:
+    border-color var(--zy-duration-2) var(--zy-ease),
+    color var(--zy-duration-2) var(--zy-ease),
+    background-color var(--zy-duration-2) var(--zy-ease);
+}
+
+.project-workspace-nav__subtabs button:hover {
+  border-color: var(--zy-blue-300);
+  color: var(--zy-blue-700);
+}
+
+.project-workspace-nav__subtabs button.is-active {
+  border-color: var(--zy-blue-300);
+  background: var(--zy-blue-50);
+  color: var(--zy-blue-700);
 }
 
 @media (max-width: 720px) {

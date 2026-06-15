@@ -843,7 +843,7 @@ public class CatalogApplicationService {
                             project.projectCode(),
                             0,
                             0L,
-                            hasVisibleDirectChildren(child),
+                            true,
                             true
                         );
                     } else if (child.isFile()) {
@@ -885,11 +885,6 @@ public class CatalogApplicationService {
     private boolean isIgnoredPhysicalChild(File child) {
         String name = child.getName();
         return name == null || name.isBlank() || ".DS_Store".equals(name);
-    }
-
-    private boolean hasVisibleDirectChildren(File directory) {
-        File[] children = directory.listFiles(child -> !isIgnoredPhysicalChild(child));
-        return children != null && children.length > 0;
     }
 
     private List<CatalogFileResponse> queryDirectCatalogFiles(
@@ -1751,6 +1746,9 @@ public class CatalogApplicationService {
         String issue = qualityIssue == null || qualityIssue.isBlank() ? null : qualityIssue.trim();
         if (issue == null) return;
         switch (issue.toUpperCase()) {
+            case "ANY_QUALITY_ISSUE" -> sb.append(" AND (f.checksum IS NULL OR f.checksum = ''"
+                + " OR f.confidence_level IS NULL OR f.confidence_level = ''"
+                + " OR f.discipline IS NULL OR f.discipline = '' OR f.discipline = 'OTHER')");
             case "MISSING_CHECKSUM" -> sb.append(" AND (f.checksum IS NULL OR f.checksum = '')");
             case "MISSING_CONFIDENCE" -> sb.append(" AND (f.confidence_level IS NULL OR f.confidence_level = '')");
             case "MISSING_DISCIPLINE" -> sb.append(" AND (f.discipline IS NULL OR f.discipline = '' OR f.discipline = 'OTHER')");
