@@ -7,6 +7,7 @@ export interface LoginPayload {
 }
 
 export interface RegisterPayload {
+  username?: string;
   phoneNumber: string;
   displayName: string;
   departmentName?: string;

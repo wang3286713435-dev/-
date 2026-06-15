@@ -46,6 +46,10 @@ public class AuthApplicationService {
     @Transactional
     public RegisterResponse register(RegisterRequest request) {
         String phoneNumber = normalizePhoneNumber(request.phoneNumber());
+        String username = normalizeOptionalUsername(request.username(), phoneNumber);
+        userAccountRepository.findByUsername(username).ifPresent(existing -> {
+            throw new BusinessException("CORE_AUTH_USERNAME_DUPLICATED", "用户名已存在", HttpStatus.CONFLICT);
+        });
         userAccountRepository.findByUsername(phoneNumber).ifPresent(existing -> {
             throw new BusinessException("CORE_AUTH_PHONE_DUPLICATED", "手机号已注册", HttpStatus.CONFLICT);
         });
@@ -57,13 +61,14 @@ public class AuthApplicationService {
         Long userId;
         try {
             userId = userAccountRepository.insertRegisteredEmployee(
+                username,
                 phoneNumber,
                 passwordEncoder.encode(request.password()),
                 displayName,
                 departmentName
             );
         } catch (DuplicateKeyException exception) {
-            throw new BusinessException("CORE_AUTH_PHONE_DUPLICATED", "手机号已注册", HttpStatus.CONFLICT);
+            throw new BusinessException("CORE_AUTH_ACCOUNT_DUPLICATED", "用户名或手机号已存在", HttpStatus.CONFLICT);
         }
         auditLogApplicationService.record(
             null,
@@ -71,14 +76,15 @@ public class AuthApplicationService {
             "USER",
             String.valueOf(userId),
             userId,
-            Map.of("username", phoneNumber, "projectAuthorized", false)
+            Map.of("username", username, "phoneNumber", phoneNumber, "projectAuthorized", false)
         );
-        return new RegisterResponse(userId, phoneNumber, phoneNumber, displayName, departmentName, "ACTIVE", false);
+        return new RegisterResponse(userId, username, phoneNumber, displayName, departmentName, "ACTIVE", false);
     }
 
     @Transactional
     public SessionTokenResponse login(LoginRequest request) {
-        var user = userAccountRepository.findByUsername(request.username())
+        String loginName = normalizeLoginName(request.username());
+        var user = userAccountRepository.findByUsernameOrPhoneNumber(loginName)
             .orElseThrow(() -> new BusinessException("CORE_AUTH_INVALID_CREDENTIAL", "用户名或密码错误", HttpStatus.UNAUTHORIZED));
         if (!"ACTIVE".equalsIgnoreCase(user.status())) {
             throw new BusinessException("CORE_AUTH_DISABLED", "当前账号已停用", HttpStatus.FORBIDDEN);
@@ -165,5 +171,24 @@ public class AuthApplicationService {
 
     private String normalizePhoneNumber(String phoneNumber) {
         return phoneNumber == null ? "" : phoneNumber.trim();
+    }
+
+    private String normalizeLoginName(String username) {
+        return username == null ? "" : username.trim();
+    }
+
+    private String normalizeOptionalUsername(String username, String fallbackPhoneNumber) {
+        if (username == null || username.isBlank()) {
+            return fallbackPhoneNumber;
+        }
+        String normalized = username.trim();
+        if (!normalized.matches("^[A-Za-z][A-Za-z0-9._-]{2,31}$")) {
+            throw new BusinessException(
+                "CORE_AUTH_USERNAME_INVALID",
+                "用户名需以字母开头，支持字母、数字、点、下划线和短横线，长度 3-32 位",
+                HttpStatus.BAD_REQUEST
+            );
+        }
+        return normalized;
     }
 }

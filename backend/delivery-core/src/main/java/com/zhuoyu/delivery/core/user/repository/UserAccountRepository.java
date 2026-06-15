@@ -51,6 +51,11 @@ public class UserAccountRepository {
         return users.stream().findFirst();
     }
 
+    public Optional<UserAccount> findByUsernameOrPhoneNumber(String loginName) {
+        return findByUsername(loginName)
+            .or(() -> findByPhoneNumber(loginName));
+    }
+
     public Optional<UserAccount> findById(Long id) {
         String sql = """
             SELECT id, username, password_hash, display_name, status,
@@ -63,6 +68,7 @@ public class UserAccountRepository {
     }
 
     public Long insertRegisteredEmployee(
+        String username,
         String phoneNumber,
         String passwordHash,
         String displayName,
@@ -73,12 +79,13 @@ public class UserAccountRepository {
                 username, phone_number, password_hash, display_name,
                 department_name, status, created_by, updated_by
             ) VALUES (
-                :phoneNumber, :phoneNumber, :passwordHash, :displayName,
+                :username, :phoneNumber, :passwordHash, :displayName,
                 :departmentName, 'ACTIVE', NULL, NULL
             )
             """;
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(sql, new MapSqlParameterSource()
+            .addValue("username", username)
             .addValue("phoneNumber", phoneNumber)
             .addValue("passwordHash", passwordHash)
             .addValue("displayName", displayName)
@@ -95,6 +102,32 @@ public class UserAccountRepository {
             WHERE id = :userId AND deleted = 0
             """;
         jdbcTemplate.update(sql, new MapSqlParameterSource("userId", userId));
+    }
+
+    public void updateProfile(Long userId, String displayName, String departmentName) {
+        String sql = """
+            UPDATE core_users
+            SET display_name = :displayName,
+                department_name = :departmentName,
+                updated_by = :userId
+            WHERE id = :userId AND deleted = 0
+            """;
+        jdbcTemplate.update(sql, new MapSqlParameterSource()
+            .addValue("userId", userId)
+            .addValue("displayName", displayName)
+            .addValue("departmentName", blankToNull(departmentName)));
+    }
+
+    public void updatePasswordHash(Long userId, String passwordHash) {
+        String sql = """
+            UPDATE core_users
+            SET password_hash = :passwordHash,
+                updated_by = :userId
+            WHERE id = :userId AND deleted = 0
+            """;
+        jdbcTemplate.update(sql, new MapSqlParameterSource()
+            .addValue("userId", userId)
+            .addValue("passwordHash", passwordHash));
     }
 
     private static UserAccount mapUser(ResultSet resultSet, int rowNum) throws SQLException {

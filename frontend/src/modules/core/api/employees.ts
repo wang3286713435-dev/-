@@ -2,6 +2,7 @@ import { http } from '@/app/http';
 import type {
   ApiResponse,
   AssignableProject,
+  EmployeeCreatePayload,
   EmployeeDetail,
   EmployeeProjectRoleUpdatePayload,
   EmployeeSummary,
@@ -20,6 +21,11 @@ export async function fetchEmployees(params: EmployeeListParams) {
 
 export async function fetchEmployeeDetail(userId: number) {
   const { data } = await http.get<ApiResponse<EmployeeDetail>>(`/api/core/users/${userId}`);
+  return data.data;
+}
+
+export async function createEmployee(payload: EmployeeCreatePayload) {
+  const { data } = await http.post<ApiResponse<EmployeeDetail>>('/api/core/users', payload);
   return data.data;
 }
 

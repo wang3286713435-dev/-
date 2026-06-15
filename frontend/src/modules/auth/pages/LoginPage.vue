@@ -15,7 +15,7 @@
       </div>
 
       <el-alert type="info" :closable="false" show-icon>
-        <template #title>样板账号：platform.admin / Admin@123</template>
+        <template #title>请使用管理员下发的手机号 / 用户名和初始密码登录。</template>
       </el-alert>
 
       <el-form
@@ -25,8 +25,8 @@
         class="login-form"
         @submit.prevent="handleSubmit"
       >
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="form.username" size="large" placeholder="请输入用户名" />
+        <el-form-item label="手机号 / 用户名" prop="username">
+          <el-input v-model="form.username" size="large" placeholder="请输入手机号或用户名" />
         </el-form-item>
         <el-form-item label="密码" prop="password">
           <el-input
@@ -51,7 +51,7 @@
 
       <div class="login-helper">
         <span>还没有账号？</span>
-        <el-button text type="primary" @click="router.push({ name: 'register' })">手机号注册</el-button>
+        <el-button text type="primary" @click="router.push({ name: 'register' })">账号注册</el-button>
       </div>
     </section>
   </div>
@@ -81,12 +81,12 @@ onMounted(() => {
 });
 
 const form = reactive({
-  username: 'platform.admin',
-  password: 'Admin@123'
+  username: '',
+  password: ''
 });
 
 const rules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  username: [{ required: true, message: '请输入手机号或用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 };
 

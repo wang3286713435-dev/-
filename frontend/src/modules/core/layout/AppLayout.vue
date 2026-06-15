@@ -79,6 +79,7 @@
             </button>
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item command="profile">个人中心</el-dropdown-item>
                 <el-dropdown-item command="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -162,7 +163,27 @@ const menus = computed(() => {
       key: 'asset-governance',
       label: '资产治理',
       path: '/data-steward/catalog',
-      icon: 'DataBoard'
+      icon: 'DataBoard',
+      children: [
+        {
+          key: 'asset-catalog',
+          label: '资产目录',
+          path: '/data-steward/catalog',
+          icon: 'FolderOpened'
+        },
+        {
+          key: 'asset-quality',
+          label: '数据质量',
+          path: '/data-steward/quality',
+          icon: 'Warning'
+        },
+        {
+          key: 'asset-object-storage',
+          label: '对象存储',
+          path: '/data-steward/file-service',
+          icon: 'Box'
+        }
+      ]
     },
     {
       key: 'bim-collaboration',
@@ -221,10 +242,12 @@ const platformRootRouteNames = new Set([
   'data-steward-assets',
   'bim-collaboration',
   'data-steward-catalog',
+  'data-steward-file-service',
   'data-steward-quality',
   'data-steward-scans',
   'data-steward-agent-preview',
   'admin-employees',
+  'user-profile',
   'home',
   'access-pending'
 ]);
@@ -300,8 +323,10 @@ const shellTitle = computed(() => {
     'data-steward-scans': '扫描任务',
     'data-steward-quality': '数据质量',
     'data-steward-catalog': '资产目录',
+    'data-steward-file-service': '对象存储',
     'bim-collaboration': 'BIM协同管理',
     'admin-employees': '员工权限管理',
+    'user-profile': '个人中心',
     'access-pending': '等待项目授权'
   };
   return labels[String(route.name ?? '')] ?? '卓羽智能数据中台';
@@ -358,6 +383,10 @@ async function handleLogout() {
 }
 
 async function handleUserCommand(command: string) {
+  if (command === 'profile') {
+    router.push({ name: 'user-profile' });
+    return;
+  }
   if (command === 'logout') {
     await handleLogout();
   }

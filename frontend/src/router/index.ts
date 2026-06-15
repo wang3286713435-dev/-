@@ -60,6 +60,12 @@ const router = createRouter({
           meta: { requiresAuth: true }
         },
         {
+          path: 'profile',
+          name: 'user-profile',
+          component: () => import('@/modules/core/pages/UserProfilePage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
           path: 'admin/employees',
           name: 'admin-employees',
           component: () => import('@/modules/core/pages/AdminEmployeesPage.vue'),
@@ -117,6 +123,12 @@ const router = createRouter({
           path: 'data-steward/catalog',
           name: 'data-steward-catalog',
           component: () => import('@/modules/data-steward/pages/AssetCatalogPage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
+          path: 'data-steward/file-service',
+          name: 'data-steward-file-service',
+          component: () => import('@/modules/data-steward/pages/DataStewardFileServicePage.vue'),
           meta: { requiresAuth: true }
         },
         {
@@ -353,7 +365,7 @@ router.beforeEach(async (to) => {
     return { name: noProjectUser ? 'access-pending' : 'data-steward-assets' };
   }
 
-  if (to.meta.requiresAuth && noProjectUser && to.name !== 'access-pending') {
+  if (to.meta.requiresAuth && noProjectUser && !['access-pending', 'user-profile'].includes(String(to.name ?? ''))) {
     return { name: 'access-pending' };
   }
 

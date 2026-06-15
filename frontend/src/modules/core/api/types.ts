@@ -29,6 +29,9 @@ export interface CurrentUser {
   userId: number;
   username: string;
   displayName: string;
+  phoneNumber: string | null;
+  departmentName: string | null;
+  lastLoginAt: string | null;
   currentProject: ProjectSummary | null;
   projects: ProjectSummary[];
   permissions: string[];
@@ -107,6 +110,14 @@ export interface EmployeeProjectRoleUpdatePayload {
     projectId: number;
     roleCode: 'PROJECT_VIEWER' | 'DELIVERY_ENGINEER' | 'PROJECT_ADMIN';
   }>;
+}
+
+export interface EmployeeCreatePayload {
+  username: string;
+  phoneNumber: string;
+  displayName: string;
+  departmentName?: string;
+  password: string;
 }
 
 export interface AssignableProject {
