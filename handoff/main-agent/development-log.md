@@ -1,5 +1,112 @@
 # 主 Agent 开发监控日志
 
+## 2026-06-15：PLM-1 开发 agent 返回，进入测试前审计
+
+- 开发 agent 已完成 PLM-1 并写入 `handoff/dev-agent/latest-report.md`。
+- 报告结论：
+  - 超级管理员 `admin` 可创建项目。
+  - 创建项目会复用 `core_projects`，授予创建人 `PROJECT_ADMIN`。
+  - 创建项目会初始化 MinIO 对象存储占位和工程树根节点。
+  - 归档项目走软归档，不删除 MinIO 对象，不触碰真实 NAS 文件。
+  - 后端构建、前端构建、健康检查、PLM-1 专项、M3G-8、file-access 回归均通过。
+- 主 agent 审计发现：
+  - `scripts/dev/check-plm1-project-lifecycle.sh` 和 `handoff/dev-agent/latest-report.md` 已暂存。
+  - PLM-1 运行期业务代码仍是已修改但未暂存，收口提交前必须纳入 Git：
+    - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/application/AssetApplicationService.java`
+    - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/controller/AssetController.java`
+    - `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/asset/dto/AssetDtos.java`
+    - `frontend/src/modules/data-steward/api/dataSteward.ts`
+    - `frontend/src/modules/data-steward/pages/AssetOverviewPage.vue`
+- 下一步：
+  - 交给测试 agent 按 `handoff/test-agent/current-prompt.md` 做轻量验收。
+  - 如测试通过，再补齐 PLM-1 运行期文件暂存并进入收口判断。
+
+## 2026-06-15：PLM-1 测试 P1 处理
+
+- 测试 agent 结论：
+  - PLM-1 功能链路通过。
+  - 后端构建、前端构建、健康检查、PLM-1 专项、M3G-8、file-access 回归均通过。
+  - 唯一 P1：`frontend/src/modules/master-data/components/MasterDataStepNav.vue` 为未跟踪运行期文件，但已被工程主数据多个页面引用。
+- 主 agent 处理：
+  - 已将 `frontend/src/modules/master-data/components/MasterDataStepNav.vue` 纳入 Git 暂存区。
+  - `git diff --cached --check -- frontend/src/modules/master-data/components/MasterDataStepNav.vue` 通过。
+- 下一步：
+  - 让测试 agent 做极短复验，只看该 P1 是否关闭，不需要重跑全量浏览器验收。
+
+## 2026-06-15：PLM-1 收口判断
+
+- 测试 agent 极短复验结论：
+  - 上轮唯一 P1 已关闭。
+  - `MasterDataStepNav.vue` 当前为 `A`，不再是 `??`。
+  - `git diff --cached --check` 通过。
+  - 前端构建通过。
+- 主 agent 裁决：
+  - `PLM-1：项目生命周期管理 MVP` 收口。
+  - 功能范围符合最初边界：超级管理员创建项目、软归档项目、对象存储工作区占位、工程树根节点、项目管理员授权和审计。
+  - 未引入完整 PLM 大系统。
+  - 未物理删除真实 NAS 文件。
+  - 未删除 MinIO 对象。
+  - 未引入 Hermes / BIM / 语义索引新能力。
+- 收口提醒：
+  - 当前工作区仍包含大量跨批次改动，后续提交前需要按批次归类，避免把无关内容混入 PLM-1。
+  - PLM-1 运行期文件和专项脚本必须随本批一起提交。
+
+## 2026-06-15：PLM-1 项目生命周期管理 MVP 启动
+
+- 用户要求：
+  - 开始 PLM-1 功能。
+  - 不引入不必要开发。
+  - 尽量使用平台中已有基础开发。
+- 主 agent 判断：
+  - PLM-1 只做项目创建与归档的最小闭环，不做完整项目生命周期大系统。
+  - 创建项目复用现有 `core_projects`、项目角色、对象存储、工程树和审计能力。
+  - 归档项目采用软归档/软删除，不物理删除 MinIO 对象或真实 NAS 文件。
+  - 超级管理员判断复用现有账号/权限体系，不新建权限模型。
+- 已写入：
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+  - `handoff/main-agent/status.md`
+  - `handoff/main-agent/post-ux4-project-lifecycle-todo.md`
+- 后续：
+  - 等开发 agent 完成并写入 `handoff/dev-agent/latest-report.md`。
+  - 测试 agent 只做轻量 API / 构建 / 安全边界验收，不做全量浏览器逐页点击。
+
+## 2026-06-15：UX4 收口判断
+
+- 用户确认：
+  - 当前 UI 没有大的问题。
+  - 后续如果还需要修改，另开小批次修复。
+  - 不再让 UX4 卡住后续主线开发。
+- 主 agent 裁决：
+  - `UX4：平台视觉与员工使用效率修复` 收口。
+  - UX4 之后不再继续追加零散前端需求到同一批次。
+  - 已记录但未启动的后续功能需求包括：`PLM-1：项目生命周期管理 MVP`，即添加项目、删除项目、对象存储工作区创建和工程树根目录创建。
+- 最近一次 UX4 修复内容：
+  - 工程主数据页的工程树可视化改为主视图。
+  - 左侧资产推导树与右侧节点文件复核成为首屏工作区。
+  - 流程步骤、阻塞项和节点属性下沉为辅助信息。
+- 验证：
+  - 最近一次前端构建通过。
+  - `git diff --check` 通过。
+  - 未修改 `docs/**`。
+- 后续处理规则：
+  - UI 小问题按 `UX4-Fx` 或新的小修批次处理。
+  - 新业务能力不得混入 UX4，必须单独开批次并明确边界。
+
+## 2026-06-15：Post-UX4 项目生命周期管理待办记录
+
+- 用户要求：
+  - 增加添加项目和删除项目功能。
+  - 删除项目需要二次确认，且仅超级管理员可删除。
+  - 添加项目应通过对象存储管理，创建真实对象存储工作区，并同步创建工程树根目录。
+- 主 agent 裁决：
+  - 当前不插入 UX4 实现，避免打断 UX4 前端收口。
+  - 将该能力记录为 UX4 合并后的独立功能批次 `PLM-1：项目生命周期管理 MVP`。
+  - 删除项目第一阶段建议采用安全归档/软删除，不物理删除 MinIO 对象或 NAS 原文件。
+- 已写入：
+  - `handoff/main-agent/post-ux4-project-lifecycle-todo.md`
+  - `handoff/main-agent/ux4-visual-usability-fix-plan.md`
+
 ## 2026-06-04：UX4 平台视觉与员工使用效率修复启动
 
 - 用户要求：

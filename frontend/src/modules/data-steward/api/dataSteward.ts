@@ -156,6 +156,42 @@ export interface AssetProject {
   governanceReady?: boolean;
 }
 
+export interface AssetProjectCreatePayload {
+  code: string;
+  name: string;
+  industryType?: string | null;
+  projectStage?: string | null;
+  projectManagerName?: string | null;
+  ownerOrgName?: string | null;
+  assetSource?: string | null;
+}
+
+export interface ProjectLifecycleCreateResponse {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  projectAdminGranted: boolean;
+  storageWorkspaceStatus: string;
+  sectionRootStatus: string;
+  sectionRootNodeId: number;
+  project: AssetProject;
+}
+
+export interface AssetProjectArchivePayload {
+  confirmed: boolean;
+  confirmText: string;
+}
+
+export interface AssetProjectArchiveResponse {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  archived: boolean;
+  archiveStatus: string;
+  objectStorageDeleted: boolean;
+  nasTouched: boolean;
+}
+
 export interface AssetCapacityByFileKind {
   fileKind: string;
   fileCount: number;
@@ -1254,6 +1290,22 @@ export async function fetchAssetProjects(keyword?: string, assetSource?: string)
       ...(assetSource ? { assetSource } : {})
     }
   });
+  return data.data;
+}
+
+export async function createLifecycleProject(payload: AssetProjectCreatePayload) {
+  const { data } = await http.post<ApiResponse<ProjectLifecycleCreateResponse>>(
+    '/api/data-steward/assets/projects:lifecycle-create',
+    payload
+  );
+  return data.data;
+}
+
+export async function archiveAssetProject(projectId: number, payload: AssetProjectArchivePayload) {
+  const { data } = await http.post<ApiResponse<AssetProjectArchiveResponse>>(
+    `/api/data-steward/assets/projects/${projectId}:archive`,
+    payload
+  );
   return data.data;
 }
 

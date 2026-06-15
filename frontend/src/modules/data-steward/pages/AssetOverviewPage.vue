@@ -32,7 +32,6 @@
                 class="launchpad-recommend__cover"
                 :style="{ backgroundImage: `url(${projectCoverImage})` }"
               >
-                <span>{{ recommendedBadge }}</span>
                 <strong>{{ recommendedProject.name }}</strong>
               </div>
               <dl class="launchpad-recommend__meta">
@@ -144,7 +143,12 @@
               <strong>全部项目 <span>({{ formatCount(sortedProjects.length) }})</span></strong>
               <p>双击项目行或点击“进入”，即可打开真实项目工作台。</p>
             </div>
-            <el-button type="primary" @click="showCreateProjectNotice">新建项目</el-button>
+            <el-button v-if="isSuperAdmin" type="primary" @click="openCreateProjectDialog">新建项目</el-button>
+            <el-tooltip v-else content="仅超级管理员可以新建项目" placement="top">
+              <span>
+                <el-button type="primary" disabled>新建项目</el-button>
+              </span>
+            </el-tooltip>
           </div>
 
           <el-table
@@ -196,11 +200,19 @@
             <el-table-column label="最近访问" width="140">
               <template #default="{ row }">{{ projectRecentText(row) }}</template>
             </el-table-column>
-            <el-table-column label="操作" width="130" fixed="right">
+            <el-table-column label="操作" width="190" fixed="right">
               <template #default="{ row }">
                 <div class="launchpad-row-actions">
                   <el-button text @click="openDetail(row)">进入</el-button>
                   <el-button text :icon="MoreFilled" aria-label="更多操作" @click="openProjectFiles(row)" />
+                  <el-button
+                    v-if="isSuperAdmin"
+                    text
+                    type="danger"
+                    @click.stop="confirmArchiveProject(row)"
+                  >
+                    归档
+                  </el-button>
                 </div>
               </template>
             </el-table-column>
@@ -281,17 +293,75 @@
         </section>
       </aside>
     </section>
+
+    <el-dialog
+      v-model="createProjectDialogVisible"
+      title="新建项目"
+      width="560px"
+      destroy-on-close
+    >
+      <el-alert
+        class="launchpad-create-alert"
+        type="info"
+        show-icon
+        :closable="false"
+        title="创建后会初始化对象存储工作区和工程树根节点，但不会扫描或操作真实 NAS 文件。"
+      />
+      <el-form class="launchpad-create-form" label-position="top">
+        <el-form-item label="项目名称" required>
+          <el-input v-model.trim="createProjectForm.name" placeholder="例如：105 启航华居项目" maxlength="255" />
+        </el-form-item>
+        <el-form-item label="项目编码" required>
+          <el-input v-model.trim="createProjectForm.code" placeholder="例如：PLM-2026-001" maxlength="64" />
+        </el-form-item>
+        <div class="launchpad-create-form__grid">
+          <el-form-item label="项目类型">
+            <el-select v-model="createProjectForm.industryType" placeholder="请选择">
+              <el-option label="建筑机电" value="BUILDING_MEP" />
+              <el-option label="房建" value="BUILDING" />
+              <el-option label="市政" value="MUNICIPAL" />
+              <el-option label="其他" value="OTHER" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="项目阶段">
+            <el-select v-model="createProjectForm.projectStage" placeholder="请选择">
+              <el-option label="准备阶段" value="PREPARATION" />
+              <el-option label="实施阶段" value="IMPLEMENTATION" />
+              <el-option label="交付阶段" value="DELIVERY" />
+              <el-option label="未知" value="UNKNOWN" />
+            </el-select>
+          </el-form-item>
+        </div>
+        <div class="launchpad-create-form__grid">
+          <el-form-item label="负责人">
+            <el-input v-model.trim="createProjectForm.projectManagerName" placeholder="默认可填写项目负责人姓名" maxlength="128" />
+          </el-form-item>
+          <el-form-item label="责任组织">
+            <el-input v-model.trim="createProjectForm.ownerOrgName" placeholder="例如：项目管理部" maxlength="128" />
+          </el-form-item>
+        </div>
+      </el-form>
+      <template #footer>
+        <el-button @click="createProjectDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="createProjectSubmitting" @click="submitCreateProject">
+          创建项目
+        </el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowRight, MoreFilled, Refresh, Search } from '@element-plus/icons-vue';
 
 import projectCoverImage from '@/assets/ux4/project-cover-reference.png';
+import { useAuthStore } from '@/stores/auth';
 import {
+  archiveAssetProject,
+  createLifecycleProject,
   fetchCatalogProjects,
   fetchAssetProjects,
   fetchAssetQualityOverview,
@@ -302,6 +372,7 @@ import {
   type AssetStatistics,
   type CatalogProject
 } from '@/modules/data-steward/api/dataSteward';
+import { fetchGlandarReadyModelCatalog } from '@/modules/visualization/api/visualization';
 
 type TodoCard = {
   key: string;
@@ -324,6 +395,7 @@ type LaunchpadRisk = {
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
 const loading = ref(false);
 const keyword = ref('');
 const sourceFilter = ref('ALL');
@@ -334,9 +406,15 @@ const updatedRange = ref<[string, string] | null>(null);
 const projects = ref<AssetProject[]>([]);
 const statistics = ref<AssetStatistics | null>(null);
 const qualityOverview = ref<AssetQualityOverview | null>(null);
+const readyModelCount = ref(0);
 const recentProjectIds = ref<number[]>(readRecentProjectIds());
 const pageNo = ref(1);
 const pageSize = ref(10);
+const createProjectDialogVisible = ref(false);
+const createProjectSubmitting = ref(false);
+const createProjectForm = ref(defaultCreateProjectForm());
+
+const isSuperAdmin = computed(() => authStore.currentUser?.username?.toLowerCase() === 'admin');
 
 const sourceOptions = [
   { label: '全部', value: 'ALL' },
@@ -413,13 +491,6 @@ const recommendedProject = computed(() =>
   pendingProjects.value[0] ?? recentProjects.value[0] ?? primaryActionProject.value
 );
 
-const recommendedBadge = computed(() => {
-  if (!recommendedProject.value) return '';
-  if (recentProjectIds.value.includes(recommendedProject.value.projectId)) return '继续上次';
-  if (!recommendedProject.value.hasMasterData || !recommendedProject.value.hasDeliveryStandard) return '待处理';
-  return '推荐';
-});
-
 const currentRoleLabel = computed(() => {
   return recommendedProject.value ? '项目管理员' : '-';
 });
@@ -428,8 +499,6 @@ const todoCards = computed<TodoCard[]>(() => {
   const rows = visibleProjects.value.length ? visibleProjects.value : projects.value;
   const masterPendingProject = rows.find((item) => !item.hasMasterData);
   const deliveryPendingProject = rows.find((item) => !item.hasDeliveryStandard) ?? masterPendingProject;
-  const objectProject = riskProjectForTodo.value ?? deliveryPendingProject;
-  const bimProject = rows.find((item) => Number(item.modelCount ?? 0) > 0) ?? recommendedProject.value;
   return [
     {
       key: 'master-data',
@@ -458,18 +527,18 @@ const todoCards = computed<TodoCard[]>(() => {
       value: Number(qualityOverview.value?.missingStoragePathCount ?? 0) + Number(qualityOverview.value?.zeroSizeFileCount ?? 0),
       tone: 'blue',
       action: '去处置',
-      project: objectProject,
-      routeName: objectProject ? 'project-data-steward-file-service' : 'data-steward-quality'
+      project: null,
+      routeName: 'data-steward-file-service'
     },
     {
       key: 'bim',
-      label: 'BIM 模型待轻量化',
+      label: '已轻量化模型',
       initial: 'B',
-      value: rows.filter((item) => Number(item.modelCount ?? 0) > 0 && item.onboardingStatus !== 'GOVERNANCE_READY').length,
+      value: readyModelCount.value,
       tone: 'green',
-      action: '去查看',
-      project: bimProject,
-      routeName: 'data-steward-asset-detail'
+      action: '看列表',
+      project: null,
+      routeName: 'bim-collaboration'
     }
   ];
 });
@@ -570,15 +639,19 @@ async function loadPage() {
     projects.value = nextProjects;
     pageNo.value = 1;
 
-    const [statisticsResult, qualityResult] = await Promise.allSettled([
+    const [statisticsResult, qualityResult, readyModelsResult] = await Promise.allSettled([
       fetchAssetStatistics(undefined, undefined),
-      fetchAssetQualityOverview(undefined, undefined)
+      fetchAssetQualityOverview(undefined, undefined),
+      fetchGlandarReadyModelCatalog()
     ]);
 
     statistics.value = statisticsResult.status === 'fulfilled' ? statisticsResult.value : null;
     qualityOverview.value = qualityResult.status === 'fulfilled' ? qualityResult.value : null;
+    readyModelCount.value = readyModelsResult.status === 'fulfilled'
+      ? readyModelsResult.value.reduce((total, group) => total + (group.models?.length ?? 0), 0)
+      : 0;
 
-    if (statisticsResult.status === 'rejected' || qualityResult.status === 'rejected') {
+    if (statisticsResult.status === 'rejected' || qualityResult.status === 'rejected' || readyModelsResult.status === 'rejected') {
       ElMessage.warning('项目列表已加载，部分统计信息稍后刷新。');
     }
   } catch (error) {
@@ -642,8 +715,95 @@ function resetFilters() {
   pageNo.value = 1;
 }
 
-function showCreateProjectNotice() {
-  ElMessage.info('当前试运行阶段由管理员接入真实项目；本按钮暂不创建项目。');
+function defaultCreateProjectForm() {
+  return {
+    code: '',
+    name: '',
+    industryType: 'BUILDING_MEP',
+    projectStage: 'PREPARATION',
+    projectManagerName: authStore.currentUser?.displayName || '',
+    ownerOrgName: ''
+  };
+}
+
+function openCreateProjectDialog() {
+  if (!isSuperAdmin.value) {
+    ElMessage.warning('仅超级管理员可以新建项目，请联系平台管理员。');
+    return;
+  }
+  createProjectForm.value = defaultCreateProjectForm();
+  createProjectDialogVisible.value = true;
+}
+
+async function submitCreateProject() {
+  const payload = {
+    ...createProjectForm.value,
+    code: createProjectForm.value.code.trim(),
+    name: createProjectForm.value.name.trim(),
+    projectManagerName: createProjectForm.value.projectManagerName.trim() || null,
+    ownerOrgName: createProjectForm.value.ownerOrgName.trim() || null,
+    assetSource: 'MANUAL'
+  };
+  if (!payload.name || !payload.code) {
+    ElMessage.warning('请填写项目名称和项目编码');
+    return;
+  }
+  createProjectSubmitting.value = true;
+  try {
+    const result = await createLifecycleProject(payload);
+    createProjectDialogVisible.value = false;
+    ElMessage.success('项目已创建，已准备对象存储工作区和工程树根节点。');
+    await loadPage();
+    const action = await ElMessageBox.confirm(
+      `项目「${result.projectName}」已创建，是否现在进入项目工作台？`,
+      '项目创建成功',
+      {
+        confirmButtonText: '进入项目',
+        cancelButtonText: '留在启动台',
+        type: 'success'
+      }
+    ).catch(() => null);
+    if (action) {
+      openDetail(result.project);
+    }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '创建项目失败');
+  } finally {
+    createProjectSubmitting.value = false;
+  }
+}
+
+async function confirmArchiveProject(row: AssetProject) {
+  if (!isSuperAdmin.value) {
+    ElMessage.warning('仅超级管理员可以归档项目');
+    return;
+  }
+  const promptResult = await ElMessageBox.prompt(
+    `归档后项目默认不再出现在项目启动台，但不会删除真实 NAS 文件、MinIO 对象、工程主数据或审计记录。请输入项目编码「${row.code}」或项目名称「${row.name}」确认。`,
+    '归档项目',
+    {
+      confirmButtonText: '确认归档',
+      cancelButtonText: '取消',
+      inputPlaceholder: row.code,
+      inputValidator: (value) => value === row.code || value === row.name,
+      inputErrorMessage: '请输入完整项目编码或项目名称'
+    }
+  ).catch(() => null);
+  if (!promptResult) return;
+  try {
+    const result = await archiveAssetProject(row.projectId, {
+      confirmed: true,
+      confirmText: promptResult.value
+    });
+    if (result.objectStorageDeleted || result.nasTouched) {
+      ElMessage.error('归档结果异常：平台不应删除对象存储或触碰 NAS 文件。');
+      return;
+    }
+    ElMessage.success('项目已归档，启动台默认不再显示。');
+    await loadPage();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '归档项目失败');
+  }
 }
 
 function openDetail(row: AssetProject) {
@@ -664,6 +824,10 @@ function openProjectFiles(row: AssetProject) {
 }
 
 function handleTodoClick(item: TodoCard) {
+  if (item.project === null && item.routeName) {
+    router.push({ name: item.routeName });
+    return;
+  }
   const row = item.project ?? recommendedProject.value;
   if (!row) {
     if (item.routeName) {
@@ -672,10 +836,6 @@ function handleTodoClick(item: TodoCard) {
     return;
   }
   rememberProject(row.projectId);
-  if (item.key === 'bim') {
-    router.push({ name: 'data-steward-asset-detail', params: { projectId: row.projectId }, query: { tab: 'bim' } });
-    return;
-  }
   router.push({ name: item.routeName || 'data-steward-asset-detail', params: { projectId: row.projectId } });
 }
 
@@ -890,6 +1050,21 @@ function noticeTitle(actionCode: string, summary: string | null) {
   border-radius: 10px;
 }
 
+.launchpad-create-alert {
+  margin-bottom: 16px;
+}
+
+.launchpad-create-form {
+  display: grid;
+  gap: 2px;
+}
+
+.launchpad-create-form__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .launchpad-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
@@ -977,17 +1152,6 @@ function noticeTitle(actionCode: string, summary: string | null) {
   background:
     linear-gradient(90deg, rgba(20, 48, 112, 0.78), rgba(20, 48, 112, 0.08)),
     linear-gradient(180deg, rgba(16, 38, 84, 0.1), rgba(16, 38, 84, 0.34));
-}
-
-.launchpad-recommend__cover span {
-  justify-self: end;
-  border-radius: 999px;
-  background: oklch(0.52 0.19 257);
-  color: oklch(0.99 0.004 255);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  padding: 8px 10px;
 }
 
 .launchpad-recommend__cover strong {

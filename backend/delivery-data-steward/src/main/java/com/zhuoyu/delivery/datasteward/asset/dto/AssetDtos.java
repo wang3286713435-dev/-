@@ -73,6 +73,35 @@ public final class AssetDtos {
     ) {
     }
 
+    public record ProjectLifecycleCreateResponse(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        Boolean projectAdminGranted,
+        String storageWorkspaceStatus,
+        String sectionRootStatus,
+        Long sectionRootNodeId,
+        AssetProjectResponse project
+    ) {
+    }
+
+    public record AssetProjectArchiveRequest(
+        Boolean confirmed,
+        String confirmText
+    ) {
+    }
+
+    public record AssetProjectArchiveResponse(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        Boolean archived,
+        String archiveStatus,
+        Boolean objectStorageDeleted,
+        Boolean nasTouched
+    ) {
+    }
+
     public record AssetProjectUpdateRequest(
         String name,
         String industryType,

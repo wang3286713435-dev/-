@@ -1,287 +1,269 @@
-# 开发 Agent 当前任务：UX4-A-R1 参考图驱动前端返工
+# Dev Agent 当前任务：PLM-1 项目生命周期管理 MVP
 
-你是卓羽智能数据中台的开发 agent。工作目录：
+你是数字化交付平台 v1 的开发 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
-当前分支：
+先阅读并遵守：
 
-`codex/ux4-frontend-shell-routing`
-
-## 0. 返工结论
-
-上一版 `UX4-A` 不能收口。
-
-主 agent 已检查当前页面和用户提供的 5 张参考图，结论是：
-
-- 当前实现只是“旧页面 + 新壳层”。
-- 参考图要的是“项目级 SaaS 工作台重构”。
-- 本轮必须返工为 `UX4-A-R1`。
-
-你不能继续在旧页面上方添加新的标题区、导航区或说明区。你需要把旧业务能力重新组织进新的项目工作台模板里。
-
-## 1. 本轮目标
-
-本轮只做前端交互逻辑和视觉重构，不改后端接口结构。
-
-核心目标：
-
-1. 建立统一的项目工作台页面骨架。
-2. 按参考图重构项目启动台、项目概览、文件管理、工程主数据、交付闭环、BIM 协同的一级结构。
-3. 复用现有 API 和现有业务组件能力，但不能原样堆回旧页面。
-4. 让当前页面第一眼接近用户提供的 SaaS 项目管理仪表盘参考图。
-
-## 2. 必须先查看的参考图
-
-开始开发前必须实际打开并查看以下图片，在报告里写清你看了哪些图，以及每张图借鉴了什么结构：
-
-- `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_44 AM.png`
-- `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_41 AM.png`
-- `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_38 AM.png`
-- `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_36 AM.png`
-- `/Users/vc/Downloads/ChatGPT Image Jun 5, 2026, 10_37_31 AM.png`
-
-## 3. 当前失败原因
-
-你需要先理解上一版为什么失败：
-
-1. `AssetProjectDetailPage.vue` 仍然保留旧 `el-tabs` 和旧资产总览卡片，只是在上方加了新项目身份区。
-2. 文件管理仍然是旧组件嵌在旧页内，没有形成参考图里的“左目录树 + 中文件列表 + 右详情面板”的清晰工作区。
-3. BIM 协同没有和项目工作台真正融合，缺少参考图里的 Viewer、模型列表、轻量化状态、问题/协同信息区域组合。
-4. 项目启动台没有真正重做成项目入口台。
-5. 顶部、项目身份区、一级 tab、主体内容之间仍然割裂。
-
-本轮必须修这些结构问题，而不是继续修边角样式。
-
-## 4. 允许修改范围
-
-允许：
-
-- `frontend/**`
+- `handoff/main-agent/status.md`
+- `handoff/main-agent/decisions.md`
+- `handoff/main-agent/development-log.md`
+- `handoff/main-agent/post-ux4-project-lifecycle-todo.md`
 - `handoff/dev-agent/latest-report.md`
+- `handoff/test-agent/latest-report.md`
 
-禁止：
+不要修改 `docs/**`。
 
-- 修改 `backend/**`
-- 修改数据库迁移
-- 修改接口语义
-- 修改权限规则
-- 修改对象存储读取规则
-- 修改 Hermes evidence / 语义问答
-- 修改 BIM 引擎后端能力
-- 修改 `docs/**`
-- 读取文件正文
-- 写 parser / documents / chunks / Qdrant / OpenSearch
-- 暴露真实 NAS 路径、bucket、object key、`storage_uri`、SQL、token、secret
+## 0. 批次定位
 
-如果你认为必须改后端才能完成，请停止并写入报告，不要自行改。
+批次名称：
 
-## 5. 必须建立的前端结构
+`PLM-1：项目生命周期管理 MVP`
 
-### A. 统一项目工作台模板
+本批只做最小可用的项目创建与归档能力，不要扩展成完整 PLM 系统。
 
-建议新增或重构为一个统一项目工作台壳层，例如：
+目标是让平台具备真实管理项目生命周期的基础能力：
 
-- `ProjectWorkspaceShell.vue`
-- 或在现有 `AssetProjectDetailPage.vue` 内彻底重排，但必须达到同等效果
+1. 超级管理员可以创建项目。
+2. 创建项目时同步初始化对象存储工作区和工程树根节点。
+3. 超级管理员可以二次确认后归档项目。
+4. 归档项目默认不再出现在项目启动台。
+5. 不删除、移动、重命名真实 NAS 文件，也不删除 MinIO 对象。
 
-它必须包含：
+## 1. 当前已有基础，必须优先复用
 
-1. 顶部全局栏：
-   - 面包屑
-   - 当前项目选择
-   - 全局搜索入口
-   - 用户信息
-2. 项目身份区：
-   - 项目图片或清晰项目视觉占位
-   - 项目名
-   - 项目编码
-   - 负责人
-   - 当前角色
-   - 当前阶段
-   - 收藏 / 刷新 / 设置类轻操作
-3. 项目一级 tab：
-   - 概览
-   - 文件管理
-   - 工程主数据
-   - 交付闭环
-   - BIM 协同
-   - 档案目录
-4. 当前 tab 专属工作区：
-   - 每个 tab 都要有自己的页面布局，不能继续显示旧页面堆叠。
+优先复用现有能力，不要重造一套项目系统：
 
-### B. 项目启动台
+- 项目台账：`core_projects`
+- 项目角色：`core_user_project_roles`
+- 审计日志：`core_audit_logs`
+- 现有项目创建基础：
+  - `AssetController`
+  - `AssetApplicationService#createProject`
+  - `BimAssetRepository#upsertProject`
+  - `BimAssetRepository#grantProjectAdmin`
+- 对象存储基础：
+  - `StorageService`
+  - `data_storage_objects`
+  - `data_file_object_versions`
+- 工程主数据基础：
+  - `masterdata_section_nodes`
+  - section node repository/service
+- 前端项目入口：
+  - `AssetOverviewPage.vue`
 
-`/data-steward/assets` 需要更像参考图的“我的项目 / 项目启动台”：
+如果发现已有接口或服务已经能满足，不要新增重复接口。
 
-- 左侧全局导航保留。
-- 主区域突出项目搜索、当前推荐项目、真实项目列表。
-- 不要大段教程文字。
-- 不要铺满无关统计。
-- 用户应能快速判断：先选项目，然后进入文件管理 / 项目可视化 / 交付状态。
+## 2. 功能范围
 
-### C. 项目概览
+### A. 创建项目
 
-`/data-steward/assets/:projectId` 的默认概览要参考第 5 张图：
+在资产总览页把“新建项目”从占位提示改成真实弹窗。
 
-- 用流程条表达：资产接入 -> 工程主数据 -> 交付闭环 -> BIM 协同 -> 档案目录。
-- 主卡片突出：
-  - 文件管理
-  - 工程主数据
-  - 交付状态
-  - Viewer 状态
-- 右侧可以有项目健康度、风险提醒、最近动态。
-- 不要继续展示大量旧技术统计卡作为主视觉。
+字段保持最小：
 
-### D. 文件管理
+- 项目名称
+- 项目编码
+- 项目类型/行业类型，沿用现有字段或默认值
+- 负责人/责任组织，如现有字段支持则保留；不支持不要强行加表
 
-文件管理必须参考第 4 张图，形成三栏结构：
+后端创建项目时必须做到：
 
-1. 左侧：目录树 + 存储使用 / 对象化状态摘要。
-2. 中间：文件列表。
-   - 默认列只保留业务用户最常用字段：
-     - 文件名
-     - 版本
-     - 类型
-     - 专业
-     - 状态
-     - 大小
-     - 更新时间
-   - 平台文件 ID、checksum、对象版本、迁移状态等放入右侧详情或技术信息折叠区。
-3. 右侧：文件详情面板。
-   - 文件预览缩略 / 占位
-   - 文件归属
-   - 对象存储状态
-   - 版本信息
-   - 安全边界说明
+1. 仅超级管理员可创建。
+2. 校验项目编码和项目名称。
+3. 写入 `core_projects`，优先复用现有 `createProject/upsertProject`。
+4. 给创建人授予该项目 `PROJECT_ADMIN`。
+5. 初始化一个对象存储工作区占位。
+   - 只通过平台 StorageService / MinIO API。
+   - 不暴露 bucket、object key、storage_uri。
+   - object key 必须是不含真实业务路径的 opaque 规则。
+6. 初始化工程树根节点。
+   - 只创建根节点，不自动生成大量模板节点。
+   - 如果根节点已存在，保持幂等，不重复创建。
+7. 写审计日志。
+8. 返回业务化结果：
+   - projectId
+   - projectCode
+   - projectName
+   - projectAdminGranted
+   - storageWorkspaceStatus
+   - sectionRootStatus / sectionRootNodeId
 
-搜索时仍按 M3G-5-F1 口径：全项目搜索文件，不混入文件夹。
+注意：
 
-### E. 工程主数据
+- 不要读取或扫描真实 NAS。
+- 不要自动创建交付物标准。
+- 不要自动生成完整工程树。
+- 不要宣称项目已经完成工程主数据初始化。
 
-工程主数据必须参考第 3 张图：
+### B. 归档项目
 
-- 顶部展示主数据完成度。
-- 中间展示步骤：
-  - 确认部位树
-  - 锁定节点类型
-  - 配置交付物标准
-  - 生成规则草案
-- 左侧展示阻塞项 / 待处理。
-- 中间展示部位树。
-- 右侧展示当前节点属性、最近更新、相关文档。
+资产总览项目行增加“归档项目”操作，仅超级管理员可见。
 
-不能让用户感觉工程主数据是架空模板。
+归档必须：
 
-### F. 交付闭环
+1. 二次确认。
+2. 要求 `confirmed=true`。
+3. 要求输入项目编码或项目名称进行确认，避免误操作。
+4. 只做软归档/软删除，不做物理删除。
+5. 默认项目列表不再显示归档项目。
+6. 不删除 MinIO 对象。
+7. 不删除真实 NAS 原文件。
+8. 不删除工程主数据、交付记录、审计记录。
+9. 写审计日志。
 
-交付闭环必须参考第 2 张图：
+建议后端语义：
 
-- 顶部是交付状态 tab：
-  - 交付状态
-  - 文档交付
-  - 图纸交付
-  - 整改闭环
-  - 交付包草案
-- 主区域展示待交付清单、状态卡、下一步行动。
-- 右侧展示审核进度、风险提醒、快捷操作。
-- 现有文档/图纸交付能力可以复用，但必须重排在这个结构里。
+- 如果现有项目列表依赖 `core_projects.deleted=0`，可以将归档项目设为 `deleted=1` 或使用现有归档状态字段，但必须保持软删除语义。
+- 如果已有 `asset_status` / `status` 等字段，按当前项目约定标记为 `ARCHIVED` / `INACTIVE`。
+- 不要物理删除任何业务数据。
 
-### G. BIM 协同
+### C. 权限边界
 
-BIM 协同必须参考第 1 张图：
+本批的“超级管理员”优先复用现有系统里已经实现的超级管理员判断。
 
-- 顶部 KPI：模型数量、READY 状态、轻量化任务、问题票据。
-- 主区域左侧是 Viewer 或 Viewer 占位。
-- 右侧是模型列表、轻量化状态、最近协同动态。
-- 支持当前已接入的 MOCK / 葛兰岱尔状态展示。
-- 不新增后端能力，不改变引擎接口。
+如果当前后端已有：
 
-## 6. 明确禁止的伪完成
+- `admin` 超级管理员
+- `platform.admin`
+- `isSuperAdmin`
+- 员工权限管理里的超级管理员判断
 
-以下情况一律视为不通过：
+请直接复用，不要新建一套权限模型。
 
-1. 只在旧页面上方加一个新 header。
-2. 旧 `el-tabs` 和旧 dashboard 原样保留，作为主体继续使用。
-3. 文件管理仍然只是旧文件浏览器全宽铺开，没有右侧详情面板。
-4. BIM 协同只是跳转旧页面，没有项目工作台化。
-5. 工程主数据仍是旧页面入口堆叠，没有步骤感和完成度。
-6. 页面文字解释很多，但交互结构没有变。
-7. 旧路由被删除导致历史链接白屏。
+普通项目管理员不能创建/归档全局项目。
 
-## 7. 旧路由兼容
+## 3. API 建议
 
-必须保留旧链接兼容跳转：
+优先少新增接口。
 
-- `/master-data/*`
-- `/work/*`
-- `/data-steward/models`
-- `/data-steward/objects`
-- `/bim-collaboration?projectId=503`
+创建项目：
 
-旧链接可以跳到项目工作台内对应 tab，但不能白屏、不能丢项目上下文。
+- 优先增强现有 `POST /api/data-steward/assets/projects`
+- 如果兼容风险更低，也可以新增：
+  - `POST /api/data-steward/projects:lifecycle-create`
 
-## 8. 验收页面
+归档项目：
 
-至少必须完成这些页面的浏览器可见效果：
+- 建议新增：
+  - `POST /api/data-steward/assets/projects/{projectId}:archive`
 
-1. `/data-steward/assets`
-2. `/data-steward/assets/503`
-3. `/data-steward/assets/503?tab=files`
-4. `/data-steward/assets/503?tab=master-data`
-5. `/data-steward/assets/503?tab=delivery`
-6. `/data-steward/assets/503?tab=bim`
-7. `/bim-collaboration?projectId=503`
+归档请求体建议：
 
-## 9. 必跑验证
+```json
+{
+  "confirmed": true,
+  "confirmText": "项目编码或项目名称"
+}
+```
 
-完成后执行：
+响应禁止包含：
+
+- `/Volumes`
+- `smb://`
+- `nas://`
+- `storage_uri`
+- bucket
+- object_key
+- SQL
+- raw row
+- token / secret
+
+## 4. 前端要求
+
+只改必要交互，不做大 UI 重构。
+
+### 资产总览
+
+1. “新建项目”按钮：
+   - 超级管理员可见并可用。
+   - 非超级管理员隐藏或禁用，并提示联系管理员。
+2. 新建项目弹窗：
+   - 简洁字段。
+   - 创建成功后刷新项目列表。
+   - 可选择进入新项目工作台。
+3. 项目行操作：
+   - 增加“归档项目”。
+   - 仅超级管理员可见。
+   - 二次确认时要求输入项目编码或名称。
+4. 归档成功后刷新列表。
+5. 不新增复杂页面。
+
+## 5. 专项脚本
+
+新增：
+
+`scripts/dev/check-plm1-project-lifecycle.sh`
+
+至少验证：
+
+1. 超级管理员登录。
+2. 创建唯一测试项目成功。
+3. 创建结果包含项目 ID、项目编码、工程树根节点状态、对象存储工作区状态。
+4. 新项目出现在项目列表。
+5. 创建人拥有该项目 `PROJECT_ADMIN`。
+6. 工程树根节点存在且不重复。
+7. 响应不泄露 bucket/object_key/storage_uri/raw NAS path。
+8. `confirmed=false` 归档被拒绝。
+9. 确认文本错误归档被拒绝。
+10. 正确确认后归档成功。
+11. 归档项目默认不再出现在项目列表。
+12. 归档不删除 MinIO 对象、不触碰真实 NAS 文件。
+
+脚本可以创建并归档一个临时项目，但不得影响 105/503 等真实项目。
+
+## 6. 必跑验证
+
+完成后至少运行：
 
 ```bash
+cd /Users/vc/Documents/数字化交付平台/backend
+./mvnw -pl delivery-app -am -DskipTests package
+
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
+bash scripts/dev/check-plm1-project-lifecycle.sh
 bash scripts/dev/check-m3g8-object-first-read-fallback.sh
 bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
 
-## 10. 浏览器自测要求
+如本地后端未运行，可按项目既有方式启动；不要把密钥写入仓库或报告。
 
-你必须用浏览器实际查看页面，并在报告里说明：
+## 7. 禁止事项
 
-1. 参考图和当前页面分别对照了哪些模块。
-2. 哪些旧页面结构被替换。
-3. 哪些旧组件只是复用数据能力，不再原样堆叠。
-4. 1280 / 1440 / 1920 宽度是否有横向溢出。
-5. 旧链接是否兼容。
+严禁：
 
-## 11. 报告要求
+- 修改 `docs/**`
+- 新建完整 PLM 子系统
+- 重做权限模型
+- 物理删除项目数据
+- 删除、移动、重命名真实 NAS 文件
+- 删除 MinIO 对象
+- 自动生成完整工程树或交付标准
+- 引入 Hermes 新能力
+- 引入 BIM 新能力
+- 写 documents/chunks/Qdrant/OpenSearch/Hermes memory
+- 暴露真实路径、bucket、object key、token、secret
 
-完成后写入：
+## 8. 交付报告
+
+完成后更新：
 
 `handoff/dev-agent/latest-report.md`
 
-报告必须包含：
+报告必须写清：
 
-1. UX4-A-R1 返工摘要。
-2. 5 张参考图逐图借鉴点。
-3. 修改文件列表。
-4. 新项目工作台结构说明。
-5. 项目启动台、项目概览、文件管理、工程主数据、交付闭环、BIM 协同分别如何变化。
-6. 保留的接口和能力。
-7. 没有改后端 / docs / DB / 权限 / 对象存储 / Hermes / BIM 后端能力的确认。
-8. 必跑验证结果。
-9. 浏览器截图或浏览器检查结果。
-10. 未完成事项和风险。
+1. 修改了哪些文件。
+2. 是否新增迁移。
+3. 创建项目如何复用现有项目台账。
+4. 对象存储工作区如何初始化。
+5. 工程树根节点如何创建且保持幂等。
+6. 归档项目如何软归档。
+7. 超级管理员权限如何判断。
+8. 验证结果。
+9. 是否存在风险或未完成项。
 
-## 12. 完成定义
-
-只有同时满足以下条件，才可以标记完成：
-
-1. 当前页面不再像旧页面加新壳。
-2. 项目工作台整体结构接近参考图。
-3. 文件管理、工程主数据、交付闭环、BIM 协同至少具备参考图级别的信息层级。
-4. 旧路由兼容。
-5. 前端构建、健康检查、M3G-8、file-access、`git diff --check` 通过。
-6. 报告已写入 `handoff/dev-agent/latest-report.md`。
+注意当前工作区可能已有其他 agent 的未提交改动。你只能处理 PLM-1 必需文件，不要混入无关 staged / unstaged / untracked 文件；如发现无关改动，报告即可，不要回退。
