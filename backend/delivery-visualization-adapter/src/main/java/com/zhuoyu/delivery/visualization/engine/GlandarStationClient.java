@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -188,6 +189,32 @@ public class GlandarStationClient {
             Thread.currentThread().interrupt();
             throw new BusinessException("ENGINE_COMPONENT_PROPERTY_UNREACHABLE",
                 "构件属性查询被中断", HttpStatus.PRECONDITION_FAILED);
+        }
+    }
+
+    public ModelOutputProbe probeModelOutput(String modelAccessAddress) {
+        if (!hasText(modelAccessAddress)) {
+            return new ModelOutputProbe(false, "葛兰岱尔未返回模型输出地址。");
+        }
+        HttpRequest request = HttpRequest.newBuilder(URI.create(modelAccessAddress))
+            .timeout(Duration.ofSeconds(8))
+            .GET()
+            .build();
+        try {
+            HttpResponse<Void> response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
+            String contentType = response.headers().firstValue("content-type").orElse("");
+            if (response.statusCode() >= 200 && response.statusCode() < 300
+                && !contentType.toLowerCase(Locale.ROOT).contains("text/html")) {
+                return new ModelOutputProbe(true, "");
+            }
+            return new ModelOutputProbe(false, "葛兰岱尔模型输出服务返回异常：HTTP " + response.statusCode());
+        } catch (IOException exception) {
+            return new ModelOutputProbe(false, "葛兰岱尔模型输出服务不可达：" + exception.getClass().getSimpleName());
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return new ModelOutputProbe(false, "葛兰岱尔模型输出服务检查被中断。");
+        } catch (IllegalArgumentException exception) {
+            return new ModelOutputProbe(false, "葛兰岱尔模型输出地址格式异常。");
         }
     }
 
@@ -450,6 +477,12 @@ public class GlandarStationClient {
         String propertyName,
         String value,
         String groupName
+    ) {
+    }
+
+    public record ModelOutputProbe(
+        Boolean readable,
+        String message
     ) {
     }
 }
