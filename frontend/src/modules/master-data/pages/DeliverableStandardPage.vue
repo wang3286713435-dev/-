@@ -2,8 +2,9 @@
   <section class="master-data-page">
     <div class="master-data-page__header">
       <div>
+        <span class="master-data-page__eyebrow">工程主数据</span>
         <h1>交付物标准</h1>
-        <p>{{ projectLabel }}</p>
+        <p>{{ projectLabel }} · 定义项目哪些资料必须交、用什么文件类型交、挂到哪里。</p>
       </div>
       <div class="master-data-page__actions">
         <el-button :icon="Refresh" @click="loadPage">刷新</el-button>
@@ -13,48 +14,26 @@
       </div>
     </div>
 
+    <MasterDataStepNav active="deliverableStandard" />
+
     <StandardStatusPanel :status="standardStatus" />
 
-    <el-alert
-      class="masterdata-review-alert"
-      type="info"
-      :closable="false"
-      show-icon
-      title="如果交付物标准来自接入草案，它只代表基础交付骨架，仍需项目负责人复核必交项、文件类型、属性和目录模板。"
-    />
-
-    <section class="workflow-guide">
-      <div class="workflow-guide__main">
-        <span class="workflow-guide__step">第 3 步</span>
-        <h2>把“要交什么资料”固化成项目标准</h2>
-        <p>
-          交付物标准会决定文档交付和图纸交付页面的应交项、缺失项和补交流程。推荐顺序是：先定义要交什么，再配置交哪类文件，然后补属性，最后维护目录模板。
-        </p>
-      </div>
-      <ol class="workflow-guide__steps">
-        <li>交付物定义：说明项目必须交哪些资料。</li>
-        <li>交付物类型：说明这些资料用文档、图纸还是模型交付。</li>
-        <li>交付物属性：说明资料还需要补充哪些字段。</li>
-        <li>目录模板：说明交付成果建议按什么目录组织。</li>
-      </ol>
-    </section>
-
-    <section class="masterdata-next-action">
+    <section class="master-workspace-callout" :class="{ 'is-ready': canWrite }">
       <div>
-        <span>下一步</span>
+        <span>{{ canWrite ? '当前任务' : '前置条件' }}</span>
         <strong>标准确认后，进入文档 / 图纸交付</strong>
         <p>交付物定义和类型会直接生成应交项。缺失项不是错误，而是提示员工需要选择哪个文件补交。</p>
       </div>
-      <div class="masterdata-next-action__actions">
+      <div class="master-workspace-callout__actions">
         <el-button type="primary" @click="goDocumentDelivery">进入文档交付</el-button>
         <el-button @click="goDrawingDelivery">进入图纸交付</el-button>
       </div>
     </section>
 
-    <el-alert v-if="!canWrite" class="node-type-lock" type="warning" :closable="false" show-icon>
-      <template #title>请先锁定节点类型</template>
-      <p class="status-helper">节点类型锁定后，平台才能确认交付标准绑定在哪些部位层级上。</p>
-    </el-alert>
+    <section v-if="!canWrite" class="master-workspace-warning">
+      <strong>请先锁定节点类型</strong>
+      <span>节点类型锁定后，平台才能确认交付标准绑定在哪些部位层级上。</span>
+    </section>
 
     <div class="deliverable-layout">
       <section class="deliverable-panel">
@@ -309,6 +288,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Delete, Edit, Plus, Refresh } from '@element-plus/icons-vue';
 
+import MasterDataStepNav from '@/modules/master-data/components/MasterDataStepNav.vue';
 import StandardStatusPanel from '@/modules/master-data/components/StandardStatusPanel.vue';
 import {
   createDeliverableAttribute,
@@ -337,11 +317,13 @@ import {
   type StandardStatus
 } from '@/modules/master-data/api/masterData';
 import { useAuthStore } from '@/stores/auth';
+import { useProjectWorkspaceContext } from '@/modules/core/composables/useProjectWorkspaceContext';
 
 type DialogKind = 'definition' | 'type' | 'attribute' | 'template';
 
 const authStore = useAuthStore();
 const router = useRouter();
+const { workspaceProjectId } = useProjectWorkspaceContext();
 const loading = ref(false);
 const loadingTypes = ref(false);
 const loadingAttributes = ref(false);
@@ -426,10 +408,11 @@ const statusOptions = [
   { label: '停用', value: 'DISABLED' }
 ];
 
-const currentProjectId = computed(() => authStore.currentProjectId);
+const currentProjectId = computed(() => workspaceProjectId.value ?? authStore.currentProjectId);
 const canWrite = computed(() => Boolean(standardStatus.value?.nodeTypesLocked));
 const projectLabel = computed(() => {
-  const project = authStore.currentUser?.currentProject;
+  const project = authStore.currentUser?.projects.find((item) => item.id === currentProjectId.value)
+    ?? authStore.currentUser?.currentProject;
   return project ? `${project.code} | ${project.name}` : '等待项目上下文';
 });
 const dialogTitle = computed(() => {

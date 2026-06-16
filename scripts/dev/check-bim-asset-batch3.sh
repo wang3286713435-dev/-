@@ -2,8 +2,8 @@
 set -euo pipefail
 
 BASE_URL="${1:-http://localhost:8080}"
-USERNAME="${2:-platform.admin}"
-PASSWORD="${3:-Admin@123}"
+USERNAME="${2:-admin}"
+PASSWORD="${3:-123456}"
 TARGET_PROJECT_ID="${4:-2}"
 SUFFIX="${5:-$(date +%s)}"
 
@@ -238,7 +238,7 @@ assert d['code'] == 'AGENT_KEY_ALL_PROJECTS_FORBIDDEN', f'Expected AGENT_KEY_ALL
 print('OK: Error code is AGENT_KEY_ALL_PROJECTS_FORBIDDEN')
 " || exit 1
 
-# 4b-2: platform.admin (project admin on all active projects) MUST be able to create ALL_PROJECTS key
+# 4b-2: admin (project admin on all active projects) MUST be able to create ALL_PROJECTS key
 echo "--- P0: admin create ALL_PROJECTS must succeed ---"
 admin_all_payload="{\"keyName\":\"admin-all-proj-${SUFFIX}\",\"scopeType\":\"ALL_PROJECTS\",\"remark\":\"P0 test - should succeed\"}"
 admin_all_resp="$(curl -sS -X POST "${BASE_URL}/api/data-steward/agent/api-keys" \
@@ -484,7 +484,7 @@ echo "--- step 11 passed: agent cannot approve/execute/quarantine ---"
 echo "== step 12: P0-3 self-approval blocked, engineer approves =="
 
 if [ -n "${dr_id:-}" ]; then
-  # Key creator (platform.admin) must NOT be able to approve agent's request
+  # Key creator (admin) must NOT be able to approve agent's request
   echo "--- P0-3a: key creator self-approval must fail ---"
   admin_approve="$(curl -sS -X POST "${BASE_URL}/api/data-steward/assets/delete-requests/${dr_id}:approve" \
     "${auth_header[@]}" -H 'Content-Type: application/json' \

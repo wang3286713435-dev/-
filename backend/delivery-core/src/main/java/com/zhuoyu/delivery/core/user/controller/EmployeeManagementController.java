@@ -3,6 +3,7 @@ package com.zhuoyu.delivery.core.user.controller;
 import com.zhuoyu.delivery.core.auth.application.SecurityPrincipalAccessor;
 import com.zhuoyu.delivery.core.user.application.EmployeeManagementApplicationService;
 import com.zhuoyu.delivery.core.user.dto.AssignableProjectResponse;
+import com.zhuoyu.delivery.core.user.dto.EmployeeCreateRequest;
 import com.zhuoyu.delivery.core.user.dto.EmployeeDetailResponse;
 import com.zhuoyu.delivery.core.user.dto.EmployeeProjectRoleUpdateRequest;
 import com.zhuoyu.delivery.core.user.dto.EmployeeStatusUpdateRequest;
@@ -14,6 +15,7 @@ import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -43,6 +45,12 @@ public class EmployeeManagementController {
     ) {
         var principal = securityPrincipalAccessor.requireCurrentPrincipal();
         return ApiResponse.success(employeeManagementApplicationService.listEmployees(principal.userId(), keyword, status));
+    }
+
+    @PostMapping("/users")
+    public ApiResponse<EmployeeDetailResponse> createEmployee(@Valid @RequestBody EmployeeCreateRequest request) {
+        var principal = securityPrincipalAccessor.requireCurrentPrincipal();
+        return ApiResponse.success(employeeManagementApplicationService.createEmployee(principal.userId(), request));
     }
 
     @GetMapping("/users/{userId}")

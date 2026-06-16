@@ -74,15 +74,19 @@ export function conversionStatusLabel(preview: PreviewStatusLike | null | undefi
 }
 
 export function previewActionHint(preview: PreviewStatusLike | null | undefined): string {
+  if (preview?.previewMode === 'BIM_LIGHTWEIGHT') {
+    const actionHint = preview.actionHint ?? '';
+    if (actionHint && !actionHint.includes('需要接入 BIM 轻量化') && !actionHint.includes('当前仅登记转换占位')) {
+      return actionHint;
+    }
+    return 'BIM 模型需先完成轻量化任务；完成后可通过平台 Viewer 在线预览。原始模型文件仍可按权限交付或下载。';
+  }
   if (preview?.actionHint) return preview.actionHint;
   if (preview?.previewMode === 'OFFICE_CONVERSION') {
     return '需要接入 Office 转换服务后才能在线预览。原始文件仍可按权限交付或下载。';
   }
   if (preview?.previewMode === 'CAD_CONVERSION') {
     return '需要接入 CAD 图纸转换或查看引擎后才能在线预览。原始文件仍可按权限交付或下载。';
-  }
-  if (preview?.previewMode === 'BIM_LIGHTWEIGHT') {
-    return '需要接入 BIM 轻量化转换后才能在线预览。原始模型文件仍可按权限交付或下载。';
   }
   if (preview?.previewMode === 'DOWNLOAD_ONLY') {
     return '暂不支持在线预览，可按权限下载原文件。';
@@ -140,7 +144,7 @@ function decidePreview(ext: string, fileKind?: string | null): PreviewStatusLike
     return conversionPreview(normalized, normalizedKind, 'CAD_CONVERSION', '需 CAD 转换', '需要接入 CAD 图纸转换或查看引擎后才能在线预览。原始文件仍可按权限交付或下载。');
   }
   if (bimExts.has(normalized) || normalizedKind === 'MODEL' || normalizedKind === 'MODEL_VIEWER') {
-    return conversionPreview(normalized, normalizedKind, 'BIM_LIGHTWEIGHT', '需 BIM 轻量化', '需要接入 BIM 轻量化转换后才能在线预览。原始模型文件仍可按权限交付或下载。');
+    return conversionPreview(normalized, normalizedKind, 'BIM_LIGHTWEIGHT', '待 BIM 轻量化', 'BIM 模型需先完成轻量化任务；完成后可通过平台 Viewer 在线预览。原始模型文件仍可按权限交付或下载。');
   }
   if (archiveExts.has(normalized)) {
     return {

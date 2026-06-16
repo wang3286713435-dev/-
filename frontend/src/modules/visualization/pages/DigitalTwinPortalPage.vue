@@ -1,32 +1,5 @@
 <template>
   <section class="digital-twin-portal">
-    <section class="digital-twin-intro" aria-label="BIM协同管理亮点功能">
-      <div>
-        <span>BIM 协同管理</span>
-        <h1>BIM协同管理</h1>
-        <p>以项目为单位串联模型、图纸、设备设施、房屋空间、整改和质量风险，让 BIM 协同成为卓羽智能数据中台的高频入口。</p>
-      </div>
-      <div class="digital-twin-highlights">
-        <button
-          class="digital-twin-highlight digital-twin-highlight--project"
-          type="button"
-          aria-controls="digital-twin-project-panel"
-          :aria-expanded="projectPanelOpen"
-          @click="projectPanelOpen = true"
-        >
-          <span>项目选择</span>
-          <strong>{{ activeProject?.name ?? '请选择项目' }}</strong>
-          <em>{{ activeProject?.code ?? `${filteredProjects.length} 个项目可选` }}</em>
-        </button>
-
-        <article v-for="item in highlights" :key="item.label" class="digital-twin-highlight">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-          <em>{{ item.hint }}</em>
-        </article>
-      </div>
-    </section>
-
     <div
       v-if="projectPanelOpen"
       class="digital-twin-project-overlay"
@@ -98,26 +71,137 @@
         :closable="false"
       />
 
-      <DigitalTwinDashboardPage v-if="activeProjectId" />
-      <el-empty v-else description="请选择项目后查看 BIM 协同管理" />
+      <section class="digital-twin-project-strip" aria-label="BIM协同项目选择">
+        <button
+          class="digital-twin-project-trigger"
+          type="button"
+          aria-controls="digital-twin-project-panel"
+          :aria-expanded="projectPanelOpen"
+          @click="projectPanelOpen = true"
+        >
+          <span>当前项目</span>
+          <strong>{{ activeProject?.name ?? '请选择项目' }}</strong>
+          <em>{{ activeProject?.code ?? `${filteredProjects.length} 个项目可选` }}</em>
+        </button>
+        <p>选择项目后，下方 BIM 协同大屏会直接读取该项目的模型、图纸、交付和质量数据。</p>
+      </section>
+
+      <DigitalTwinDashboardPage v-if="activeProjectId && portalProjectReady" />
+      <el-skeleton v-else-if="activeProjectId && !switchError" :rows="8" animated />
+      <section v-else class="global-ready-models" aria-label="已轻量化模型目录">
+        <div class="global-ready-models__head">
+          <div>
+            <span>LIGHTWEIGHT MODEL CATALOG</span>
+            <h2>已轻量化模型</h2>
+            <p>未选择项目时，先按项目查看已经 READY 的模型；点击模型可直接进入预览。</p>
+          </div>
+          <el-button :loading="readyCatalogLoading" @click="loadReadyModelCatalog(true)">刷新目录</el-button>
+        </div>
+
+        <el-alert
+          v-if="readyCatalogError"
+          :title="readyCatalogError"
+          type="warning"
+          show-icon
+          :closable="false"
+        />
+
+        <el-skeleton v-if="readyCatalogLoading && !readyModelGroups.length" :rows="6" animated />
+
+        <template v-else-if="readyModelGroups.length">
+          <div class="global-ready-models__summary">
+            <article>
+              <span>可预览模型</span>
+              <strong>{{ readyModelTotal }}</strong>
+            </article>
+            <article>
+              <span>覆盖项目</span>
+              <strong>{{ readyModelGroups.length }}</strong>
+            </article>
+            <article>
+              <span>打开方式</span>
+              <strong>受控 Viewer</strong>
+            </article>
+          </div>
+
+          <div class="global-ready-models__groups">
+            <article
+              v-for="group in readyModelGroups"
+              :key="group.projectId"
+              class="global-ready-project"
+            >
+              <header>
+                <div>
+                  <span>{{ group.projectCode }}</span>
+                  <strong>{{ group.projectName }}</strong>
+                  <em>{{ group.roleName || '项目成员' }} · {{ group.readyModelCount }} 个 READY 模型</em>
+                </div>
+                <el-button size="small" @click="selectProject(group.projectId)">进入项目 BIM 协同</el-button>
+              </header>
+
+              <div class="global-ready-project__models">
+                <button
+                  v-for="model in group.models"
+                  :key="`${group.projectId}-${model.fileId}-${model.latestJobId}`"
+                  class="global-ready-model"
+                  type="button"
+                  @click="openReadyModel(group.projectId, model)"
+                >
+                  <span>{{ model.extension || 'MODEL' }}</span>
+                  <strong>{{ model.fileName }}</strong>
+                  <em>{{ formatSize(model.sizeBytes) }} · {{ formatUpdatedAt(model.updatedAt) }}</em>
+                </button>
+              </div>
+            </article>
+          </div>
+        </template>
+
+        <el-empty
+          v-else
+          description="当前可访问项目暂无 READY 轻量化模型"
+        >
+          <el-button @click="projectPanelOpen = true">选择项目查看 BIM 协同</el-button>
+        </el-empty>
+      </section>
     </main>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Close, Search } from '@element-plus/icons-vue';
+import { useRoute, useRouter } from 'vue-router';
 
 import DigitalTwinDashboardPage from '@/modules/visualization/pages/DigitalTwinDashboardPage.vue';
+import {
+  fetchGlandarReadyModelCatalog,
+  type GlandarModelFile,
+  type GlandarReadyModelProject
+} from '@/modules/visualization/api/visualization';
 import { useAuthStore } from '@/stores/auth';
 
 const authStore = useAuthStore();
+const route = useRoute();
+const router = useRouter();
 const keyword = ref('');
 const projectPanelOpen = ref(false);
 const switchingProjectId = ref<number | null>(null);
 const switchError = ref('');
+const readyCatalog = ref<GlandarReadyModelProject[]>([]);
+const readyCatalogLoading = ref(false);
+const readyCatalogError = ref('');
+const readyCatalogLoaded = ref(false);
 
-const activeProjectId = computed(() => authStore.currentProjectId);
+const routeProjectId = computed(() => Number(route.query.projectId));
+const requestedProjectId = computed(() => {
+  const id = routeProjectId.value;
+  return Number.isFinite(id) && id > 0 ? id : null;
+});
+const activeProjectId = computed(() => requestedProjectId.value);
+const portalProjectReady = computed(() => {
+  const requestedId = requestedProjectId.value;
+  return !requestedId || authStore.currentProjectId === requestedId;
+});
 const projects = computed(() => authStore.currentUser?.projects ?? []);
 
 const filteredProjects = computed(() => {
@@ -135,35 +219,97 @@ const activeProject = computed(() => {
   return projects.value.find((project) => project.id === id) ?? null;
 });
 
-const highlights = computed(() => [
-  {
-    label: '能力定位',
-    value: 'BIM协同',
-    hint: '模型、设备、空间、交付联动'
-  },
-  {
-    label: '数据来源',
-    value: '平台真实数据',
-    hint: '不接施工物联演示假数据'
+const readyModelGroups = computed(() => readyCatalog.value.filter((group) => group.models.length > 0));
+const readyModelTotal = computed(() =>
+  readyModelGroups.value.reduce((total, group) => total + group.readyModelCount, 0)
+);
+
+watch(requestedProjectId, (projectId) => {
+  if (!projectId) {
+    void loadReadyModelCatalog(false);
+    return;
   }
-]);
+  void ensureRouteProjectContext(projectId);
+}, { immediate: true });
 
 async function selectProject(projectId: number) {
-  if (projectId === activeProjectId.value) {
+  if (projectId === activeProjectId.value && projectId === authStore.currentProjectId) {
     projectPanelOpen.value = false;
     return;
   }
-  if (switchingProjectId.value) return;
+  const switched = await switchProject(projectId, true);
+  if (switched) {
+    await router.push({ name: 'bim-collaboration', query: { projectId } });
+  }
+}
+
+async function loadReadyModelCatalog(force: boolean) {
+  if (activeProjectId.value) return;
+  if (readyCatalogLoading.value || (readyCatalogLoaded.value && !force)) return;
+  readyCatalogLoading.value = true;
+  readyCatalogError.value = '';
+  try {
+    readyCatalog.value = await fetchGlandarReadyModelCatalog();
+    readyCatalogLoaded.value = true;
+  } catch (error) {
+    readyCatalogError.value = error instanceof Error ? error.message : '已轻量化模型目录加载失败';
+  } finally {
+    readyCatalogLoading.value = false;
+  }
+}
+
+function openReadyModel(projectId: number, model: GlandarModelFile) {
+  if (!model.latestJobId) return;
+  router.push({
+    name: 'glandar-model-preview',
+    query: {
+      projectId,
+      jobId: model.latestJobId,
+      fileName: model.fileName,
+      modelFileId: model.fileId
+    }
+  });
+}
+
+async function ensureRouteProjectContext(projectId: number) {
+  if (projectId === authStore.currentProjectId || switchingProjectId.value) return;
+  await switchProject(projectId, false);
+}
+
+async function switchProject(projectId: number, closePanel: boolean) {
+  if (switchingProjectId.value) return false;
   switchingProjectId.value = projectId;
   switchError.value = '';
   try {
     await authStore.changeProject(projectId);
-    projectPanelOpen.value = false;
+    if (closePanel) projectPanelOpen.value = false;
+    return true;
   } catch (error) {
     switchError.value = error instanceof Error ? error.message : '项目切换失败';
+    return false;
   } finally {
     switchingProjectId.value = null;
   }
+}
+
+function formatSize(bytes: number | null | undefined) {
+  const value = Number(bytes || 0);
+  if (!Number.isFinite(value) || value <= 0) return '-';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = value;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function formatUpdatedAt(value: string | null | undefined) {
+  if (!value) return '更新时间待同步';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '更新时间待同步';
+  return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 </script>
 
@@ -178,7 +324,7 @@ async function selectProject(projectId: number) {
 }
 
 .digital-twin-projects,
-.digital-twin-intro {
+.digital-twin-project-strip {
   background: var(--zy-surface);
   border: 1px solid color-mix(in srgb, var(--zy-line) 72%, transparent);
   border-radius: var(--zy-radius-base);
@@ -230,14 +376,13 @@ async function selectProject(projectId: number) {
 }
 
 .digital-twin-projects__head span,
-.digital-twin-intro > div:first-child span {
+.digital-twin-project-trigger span {
   color: var(--zy-blue-600);
   font-size: var(--zy-fs-xs);
   font-weight: var(--zy-fw-semi);
 }
 
-.digital-twin-projects__head h2,
-.digital-twin-intro h1 {
+.digital-twin-projects__head h2 {
   color: var(--zy-ink);
   line-height: 1.2;
   margin: 0;
@@ -248,10 +393,9 @@ async function selectProject(projectId: number) {
 }
 
 .digital-twin-projects__head p,
-.digital-twin-intro p,
 .digital-twin-project em,
-.digital-twin-highlights em,
-.digital-twin-highlights span {
+.digital-twin-project-strip p,
+.digital-twin-project-trigger em {
   color: var(--zy-muted);
   font-size: var(--zy-fs-xs);
   font-style: normal;
@@ -331,81 +475,210 @@ async function selectProject(projectId: number) {
   min-width: 0;
 }
 
-.digital-twin-intro {
+.digital-twin-project-strip {
   align-items: center;
-  display: grid;
-  gap: var(--zy-sp-4);
-  grid-column: 1 / -1;
-  grid-template-columns: minmax(0, 0.95fr) minmax(420px, 1fr);
-  padding: var(--zy-sp-5);
-}
-
-.digital-twin-intro > div:first-child {
-  display: grid;
-  gap: var(--zy-sp-2);
-  min-width: 0;
-}
-
-.digital-twin-intro h1 {
-  font-size: var(--zy-fs-3xl);
-}
-
-.digital-twin-intro p {
-  font-size: var(--zy-fs-sm);
-  line-height: 1.7;
-  margin: 0;
-}
-
-.digital-twin-highlights {
-  display: grid;
+  display: flex;
   gap: var(--zy-sp-3);
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  justify-content: space-between;
+  padding: var(--zy-sp-2) var(--zy-sp-3);
 }
 
-.digital-twin-highlight {
-  background: var(--zy-surface);
-  border: 1px solid color-mix(in srgb, var(--zy-line) 74%, transparent);
-  border-radius: var(--zy-radius-base);
-  color: var(--zy-ink);
-  display: grid;
-  gap: 5px;
-  min-height: 86px;
+.digital-twin-project-strip p {
+  line-height: 1.5;
+  margin: 0;
   min-width: 0;
-  padding: var(--zy-sp-3);
+  text-align: right;
+}
+
+.digital-twin-project-trigger {
+  align-items: center;
+  background: color-mix(in srgb, var(--zy-blue-50) 44%, var(--zy-surface));
+  border: 1px solid color-mix(in srgb, var(--zy-blue-500) 24%, transparent);
+  border-radius: calc(var(--zy-radius-base) - 2px);
+  color: var(--zy-ink);
+  cursor: pointer;
+  display: grid;
+  gap: 2px 12px;
+  grid-template-columns: auto minmax(160px, auto);
+  min-height: 46px;
+  min-width: min(420px, 100%);
+  padding: 7px 12px;
   text-align: left;
 }
 
-.digital-twin-highlight--project {
-  cursor: pointer;
+.digital-twin-project-trigger span {
+  grid-row: 1 / 3;
+  white-space: nowrap;
 }
 
-.digital-twin-highlight--project:hover,
-.digital-twin-highlight--project:focus-visible {
-  border-color: color-mix(in srgb, var(--zy-blue-500) 48%, transparent);
-  box-shadow: var(--zy-shadow-sm);
-  outline: none;
-}
-
-.digital-twin-highlight--project span {
-  color: var(--zy-blue-600);
-  font-weight: var(--zy-fw-semi);
-}
-
-.digital-twin-highlights strong {
+.digital-twin-project-trigger strong {
   color: var(--zy-ink);
-  font-size: var(--zy-fs-lg);
+  font-size: var(--zy-fs-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-@media (max-width: 1280px) {
-  .digital-twin-intro {
-    grid-template-columns: 1fr;
-  }
+.digital-twin-project-trigger em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-@media (max-width: 820px) {
+.digital-twin-project-trigger:hover,
+.digital-twin-project-trigger:focus-visible {
+  border-color: color-mix(in srgb, var(--zy-blue-500) 48%, transparent);
+  box-shadow: var(--zy-shadow-sm);
+  outline: none;
+}
+
+.global-ready-models {
+  background: var(--zy-surface);
+  border: 1px solid color-mix(in srgb, var(--zy-line) 72%, transparent);
+  border-radius: var(--zy-radius-base);
+  box-shadow: var(--zy-shadow-xs);
+  display: grid;
+  gap: var(--zy-sp-4);
+  min-height: 320px;
+  min-width: 0;
+  padding: var(--zy-sp-4);
+}
+
+.global-ready-models__head,
+.global-ready-project header {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--zy-sp-3);
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.global-ready-models__head > div,
+.global-ready-project header > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.global-ready-models__head span,
+.global-ready-project header span {
+  color: var(--zy-blue-600);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-semi);
+  letter-spacing: 0;
+}
+
+.global-ready-models__head h2 {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-2xl);
+  line-height: 1.2;
+  margin: 0;
+}
+
+.global-ready-models__head p,
+.global-ready-project header em,
+.global-ready-model em {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  font-style: normal;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.global-ready-models__summary {
+  display: grid;
+  gap: var(--zy-sp-3);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.global-ready-models__summary article {
+  background: color-mix(in srgb, var(--zy-blue-50) 52%, var(--zy-surface));
+  border: 1px solid color-mix(in srgb, var(--zy-blue-500) 16%, transparent);
+  border-radius: calc(var(--zy-radius-base) - 2px);
+  display: grid;
+  gap: 6px;
+  min-height: 76px;
+  padding: var(--zy-sp-3);
+}
+
+.global-ready-models__summary span {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+}
+
+.global-ready-models__summary strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-xl);
+  line-height: 1.15;
+}
+
+.global-ready-models__groups {
+  display: grid;
+  gap: var(--zy-sp-3);
+}
+
+.global-ready-project {
+  border: 1px solid color-mix(in srgb, var(--zy-line) 76%, transparent);
+  border-radius: calc(var(--zy-radius-base) - 2px);
+  display: grid;
+  gap: var(--zy-sp-3);
+  padding: var(--zy-sp-3);
+}
+
+.global-ready-project header strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-lg);
+  line-height: 1.25;
+}
+
+.global-ready-project__models {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.global-ready-model {
+  background: color-mix(in srgb, var(--zy-bg) 64%, var(--zy-surface));
+  border: 1px solid color-mix(in srgb, var(--zy-line) 78%, transparent);
+  border-radius: calc(var(--zy-radius-base) - 4px);
+  color: var(--zy-ink);
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+  min-height: 106px;
+  padding: 12px;
+  text-align: left;
+}
+
+.global-ready-model:hover,
+.global-ready-model:focus-visible {
+  border-color: color-mix(in srgb, var(--zy-blue-500) 42%, transparent);
+  box-shadow: var(--zy-shadow-sm);
+  outline: none;
+}
+
+.global-ready-model span {
+  align-self: start;
+  background: color-mix(in srgb, var(--zy-blue-500) 10%, var(--zy-surface));
+  border-radius: 999px;
+  color: var(--zy-blue-700);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-semi);
+  justify-self: start;
+  line-height: 1;
+  padding: 5px 8px;
+}
+
+.global-ready-model strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-sm);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 860px) {
   .digital-twin-projects {
     height: min(680px, calc(100dvh - 48px));
     left: var(--zy-content-pad);
@@ -414,7 +687,29 @@ async function selectProject(projectId: number) {
     width: calc(100vw - var(--zy-content-pad) * 2);
   }
 
-  .digital-twin-highlights {
+  .digital-twin-project-strip {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .digital-twin-project-strip p {
+    text-align: left;
+  }
+
+  .digital-twin-project-trigger {
+    grid-template-columns: 1fr;
+  }
+
+  .digital-twin-project-trigger span {
+    grid-row: auto;
+  }
+
+  .global-ready-models__head,
+  .global-ready-project header {
+    display: grid;
+  }
+
+  .global-ready-models__summary {
     grid-template-columns: 1fr;
   }
 }

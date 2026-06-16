@@ -2,8 +2,8 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:8080}"
-USERNAME="${USERNAME:-platform.admin}"
-PASSWORD="${PASSWORD:-Admin@123}"
+USERNAME="${USERNAME:-admin}"
+PASSWORD="${PASSWORD:-123456}"
 SUFFIX="${SUFFIX:-$(date +%s)}"
 TARGET_PROJECT_ID="${TARGET_PROJECT_ID:-1}"
 NAS_DIR=""

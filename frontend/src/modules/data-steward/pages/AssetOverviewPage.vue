@@ -1,289 +1,481 @@
 <template>
-  <section class="mvp-page asset-page">
-    <div class="mvp-page__header">
+  <section class="mvp-page launchpad-page">
+    <header class="launchpad-page__header">
       <div>
         <h1>项目启动台</h1>
-        <p>先选项目，再进入文件管理、项目可视化或交付状态</p>
+        <p>选择项目，查看工作状态，快速进入项目工作台</p>
       </div>
-      <div class="mvp-page__actions">
-        <el-segmented v-model="sourceFilter" :options="sourceOptions" @change="loadPage" />
+      <div class="launchpad-page__tools">
         <el-input
           v-model="keyword"
-          class="asset-search"
+          class="launchpad-search"
           clearable
-          placeholder="项目编码、名称"
+          placeholder="搜索项目名称 / 编码 / 负责人"
           :prefix-icon="Search"
           @keyup.enter="loadPage"
           @clear="loadPage"
         />
-        <el-select v-model="projectSortOrder" class="asset-sort" aria-label="项目ID排序">
-          <el-option label="项目ID升序" value="ASC" />
-          <el-option label="项目ID降序" value="DESC" />
-        </el-select>
         <el-button :icon="Refresh" @click="loadPage">刷新</el-button>
       </div>
-    </div>
+    </header>
 
-    <section ref="heroRef" class="asset-launchpad" aria-label="项目启动台">
-      <div class="zy-hero-lightfield" aria-hidden="true">
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-      <div class="zy-spotlight" aria-hidden="true"></div>
-      <ParticleField :count="14" :speed="0.2" :link-distance="120" />
-      <div class="asset-launchpad__copy">
-        <span class="zy-code-chip">PROJECT LAUNCHPAD</span>
-        <h2>选择项目，直接开始工作</h2>
-        <p>默认聚焦真实项目。搜索或选择推荐项目后，直接进入文件管理、项目可视化或交付状态。</p>
-      </div>
-
-      <article class="asset-launchpad__recommend">
-        <span>推荐项目</span>
-        <template v-if="recommendedProject">
-          <strong>{{ recommendedProject.code }} {{ recommendedProject.name }}</strong>
-          <div class="asset-launchpad__tags">
-            <el-tag size="small" :type="sourceTagType(recommendedProject.projectSource, recommendedProject.projectCategory)">
-              {{ projectSourceText(recommendedProject.projectSource, recommendedProject.projectCategory) }}
-            </el-tag>
-            <el-tag size="small" :type="onboardingTagType(recommendedProject.onboardingStatus)">
-              {{ onboardingStatusText(recommendedProject.onboardingStatus) }}
-            </el-tag>
-          </div>
-          <div class="asset-launchpad__actions">
-            <el-button type="primary" @click="openDetail(recommendedProject)">进入项目</el-button>
-            <el-button @click="openProjectFiles(recommendedProject)">文件管理</el-button>
-            <el-button @click="openProjectVisualization(recommendedProject)">项目可视化</el-button>
-          </div>
-        </template>
-        <template v-else>
-          <strong>暂无推荐项目</strong>
-          <p>当前筛选下没有可进入项目，可以切换筛选或联系管理员确认权限。</p>
-        </template>
-      </article>
-    </section>
-
-    <section class="asset-entry-lanes" aria-label="项目入口台">
-      <article class="asset-entry-card">
-        <span class="asset-entry-card__eyebrow">待处理</span>
-        <strong>{{ pendingProjects.length ? '需要确认规则' : '暂无明显阻塞' }}</strong>
-        <div v-if="pendingProjects.length" class="asset-entry-list">
-          <button v-for="row in pendingProjects" :key="`pending-${row.projectId}`" type="button" @click="openGovernanceNext(row)">
-            <span>{{ row.name }}</span>
-            <em>{{ governanceStage(row).actionLabel }}</em>
-          </button>
-        </div>
-        <p v-else>真实项目暂无主数据或交付标准阻塞，可继续查看交付状态。</p>
-      </article>
-
-      <article class="asset-entry-card">
-        <span class="asset-entry-card__eyebrow">最近项目</span>
-        <strong>{{ recentProjects.length ? '继续上次项目' : '还没有最近项目' }}</strong>
-        <div v-if="recentProjects.length" class="asset-entry-list">
-          <button v-for="row in recentProjects" :key="`recent-${row.projectId}`" type="button" @click="openDetail(row)">
-            <span>{{ row.name }}</span>
-            <em>进入工作台</em>
-          </button>
-        </div>
-        <p v-else>进入项目工作台后，这里会记录最近打开的项目。</p>
-      </article>
-
-      <article class="asset-entry-card asset-entry-card--summary">
-        <span class="asset-entry-card__eyebrow">项目概况</span>
-        <strong>{{ formatCount(visibleProjects.length) }} 个可见项目</strong>
-        <div class="asset-summary-row">
-          <span>已登记文件</span>
-          <em>{{ statusCards[1]?.value ?? '0' }} 份</em>
-        </div>
-        <div class="asset-summary-row">
-          <span>待补规则</span>
-          <em>{{ statusCards[6]?.value ?? '0' }} 个</em>
-        </div>
-        <el-button text @click="overviewMoreActive = overviewMoreActive.length ? [] : ['summary']">
-          查看统计和风险
-        </el-button>
-      </article>
-    </section>
-
-    <el-collapse v-model="overviewMoreActive" class="asset-overview-more">
-      <el-collapse-item name="summary">
-        <template #title>
-          <span class="asset-overview-more__title">统计和风险摘要</span>
-          <small>低频信息已收起，不影响选项目</small>
-        </template>
-        <div class="asset-status-grid">
-          <article v-for="item in statusCards" :key="item.label">
-            <span class="asset-status-grid__label">{{ item.label }}</span>
-            <strong class="asset-status-grid__value">{{ item.value }}</strong>
-            <em class="asset-status-grid__unit">{{ item.unit }}</em>
+    <section class="launchpad-layout" aria-label="项目启动台">
+      <main class="launchpad-main">
+        <section class="launchpad-hero-grid" aria-label="推荐项目和待处理事项">
+          <article class="launchpad-panel launchpad-recommend">
+            <div class="launchpad-section-title">
+              <strong>为你推荐</strong>
+              <span>{{ recommendedProject ? '优先处理当前最相关项目' : '等待项目数据' }}</span>
+            </div>
+            <div v-if="recommendedProject" class="launchpad-recommend__card">
+              <div
+                class="launchpad-recommend__cover"
+                :style="{ backgroundImage: `url(${projectCoverImage})` }"
+              >
+                <strong>{{ recommendedProject.name }}</strong>
+              </div>
+              <dl class="launchpad-recommend__meta">
+                <div>
+                  <dt>项目编码</dt>
+                  <dd>{{ recommendedProject.code }}</dd>
+                </div>
+                <div>
+                  <dt>你的角色</dt>
+                  <dd>{{ currentRoleLabel }}</dd>
+                </div>
+                <div>
+                  <dt>负责人</dt>
+                  <dd>{{ recommendedProject.projectManagerName || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>最近访问</dt>
+                  <dd>{{ projectRecentText(recommendedProject) }}</dd>
+                </div>
+              </dl>
+              <div class="launchpad-recommend__actions">
+                <el-button type="primary" :icon="ArrowRight" @click="openDetail(recommendedProject)">
+                  进入项目工作台
+                </el-button>
+                <el-button @click="openProjectFiles(recommendedProject)">文件管理</el-button>
+              </div>
+            </div>
+            <div v-else class="launchpad-empty">
+              <strong>暂无推荐项目</strong>
+              <p>当前筛选下没有可进入项目，可以切换筛选或联系管理员确认权限。</p>
+            </div>
           </article>
-        </div>
-        <div class="asset-risk-strip">
-          <article v-for="risk in riskSummaryCards" :key="risk.label" :class="{ 'is-warning': risk.count > 0 }">
-            <span class="asset-risk-strip__label">
-              <span class="zy-status-dot" :class="risk.count > 0 ? 'zy-status-dot--warning' : 'zy-status-dot--success'"></span>
-              {{ risk.label }}
-            </span>
-            <strong>{{ formatCount(risk.count) }}</strong>
-            <em>{{ risk.helper }}</em>
+
+          <article class="launchpad-panel launchpad-todo">
+            <div class="launchpad-section-title">
+              <strong>待处理事项</strong>
+              <span>按当前项目数据自动汇总</span>
+            </div>
+            <div class="launchpad-todo__grid">
+              <button
+                v-for="item in todoCards"
+                :key="item.key"
+                class="launchpad-todo-card"
+                :class="`is-${item.tone}`"
+                type="button"
+                @click="handleTodoClick(item)"
+              >
+                <span class="launchpad-todo-card__icon" aria-hidden="true">{{ item.initial }}</span>
+                <span>{{ item.label }}</span>
+                <strong>{{ formatCount(item.value) }}</strong>
+                <em>{{ item.action }} <span>›</span></em>
+              </button>
+            </div>
           </article>
-        </div>
-      </el-collapse-item>
-    </el-collapse>
+        </section>
 
-    <section class="asset-table-section" aria-label="项目列表">
-      <div class="asset-table-section__header">
-        <div>
-          <span class="zy-code-chip">PROJECTS</span>
-          <strong>项目列表</strong>
-          <p>选择项目后可直接进入文件管理、项目可视化或交付状态。</p>
-        </div>
-        <el-switch
-          v-model="detailColumnsVisible"
-          active-text="显示详细字段"
-          inactive-text="收起详细字段"
-        />
-      </div>
+        <section class="launchpad-filters" aria-label="项目筛选">
+          <label>
+            <span>项目状态</span>
+            <el-select v-model="onboardingFilter" placeholder="全部">
+              <el-option label="全部" value="ALL" />
+              <el-option label="治理就绪" value="GOVERNANCE_READY" />
+              <el-option label="主数据已初始化" value="MASTERDATA_INITIALIZED" />
+              <el-option label="资产已登记" value="ASSETS_REGISTERED" />
+              <el-option label="路径已映射" value="PATH_MAPPED" />
+              <el-option label="待接入" value="NOT_ONBOARDED" />
+            </el-select>
+          </label>
+          <label>
+            <span>项目类型</span>
+            <el-select v-model="sourceFilter" placeholder="全部">
+              <el-option
+                v-for="item in sourceOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </label>
+          <label>
+            <span>负责人</span>
+            <el-select v-model="managerFilter" placeholder="全部" filterable>
+              <el-option label="全部" value="ALL" />
+              <el-option
+                v-for="item in managerOptions"
+                :key="item"
+                :label="item"
+                :value="item"
+              />
+            </el-select>
+          </label>
+          <label class="launchpad-filters__date">
+            <span>最近更新</span>
+            <el-date-picker
+              v-model="updatedRange"
+              type="daterange"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              value-format="YYYY-MM-DD"
+              unlink-panels
+            />
+          </label>
+          <el-button @click="resetFilters">重置</el-button>
+        </section>
 
-      <el-table
-        v-loading="loading"
-        :data="sortedProjects"
-        class="master-table"
-        empty-text="暂无资产项目"
-        @row-dblclick="openDetail"
-      >
-      <el-table-column label="项目" min-width="260">
-        <template #default="{ row }">
-          <div class="asset-title-cell">
-            <strong>{{ row.code }}</strong>
-            <span>{{ row.name }}</span>
+        <section class="launchpad-panel launchpad-projects" aria-label="全部项目">
+          <div class="launchpad-projects__header">
+            <div>
+              <strong>全部项目 <span>({{ formatCount(sortedProjects.length) }})</span></strong>
+              <p>双击项目行或点击“进入”，即可打开真实项目工作台。</p>
+            </div>
+            <el-button v-if="isSuperAdmin" type="primary" @click="openCreateProjectDialog">新建项目</el-button>
+            <el-tooltip v-else content="仅超级管理员可以新建项目" placement="top">
+              <span>
+                <el-button type="primary" disabled>新建项目</el-button>
+              </span>
+            </el-tooltip>
           </div>
-        </template>
-      </el-table-column>
-      <el-table-column label="项目来源" width="130">
-        <template #default="{ row }">
-          <el-tag size="small" :type="sourceTagType(row.projectSource, row.projectCategory)">
-            {{ projectSourceText(row.projectSource, row.projectCategory) }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="接入状态" width="150">
-        <template #default="{ row }">
-          <el-tag size="small" :type="onboardingTagType(row.onboardingStatus)">
-            {{ onboardingStatusText(row.onboardingStatus) }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column v-if="detailColumnsVisible" prop="projectStage" label="阶段" width="120" show-overflow-tooltip />
-      <el-table-column prop="projectManagerName" label="负责人" width="130" show-overflow-tooltip />
-      <el-table-column label="下一步" min-width="260">
-        <template #default="{ row }">
-          <div class="asset-governance-cell">
-            <small>{{ governanceStage(row).hint }}</small>
-            <el-button text :icon="ArrowRight" @click.stop="openGovernanceNext(row)">
-              {{ governanceStage(row).actionLabel }}
-            </el-button>
+
+          <el-table
+            v-loading="loading"
+            :data="pagedProjects"
+            class="master-table launchpad-table"
+            empty-text="暂无资产项目"
+            @row-dblclick="openDetail"
+          >
+            <el-table-column label="项目名称" min-width="260">
+              <template #default="{ row }">
+                <div class="launchpad-project-title">
+                  <strong>{{ row.name }}</strong>
+                  <span>{{ projectSourceText(row.projectSource, row.projectCategory) }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="项目编码" width="150">
+              <template #default="{ row }">
+                <span class="launchpad-code">{{ row.code }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="项目类型" width="120">
+              <template #default="{ row }">{{ row.industryType || projectSourceText(row.projectSource, row.projectCategory) }}</template>
+            </el-table-column>
+            <el-table-column label="当前阶段" width="150">
+              <template #default="{ row }">
+                <span class="launchpad-phase">{{ governanceStage(row).index }} {{ governanceStage(row).shortLabel }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="整体进度" width="160">
+              <template #default="{ row }">
+                <div class="launchpad-progress">
+                  <span :style="{ width: `${projectProgress(row)}%` }"></span>
+                </div>
+                <em class="launchpad-progress-text">{{ projectProgress(row) }}%</em>
+              </template>
+            </el-table-column>
+            <el-table-column label="风险等级" width="110">
+              <template #default="{ row }">
+                <span class="launchpad-risk-pill" :class="`is-${projectRisk(row).level}`">
+                  {{ projectRisk(row).label }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="负责人" width="110" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.projectManagerName || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="最近访问" width="140">
+              <template #default="{ row }">{{ projectRecentText(row) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="190" fixed="right">
+              <template #default="{ row }">
+                <div class="launchpad-row-actions">
+                  <el-button text @click="openDetail(row)">进入</el-button>
+                  <el-button text :icon="MoreFilled" aria-label="更多操作" @click="openProjectFiles(row)" />
+                  <el-button
+                    v-if="isSuperAdmin"
+                    text
+                    type="danger"
+                    @click.stop="confirmArchiveProject(row)"
+                  >
+                    归档
+                  </el-button>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <div class="launchpad-pagination">
+            <span>共 {{ formatCount(sortedProjects.length) }} 条</span>
+            <el-pagination
+              v-model:current-page="pageNo"
+              v-model:page-size="pageSize"
+              background
+              layout="prev, pager, next, sizes, jumper"
+              :page-sizes="[8, 10, 20, 50]"
+              :total="sortedProjects.length"
+            />
           </div>
-        </template>
-      </el-table-column>
-      <el-table-column label="文件数" width="100" align="right">
-        <template #default="{ row }">{{ formatCount(row.fileCount) }}</template>
-      </el-table-column>
-      <el-table-column v-if="detailColumnsVisible" label="模型数" width="110" align="right">
-        <template #default="{ row }">{{ formatCount(row.modelCount) }}</template>
-      </el-table-column>
-      <el-table-column v-if="detailColumnsVisible" label="主要类型" min-width="160">
-        <template #default="{ row }">
-          <div class="asset-kind-tags">
-            <el-tag
-              v-for="kind in row.dominantFileKinds || []"
-              :key="`${row.projectId}-${kind}`"
-              size="small"
-              type="info"
+        </section>
+      </main>
+
+      <aside class="launchpad-sidebar" aria-label="项目状态侧栏">
+        <section class="launchpad-panel launchpad-status">
+          <div class="launchpad-section-title">
+            <strong>项目总体状态</strong>
+            <span>按当前项目列表统计</span>
+          </div>
+          <div class="launchpad-donut-wrap">
+            <div class="launchpad-donut" :style="{ background: donutGradient }">
+              <div class="launchpad-donut__content">
+                <span>{{ formatCount(statusTotal) }}</span>
+                <em>总项目数</em>
+              </div>
+            </div>
+            <ul class="launchpad-status__legend">
+              <li v-for="item in statusLegend" :key="item.key">
+                <span :style="{ background: item.color }"></span>
+                <strong>{{ item.label }}</strong>
+                <em>{{ formatCount(item.value) }} ({{ item.percent }}%)</em>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="launchpad-panel launchpad-risk-list">
+          <div class="launchpad-section-title launchpad-section-title--row">
+            <strong>风险项目</strong>
+            <el-button text @click="router.push({ name: 'data-steward-quality' })">查看全部</el-button>
+          </div>
+          <div class="launchpad-side-list">
+            <button
+              v-for="item in riskProjects"
+              :key="`risk-${item.projectId}`"
+              type="button"
+              @click="openDetailById(item.projectId)"
             >
-              {{ kind }}
-            </el-tag>
-            <span v-if="!(row.dominantFileKinds || []).length">-</span>
+              <span class="launchpad-side-list__alert" aria-hidden="true">!</span>
+              <span>
+                <strong>{{ item.projectName }}</strong>
+                <em>{{ item.reason }}</em>
+              </span>
+              <b :class="`is-${item.level}`">{{ item.label }}</b>
+            </button>
+            <p v-if="!riskProjects.length" class="launchpad-side-empty">当前没有高风险项目。</p>
           </div>
-        </template>
-      </el-table-column>
-      <el-table-column v-if="detailColumnsVisible" label="模型容量" width="130" align="right">
-        <template #default="{ row }">{{ formatBytes(row.totalSizeBytes) }}</template>
-      </el-table-column>
-      <el-table-column label="最近扫描/更新" width="170">
-        <template #default="{ row }">{{ formatDate(row.lastScanAt || row.lastModelUpdatedAt) }}</template>
-      </el-table-column>
-      <el-table-column v-if="detailColumnsVisible" label="底座" width="160">
-        <template #default="{ row }">
-          <div class="asset-foundation-tags">
-            <el-tag size="small" :type="row.hasMasterData ? 'success' : 'info'">主数据</el-tag>
-            <el-tag size="small" :type="row.hasDeliveryStandard ? 'success' : 'info'">交付标准</el-tag>
+        </section>
+
+        <section class="launchpad-panel launchpad-notices">
+          <div class="launchpad-section-title launchpad-section-title--row">
+            <strong>公告通知</strong>
+            <el-button text @click="router.push({ name: 'data-steward-quality' })">查看全部</el-button>
           </div>
-        </template>
-      </el-table-column>
-      <el-table-column v-if="detailColumnsVisible" label="状态" width="100">
-        <template #default="{ row }">
-          <el-tag :type="row.assetStatus === 'ACTIVE' ? 'success' : 'info'">{{ row.assetStatus }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="230" fixed="right">
-        <template #default="{ row }">
-          <div class="asset-row-actions">
-            <el-button text :icon="ArrowRight" @click="openDetail(row)">工作台</el-button>
-            <el-button text @click="openProjectFiles(row)">文件</el-button>
-            <el-button text @click="openProjectVisualization(row)">可视化</el-button>
-          </div>
-        </template>
-      </el-table-column>
-      </el-table>
+          <ul>
+            <li v-for="item in noticeItems" :key="item.key">
+              <span></span>
+              <strong>{{ item.title }}</strong>
+              <time>{{ item.time }}</time>
+            </li>
+          </ul>
+        </section>
+      </aside>
     </section>
+
+    <el-dialog
+      v-model="createProjectDialogVisible"
+      title="新建项目"
+      width="560px"
+      destroy-on-close
+    >
+      <el-alert
+        class="launchpad-create-alert"
+        type="info"
+        show-icon
+        :closable="false"
+        title="创建后会初始化对象存储工作区和工程树根节点，但不会扫描或操作真实 NAS 文件。"
+      />
+      <el-form class="launchpad-create-form" label-position="top">
+        <el-form-item label="项目名称" required>
+          <el-input v-model.trim="createProjectForm.name" placeholder="例如：105 启航华居项目" maxlength="255" />
+        </el-form-item>
+        <el-form-item label="项目编码" required>
+          <el-input v-model.trim="createProjectForm.code" placeholder="例如：PLM-2026-001" maxlength="64" />
+        </el-form-item>
+        <div class="launchpad-create-form__grid">
+          <el-form-item label="项目类型">
+            <el-select v-model="createProjectForm.industryType" placeholder="请选择">
+              <el-option label="建筑机电" value="BUILDING_MEP" />
+              <el-option label="房建" value="BUILDING" />
+              <el-option label="市政" value="MUNICIPAL" />
+              <el-option label="其他" value="OTHER" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="项目阶段">
+            <el-select v-model="createProjectForm.projectStage" placeholder="请选择">
+              <el-option label="准备阶段" value="PREPARATION" />
+              <el-option label="实施阶段" value="IMPLEMENTATION" />
+              <el-option label="交付阶段" value="DELIVERY" />
+              <el-option label="未知" value="UNKNOWN" />
+            </el-select>
+          </el-form-item>
+        </div>
+        <div class="launchpad-create-form__grid">
+          <el-form-item label="负责人">
+            <el-input v-model.trim="createProjectForm.projectManagerName" placeholder="默认可填写项目负责人姓名" maxlength="128" />
+          </el-form-item>
+          <el-form-item label="责任组织">
+            <el-input v-model.trim="createProjectForm.ownerOrgName" placeholder="例如：项目管理部" maxlength="128" />
+          </el-form-item>
+        </div>
+      </el-form>
+      <template #footer>
+        <el-button @click="createProjectDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="createProjectSubmitting" @click="submitCreateProject">
+          创建项目
+        </el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
-import { ArrowRight, Refresh, Search } from '@element-plus/icons-vue';
+import { computed, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { ArrowRight, MoreFilled, Refresh, Search } from '@element-plus/icons-vue';
 
-import ParticleField from '@/modules/core/components/ParticleField.vue';
-import { useSpotlight } from '@/modules/core/composables/useSpotlight';
+import projectCoverImage from '@/assets/ux4/project-cover-reference.png';
+import { useAuthStore } from '@/stores/auth';
 import {
+  archiveAssetProject,
+  createLifecycleProject,
+  fetchCatalogProjects,
   fetchAssetProjects,
   fetchAssetQualityOverview,
   fetchAssetStatistics,
   type AssetProject,
   type AssetQualityOverview,
-  type AssetStatistics
+  type AssetQualityProjectRisk,
+  type AssetStatistics,
+  type CatalogProject
 } from '@/modules/data-steward/api/dataSteward';
+import { fetchGlandarReadyModelCatalog } from '@/modules/visualization/api/visualization';
 
-const heroRef = ref<HTMLElement | null>(null);
-useSpotlight(heroRef);
+type TodoCard = {
+  key: string;
+  label: string;
+  initial: string;
+  value: number;
+  tone: 'red' | 'amber' | 'blue' | 'green';
+  action: string;
+  project?: AssetProject | null;
+  routeName?: string;
+};
 
+type LaunchpadRisk = {
+  projectId: number;
+  projectName: string;
+  reason: string;
+  level: 'high' | 'medium' | 'low';
+  label: string;
+};
+
+const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
 const loading = ref(false);
 const keyword = ref('');
-const sourceFilter = ref('REAL_NAS');
+const sourceFilter = ref('ALL');
+const onboardingFilter = ref('ALL');
+const managerFilter = ref('ALL');
 const projectSortOrder = ref<'ASC' | 'DESC'>('ASC');
-const detailColumnsVisible = ref(false);
-const overviewMoreActive = ref<string[]>([]);
+const updatedRange = ref<[string, string] | null>(null);
 const projects = ref<AssetProject[]>([]);
 const statistics = ref<AssetStatistics | null>(null);
 const qualityOverview = ref<AssetQualityOverview | null>(null);
+const readyModelCount = ref(0);
 const recentProjectIds = ref<number[]>(readRecentProjectIds());
+const pageNo = ref(1);
+const pageSize = ref(10);
+const createProjectDialogVisible = ref(false);
+const createProjectSubmitting = ref(false);
+const createProjectForm = ref(defaultCreateProjectForm());
+
+const isSuperAdmin = computed(() => authStore.currentUser?.username?.toLowerCase() === 'admin');
+
 const sourceOptions = [
+  { label: '全部', value: 'ALL' },
   { label: '真实项目', value: 'REAL_NAS' },
-  { label: '未完成接入', value: 'UNFINISHED_ONBOARDING' },
   { label: '样例/模板', value: 'SAMPLE_TEMPLATE' },
   { label: '测试', value: 'TEST_PROJECT' },
-  { label: '归档', value: 'ARCHIVED_HISTORY' },
-  { label: '全部', value: 'ALL' }
+  { label: '归档', value: 'ARCHIVED_HISTORY' }
 ];
+
+const baseProjects = computed(() => {
+  if (sourceFilter.value === 'ALL') {
+    return projects.value;
+  }
+  if (sourceFilter.value === 'REAL_NAS') {
+    return projects.value.filter((item) => item.projectCategory === 'REAL_NAS_PROJECT' || item.projectSource === 'REAL_NAS');
+  }
+  return projects.value.filter((item) => item.projectCategory === sourceFilter.value || item.projectSource === sourceFilter.value);
+});
 
 const realNasProjects = computed(() => projects.value.filter(isRealNasProject));
 
+const visibleProjects = computed(() => baseProjects.value.filter((item) => {
+  if (onboardingFilter.value !== 'ALL' && (item.onboardingStatus || 'NOT_ONBOARDED') !== onboardingFilter.value) {
+    return false;
+  }
+  if (managerFilter.value !== 'ALL' && (item.projectManagerName || '-') !== managerFilter.value) {
+    return false;
+  }
+  if (updatedRange.value) {
+    const timestamp = projectTimestamp(item);
+    if (!timestamp) return false;
+    const [start, end] = updatedRange.value;
+    const startTime = new Date(`${start}T00:00:00`).getTime();
+    const endTime = new Date(`${end}T23:59:59`).getTime();
+    if (timestamp < startTime || timestamp > endTime) return false;
+  }
+  return true;
+}));
+
+const sortedProjects = computed(() => {
+  return [...visibleProjects.value].sort((left, right) => {
+    return projectSortOrder.value === 'ASC'
+      ? left.projectId - right.projectId
+      : right.projectId - left.projectId;
+  });
+});
+
+const pagedProjects = computed(() => {
+  const start = (pageNo.value - 1) * pageSize.value;
+  return sortedProjects.value.slice(start, start + pageSize.value);
+});
+
+const managerOptions = computed(() => {
+  const names = projects.value
+    .map((item) => item.projectManagerName || '-')
+    .filter((item) => item !== '-');
+  return [...new Set(names)].sort((left, right) => left.localeCompare(right, 'zh-CN'));
+});
+
 const primaryActionProject = computed(() => {
-  return visibleProjects.value.find(isRealNasProject) ?? realNasProjects.value[0] ?? visibleProjects.value[0] ?? null;
+  return visibleProjects.value.find(isRealNasProject) ?? realNasProjects.value[0] ?? visibleProjects.value[0] ?? projects.value[0] ?? null;
 });
 
 const pendingProjects = computed(() => sortedProjects.value
@@ -299,75 +491,318 @@ const recommendedProject = computed(() =>
   pendingProjects.value[0] ?? recentProjects.value[0] ?? primaryActionProject.value
 );
 
-const statusCards = computed(() => {
+const currentRoleLabel = computed(() => {
+  return recommendedProject.value ? '项目管理员' : '-';
+});
+
+const todoCards = computed<TodoCard[]>(() => {
+  const rows = visibleProjects.value.length ? visibleProjects.value : projects.value;
+  const masterPendingProject = rows.find((item) => !item.hasMasterData);
+  const deliveryPendingProject = rows.find((item) => !item.hasDeliveryStandard) ?? masterPendingProject;
+  return [
+    {
+      key: 'master-data',
+      label: '主数据待确认',
+      initial: 'M',
+      value: rows.filter((item) => !item.hasMasterData).length,
+      tone: 'red',
+      action: '去处理',
+      project: masterPendingProject,
+      routeName: 'project-master-data-initialization'
+    },
+    {
+      key: 'delivery',
+      label: '交付缺失文件',
+      initial: 'D',
+      value: rows.filter((item) => !item.hasDeliveryStandard).length + Number(qualityOverview.value?.pendingReviewCount ?? 0),
+      tone: 'amber',
+      action: '去查看',
+      project: deliveryPendingProject,
+      routeName: 'project-work-document-delivery'
+    },
+    {
+      key: 'object-storage',
+      label: '对象存储风险',
+      initial: 'O',
+      value: Number(qualityOverview.value?.missingStoragePathCount ?? 0) + Number(qualityOverview.value?.zeroSizeFileCount ?? 0),
+      tone: 'blue',
+      action: '去处置',
+      project: null,
+      routeName: 'data-steward-file-service'
+    },
+    {
+      key: 'bim',
+      label: '已轻量化模型',
+      initial: 'B',
+      value: readyModelCount.value,
+      tone: 'green',
+      action: '看列表',
+      project: null,
+      routeName: 'bim-collaboration'
+    }
+  ];
+});
+
+const riskProjectForTodo = computed(() => {
+  const firstRisk = qualityOverview.value?.topRiskProjects?.[0];
+  if (!firstRisk) return null;
+  return projects.value.find((item) => item.projectId === firstRisk.projectId) ?? null;
+});
+
+const statusTotal = computed(() => visibleProjects.value.length);
+
+const statusLegend = computed(() => {
   const rows = visibleProjects.value;
-  const stats = sourceFilter.value === 'REAL_NAS' ? statistics.value : null;
-  const registered = rows.filter((item) => Number(item.fileCount ?? 0) > 0).length;
-  const masterData = rows.filter((item) => Boolean(item.hasMasterData)).length;
-  const pending = rows.filter((item) => !Boolean(item.hasMasterData) || !Boolean(item.hasDeliveryStandard)).length;
-  const fileCount = stats?.fileCount ?? rows.reduce((sum, item) => sum + Number(item.fileCount ?? 0), 0);
-  const modelCount = stats?.modelFileCount ?? rows.reduce((sum, item) => sum + Number(item.modelCount ?? 0), 0);
-  const drawingCount = stats?.drawingFileCount ?? 0;
-  const totalSize = stats?.totalSizeBytes ?? rows.reduce((sum, item) => sum + Number(item.totalSizeBytes ?? 0), 0);
+  const completed = rows.filter((item) => item.onboardingStatus === 'GOVERNANCE_READY').length;
+  const running = rows.filter((item) => ['MASTERDATA_INITIALIZED', 'ASSETS_REGISTERED'].includes(item.onboardingStatus || '')).length;
+  const preparing = rows.filter((item) => !item.onboardingStatus || ['PATH_MAPPED', 'NOT_ONBOARDED'].includes(item.onboardingStatus)).length;
+  const paused = rows.filter((item) => item.projectCategory === 'ARCHIVED_HISTORY' || item.assetStatus !== 'ACTIVE').length;
   return [
-    { label: '项目', value: formatCount(stats?.projectCount ?? rows.length), unit: '个' },
-    { label: '已登记文件', value: formatCount(fileCount), unit: '份' },
-    { label: '模型文件', value: formatCount(modelCount), unit: '份' },
-    { label: '图纸文件', value: formatCount(drawingCount), unit: '份' },
-    { label: '登记容量', value: formatBytes(totalSize), unit: '目录级' },
-    { label: '主数据已建', value: formatCount(masterData), unit: `/${formatCount(rows.length)} 个项目` },
-    { label: '待补底座', value: formatCount(pending), unit: '需处理' },
-    { label: '有文件项目', value: formatCount(registered), unit: '个项目' }
-  ];
+    { key: 'running', label: '进行中', value: running, color: 'oklch(0.52 0.19 257)' },
+    { key: 'preparing', label: '准备中', value: preparing, color: 'oklch(0.63 0.16 162)' },
+    { key: 'completed', label: '已完成', value: completed, color: 'oklch(0.64 0.16 273)' },
+    { key: 'paused', label: '暂停中', value: paused, color: 'oklch(0.64 0.19 25)' }
+  ].map((item) => ({
+    ...item,
+    percent: statusTotal.value ? Math.round((item.value / statusTotal.value) * 100) : 0
+  }));
 });
 
-const riskSummaryCards = computed(() => {
-  const rows = realNasProjects.value;
-  return [
-    { label: '缺工程主数据', count: rows.filter((item) => !Boolean(item.hasMasterData)).length, helper: '影响接入评估' },
-    { label: '缺交付标准', count: rows.filter((item) => !Boolean(item.hasDeliveryStandard)).length, helper: '影响缺失项计算' },
-    { label: '待审核', count: Number(qualityOverview.value?.pendingReviewCount ?? 0), helper: '需人工确认' },
-    { label: '缺 checksum', count: Number(qualityOverview.value?.missingChecksumCount ?? 0), helper: '影响重复识别' },
-    { label: '低置信度', count: Number(qualityOverview.value?.missingConfidenceCount ?? 0), helper: '需补元数据' }
-  ];
-});
-
-const sortedProjects = computed(() => {
-  return [...visibleProjects.value].sort((left, right) => {
-    return projectSortOrder.value === 'ASC'
-      ? left.projectId - right.projectId
-      : right.projectId - left.projectId;
+const donutGradient = computed(() => {
+  if (!statusTotal.value) {
+    return 'conic-gradient(oklch(0.9 0.015 255) 0deg 360deg)';
+  }
+  let start = 0;
+  const segments = statusLegend.value.map((item) => {
+    const end = start + (item.value / statusTotal.value) * 360;
+    const segment = `${item.color} ${start}deg ${end}deg`;
+    start = end;
+    return segment;
   });
+  return `conic-gradient(${segments.join(', ')})`;
 });
 
-const visibleProjects = computed(() => {
-  if (sourceFilter.value === 'ALL') {
-    return projects.value;
-  }
-  if (sourceFilter.value === 'REAL_NAS') {
-    return projects.value.filter((item) => item.projectCategory === 'REAL_NAS_PROJECT' || item.projectSource === 'REAL_NAS');
-  }
-  return projects.value.filter((item) => item.projectCategory === sourceFilter.value || item.projectSource === sourceFilter.value);
+const riskProjects = computed<LaunchpadRisk[]>(() => {
+  const risks = qualityOverview.value?.topRiskProjects ?? [];
+  const fromQuality = risks.slice(0, 3).map((item) => riskFromQualityProject(item));
+  if (fromQuality.length) return fromQuality;
+  return visibleProjects.value
+    .filter((item) => !item.hasMasterData || !item.hasDeliveryStandard)
+    .slice(0, 3)
+    .map((item) => ({
+      projectId: item.projectId,
+      projectName: item.name,
+      reason: !item.hasMasterData ? '主数据未确认' : '交付标准待配置',
+      level: !item.hasMasterData ? 'high' : 'medium',
+      label: !item.hasMasterData ? '高风险' : '中风险'
+    }));
+});
+
+const noticeItems = computed(() => {
+  const events = qualityOverview.value?.recentEvents ?? [];
+  const rows = events.slice(0, 3).map((item) => ({
+    key: `event-${item.id}`,
+    title: noticeTitle(item.actionCode, item.summary),
+    time: formatDate(item.createdAt)
+  }));
+  if (rows.length) return rows;
+  return [
+    {
+      key: 'empty-notice',
+      title: '当前暂无新的系统公告',
+      time: '-'
+    }
+  ];
 });
 
 loadPage();
 
+watch(
+  () => route.query.selectProject,
+  (value) => {
+    if (value !== '1') return;
+    ElMessage.info('请先选择项目');
+    const { selectProject: _selectProject, ...nextQuery } = route.query;
+    void router.replace({ name: 'data-steward-assets', query: nextQuery });
+  },
+  { immediate: true }
+);
+
+watch([sourceFilter, onboardingFilter, managerFilter, updatedRange, pageSize], () => {
+  pageNo.value = 1;
+});
+
 async function loadPage() {
   loading.value = true;
   try {
-    const assetSource = sourceFilter.value === 'REAL_NAS' ? 'NAS_REAL*' : undefined;
-    const [nextProjects, nextStatistics, nextQualityOverview] = await Promise.all([
-      fetchAssetProjects(keyword.value.trim() || undefined, assetSource),
-      fetchAssetStatistics(undefined, assetSource),
-      fetchAssetQualityOverview(undefined, assetSource)
-    ]);
+    const nextProjects = await loadLaunchpadProjects();
     projects.value = nextProjects;
-    statistics.value = nextStatistics;
-    qualityOverview.value = nextQualityOverview;
+    pageNo.value = 1;
+
+    const [statisticsResult, qualityResult, readyModelsResult] = await Promise.allSettled([
+      fetchAssetStatistics(undefined, undefined),
+      fetchAssetQualityOverview(undefined, undefined),
+      fetchGlandarReadyModelCatalog()
+    ]);
+
+    statistics.value = statisticsResult.status === 'fulfilled' ? statisticsResult.value : null;
+    qualityOverview.value = qualityResult.status === 'fulfilled' ? qualityResult.value : null;
+    readyModelCount.value = readyModelsResult.status === 'fulfilled'
+      ? readyModelsResult.value.reduce((total, group) => total + (group.models?.length ?? 0), 0)
+      : 0;
+
+    if (statisticsResult.status === 'rejected' || qualityResult.status === 'rejected' || readyModelsResult.status === 'rejected') {
+      ElMessage.warning('项目列表已加载，部分统计信息稍后刷新。');
+    }
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '资产总览加载失败');
+    projects.value = [];
+    statistics.value = null;
+    qualityOverview.value = null;
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadLaunchpadProjects() {
+  const rows = await fetchAssetProjects(keyword.value.trim() || undefined, undefined);
+  if (rows.length) {
+    return rows;
+  }
+  const catalogRows = await fetchCatalogProjects();
+  return catalogRows.filter(matchesCatalogKeyword).map(mapCatalogProject);
+}
+
+function matchesCatalogKeyword(row: CatalogProject) {
+  const query = keyword.value.trim().toLowerCase();
+  if (!query) return true;
+  return [row.projectCode, row.projectName]
+    .some((value) => (value || '').toLowerCase().includes(query));
+}
+
+function mapCatalogProject(row: CatalogProject): AssetProject {
+  const realNas = row.assetSource === 'NAS_REAL' || row.assetSource === 'REAL_NAS';
+  return {
+    projectId: row.projectId,
+    code: row.projectCode,
+    name: row.projectName,
+    industryType: row.projectStage || null,
+    projectStage: row.projectStage,
+    projectManagerName: null,
+    assetStatus: 'ACTIVE',
+    assetSource: row.assetSource,
+    modelCount: 0,
+    totalSizeBytes: row.totalSizeBytes,
+    lastModelUpdatedAt: null,
+    projectSource: realNas ? 'REAL_NAS' : row.assetSource,
+    projectCategory: realNas ? 'REAL_NAS_PROJECT' : null,
+    onboardingStatus: row.fileCount > 0 ? 'ASSETS_REGISTERED' : 'PATH_MAPPED',
+    fileCount: row.fileCount,
+    dominantFileKinds: [],
+    lastScanAt: null,
+    hasMasterData: false,
+    hasDeliveryStandard: false,
+    governanceReady: false
+  };
+}
+
+function resetFilters() {
+  sourceFilter.value = 'ALL';
+  onboardingFilter.value = 'ALL';
+  managerFilter.value = 'ALL';
+  updatedRange.value = null;
+  projectSortOrder.value = 'ASC';
+  pageNo.value = 1;
+}
+
+function defaultCreateProjectForm() {
+  return {
+    code: '',
+    name: '',
+    industryType: 'BUILDING_MEP',
+    projectStage: 'PREPARATION',
+    projectManagerName: authStore.currentUser?.displayName || '',
+    ownerOrgName: ''
+  };
+}
+
+function openCreateProjectDialog() {
+  if (!isSuperAdmin.value) {
+    ElMessage.warning('仅超级管理员可以新建项目，请联系平台管理员。');
+    return;
+  }
+  createProjectForm.value = defaultCreateProjectForm();
+  createProjectDialogVisible.value = true;
+}
+
+async function submitCreateProject() {
+  const payload = {
+    ...createProjectForm.value,
+    code: createProjectForm.value.code.trim(),
+    name: createProjectForm.value.name.trim(),
+    projectManagerName: createProjectForm.value.projectManagerName.trim() || null,
+    ownerOrgName: createProjectForm.value.ownerOrgName.trim() || null,
+    assetSource: 'MANUAL'
+  };
+  if (!payload.name || !payload.code) {
+    ElMessage.warning('请填写项目名称和项目编码');
+    return;
+  }
+  createProjectSubmitting.value = true;
+  try {
+    const result = await createLifecycleProject(payload);
+    createProjectDialogVisible.value = false;
+    ElMessage.success('项目已创建，已准备对象存储工作区和工程树根节点。');
+    await loadPage();
+    const action = await ElMessageBox.confirm(
+      `项目「${result.projectName}」已创建，是否现在进入项目工作台？`,
+      '项目创建成功',
+      {
+        confirmButtonText: '进入项目',
+        cancelButtonText: '留在启动台',
+        type: 'success'
+      }
+    ).catch(() => null);
+    if (action) {
+      openDetail(result.project);
+    }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '创建项目失败');
+  } finally {
+    createProjectSubmitting.value = false;
+  }
+}
+
+async function confirmArchiveProject(row: AssetProject) {
+  if (!isSuperAdmin.value) {
+    ElMessage.warning('仅超级管理员可以归档项目');
+    return;
+  }
+  const promptResult = await ElMessageBox.prompt(
+    `归档后项目默认不再出现在项目启动台，但不会删除真实 NAS 文件、MinIO 对象、工程主数据或审计记录。请输入项目编码「${row.code}」或项目名称「${row.name}」确认。`,
+    '归档项目',
+    {
+      confirmButtonText: '确认归档',
+      cancelButtonText: '取消',
+      inputPlaceholder: row.code,
+      inputValidator: (value) => value === row.code || value === row.name,
+      inputErrorMessage: '请输入完整项目编码或项目名称'
+    }
+  ).catch(() => null);
+  if (!promptResult) return;
+  try {
+    const result = await archiveAssetProject(row.projectId, {
+      confirmed: true,
+      confirmText: promptResult.value
+    });
+    if (result.objectStorageDeleted || result.nasTouched) {
+      ElMessage.error('归档结果异常：平台不应删除对象存储或触碰 NAS 文件。');
+      return;
+    }
+    ElMessage.success('项目已归档，启动台默认不再显示。');
+    await loadPage();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '归档项目失败');
   }
 }
 
@@ -376,23 +811,32 @@ function openDetail(row: AssetProject) {
   router.push({ name: 'data-steward-asset-detail', params: { projectId: row.projectId } });
 }
 
+function openDetailById(projectId: number) {
+  const row = projects.value.find((item) => item.projectId === projectId);
+  if (row) {
+    openDetail(row);
+  }
+}
+
 function openProjectFiles(row: AssetProject) {
   rememberProject(row.projectId);
   router.push({ name: 'data-steward-asset-detail', params: { projectId: row.projectId }, query: { tab: 'files' } });
 }
 
-function openProjectVisualization(row: AssetProject) {
-  rememberProject(row.projectId);
-  router.push({ name: 'data-steward-asset-detail', params: { projectId: row.projectId }, query: { tab: 'dashboard' } });
-}
-
-function openGovernanceNext(row: AssetProject) {
-  const stage = governanceStage(row);
-  if (stage.routeName === 'data-steward-asset-detail') {
-    openDetail(row);
+function handleTodoClick(item: TodoCard) {
+  if (item.project === null && item.routeName) {
+    router.push({ name: item.routeName });
     return;
   }
-  router.push({ name: stage.routeName, params: { projectId: row.projectId } });
+  const row = item.project ?? recommendedProject.value;
+  if (!row) {
+    if (item.routeName) {
+      router.push({ name: item.routeName });
+    }
+    return;
+  }
+  rememberProject(row.projectId);
+  router.push({ name: item.routeName || 'data-steward-asset-detail', params: { projectId: row.projectId } });
 }
 
 function governanceStage(row: AssetProject) {
@@ -400,6 +844,7 @@ function governanceStage(row: AssetProject) {
   if (status === 'GOVERNANCE_READY') {
     return {
       index: 4,
+      shortLabel: '交付闭环',
       actionLabel: '看交付状态',
       hint: '底座已具备，下一步在文档/图纸交付页查看缺项、审核和预检查。',
       routeName: 'project-work-document-delivery'
@@ -408,6 +853,7 @@ function governanceStage(row: AssetProject) {
   if (status === 'MASTERDATA_INITIALIZED') {
     return {
       index: 3,
+      shortLabel: '交付闭环',
       actionLabel: '进入文档交付',
       hint: '主数据已初始化，下一步查看文档/图纸应交项和缺失项。',
       routeName: 'project-work-document-delivery'
@@ -415,7 +861,8 @@ function governanceStage(row: AssetProject) {
   }
   if (status === 'ASSETS_REGISTERED') {
     return {
-      index: 1,
+      index: 2,
+      shortLabel: '工程主数据',
       actionLabel: '查看接入评估',
       hint: '资产目录已登记，下一步查看接入评估并确认主数据草案。',
       routeName: 'project-master-data-initialization'
@@ -424,17 +871,56 @@ function governanceStage(row: AssetProject) {
   if (status === 'PATH_MAPPED') {
     return {
       index: 1,
+      shortLabel: '资产接入',
       actionLabel: '查看接入评估',
       hint: '路径已映射但资产或主数据仍需补齐，先看接入评估。',
       routeName: 'project-master-data-initialization'
     } as const;
   }
   return {
-    index: 0,
+    index: 1,
+    shortLabel: '资产接入',
     actionLabel: '进入项目',
     hint: '先进入项目工作台，确认资产目录和接入前置条件。',
     routeName: 'data-steward-asset-detail'
   } as const;
+}
+
+function projectProgress(row: AssetProject) {
+  const status = row.onboardingStatus;
+  if (status === 'GOVERNANCE_READY') return 86;
+  if (status === 'MASTERDATA_INITIALIZED') return 62;
+  if (status === 'ASSETS_REGISTERED') return 42;
+  if (status === 'PATH_MAPPED') return 26;
+  return Number(row.fileCount ?? 0) > 0 ? 18 : 8;
+}
+
+function projectRisk(row: AssetProject) {
+  const risk = qualityOverview.value?.topRiskProjects?.find((item) => item.projectId === row.projectId);
+  const count = risk?.totalRiskCount ?? 0;
+  if (!row.hasMasterData || count >= 10) return { level: 'high', label: '高' };
+  if (!row.hasDeliveryStandard || count > 0) return { level: 'medium', label: '中' };
+  return { level: 'low', label: '低' };
+}
+
+function riskFromQualityProject(item: AssetQualityProjectRisk): LaunchpadRisk {
+  const level = item.totalRiskCount >= 10 ? 'high' : item.totalRiskCount > 0 ? 'medium' : 'low';
+  const label = level === 'high' ? '高风险' : level === 'medium' ? '中风险' : '低风险';
+  return {
+    projectId: item.projectId,
+    projectName: item.projectName,
+    reason: riskReason(item),
+    level,
+    label
+  };
+}
+
+function riskReason(item: AssetQualityProjectRisk) {
+  if (item.missingStoragePathCount > 0) return `对象存储/路径风险 ${formatCount(item.missingStoragePathCount)} 个文件`;
+  if (item.pendingReviewCount > 0) return `待审核 ${formatCount(item.pendingReviewCount)} 个文件`;
+  if (item.missingDisciplineCount > 0) return `专业待完善 ${formatCount(item.missingDisciplineCount)} 个文件`;
+  if (item.missingChecksumCount > 0) return `checksum 待补 ${formatCount(item.missingChecksumCount)} 个文件`;
+  return `治理项 ${formatCount(item.totalRiskCount)} 个`;
 }
 
 function isRealNasProject(row: AssetProject) {
@@ -467,19 +953,6 @@ function formatCount(value: number | null | undefined) {
   return Number(value ?? 0).toLocaleString('zh-CN');
 }
 
-function formatBytes(value: number | null | undefined) {
-  const size = Number(value ?? 0);
-  if (size <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let next = size;
-  let unit = 0;
-  while (next >= 1024 && unit < units.length - 1) {
-    next /= 1024;
-    unit += 1;
-  }
-  return `${next >= 100 || unit === 0 ? next.toFixed(0) : next.toFixed(2)} ${units[unit]}`;
-}
-
 function formatDate(value: string | null | undefined) {
   if (!value) return '-';
   return new Intl.DateTimeFormat('zh-CN', {
@@ -491,13 +964,31 @@ function formatDate(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
+function projectTimestamp(row: AssetProject) {
+  const value = row.lastScanAt || row.lastModelUpdatedAt;
+  return value ? new Date(value).getTime() : 0;
+}
+
+function projectRecentText(row: AssetProject) {
+  const timestamp = projectTimestamp(row);
+  if (!timestamp) return '-';
+  const now = Date.now();
+  const diffDays = Math.floor((now - timestamp) / 86_400_000);
+  if (diffDays <= 0) {
+    return formatDate(row.lastScanAt || row.lastModelUpdatedAt).replace(/^\d{4}\/\d{2}\/\d{2}\s*/, '今天 ');
+  }
+  if (diffDays === 1) return '昨天';
+  if (diffDays < 7) return `${diffDays} 天前`;
+  return formatDate(row.lastScanAt || row.lastModelUpdatedAt);
+}
+
 function projectSourceText(value?: string | null, category?: string | null) {
   if (category === 'TEST_PROJECT') return '测试';
   if (category === 'SAMPLE_TEMPLATE') return '样例/模板';
   if (category === 'ARCHIVED_HISTORY') return '归档';
-  if (category === 'REAL_NAS_PROJECT') return '真实 NAS';
+  if (category === 'REAL_NAS_PROJECT') return '真实项目';
   const labels: Record<string, string> = {
-    REAL_NAS: '真实 NAS',
+    REAL_NAS: '真实项目',
     SAMPLE_TEMPLATE: '样例/模板',
     TEST: '测试',
     ARCHIVED_HISTORY: '归档',
@@ -506,676 +997,746 @@ function projectSourceText(value?: string | null, category?: string | null) {
   return labels[value || ''] ?? '未分类';
 }
 
-function sourceTagType(value?: string | null, category?: string | null) {
-  if (category === 'REAL_NAS_PROJECT' || value === 'REAL_NAS') return 'success';
-  if (category === 'TEST_PROJECT' || value === 'TEST') return 'warning';
-  if (category === 'SAMPLE_TEMPLATE' || value === 'SAMPLE_TEMPLATE') return 'info';
-  return 'info';
-}
-
-function onboardingStatusText(value?: string | null) {
+function noticeTitle(actionCode: string, summary: string | null) {
+  if (summary) return summary;
   const labels: Record<string, string> = {
-    GOVERNANCE_READY: '治理就绪',
-    MASTERDATA_INITIALIZED: '主数据已初始化',
-    ASSETS_REGISTERED: '资产已登记',
-    PATH_MAPPED: '路径已映射',
-    NOT_ONBOARDED: '待接入'
+    FILE_ACCESS_PREVIEW_ALLOWED: '文件预览访问记录',
+    FILE_ACCESS_DOWNLOAD_ALLOWED: '文件下载访问记录',
+    ASSET_REGISTERED: '资产登记记录',
+    EMPLOYEE_PROJECT_ROLES_UPDATED: '员工项目权限更新',
+    NAS_FILE_OBJECTIFIED: '对象存储副本更新'
   };
-  return labels[value || ''] ?? '待评估';
+  return labels[actionCode] ?? actionCode;
 }
-
-function onboardingTagType(value?: string | null) {
-  if (value === 'GOVERNANCE_READY') return 'success';
-  if (value === 'MASTERDATA_INITIALIZED' || value === 'ASSETS_REGISTERED') return 'warning';
-  return 'info';
-}
-
 </script>
 
 <style scoped>
-.asset-page {
-  min-width: 0;
+.launchpad-page {
+  gap: 14px;
 }
 
-.asset-search {
-  width: 260px;
-}
-
-.asset-sort {
-  width: 130px;
-}
-
-/* ---- Project launchpad ---- */
-.asset-launchpad {
-  background: var(--zy-panel-tint);
-  -webkit-backdrop-filter: blur(14px) saturate(1.04);
-  backdrop-filter: blur(14px) saturate(1.04);
-  border: 1px solid color-mix(in srgb, var(--zy-line) 72%, transparent);
-  border-radius: var(--zy-radius-lg);
+.launchpad-page__header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.72fr);
-  gap: var(--zy-sp-5);
+  grid-template-columns: minmax(240px, 1fr) minmax(360px, 520px);
+  gap: 24px;
   align-items: center;
-  min-width: 0;
-  padding: var(--zy-sp-5);
-  position: relative;
-  overflow: hidden;
-  box-shadow: var(--zy-shadow-soft);
-  isolation: isolate;
 }
 
-@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-  .asset-launchpad {
-    background: var(--zy-surface);
-  }
-}
-
-.asset-launchpad::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background-image:
-    linear-gradient(to right, rgba(37, 99, 235, 0.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(37, 99, 235, 0.04) 1px, transparent 1px);
-  background-size: 32px 32px;
-  pointer-events: none;
-  mask-image: linear-gradient(to bottom, black 0%, transparent 70%);
-}
-
-.asset-launchpad__copy,
-.asset-launchpad__recommend {
-  position: relative;
-  z-index: 2;
-}
-
-.asset-launchpad__copy {
-  display: grid;
-  gap: var(--zy-sp-2);
-  max-width: 700px;
-}
-
-.asset-launchpad__copy h2 {
+.launchpad-page__header h1 {
   margin: 0;
-  color: var(--zy-ink);
-  font-size: var(--zy-fs-3xl);
-  font-weight: var(--zy-fw-semi);
+  color: var(--ux4-text-strong);
+  font-size: 24px;
   line-height: 1.25;
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
-.asset-launchpad__copy p,
-.asset-launchpad__recommend p {
-  margin: 0;
-  color: var(--zy-text-soft);
-  font-size: var(--zy-fs-sm);
-  line-height: 1.7;
+.launchpad-page__header p {
+  margin: 6px 0 0;
+  color: var(--ux4-text-muted);
+  font-size: 14px;
+  line-height: 1.6;
 }
 
-.asset-launchpad__recommend {
+.launchpad-page__tools {
   display: grid;
-  gap: var(--zy-sp-3);
-  min-width: 0;
-  padding: var(--zy-sp-4);
-  border: var(--zy-border-soft);
-  border-radius: var(--zy-radius-base);
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: var(--zy-shadow-xs);
-}
-
-.asset-launchpad__recommend > span {
-  color: var(--zy-blue-700);
-  font-size: var(--zy-fs-xs);
-  font-weight: var(--zy-fw-bold);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.asset-launchpad__recommend strong {
-  color: var(--zy-ink);
-  font-size: var(--zy-fs-xl);
-  font-weight: var(--zy-fw-semi);
-  line-height: 1.35;
-}
-
-.asset-launchpad__tags,
-.asset-launchpad__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--zy-sp-2);
-  min-width: 0;
-}
-
-.asset-hero__section-head {
-  display: flex;
+  grid-template-columns: minmax(260px, 1fr) auto;
+  gap: 12px;
   align-items: center;
-  flex-wrap: wrap;
-  gap: var(--zy-sp-2) var(--zy-sp-3);
+}
+
+.launchpad-search :deep(.el-input__wrapper) {
+  min-height: 44px;
+  border-radius: 10px;
+}
+
+.launchpad-create-alert {
+  margin-bottom: 16px;
+}
+
+.launchpad-create-form {
+  display: grid;
+  gap: 2px;
+}
+
+.launchpad-create-form__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.launchpad-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 14px;
   min-width: 0;
 }
 
-.asset-hero__section-head strong {
-  color: var(--zy-ink);
-  font-size: var(--zy-fs-base);
-  font-weight: var(--zy-fw-semi);
+.launchpad-main,
+.launchpad-sidebar {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
 }
 
-.asset-hero__section-head small {
-  color: var(--zy-muted);
-  font-size: var(--zy-fs-xs);
+.launchpad-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) minmax(360px, 1.05fr);
+  gap: 14px;
+  min-width: 0;
+}
+
+.launchpad-panel {
+  border: 1px solid var(--ux4-border-soft);
+  border-radius: 12px;
+  background: var(--ux4-surface);
+  box-shadow: var(--ux4-shadow-card);
+  min-width: 0;
+}
+
+.launchpad-section-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 10px;
+}
+
+.launchpad-section-title strong {
+  color: var(--ux4-text-strong);
+  font-size: 18px;
+  line-height: 1.35;
+  font-weight: 700;
+}
+
+.launchpad-section-title span {
+  color: var(--ux4-text-muted);
+  font-size: 12px;
   line-height: 1.5;
 }
 
-/* ---- Flow / 三步工作链 ---- */
-.asset-hero__workflow,
-.asset-hero__status,
-.asset-hero__risk {
-  display: grid;
-  gap: var(--zy-sp-3);
+.launchpad-section-title--row {
+  align-items: center;
 }
 
-.asset-flow {
+.launchpad-recommend {
+  padding-bottom: 14px;
+}
+
+.launchpad-recommend__card {
+  margin: 0 16px;
+  border: 1px solid var(--ux4-border-soft);
+  border-radius: 10px;
+  overflow: hidden;
+  background: oklch(0.995 0.004 255);
+}
+
+.launchpad-recommend__cover {
+  min-height: 128px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--zy-sp-3);
+  align-content: end;
+  gap: 14px;
+  padding: 18px;
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  isolation: isolate;
+}
+
+.launchpad-recommend__cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(90deg, rgba(20, 48, 112, 0.78), rgba(20, 48, 112, 0.08)),
+    linear-gradient(180deg, rgba(16, 38, 84, 0.1), rgba(16, 38, 84, 0.34));
+}
+
+.launchpad-recommend__cover strong {
+  max-width: 22em;
+  color: oklch(0.99 0.004 255);
+  font-size: 20px;
+  line-height: 1.35;
+  font-weight: 700;
+}
+
+.launchpad-recommend__meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 14px 16px 4px;
+}
+
+.launchpad-recommend__meta div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.launchpad-recommend__meta dt {
+  color: var(--ux4-text-muted);
+  font-size: 12px;
+}
+
+.launchpad-recommend__meta dd {
+  margin: 0;
+  color: var(--ux4-text-strong);
+  font-size: 13px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.launchpad-recommend__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 16px 14px;
+}
+
+.launchpad-empty,
+.launchpad-side-empty {
+  display: grid;
+  gap: 6px;
+  margin: 0 16px 16px;
+  padding: 18px;
+  border: 1px dashed var(--ux4-border);
+  border-radius: 10px;
+  color: var(--ux4-text-muted);
+  font-size: 13px;
+}
+
+.launchpad-empty strong {
+  color: var(--ux4-text-strong);
+}
+
+.launchpad-empty p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.launchpad-todo__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 22px 16px 16px;
+}
+
+.launchpad-todo-card {
+  appearance: none;
+  min-height: 174px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 11px;
+  border: 1px solid var(--ux4-border-soft);
+  border-radius: 10px;
+  background: oklch(0.998 0.004 255);
+  color: var(--ux4-text);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: center;
+  transition:
+    transform var(--ux4-motion-base) var(--ux4-ease),
+    border-color var(--ux4-motion-base) var(--ux4-ease),
+    box-shadow var(--ux4-motion-base) var(--ux4-ease);
+}
+
+.launchpad-todo-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--ux4-blue-border);
+  box-shadow: var(--ux4-shadow-raised);
+}
+
+.launchpad-todo-card:focus-visible {
+  outline: 3px solid var(--ux4-focus);
+  outline-offset: 2px;
+}
+
+.launchpad-todo-card__icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  font-weight: 800;
+}
+
+.launchpad-todo-card.is-red .launchpad-todo-card__icon {
+  color: oklch(0.62 0.19 25);
+  background: var(--ux4-red-soft);
+}
+
+.launchpad-todo-card.is-amber .launchpad-todo-card__icon {
+  color: oklch(0.62 0.15 75);
+  background: var(--ux4-amber-soft);
+}
+
+.launchpad-todo-card.is-blue .launchpad-todo-card__icon {
+  color: var(--ux4-blue);
+  background: var(--ux4-blue-soft);
+}
+
+.launchpad-todo-card.is-green .launchpad-todo-card__icon {
+  color: oklch(0.56 0.15 155);
+  background: var(--ux4-green-soft);
+}
+
+.launchpad-todo-card > span:not(.launchpad-todo-card__icon) {
+  color: var(--ux4-text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.launchpad-todo-card strong {
+  color: oklch(0.18 0.055 260);
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.launchpad-todo-card em {
+  color: var(--ux4-blue);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.launchpad-filters {
+  display: grid;
+  grid-template-columns: 150px 170px 170px minmax(280px, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+  padding: 14px 16px;
+  border: 1px solid var(--ux4-border-soft);
+  border-radius: 12px;
+  background: var(--ux4-surface);
+  box-shadow: var(--ux4-shadow-card);
+}
+
+.launchpad-filters label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.launchpad-filters label > span {
+  color: var(--ux4-text-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.launchpad-filters :deep(.el-select),
+.launchpad-filters :deep(.el-date-editor) {
+  width: 100%;
+}
+
+.launchpad-projects {
+  overflow: hidden;
+}
+
+.launchpad-projects__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--ux4-border-soft);
+}
+
+.launchpad-projects__header strong {
+  color: var(--ux4-text-strong);
+  font-size: 16px;
+}
+
+.launchpad-projects__header strong span {
+  color: var(--ux4-text-muted);
+  font-weight: 600;
+}
+
+.launchpad-projects__header p {
+  margin: 4px 0 0;
+  color: var(--ux4-text-muted);
+  font-size: 12px;
+}
+
+.launchpad-table {
+  --el-table-header-bg-color: oklch(0.985 0.008 255);
+  --el-table-row-hover-bg-color: oklch(0.972 0.018 255);
+  border: none;
+  box-shadow: none;
+}
+
+.launchpad-table :deep(.el-table__row td:first-child::before) {
+  display: none;
+}
+
+.launchpad-project-title {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.launchpad-project-title strong {
+  color: var(--ux4-text-strong);
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.launchpad-project-title span,
+.launchpad-code {
+  color: var(--ux4-text);
+  font-size: 12px;
+}
+
+.launchpad-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.launchpad-phase {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border-radius: 7px;
+  background: var(--ux4-blue-soft);
+  color: var(--ux4-blue);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 8px;
+}
+
+.launchpad-progress {
+  display: inline-block;
+  width: 72px;
+  height: 6px;
+  border-radius: 999px;
+  background: oklch(0.91 0.018 255);
+  vertical-align: middle;
+  overflow: hidden;
+}
+
+.launchpad-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, oklch(0.55 0.18 257), oklch(0.62 0.15 257));
+}
+
+.launchpad-progress-text {
+  margin-left: 8px;
+  color: var(--ux4-text);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.launchpad-risk-pill,
+.launchpad-side-list b {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0 9px;
+}
+
+.launchpad-risk-pill.is-high,
+.launchpad-side-list b.is-high {
+  color: oklch(0.58 0.18 25);
+  background: var(--ux4-red-soft);
+  border: 1px solid var(--ux4-red-border);
+}
+
+.launchpad-risk-pill.is-medium,
+.launchpad-side-list b.is-medium {
+  color: oklch(0.58 0.14 75);
+  background: var(--ux4-amber-soft);
+  border: 1px solid var(--ux4-amber-border);
+}
+
+.launchpad-risk-pill.is-low,
+.launchpad-side-list b.is-low {
+  color: oklch(0.48 0.13 155);
+  background: var(--ux4-green-soft);
+  border: 1px solid var(--ux4-green-border);
+}
+
+.launchpad-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.launchpad-row-actions :deep(.el-button) {
+  margin-left: 0;
+}
+
+.launchpad-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--ux4-border-soft);
+}
+
+.launchpad-pagination > span {
+  color: var(--ux4-text-muted);
+  font-size: 12px;
+}
+
+.launchpad-status {
+  padding-bottom: 14px;
+}
+
+.launchpad-donut-wrap {
+  display: grid;
+  grid-template-columns: 138px minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  padding: 16px 18px 18px;
+}
+
+.launchpad-donut {
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  position: relative;
+  box-shadow: inset 0 0 0 1px var(--ux4-border-soft);
+}
+
+.launchpad-donut::after {
+  content: "";
+  position: absolute;
+  inset: 22px;
+  border-radius: inherit;
+  background: var(--ux4-surface);
+  box-shadow: 0 0 0 1px var(--ux4-border-soft);
+}
+
+.launchpad-donut__content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.launchpad-donut__content span {
+  color: var(--ux4-text-strong);
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.launchpad-donut__content em {
+  color: var(--ux4-text-muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1;
+}
+
+.launchpad-status__legend {
+  display: grid;
+  gap: 13px;
   margin: 0;
   padding: 0;
   list-style: none;
-  position: relative;
 }
 
-.asset-flow__step {
-  position: relative;
-  background: var(--zy-surface-soft);
-  border: var(--zy-border-soft);
-  border-radius: var(--zy-radius-base);
-  padding: var(--zy-sp-4);
+.launchpad-status__legend li {
   display: grid;
-  gap: var(--zy-sp-2);
-  align-content: start;
-  transition:
-    border-color var(--zy-duration-2) var(--zy-ease),
-    transform var(--zy-duration-2) var(--zy-ease);
+  grid-template-columns: 10px 1fr auto;
+  gap: 9px;
+  align-items: center;
+  min-width: 0;
 }
 
-.asset-flow__step::after {
-  content: "→";
-  position: absolute;
-  right: -10px;
-  top: 50%;
-  transform: translateY(-50%);
+.launchpad-status__legend span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.launchpad-status__legend strong,
+.launchpad-status__legend em {
+  color: var(--ux4-text);
+  font-size: 13px;
+  font-style: normal;
+}
+
+.launchpad-status__legend em {
+  color: var(--ux4-text-muted);
+  font-weight: 650;
+}
+
+.launchpad-side-list {
+  display: grid;
+  gap: 0;
+  padding: 0 12px 14px;
+}
+
+.launchpad-side-list button {
+  appearance: none;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 76px;
+  border: 0;
+  border-bottom: 1px solid oklch(0.9 0.02 25);
+  background: oklch(0.975 0.025 25);
+  color: var(--ux4-text);
+  cursor: pointer;
+  font-family: inherit;
+  padding: 12px;
+  text-align: left;
+}
+
+.launchpad-side-list button:first-child {
+  border-radius: 10px 10px 0 0;
+}
+
+.launchpad-side-list button:last-child {
+  border-bottom: 0;
+  border-radius: 0 0 10px 10px;
+}
+
+.launchpad-side-list button:hover {
+  background: oklch(0.965 0.035 25);
+}
+
+.launchpad-side-list__alert {
   width: 18px;
   height: 18px;
   display: grid;
   place-items: center;
-  background: var(--zy-bg);
-  border: var(--zy-border-soft);
-  border-radius: 999px;
-  color: var(--zy-subtle);
-  font-size: 11px;
-  z-index: 2;
+  border-radius: 50%;
+  background: oklch(0.62 0.18 25);
+  color: oklch(0.99 0.004 255);
+  font-size: 12px;
+  font-weight: 800;
 }
 
-.asset-flow__step:last-child::after {
-  display: none;
-}
-
-.asset-flow__step:hover {
-  border-color: rgba(37, 99, 235, 0.28);
-}
-
-.asset-flow__head {
-  display: flex;
-  align-items: center;
-  gap: var(--zy-sp-2);
-}
-
-.asset-flow__num {
-  display: inline-grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--zy-radius-sm);
-  background: var(--zy-blue-50);
-  color: var(--zy-blue-700);
-  font-family: var(--zy-font-mono);
-  font-size: var(--zy-fs-xs);
-  font-weight: var(--zy-fw-bold);
-  letter-spacing: 0;
-  line-height: 1;
-}
-
-.asset-flow__head strong {
-  color: var(--zy-ink);
-  font-size: var(--zy-fs-base);
-  font-weight: var(--zy-fw-semi);
-}
-
-.asset-flow__step p {
-  margin: 0;
-  color: var(--zy-text-soft);
-  font-size: var(--zy-fs-xs);
-  line-height: 1.7;
-}
-
-.asset-flow__cta {
-  appearance: none;
-  background: transparent;
-  border: none;
-  color: var(--zy-blue-700);
-  font-family: inherit;
-  font-size: var(--zy-fs-xs);
-  font-weight: var(--zy-fw-semi);
-  padding: 6px 0 0;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  justify-self: start;
-  letter-spacing: 0.02em;
-  transition: gap var(--zy-duration-2) var(--zy-ease);
-}
-
-.asset-flow__cta:hover:not(:disabled) {
-  gap: 8px;
-}
-
-.asset-flow__cta:disabled {
-  color: var(--zy-subtle);
-  cursor: not-allowed;
-}
-
-.asset-flow__cta span {
-  font-family: var(--zy-font-mono);
-}
-
-/* ---- 当前视图统计 ---- */
-.asset-status-grid,
-.asset-risk-strip {
-  display: grid;
-  gap: var(--zy-sp-2);
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  min-width: 0;
-}
-
-.asset-status-grid article,
-.asset-risk-strip article {
-  background: var(--zy-surface);
-  border: var(--zy-border-soft);
-  border-radius: var(--zy-radius-base);
-  padding: var(--zy-sp-3) var(--zy-sp-4);
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  position: relative;
-  transition: border-color var(--zy-duration-2) var(--zy-ease);
-}
-
-.asset-status-grid article:hover,
-.asset-risk-strip article:hover {
-  border-color: var(--zy-line);
-}
-
-.asset-status-grid__label,
-.asset-risk-strip__label {
-  color: var(--zy-muted);
-  font-size: var(--zy-fs-xs);
-  letter-spacing: 0;
-  display: flex;
-  align-items: center;
-}
-
-.asset-status-grid__value,
-.asset-risk-strip strong {
-  color: var(--zy-ink);
-  font-size: var(--zy-fs-3xl);
-  font-weight: var(--zy-fw-bold);
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-  font-variant-numeric: tabular-nums;
-}
-
-.asset-status-grid__unit,
-.asset-risk-strip em {
-  color: var(--zy-muted);
-  font-size: 11px;
-  font-style: normal;
-  line-height: 1.4;
-}
-
-.asset-risk-strip article.is-warning {
-  background: var(--zy-amber-50);
-  border-color: rgba(245, 158, 11, 0.28);
-}
-
-.asset-risk-strip article.is-warning strong {
-  color: #b45309;
-}
-
-.asset-risk-strip article.is-warning .asset-risk-strip__label {
-  color: #92400e;
-}
-
-/* ---- 项目入口台 ---- */
-.asset-entry-lanes {
-  display: grid;
-  grid-template-columns: minmax(280px, 1.2fr) repeat(2, minmax(220px, 1fr));
-  gap: var(--zy-sp-4);
-  min-width: 0;
-}
-
-.asset-entry-card {
-  display: grid;
-  align-content: start;
-  gap: var(--zy-sp-3);
-  min-width: 0;
-  padding: var(--zy-sp-4);
-  border: var(--zy-border);
-  border-radius: var(--zy-radius-base);
-  background: var(--zy-surface);
-  box-shadow: var(--zy-shadow-xs);
-  position: relative;
-  overflow: hidden;
-}
-
-.asset-entry-card::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: var(--zy-sp-4);
-  bottom: var(--zy-sp-4);
-  width: 3px;
-  border-radius: 0 2px 2px 0;
-  background: var(--zy-blue-500);
-}
-
-.asset-entry-card--primary {
-  background:
-    linear-gradient(135deg, rgba(239, 246, 255, 0.78), rgba(255, 255, 255, 0.94)),
-    var(--zy-surface);
-}
-
-.asset-entry-card__eyebrow {
-  color: var(--zy-blue-700);
-  font-size: var(--zy-fs-xs);
-  font-weight: var(--zy-fw-bold);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.asset-entry-card strong {
-  color: var(--zy-ink);
-  font-size: var(--zy-fs-lg);
-  font-weight: var(--zy-fw-semi);
-  line-height: 1.35;
-}
-
-.asset-entry-card p {
-  margin: 0;
-  color: var(--zy-text-soft);
-  font-size: var(--zy-fs-sm);
-  line-height: 1.7;
-}
-
-.asset-entry-card__meta,
-.asset-entry-card__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--zy-sp-2);
-  min-width: 0;
-}
-
-.asset-summary-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--zy-sp-3);
-  min-width: 0;
-  padding: 6px 0;
-  border-top: var(--zy-border-soft);
-}
-
-.asset-summary-row span {
-  color: var(--zy-muted);
-  font-size: var(--zy-fs-xs);
-}
-
-.asset-summary-row em {
-  color: var(--zy-ink);
-  font-size: var(--zy-fs-sm);
-  font-style: normal;
-  font-weight: var(--zy-fw-semi);
-}
-
-.asset-overview-more {
-  border: var(--zy-border);
-  border-radius: var(--zy-radius-base);
-  background: var(--zy-surface);
-  box-shadow: var(--zy-shadow-xs);
-  overflow: hidden;
-}
-
-.asset-overview-more :deep(.el-collapse),
-.asset-overview-more :deep(.el-collapse-item__wrap) {
-  border: 0;
-}
-
-.asset-overview-more :deep(.el-collapse-item__header) {
-  min-height: 48px;
-  padding: 0 var(--zy-sp-4);
-  border: 0;
-}
-
-.asset-overview-more :deep(.el-collapse-item__content) {
-  display: grid;
-  gap: var(--zy-sp-3);
-  padding: 0 var(--zy-sp-4) var(--zy-sp-4);
-}
-
-.asset-overview-more__title {
-  margin-right: var(--zy-sp-2);
-  color: var(--zy-ink);
-  font-weight: var(--zy-fw-semi);
-}
-
-.asset-overview-more small {
-  color: var(--zy-muted);
-  font-size: var(--zy-fs-xs);
-  font-weight: var(--zy-fw-regular);
-}
-
-.asset-entry-list {
-  display: grid;
-  gap: var(--zy-sp-2);
-  min-width: 0;
-}
-
-.asset-entry-list button {
-  appearance: none;
-  border: var(--zy-border-soft);
-  border-radius: var(--zy-radius-base);
-  background: var(--zy-surface-soft);
-  color: inherit;
-  cursor: pointer;
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  padding: var(--zy-sp-2) var(--zy-sp-3);
-  text-align: left;
-  transition:
-    border-color var(--zy-duration-2) var(--zy-ease),
-    background var(--zy-duration-2) var(--zy-ease);
-}
-
-.asset-entry-list button:hover {
-  background: var(--zy-blue-50);
-  border-color: rgba(37, 99, 235, 0.24);
-}
-
-.asset-entry-list span {
-  color: var(--zy-ink);
-  font-size: var(--zy-fs-sm);
-  font-weight: var(--zy-fw-medium);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.asset-entry-list em {
-  color: var(--zy-muted);
-  font-size: var(--zy-fs-xs);
-  font-style: normal;
-}
-
-.asset-table-section {
-  display: grid;
-  gap: var(--zy-sp-3);
-  min-width: 0;
-}
-
-.asset-table-section__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--zy-sp-4);
-  min-width: 0;
-  padding: var(--zy-sp-4);
-  border: var(--zy-border);
-  border-radius: var(--zy-radius-base);
-  background: var(--zy-surface);
-}
-
-.asset-table-section__header > div {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.asset-table-section__header strong {
-  color: var(--zy-ink);
-  font-size: var(--zy-fs-lg);
-  font-weight: var(--zy-fw-semi);
-}
-
-.asset-table-section__header p {
-  margin: 0;
-  color: var(--zy-muted);
-  font-size: var(--zy-fs-xs);
-  line-height: 1.6;
-}
-
-/* ---- 表格内文案 ---- */
-.asset-title-cell {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.asset-title-cell strong {
-  color: var(--zy-ink);
-  font-weight: var(--zy-fw-semi);
-  font-family: var(--zy-font-mono);
-  font-size: var(--zy-fs-xs);
-  letter-spacing: 0;
-}
-
-.asset-title-cell span {
-  color: var(--zy-text-soft);
-  font-size: var(--zy-fs-sm);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.asset-kind-tags,
-.asset-foundation-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  min-width: 0;
-}
-
-.asset-governance-cell {
+.launchpad-side-list span:not(.launchpad-side-list__alert) {
   display: grid;
   gap: 6px;
   min-width: 0;
 }
 
-.asset-governance-cell small {
-  color: var(--zy-muted);
-  font-size: var(--zy-fs-xs);
-  line-height: 1.5;
-  overflow-wrap: anywhere;
+.launchpad-side-list strong {
+  color: var(--ux4-text-strong);
+  font-size: 13px;
+  font-weight: 750;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.asset-governance-trail {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  min-width: 0;
+.launchpad-side-list em {
+  color: var(--ux4-text-muted);
+  font-size: 12px;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.asset-governance-trail span {
-  background: var(--zy-bg);
-  border: var(--zy-border-soft);
-  border-radius: var(--zy-radius-sm);
-  color: var(--zy-muted);
-  font-size: 11px;
-  font-weight: var(--zy-fw-medium);
-  line-height: 1;
-  padding: 4px 6px;
+.launchpad-notices {
+  padding-bottom: 14px;
 }
 
-.asset-governance-trail span.is-done {
-  background: var(--zy-green-50);
-  border-color: rgba(34, 197, 94, 0.22);
-  color: #047857;
+.launchpad-notices ul {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 8px 18px 18px;
+  list-style: none;
 }
 
-.asset-governance-trail span.is-current {
-  background: var(--zy-blue-50);
-  border-color: rgba(59, 130, 246, 0.26);
-  color: var(--zy-blue-700);
-  font-weight: var(--zy-fw-bold);
-}
-
-.asset-row-actions {
-  display: flex;
+.launchpad-notices li {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  gap: 10px;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 2px;
 }
 
-.asset-row-actions :deep(.el-button) {
-  margin-left: 0;
+.launchpad-notices li span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ux4-blue);
+}
+
+.launchpad-notices strong {
+  color: var(--ux4-text);
+  font-size: 13px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.launchpad-notices time {
+  color: var(--ux4-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+@media (max-width: 1280px) {
+  .launchpad-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .launchpad-sidebar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 960px) {
-  .asset-launchpad {
-    grid-template-columns: 1fr;
-    padding: var(--zy-sp-4);
-  }
-
-  .asset-entry-lanes {
-    grid-template-columns: 1fr;
-  }
-
-  .asset-search,
-  .asset-sort {
-    width: 100%;
-  }
-
-  .asset-flow {
+  .launchpad-page__header,
+  .launchpad-page__tools,
+  .launchpad-hero-grid,
+  .launchpad-filters,
+  .launchpad-sidebar {
     grid-template-columns: 1fr;
   }
 
-  .asset-flow__step::after {
-    display: none;
+  .launchpad-todo__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .asset-table-section__header {
+  .launchpad-recommend__meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .launchpad-pagination {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .launchpad-todo-card {
+    transition: none;
+  }
+
+  .launchpad-todo-card:hover {
+    transform: none;
   }
 }
 </style>

@@ -33,6 +33,12 @@ const router = createRouter({
       meta: { guestOnly: true }
     },
     {
+      path: '/visualization/glandar-viewer-embed',
+      name: 'glandar-model-preview-embed',
+      component: () => import('@/modules/visualization/pages/GlandarModelPreviewPage.vue'),
+      meta: { embeddedViewer: true }
+    },
+    {
       path: '/',
       component: () => import('@/modules/core/layout/AppLayout.vue'),
       meta: { requiresAuth: true },
@@ -51,6 +57,12 @@ const router = createRouter({
           path: 'access-pending',
           name: 'access-pending',
           component: () => import('@/modules/core/pages/AccessPendingPage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
+          path: 'profile',
+          name: 'user-profile',
+          component: () => import('@/modules/core/pages/UserProfilePage.vue'),
           meta: { requiresAuth: true }
         },
         {
@@ -114,6 +126,12 @@ const router = createRouter({
           meta: { requiresAuth: true }
         },
         {
+          path: 'data-steward/file-service',
+          name: 'data-steward-file-service',
+          component: () => import('@/modules/data-steward/pages/DataStewardFileServicePage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
           path: 'data-steward/agent-preview',
           name: 'data-steward-agent-preview',
           component: () => import('@/modules/data-steward/pages/AgentPreviewPage.vue'),
@@ -126,8 +144,15 @@ const router = createRouter({
           meta: { requiresAuth: true }
         },
         {
+          path: 'visualization/glandar-viewer',
+          name: 'glandar-model-preview',
+          component: () => import('@/modules/visualization/pages/GlandarModelPreviewPage.vue'),
+          meta: { requiresAuth: true }
+        },
+        {
           path: 'digital-twin',
-          redirect: '/bim-collaboration',
+          name: 'digital-twin',
+          component: () => import('@/modules/visualization/pages/DigitalTwinPortalPage.vue'),
           meta: { requiresAuth: true }
         },
         {
@@ -314,6 +339,13 @@ router.beforeEach(async (to) => {
   const authStore = useAuthStore();
   authStore.hydrate();
 
+  if (to.name === 'glandar-model-preview' && (to.query.embedded === '1' || to.query.embedded === 'true')) {
+    return {
+      name: 'glandar-model-preview-embed',
+      query: to.query
+    };
+  }
+
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return { name: 'login' };
   }
@@ -333,7 +365,7 @@ router.beforeEach(async (to) => {
     return { name: noProjectUser ? 'access-pending' : 'data-steward-assets' };
   }
 
-  if (to.meta.requiresAuth && noProjectUser && to.name !== 'access-pending') {
+  if (to.meta.requiresAuth && noProjectUser && !['access-pending', 'user-profile'].includes(String(to.name ?? ''))) {
     return { name: 'access-pending' };
   }
 
@@ -345,13 +377,21 @@ router.beforeEach(async (to) => {
     return { name: 'data-steward-assets' };
   }
 
+  if (to.name === 'bim-collaboration') {
+    return true;
+  }
+
   const legacyTargetName = legacyProjectRouteMap[String(to.name ?? '')];
   if (legacyTargetName) {
     const projectId = authStore.currentProjectId;
     if (projectId) {
       return { name: legacyTargetName, params: { projectId } };
     }
-    return { name: 'data-steward-assets' };
+    return { name: 'data-steward-assets', query: { selectProject: '1' } };
+  }
+
+  if (to.name === 'digital-twin') {
+    return { name: 'bim-collaboration', query: to.query };
   }
 
   const routeProjectId = Number(to.params.projectId);

@@ -1,14 +1,14 @@
 # 二期当前路线交接
 
-更新时间：2026-05-25
+更新时间：2026-05-29
 
 ## 当前主线
 
-当前分支：以实际开发 agent 所在分支为准，当前 M3F 使用 `codex/m3f-object-storage-first-write`
+当前分支：`codex/m3g-nas-minio-real-project-object-storage`
 
 当前 active 批次：
 
-`M3F：新文件对象存储优先写入与 NAS 兼容回退`
+`待用户确认`
 
 主线健康度：
 
@@ -23,9 +23,48 @@
 - 9A 客户交付准备不启动。
 - M3A / M3B / M3C-0 / M3C-1 / M3C / M3D / M3E 已收口。
 - M3F 已收口，新增上传文件已优先进入对象存储。
-- NAS 侧 MinIO 接管真实项目文件后置为 M3G。
+- M3G-1 已收口，NAS 侧 MinIO readiness、全项目对象化盘点和单项目 dry-run 已可用。
+- M3G-2 已收口，105 项目历史文件完成受控小批对象化灰度。
+- M3G-3 已收口，多真实项目对象化规划和 dry-run 已可用。
+- M3G-4 已收口，受控多项目小批对象化执行已可用。
+- M3G-5 已收口，文件管理器项目全局搜索与存储展示修复已完成。
+- M3G-5-F1 已收口，`fileKeyword` 搜索模式仍显示文件夹的实际使用问题已修复。
+- `M3G-6R：105 对象化长跑执行与进度控制` 已收口。
+- `M3G-6S：105 对象化持续跑批至治理边界` 已收口，105 已达到 `2928 / 2928` 全量对象化。
+- `M3G-6S-F1：105 历史 active object version 与当前 NAS 侧 MinIO 对齐修复` 已收口。
+- `M3G-6T：对象化后文件业务视图与工程树交付映射` 已收口。
+- `M3G-7：多真实项目对象化 Wave 1` 已收口。
+- `M3G-7R：全项目对象化扩大跑批` 已收口。
+- `M3G-8-F1：M3G-7R 回归脚本饱和环境修复` 已收口。
+- `M3G-8：对象优先读取与 NAS fallback 收口` 已收口。
+- 当前 active 批次为 `待用户确认`。
 
 ## 当前最新裁决
+
+`M3G-1：NAS 侧 MinIO 就绪检查、全项目对象化盘点与 dry-run 计划` 已正式收口。
+
+M3G-1 只做：
+
+- NAS 侧 MinIO readiness。
+- 全项目对象化覆盖率盘点。
+- 单项目对象化 dry-run 计划。
+
+M3G-1 不做：
+
+- 不执行真实历史文件对象化迁移。
+- 不移动、删除、重命名真实 NAS 文件。
+- 不做 Hermes 正文问答。
+- 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
+- 不读取文件正文。
+
+M3G-1 收口依据：
+
+- 收口记录：`handoff/main-agent/m3g1-nas-minio-readiness-inventory-closure.md`
+- 开发报告：`handoff/dev-agent/latest-report.md`
+- 测试报告：`handoff/test-agent/latest-report.md`
+- 配置交接：`handoff/main-agent/m3g1-nas-minio-ops-preparation.md`
+
+以下为历史收口记录：
 
 `M3A：对象存储与 StorageService 基线` 已正式收口。
 
@@ -79,13 +118,14 @@ M3B 收口依据：
 
 后续阶段顺序：
 
-1. `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`（待用户确认）
+1. `M3G-9：全项目对象化覆盖率报告与 M3 收口`（下一步建议）
 2. `M4：语义证据层`
 3. `M5：Hermes 受控证据问答`
 
 后续 M3-M5 统一任务图：
 
 - `handoff/main-agent/m3-storage-evidence-chain-todo.md`
+- `handoff/main-agent/m3-m5-storage-evidence-task-graph.md`
 - 后续 M3 系列批次应以该任务图为准，完成一项勾选一项。
 - 未完成契约冻结、资产 UUID 与证据边界前，不得直接进入 Hermes 正文问答。
 
@@ -98,9 +138,8 @@ M3B 收口依据：
 - `M3E：预览与转换产物对象化` 已完成。
 - `M3F：新文件对象存储优先写入与 NAS 兼容回退` 已收口。
 - 下一步优先级：
-  1. 提交 / 推送 M3F。
-  2. `M3G：NAS 侧 MinIO 对象存储接管真实项目文件`。
-  3. `M4A：documents / chunks 语义证据契约`
+  1. `M3G-9：全项目对象化覆盖率报告与 M3 收口`。
+  2. M3 收口后才允许启动 `M4A：documents / chunks 语义证据契约`。
 
 以下为历史收口记录：
 
@@ -361,11 +400,51 @@ M3E 已确认未做：
 - 真实 CAD / BIM 转换。
 - DWG / RVT 深层内容解析。
 
+## M3G-2 收口状态
+
+最近完成批次：
+
+`M3G-2：105 项目历史文件对象化上传灰度`
+
+本批已正式收口。
+
+完成情况：
+
+- 105 首批历史文件已对象化。
+- 对象化文件通过受控 `file-access` 读取。
+- 未对象化文件继续以 `NAS_ONLY` 走 NAS 链路。
+- NAS 原项目资料未移动、未删除、不改名。
+
+当前读取策略：
+
+- 已有 active object version 的文件，优先通过对象存储读取。
+- 没有 active object version 的文件，继续走原 NAS 台账链路。
+- 标记 `OBJECT_STORED` 但对象副本不可读时 fail-closed，不静默回退 NAS。
+
+M3G-2 完成后，后续进入多项目分批对象化前必须先规划容量、速率、并发、失败重试和运维观察窗口。
+
+## M3G-3 收口状态
+
+最近完成批次：
+
+`M3G-3：多真实项目分批对象化策略与任务中心增强`
+
+本批已正式收口。
+
+完成情况：
+
+- 多项目对象化盘点已增强，能够区分真实项目与测试 / 样例项目。
+- 多项目 dry-run 能按项目生成计划，并回显文件数、容量、并发、限速、单项目和总量限制。
+- dry-run 不创建真实迁移任务、不复制文件、不修改 NAS。
+- 文件服务页已提供“多项目对象化规划”入口。
+
+M3G-3 收口后，再评估是否进入 `M3G-4：受控多项目小批对象化执行`。
+
 下一步候选：
 
-`M3G：NAS 侧 MinIO 对象存储接管真实项目文件`
+`M3G-4：受控多项目小批对象化执行`
 
-M3G 应在 M3F 验证新增文件对象存储优先写入后启动，负责把对象存储主链路切换到 NAS 侧 MinIO，并把历史真实项目按项目 / 目录 / 文件类型 / 大小范围分批镜像到 NAS 侧 MinIO。M4A 语义证据契约继续后置，不直接进入向量库写入或 Hermes 正文问答。
+M4A 语义证据契约继续后置，不直接进入向量库写入或 Hermes 正文问答。
 
 ## 后续路线
 

@@ -2,8 +2,8 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-${1:-http://localhost:8080}}"
-ADMIN_USER="${ADMIN_USER:-platform.admin}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-Admin@123}"
+ADMIN_USER="${ADMIN_USER:-admin}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-123456}"
 PROJECT_ID="${PROJECT_ID:-1}"
 DB_CONTAINER="${DB_CONTAINER:-delivery-mysql}"
 DB_NAME="${DB_NAME:-delivery_platform}"

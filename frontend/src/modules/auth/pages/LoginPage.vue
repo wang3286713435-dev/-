@@ -15,7 +15,7 @@
       </div>
 
       <el-alert type="info" :closable="false" show-icon>
-        <template #title>样板账号：platform.admin / Admin@123</template>
+        <template #title>请使用管理员下发的手机号 / 用户名和初始密码登录。</template>
       </el-alert>
 
       <el-form
@@ -25,8 +25,8 @@
         class="login-form"
         @submit.prevent="handleSubmit"
       >
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="form.username" size="large" placeholder="请输入用户名" />
+        <el-form-item label="手机号 / 用户名" prop="username">
+          <el-input v-model="form.username" size="large" placeholder="请输入手机号或用户名" />
         </el-form-item>
         <el-form-item label="密码" prop="password">
           <el-input
@@ -51,41 +51,49 @@
 
       <div class="login-helper">
         <span>还没有账号？</span>
-        <el-button text type="primary" @click="router.push({ name: 'register' })">手机号注册</el-button>
+        <el-button text type="primary" @click="router.push({ name: 'register' })">账号注册</el-button>
       </div>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import ParticleField from '@/modules/core/components/ParticleField.vue';
 import { useSpotlight } from '@/modules/core/composables/useSpotlight';
 import { useAuthStore } from '@/stores/auth';
 
 const authStore = useAuthStore();
+const route = useRoute();
 const router = useRouter();
 const submitting = ref(false);
 const shellRef = ref<HTMLElement | null>(null);
 
 useSpotlight(shellRef);
 
+onMounted(() => {
+  if (route.query.fresh === '1' || route.query.fresh === 'true') {
+    authStore.reset();
+  }
+});
+
 const form = reactive({
-  username: 'platform.admin',
-  password: 'Admin@123'
+  username: '',
+  password: ''
 });
 
 const rules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  username: [{ required: true, message: '请输入手机号或用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 };
 
 async function handleSubmit() {
   submitting.value = true;
   try {
+    authStore.reset();
     await authStore.signIn(form.username, form.password);
     ElMessage.success('登录成功');
     const target = authStore.currentUser?.projects.length === 0 ? 'access-pending' : 'data-steward-assets';

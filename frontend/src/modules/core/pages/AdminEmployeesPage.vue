@@ -3,14 +3,15 @@
     <div class="mvp-page__header">
       <div>
         <h1>员工权限</h1>
-        <p>管理员工账号状态，并按项目分配查看者、交付工程师或项目管理员角色。</p>
+        <p>创建员工账号，控制账号状态，并分配项目角色。</p>
       </div>
       <div class="mvp-page__actions">
+        <el-button type="primary" :icon="Plus" @click="openCreateDialog">新增员工</el-button>
         <el-input
           v-model.trim="filters.keyword"
           class="employee-search"
           clearable
-          placeholder="姓名、手机号"
+          placeholder="姓名、用户名、手机号"
           :prefix-icon="Search"
           @keyup.enter="loadEmployees"
           @clear="loadEmployees"
@@ -27,11 +28,18 @@
       type="info"
       :closable="false"
       show-icon
-      title="项目授权采用全量覆盖：保存时，表格里的项目角色就是该员工最终可访问范围。"
+      title="保存授权后，表格中的项目就是该员工可访问范围。"
     />
 
     <el-table v-loading="loading" :data="employees" class="master-table" empty-text="暂无员工账号">
-      <el-table-column prop="displayName" label="姓名" min-width="140" show-overflow-tooltip />
+      <el-table-column label="员工" min-width="170" show-overflow-tooltip>
+        <template #default="{ row }">
+          <div class="employee-user-cell">
+            <strong>{{ row.displayName }}</strong>
+            <span>{{ row.username }}</span>
+          </div>
+        </template>
+      </el-table-column>
       <el-table-column prop="phoneNumber" label="手机号" width="150" show-overflow-tooltip>
         <template #default="{ row }">{{ row.phoneNumber || row.username }}</template>
       </el-table-column>
@@ -71,10 +79,35 @@
       </el-table-column>
     </el-table>
 
+    <el-dialog v-model="createDialogVisible" title="新增员工" width="520px">
+      <el-form label-position="top" class="employee-create-form">
+        <el-form-item label="用户名">
+          <el-input v-model.trim="createForm.username" placeholder="例如 zhangsan" maxlength="32" />
+        </el-form-item>
+        <el-form-item label="手机号">
+          <el-input v-model.trim="createForm.phoneNumber" placeholder="员工手机号" maxlength="11" />
+        </el-form-item>
+        <el-form-item label="姓名">
+          <el-input v-model.trim="createForm.displayName" placeholder="员工姓名" maxlength="128" />
+        </el-form-item>
+        <el-form-item label="部门">
+          <el-input v-model.trim="createForm.departmentName" placeholder="可选" maxlength="128" />
+        </el-form-item>
+        <el-form-item label="初始密码">
+          <el-input v-model="createForm.password" type="password" show-password placeholder="至少 6 位" maxlength="64" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="creating" @click="createAccount">创建并授权</el-button>
+      </template>
+    </el-dialog>
+
     <el-drawer v-model="drawerVisible" title="员工项目授权" size="760px">
       <div v-if="detail" class="employee-drawer">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="姓名">{{ detail.displayName }}</el-descriptions-item>
+          <el-descriptions-item label="用户名">{{ detail.username }}</el-descriptions-item>
           <el-descriptions-item label="手机号">{{ detail.phoneNumber || detail.username }}</el-descriptions-item>
           <el-descriptions-item label="部门">{{ detail.departmentName || '-' }}</el-descriptions-item>
           <el-descriptions-item label="状态">
@@ -135,6 +168,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue';
 
 import {
+  createEmployee,
   deleteEmployee,
   fetchAssignableProjects,
   fetchEmployeeDetail,
@@ -167,12 +201,21 @@ const filters = reactive({
 });
 const loading = ref(false);
 const saving = ref(false);
+const creating = ref(false);
+const createDialogVisible = ref(false);
 const drawerVisible = ref(false);
 const employees = ref<EmployeeSummary[]>([]);
 const detail = ref<EmployeeDetail | null>(null);
 const assignableProjects = ref<AssignableProject[]>([]);
 const roleOptions = ref<ProjectRoleOption[]>([]);
 const assignmentDrafts = ref<AssignmentDraft[]>([]);
+const createForm = reactive({
+  username: '',
+  phoneNumber: '',
+  displayName: '',
+  departmentName: '',
+  password: ''
+});
 
 const firstAvailableProject = computed(() => {
   const selected = new Set(assignmentDrafts.value.map((item) => item.projectId).filter(Boolean));
@@ -217,6 +260,52 @@ async function openEmployee(userId: number) {
     drawerVisible.value = true;
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '员工详情加载失败');
+  }
+}
+
+function openCreateDialog() {
+  createForm.username = '';
+  createForm.phoneNumber = '';
+  createForm.displayName = '';
+  createForm.departmentName = '';
+  createForm.password = '';
+  createDialogVisible.value = true;
+}
+
+async function createAccount() {
+  if (!/^[A-Za-z][A-Za-z0-9._-]{2,31}$/.test(createForm.username)) {
+    ElMessage.error('用户名需以字母开头，支持字母、数字、点、下划线和短横线，长度 3-32 位');
+    return;
+  }
+  if (!/^1[3-9]\d{9}$/.test(createForm.phoneNumber)) {
+    ElMessage.error('请输入有效手机号');
+    return;
+  }
+  if (!createForm.displayName) {
+    ElMessage.error('请输入员工姓名');
+    return;
+  }
+  if (createForm.password.length < 6) {
+    ElMessage.error('初始密码至少 6 位');
+    return;
+  }
+  creating.value = true;
+  try {
+    const created = await createEmployee({
+      username: createForm.username,
+      phoneNumber: createForm.phoneNumber,
+      displayName: createForm.displayName,
+      departmentName: createForm.departmentName || undefined,
+      password: createForm.password
+    });
+    createDialogVisible.value = false;
+    await loadEmployees();
+    await openEmployee(created.userId);
+    ElMessage.success('员工已创建，请分配项目权限');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '员工创建失败');
+  } finally {
+    creating.value = false;
   }
 }
 
@@ -327,3 +416,27 @@ function formatDate(value: string | null) {
   return date.toLocaleString('zh-CN', { hour12: false });
 }
 </script>
+
+<style scoped>
+.employee-user-cell {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.employee-user-cell strong {
+  color: var(--zy-text-strong);
+  font-weight: var(--zy-fw-semi);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.employee-user-cell span {
+  color: var(--zy-text-muted);
+  font-size: var(--zy-fs-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+</style>

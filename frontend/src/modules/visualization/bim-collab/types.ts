@@ -87,6 +87,37 @@ export interface BimSceneNode {
   actionHint: string;
 }
 
+export interface BimEmbeddedPreviewModel extends BimSceneNode {
+  frameUrl: string;
+  fileManagerUrl?: string;
+  sizeLabel?: string;
+}
+
+export interface BimLightweightSummary {
+  totalModelFiles: number;
+  readyCount: number;
+  pendingCount: number;
+  failedCount: number;
+  allModels?: BimLightweightModelItem[];
+  readyModels: BimEmbeddedPreviewModel[];
+}
+
+export interface BimLightweightModelItem {
+  id: string;
+  fileId: number;
+  assetUuid: string;
+  fileName: string;
+  extension: string;
+  sizeLabel: string;
+  versionNo: string;
+  statusLabel: string;
+  actionHint: string;
+  lightweightStatus: string;
+  viewerAvailable: boolean;
+  supported: boolean;
+  fileManagerUrl: string;
+}
+
 export interface BimTimelineEvent {
   id: string;
   title: string;
@@ -95,6 +126,7 @@ export interface BimTimelineEvent {
 }
 
 export interface BimCollaborationData {
+  projectId: number;
   projectName: string;
   projectCode: string;
   projectStage: string;

@@ -3,8 +3,8 @@
 set -euo pipefail
 
 BASE_URL="${1:-http://localhost:8080}"
-USERNAME="${2:-platform.admin}"
-PASSWORD="${3:-Admin@123}"
+USERNAME="${2:-admin}"
+PASSWORD="${3:-123456}"
 TARGET_PROJECT_ID="${4:-2}"
 
 login_response="$(curl -sS -X POST "${BASE_URL}/api/core/auth/login" \

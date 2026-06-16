@@ -72,6 +72,160 @@ public final class VisualizationDtos {
     ) {
     }
 
+    public record LightweightJobCreateResponse(
+        Long projectId,
+        Long integrationId,
+        Long modelFileId,
+        String modelName,
+        String modelFormat,
+        String jobId,
+        String lightweightName,
+        String uniqueCode,
+        String modelAccessAddress,
+        String engineMode,
+        Boolean taskCreated,
+        String taskStatus,
+        Integer progressPercent,
+        String statusLabel,
+        String actionHint,
+        String blockedReason,
+        Boolean realUploadExecuted,
+        Boolean realConversionExecuted,
+        Boolean modelBodyRead,
+        Boolean nasFileTouched,
+        Boolean viewerAvailable,
+        List<String> supportedOperations,
+        List<String> forbiddenOperations
+    ) {
+    }
+
+    public record LightweightJobResponse(
+        Long projectId,
+        String jobId,
+        Long modelFileId,
+        String lightweightName,
+        String uniqueCode,
+        String modelAccessAddress,
+        String engineMode,
+        String taskStatus,
+        Integer progressPercent,
+        String statusLabel,
+        String blockedReason,
+        Boolean viewerAvailable,
+        Boolean realUploadExecuted,
+        Boolean realConversionExecuted,
+        String lastErrorCode,
+        String lastErrorMessage,
+        Instant updatedAt
+    ) {
+    }
+
+    public record LightweightViewerTicketResponse(
+        Long projectId,
+        String jobId,
+        String engineMode,
+        Boolean viewerAvailable,
+        Boolean ticketIssued,
+        String viewerTicket,
+        Instant expiresAt,
+        String launchUrl,
+        String lightweightName,
+        String modelAccessAddress,
+        String engineStaticBase,
+        String statusLabel,
+        String blockedReason,
+        List<String> supportedOperations,
+        List<String> forbiddenOperations,
+        Boolean featurePickingAvailable,
+        Boolean modelExplosionAvailable,
+        Boolean componentPropertyAvailable
+    ) {
+    }
+
+    public record GlandarComponentPropertyResponse(
+        Long projectId,
+        String jobId,
+        String lightweightName,
+        String featureId,
+        String revitId,
+        String source,
+        Boolean propertyAvailable,
+        String unavailableReason,
+        Integer propertyCount,
+        List<GlandarComponentPropertyGroup> groups
+    ) {
+    }
+
+    public record GlandarComponentPropertyGroup(
+        String groupName,
+        String setName,
+        List<GlandarComponentPropertyItem> properties
+    ) {
+    }
+
+    public record GlandarComponentPropertyItem(
+        String name,
+        String value,
+        String typeName
+    ) {
+    }
+
+    public record GlandarRvtPilotFileResponse(
+        Long projectId,
+        Long fileId,
+        String assetUuid,
+        String fileName,
+        String modelFormat,
+        Long sizeBytes,
+        Integer pilotRank,
+        Boolean inPilot,
+        String latestJobId,
+        String lightweightName,
+        String taskStatus,
+        Integer progressPercent,
+        Boolean viewerAvailable,
+        String statusLabel,
+        String actionHint,
+        String blockedReason,
+        Instant updatedAt
+    ) {
+    }
+
+    public record GlandarModelFileResponse(
+        Long projectId,
+        Long fileId,
+        String assetUuid,
+        String fileName,
+        String extension,
+        String fileKind,
+        Long sizeBytes,
+        String versionNo,
+        String relativePathHint,
+        String lightweightStatus,
+        String latestJobId,
+        String taskStatus,
+        Integer progress,
+        String failureReason,
+        Boolean viewerAvailable,
+        Boolean supported,
+        String unsupportedReason,
+        String statusLabel,
+        String actionHint,
+        Instant updatedAt
+    ) {
+    }
+
+    public record GlandarReadyModelProjectResponse(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        String projectManagerName,
+        String roleName,
+        Integer readyModelCount,
+        List<GlandarModelFileResponse> models
+    ) {
+    }
+
     public record ManagedObjectContextItem(
         Long id,
         String code,

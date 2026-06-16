@@ -8,13 +8,9 @@
       </div>
       <div class="bim-collab-hero__actions">
         <el-tag effect="plain" round>{{ dashboard ? `项目 ${dashboard.project.projectId}` : '等待项目上下文' }}</el-tag>
-        <el-switch
-          v-model="darkThemeEnabled"
-          active-text="深色"
-          inactive-text="浅色"
-          inline-prompt
-          @change="persistTheme"
-        />
+        <el-button plain @click="toggleTheme">
+          {{ darkThemeEnabled ? '切换浅色' : '切换深色' }}
+        </el-button>
         <el-button :icon="Refresh" :loading="loading" @click="loadPage">刷新平台数据</el-button>
       </div>
     </header>
@@ -30,14 +26,6 @@
     <el-empty v-if="!loading && !dashboard && !errorMessage" description="请选择项目后查看 BIM 协同窗口" />
 
     <template v-if="dashboard && bimData">
-      <section class="bim-collab-summary" aria-label="平台项目数据摘要">
-        <article v-for="item in kpiCards" :key="item.label">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-          <em>{{ item.hint }}</em>
-        </article>
-      </section>
-
       <main class="bim-collab-window-card" v-loading="loading" aria-label="平台内 BIM 协同窗口">
         <div class="bim-collab-window-card__header">
           <div>
@@ -53,16 +41,6 @@
 
         <div ref="bimHostRef" class="bim-collab-react-host" />
       </main>
-
-      <section class="bim-collab-footnote">
-        <div>
-          <span>下一步建议</span>
-          <strong>{{ dashboard.deliverySummary.nextActionText }}</strong>
-        </div>
-        <ul>
-          <li v-for="item in dashboard.safetyBoundary.guarantees.slice(0, 3)" :key="item">{{ item }}</li>
-        </ul>
-      </section>
     </template>
   </section>
 </template>
@@ -76,11 +54,26 @@ import { createRoot, type Root } from 'react-dom/client';
 
 import BimCollaborationIsland from '@/modules/visualization/bim-collab/BimCollaborationIsland';
 import { mapDashboardToBimCollab } from '@/modules/visualization/bim-collab/mapDashboardToBimCollab';
-import type { BimThemeMode } from '@/modules/visualization/bim-collab/types';
+import type { BimLightweightSummary, BimMetric, BimThemeMode } from '@/modules/visualization/bim-collab/types';
 import {
   fetchDigitalTwinDashboard,
+  fetchGlandarModelFiles,
+  type GlandarModelFile,
   type DigitalTwinDashboard
 } from '@/modules/visualization/api/visualization';
+import type { BimEmbeddedPreviewModel } from '@/modules/visualization/bim-collab/types';
+import {
+  fetchFileOwnershipCoverage,
+  fetchFileOwnershipTree,
+  type FileOwnershipCoverage,
+  type FileOwnershipTree
+} from '@/modules/data-steward/api/dataSteward';
+import {
+  fetchSectionTree,
+  fetchStandardStatus,
+  type SectionNode,
+  type StandardStatus
+} from '@/modules/master-data/api/masterData';
 import { useAuthStore } from '@/stores/auth';
 
 const THEME_STORAGE_KEY = 'delivery:bim-collab-theme';
@@ -89,23 +82,97 @@ const authStore = useAuthStore();
 const route = useRoute();
 const loading = ref(false);
 const dashboard = ref<DigitalTwinDashboard | null>(null);
+const modelFiles = ref<GlandarModelFile[]>([]);
+const standardStatus = ref<StandardStatus | null>(null);
+const sectionTree = ref<SectionNode[]>([]);
+const ownershipCoverage = ref<FileOwnershipCoverage | null>(null);
+const ownershipTree = ref<FileOwnershipTree | null>(null);
 const errorMessage = ref('');
 const bimHostRef = ref<HTMLElement | null>(null);
 const darkThemeEnabled = ref(readInitialTheme() === 'dark');
 let bimRoot: Root | null = null;
 
 const routeProjectId = computed(() => Number(route.params.projectId));
+const routeQueryProjectId = computed(() => Number(route.query.projectId));
 const projectId = computed(() => {
   const routeId = routeProjectId.value;
   if (Number.isFinite(routeId) && routeId > 0) return routeId;
+  const queryId = routeQueryProjectId.value;
+  if (Number.isFinite(queryId) && queryId > 0) return queryId;
   return authStore.currentProjectId;
 });
 
 const themeMode = computed<BimThemeMode>(() => (darkThemeEnabled.value ? 'dark' : 'light'));
-const projectLabel = computed(() => authStore.currentUser?.currentProject?.name ?? '等待项目上下文');
+const projectLabel = computed(() => {
+  const selectedProject = authStore.currentUser?.projects.find((item) => item.id === projectId.value);
+  return selectedProject?.name ?? authStore.currentUser?.currentProject?.name ?? '等待项目上下文';
+});
 const bimData = computed(() => (dashboard.value ? mapDashboardToBimCollab(dashboard.value) : null));
+const sortedModelFiles = computed(() => (
+  [...modelFiles.value].sort((left, right) => {
+    const rankDiff = lightweightSortRank(left) - lightweightSortRank(right);
+    if (rankDiff !== 0) return rankDiff;
+    const scoreDiff = scoreModelCompleteness(right) - scoreModelCompleteness(left);
+    if (scoreDiff !== 0) return scoreDiff;
+    return (left.fileId ?? 0) - (right.fileId ?? 0);
+  })
+));
+const embeddedPreviewModels = computed<BimEmbeddedPreviewModel[]>(() => {
+  const currentProjectId = projectId.value;
+  if (!currentProjectId) return [];
+  return sortedModelFiles.value
+    .filter((item) => item.viewerAvailable && item.latestJobId)
+    .sort((left, right) => scoreModelCompleteness(right) - scoreModelCompleteness(left))
+    .map((item) => ({
+      id: `glandar-${item.fileId}`,
+      modelFileId: item.fileId,
+      label: item.fileName,
+      meta: `文件 ${item.fileId} · ${formatBytes(item.sizeBytes)}`,
+      modelFormat: item.extension || 'RVT',
+      versionNo: item.versionNo || 'V1',
+      integrationStatus: 'GLANDAR_READY',
+      status: 'normal',
+      weight: Math.max(item.sizeBytes ?? 1, 1),
+      previewStatus: 'AVAILABLE',
+      previewMode: 'GLANDAR_VIEWER',
+      conversionStatus: item.taskStatus || 'READY',
+      viewerAvailable: true,
+      statusLabel: normalizedLightweightStatusLabel(item),
+      actionHint: '已通过葛兰岱尔轻量化，可在当前 BIM 协同窗口内直接预览。',
+      fileManagerUrl: `/data-steward/assets/${currentProjectId}?tab=files&fileKeyword=${encodeURIComponent(item.fileName)}&lastFileId=${item.fileId}`,
+      sizeLabel: formatBytes(item.sizeBytes),
+      frameUrl: `/visualization/glandar-viewer-embed?projectId=${currentProjectId}&jobId=${encodeURIComponent(item.latestJobId || '')}&fileName=${encodeURIComponent(item.fileName)}&modelFileId=${item.fileId}&embedded=1&theme=${themeMode.value}`
+    }));
+});
+const lightweightSummary = computed<BimLightweightSummary>(() => {
+  const totalModelFiles = modelFiles.value.length || dashboard.value?.assetSummary.modelFileCount || 0;
+  const readyModels = embeddedPreviewModels.value;
+  const failedCount = modelFiles.value.filter((item) => item.taskStatus === 'FAILED').length;
+  return {
+    totalModelFiles,
+    readyCount: readyModels.length,
+    pendingCount: Math.max(totalModelFiles - readyModels.length, 0),
+    failedCount,
+    allModels: sortedModelFiles.value.map((item) => ({
+      id: `glandar-${item.fileId}`,
+      fileId: item.fileId,
+      assetUuid: item.assetUuid,
+      fileName: item.fileName,
+      extension: item.extension || 'UNKNOWN',
+      sizeLabel: formatBytes(item.sizeBytes),
+      versionNo: item.versionNo || 'V1',
+      statusLabel: normalizedLightweightStatusLabel(item),
+      actionHint: item.actionHint || item.unsupportedReason || '可在文件管理中查看模型轻量化状态。',
+      lightweightStatus: item.lightweightStatus,
+      viewerAvailable: item.viewerAvailable,
+      supported: item.supported,
+      fileManagerUrl: `/data-steward/assets/${projectId.value}?tab=files&fileKeyword=${encodeURIComponent(item.fileName)}&lastFileId=${item.fileId}`
+    })),
+    readyModels
+  };
+});
 
-const kpiCards = computed(() => {
+const kpiCards = computed<BimMetric[]>(() => {
   const item = dashboard.value;
   if (!item) return [];
   return [
@@ -119,7 +186,7 @@ const kpiCards = computed(() => {
 });
 
 watch(projectId, () => loadPage(), { immediate: true });
-watch([bimData, themeMode], () => renderBimWindow());
+watch([bimData, themeMode, embeddedPreviewModels, lightweightSummary, kpiCards], () => renderBimWindow());
 
 onMounted(() => renderBimWindow());
 onBeforeUnmount(() => {
@@ -128,7 +195,8 @@ onBeforeUnmount(() => {
 });
 
 async function loadPage() {
-  if (!projectId.value) {
+  const targetProjectId = projectId.value;
+  if (!targetProjectId) {
     dashboard.value = null;
     renderBimWindow();
     return;
@@ -136,13 +204,65 @@ async function loadPage() {
   loading.value = true;
   errorMessage.value = '';
   try {
-    dashboard.value = await fetchDigitalTwinDashboard(projectId.value);
+    if (!(await ensureProjectContext(targetProjectId))) {
+      dashboard.value = null;
+      modelFiles.value = [];
+      renderBimWindow();
+      return;
+    }
+    dashboard.value = await fetchDigitalTwinDashboard(targetProjectId);
+    await Promise.all([
+      loadModelFiles(),
+      loadMasterDataContext(targetProjectId)
+    ]);
   } catch (error) {
     dashboard.value = null;
+    standardStatus.value = null;
+    sectionTree.value = [];
+    ownershipCoverage.value = null;
+    ownershipTree.value = null;
     errorMessage.value = error instanceof Error ? error.message : 'BIM 协同窗口数据加载失败';
   } finally {
     loading.value = false;
   }
+}
+
+async function ensureProjectContext(targetProjectId: number) {
+  if (authStore.currentProjectId === targetProjectId) return true;
+  try {
+    await authStore.changeProject(targetProjectId);
+    return true;
+  } catch {
+    errorMessage.value = '当前账号无法切换到该项目，请确认项目授权后重试。';
+    return false;
+  }
+}
+
+async function loadModelFiles() {
+  if (!projectId.value) {
+    modelFiles.value = [];
+    return;
+  }
+  try {
+    modelFiles.value = await fetchGlandarModelFiles(projectId.value);
+    renderBimWindow();
+  } catch {
+    modelFiles.value = [];
+    renderBimWindow();
+  }
+}
+
+async function loadMasterDataContext(targetProjectId: number) {
+  const [standardResult, sectionResult, coverageResult, treeResult] = await Promise.allSettled([
+    fetchStandardStatus(targetProjectId),
+    fetchSectionTree(targetProjectId),
+    fetchFileOwnershipCoverage(targetProjectId),
+    fetchFileOwnershipTree(targetProjectId)
+  ]);
+  standardStatus.value = standardResult.status === 'fulfilled' ? standardResult.value : null;
+  sectionTree.value = sectionResult.status === 'fulfilled' ? sectionResult.value : [];
+  ownershipCoverage.value = coverageResult.status === 'fulfilled' ? coverageResult.value : null;
+  ownershipTree.value = treeResult.status === 'fulfilled' ? treeResult.value : null;
 }
 
 function renderBimWindow() {
@@ -152,13 +272,63 @@ function renderBimWindow() {
       bimRoot = createRoot(bimHostRef.value);
     }
     const data = bimData.value;
-    bimRoot.render(data ? createElement(BimCollaborationIsland, { data, theme: themeMode.value }) : null);
+    bimRoot.render(data ? createElement(BimCollaborationIsland, {
+      data,
+      embeddedPreviewModels: embeddedPreviewModels.value,
+      lightweightSummary: lightweightSummary.value,
+      heroMetrics: kpiCards.value,
+      standardStatus: standardStatus.value,
+      sectionTree: sectionTree.value,
+      ownershipCoverage: ownershipCoverage.value,
+      ownershipTree: ownershipTree.value,
+      theme: themeMode.value
+    }) : null);
   });
 }
 
 function persistTheme() {
   localStorage.setItem(THEME_STORAGE_KEY, themeMode.value);
   renderBimWindow();
+}
+
+function toggleTheme() {
+  darkThemeEnabled.value = !darkThemeEnabled.value;
+  persistTheme();
+}
+
+function scoreModelCompleteness(item: GlandarModelFile) {
+  const name = item.fileName || '';
+  let score = item.sizeBytes ?? 0;
+  if (name.includes('全楼层')) score += 10_000_000_000;
+  if (name.includes('全楼') || name.includes('全栋')) score += 8_000_000_000;
+  if (/\d+\s*栋/.test(name)) score += 2_000_000_000;
+  if (item.viewerAvailable && item.latestJobId) score += 1_000_000_000;
+  return score;
+}
+
+function lightweightSortRank(item: GlandarModelFile) {
+  const status = item.taskStatus || item.lightweightStatus;
+  if (item.viewerAvailable && item.latestJobId) return 0;
+  if (status === 'READY') return 0;
+  if (status === 'RUNNING' || status === 'SUBMITTED' || status === 'UPLOADED') return 1;
+  if (status === 'FAILED') return 2;
+  if (!item.supported || status === 'UNSUPPORTED') return 4;
+  return 3;
+}
+
+function normalizedLightweightStatusLabel(item: GlandarModelFile) {
+  const status = item.taskStatus || item.lightweightStatus;
+  if (item.viewerAvailable && item.latestJobId) return '已轻量化';
+  if (!item.supported || status === 'UNSUPPORTED') return '暂不支持';
+  return lightweightStatusLabel(status);
+}
+
+function lightweightStatusLabel(value: string | null | undefined) {
+  if (value === 'READY') return '已轻量化';
+  if (value === 'RUNNING') return '处理中';
+  if (value === 'FAILED') return '轻量化失败';
+  if (value === 'UNSUPPORTED') return '暂不支持';
+  return '未轻量化';
 }
 
 function readInitialTheme(): BimThemeMode {
@@ -234,8 +404,7 @@ function engineModeLabel(value: string | null | undefined) {
   min-width: 0;
 }
 
-.bim-collab-hero__title span,
-.bim-collab-footnote span {
+.bim-collab-hero__title span {
   color: var(--bim-accent);
   font-size: var(--zy-fs-xs);
   font-weight: var(--zy-fw-semi);
@@ -261,43 +430,69 @@ function engineModeLabel(value: string | null | undefined) {
   justify-content: flex-end;
 }
 
-.bim-collab-summary {
-  display: grid;
-  gap: var(--zy-sp-3);
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-}
-
-.bim-collab-summary article,
-.bim-collab-window-card,
-.bim-collab-footnote {
+.bim-collab-window-card {
   background: var(--bim-panel);
   border: 1px solid var(--bim-line);
   border-radius: var(--zy-radius-base);
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
 }
 
-.bim-collab-summary article {
-  display: grid;
-  gap: 4px;
-  min-height: 82px;
-  min-width: 0;
-  padding: var(--zy-sp-3);
-}
-
-.bim-collab-summary span,
-.bim-collab-summary em,
-.bim-collab-window-card__header span,
-.bim-collab-footnote li {
+.bim-collab-window-card__header span {
   color: var(--bim-muted);
   font-size: var(--zy-fs-xs);
   font-style: normal;
 }
 
-.bim-collab-summary strong {
+.bim-collab-inline-viewer {
+  border: 1px solid var(--bim-line);
+  border-radius: 12px;
+  display: grid;
+  gap: var(--zy-sp-3);
+  min-width: 0;
+  padding: var(--zy-sp-3);
+}
+
+.bim-collab-inline-viewer__head {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--zy-sp-3);
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.bim-collab-inline-viewer__head > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bim-collab-inline-viewer__head span {
+  color: var(--bim-accent);
+  font-size: var(--zy-fs-xs);
+  font-weight: var(--zy-fw-semi);
+}
+
+.bim-collab-inline-viewer__head h3 {
   color: var(--bim-text);
-  font-size: var(--zy-fs-2xl);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
+  font-size: var(--zy-fs-lg);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bim-collab-inline-viewer__head p {
+  color: var(--bim-muted);
+  font-size: var(--zy-fs-xs);
+  margin: 0;
+}
+
+.bim-collab-inline-viewer__head > div:last-child {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zy-sp-2);
+  justify-content: flex-end;
 }
 
 .bim-collab-window-card {
@@ -330,8 +525,7 @@ function engineModeLabel(value: string | null | undefined) {
   gap: 2px;
 }
 
-.bim-collab-window-card__header strong,
-.bim-collab-footnote strong {
+.bim-collab-window-card__header strong {
   color: var(--bim-text);
   font-weight: var(--zy-fw-semi);
 }
@@ -342,41 +536,7 @@ function engineModeLabel(value: string | null | undefined) {
   overflow: hidden;
 }
 
-.bim-collab-footnote {
-  align-items: center;
-  display: grid;
-  gap: var(--zy-sp-4);
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.9fr);
-  padding: var(--zy-sp-4);
-}
-
-.bim-collab-footnote > div {
-  display: grid;
-  gap: var(--zy-sp-2);
-  min-width: 0;
-}
-
-.bim-collab-footnote ul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--zy-sp-2);
-  justify-content: flex-end;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.bim-collab-footnote li {
-  border: 1px solid var(--bim-line);
-  border-radius: 999px;
-  padding: 4px 10px;
-}
-
 @media (max-width: 1280px) {
-  .bim-collab-summary {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
   .bim-collab-window-card {
     min-height: 960px;
   }
@@ -384,18 +544,13 @@ function engineModeLabel(value: string | null | undefined) {
 
 @media (max-width: 860px) {
   .bim-collab-hero,
-  .bim-collab-window-card__header,
-  .bim-collab-footnote {
+  .bim-collab-window-card__header {
     display: grid;
   }
 
-  .bim-collab-hero__actions,
-  .bim-collab-footnote ul {
+  .bim-collab-hero__actions {
     justify-content: flex-start;
   }
 
-  .bim-collab-summary {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

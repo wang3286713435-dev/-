@@ -6,6 +6,8 @@ import com.zhuoyu.delivery.datasteward.asset.application.AssetApplicationService
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.AccessTicketCreateRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.AccessTicketResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.AssetProjectArchiveRequest;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.AssetProjectArchiveResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.AssetProjectCreateRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.AssetProjectResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.AssetProjectUpdateRequest;
@@ -25,6 +27,7 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.PathMappingRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.PathMappingResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.PathMappingUpdateRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.PreviewArtifactResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ProjectLifecycleCreateResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ReviewUpdateRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ScanCandidateResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ScanReportResponse;
@@ -96,6 +99,21 @@ public class AssetController {
     @PostMapping("/projects")
     public ApiResponse<AssetProjectResponse> createProject(@Valid @RequestBody AssetProjectCreateRequest request) {
         return ApiResponse.success(assetApplicationService.createProject(currentUserId(), request));
+    }
+
+    @PostMapping("/projects:lifecycle-create")
+    public ApiResponse<ProjectLifecycleCreateResponse> createProjectLifecycle(
+        @Valid @RequestBody AssetProjectCreateRequest request
+    ) {
+        return ApiResponse.success(assetApplicationService.createProjectLifecycle(currentUserId(), request));
+    }
+
+    @PostMapping("/projects/{projectId}:archive")
+    public ApiResponse<AssetProjectArchiveResponse> archiveProject(
+        @PathVariable Long projectId,
+        @RequestBody AssetProjectArchiveRequest request
+    ) {
+        return ApiResponse.success(assetApplicationService.archiveProject(currentUserId(), projectId, request));
     }
 
     @PatchMapping("/projects/{projectId}")
@@ -377,6 +395,12 @@ public class AssetController {
             .contentType(MediaType.parseMediaType(access.contentType()))
             .contentLength(access.contentLength())
             .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+            .header("X-Delivery-Storage-Status", safeHeader(access.storageStatus()))
+            .header("X-Delivery-Read-Source", safeHeader(access.readSource()))
+            .header("X-Delivery-Fallback-Used", String.valueOf(Boolean.TRUE.equals(access.fallbackUsed())))
+            .header("X-Delivery-Fallback-Reason", safeHeader(access.fallbackReason()))
+            .header("X-Delivery-Storage-Health", safeHeader(access.storageHealth()))
+            .header("X-Delivery-Object-Readable", String.valueOf(Boolean.TRUE.equals(access.objectReadable())))
             .body(access.resource());
     }
 
@@ -434,5 +458,12 @@ public class AssetController {
     private static String fileName(MultipartFile file) {
         String name = file.getOriginalFilename();
         return name != null && !name.isBlank() ? name : "UPLOAD";
+    }
+
+    private static String safeHeader(String value) {
+        if (value == null || value.isBlank()) {
+            return "UNKNOWN";
+        }
+        return value.replaceAll("[\\r\\n]+", " ").trim();
     }
 }

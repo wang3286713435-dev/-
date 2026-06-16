@@ -61,7 +61,49 @@ flowchart LR
   V["visualization-adapter"] --> BIM["第三方 BIM/轻量化引擎"]
 ```
 
-一期先实现 `NAS + 元数据入库 + 待审核队列 + SQL View + 事件流`。二期在不改变上层业务接口的前提下接入对象存储、搜索索引、模型轻量化和构件级能力。
+一期先实现 `NAS + 元数据入库 + 待审核队列 + SQL View + 事件流`。当前 M3 已把对象存储主链路推进到 `NAS 侧 MinIO + MySQL 台账 + active object version + 受控 file-access`。搜索索引、语义证据层和构件级 BIM 能力仍在后续 M4/M5/8D/8E。
+
+### 2.3 当前 M3 对象存储架构基线
+
+```mermaid
+flowchart LR
+  NAS["原 NAS 项目资料区\n只读备份 / 回滚来源"] --> MIG["对象化任务\n受控分批 / 幂等 / 审计"]
+  UPLOAD["新上传文件"] --> STORE["StorageService"]
+  MIG --> STORE
+  STORE --> MINIO["NAS 侧 MinIO\n正式对象副本"]
+  STORE --> DB["MySQL\n项目 / 文件 / assetUuid / objectVersion / 权限 / 交付 / 审计"]
+  DB --> ACCESS["file-access 票据\n权限校验 / 审计 / 过期"]
+  MINIO --> ACCESS
+  ACCESS --> FE["前端预览 / 下载 / BIM 协同"]
+  DB --> REPORT["对象化覆盖率报告"]
+```
+
+当前约束：
+
+- 105 项目已完成全量对象化，非 105 项目仍按覆盖率报告分批推进。
+- `data_file_resources` 继续作为业务资产台账，不被对象存储表取代。
+- 对外稳定资产标识优先使用 `assetUuid`，数值 `fileId` 主要用于内部排障和接口兼容。
+- 前端和普通 API 不返回真实 NAS 路径、bucket、object key、`storage_uri`。
+- 对象存储完成只代表文件本体治理完成，不代表正文语义理解完成。
+
+### 2.4 后续语义证据与 Hermes 架构目标
+
+```mermaid
+flowchart LR
+  OBJ["已对象化文件\nassetUuid + objectVersion + checksum"] --> EXTRACT["解析任务\nPDF / Office / OCR 小样本"]
+  EXTRACT --> DOC["semantic_documents"]
+  DOC --> CHUNK["semantic_chunks\npermissionScope + evidenceHash"]
+  CHUNK --> INDEX["向量库 / 关键词索引"]
+  INDEX --> GATEWAY["平台 Evidence API\n权限 / 脱敏 / Missing Evidence"]
+  GATEWAY --> HERMES["Hermes"]
+```
+
+后续约束：
+
+- Hermes 不直连 MySQL、NAS、MinIO、Qdrant 或 OpenSearch。
+- Hermes 只能通过平台 Evidence API 获取脱敏证据。
+- 没有正文证据时必须返回 Missing Evidence，不能把 catalog-only 元数据伪装成正文理解。
+- DWG / RVT / IFC 深度解析和 BIM 构件级能力后置，不阻塞 M4 小样本证据层。
 
 ### 2.2 一期后端数据治理链路
 

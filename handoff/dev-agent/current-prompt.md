@@ -1,235 +1,221 @@
-# 开发 Agent 当前任务：M3F 新文件对象存储优先写入
+# Dev Agent 当前任务：PLM-1 项目生命周期管理 MVP
 
-你是卓羽智能数据中台 v1 的开发 agent。工作目录：
+你是数字化交付平台 v1 的开发 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
-当前分支：
+先阅读并遵守：
 
-`codex/m3f-object-storage-first-write`
-
-## 0. 本批定位
-
-本批是：
-
-`M3F：新文件对象存储优先写入与 NAS 兼容回退`
-
-M3A-M3E 已完成：
-
-- StorageService 与对象存储基础表。
-- assetUuid / storage-status。
-- 对象存储迁移任务中心。
-- 105 真实 NAS 小样本对象存储镜像。
-- PDF / 图片预览产物对象化，以及 DWG / RVT / Office 转换占位。
-
-M3F 的目标是让**新增上传文件**优先进入对象存储，让后续新数据天然走对象存储底座；历史 NAS 文件仍按既有台账和迁移任务逐步处理。
-
-本批不是全量历史项目迁移，也不是 Hermes 正文问答。
-
-## 1. 必须先阅读
-
-开始前先阅读：
-
-- `handoff/main-agent/m3-storage-evidence-chain-todo.md`
-- `handoff/main-agent/m3f-object-storage-first-write-plan.md`
+- `handoff/main-agent/status.md`
+- `handoff/main-agent/decisions.md`
+- `handoff/main-agent/development-log.md`
+- `handoff/main-agent/post-ux4-project-lifecycle-todo.md`
 - `handoff/dev-agent/latest-report.md`
 - `handoff/test-agent/latest-report.md`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageService.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/storage/StorageRepository.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/application/ControlledNasApplicationService.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/controller/ControlledNasController.java`
-- `backend/delivery-data-steward/src/main/java/com/zhuoyu/delivery/datasteward/nas/repository/ControlledNasRepository.java`
-- `frontend/src/modules/data-steward/components/AssetProjectFileBrowser.vue`
-- `frontend/src/modules/data-steward/api/dataSteward.ts`
-- `scripts/dev/check-m3e-preview-artifacts-object-storage.sh`
-- `scripts/dev/check-m3d-real-nas-object-mirror-gray.sh`
 
-重点先确认现状：
+不要修改 `docs/**`。
 
-1. 文件管理器上传当前是否仍走 `ControlledNasApplicationService.uploadFile(...)` 写 NAS。
-2. `StorageService` 目前是否只有 NAS 文件镜像到对象存储能力，是否缺“直接写入对象存储”的能力。
-3. `file-access` 是否能读取 active object version。
-4. 新上传文件如何创建 `data_file_resources`、`asset_uuid`、`data_storage_objects`、`data_file_object_versions`。
+## 0. 批次定位
 
-## 2. 严格边界
+批次名称：
 
-本批允许：
+`PLM-1：项目生命周期管理 MVP`
 
-- 修改后端文件上传链路，使新增文件内容优先写入对象存储。
-- 扩展 `StorageService`，增加受控对象写入能力。
-- 必要时追加 Flyway 迁移；不得修改旧迁移。
-- 更新文件管理器上传后的状态展示。
-- 新增专项脚本。
-- 修改 handoff 报告。
+本批只做最小可用的项目创建与归档能力，不要扩展成完整 PLM 系统。
 
-本批禁止：
+目标是让平台具备真实管理项目生命周期的基础能力：
 
-- 不做全量 NAS 搬迁。
-- 不批量迁移所有项目历史文件。
-- 不移动、删除、重命名、覆盖真实 NAS 文件。
-- 不读取 PDF / Office / DWG / RVT / IFC 正文。
-- 不写 documents / chunks / Qdrant / OpenSearch / Hermes memory。
-- 不新增 Hermes 正文问答。
-- 不进入 BIM 引擎真实接入。
-- 不开放永久删除。
-- 不暴露 `/Volumes`、`smb://`、`nas://`、`storage_uri`、bucket、object_key、raw row、SQL、token、secret。
-- 不修改 `docs/**`。
+1. 超级管理员可以创建项目。
+2. 创建项目时同步初始化对象存储工作区和工程树根节点。
+3. 超级管理员可以二次确认后归档项目。
+4. 归档项目默认不再出现在项目启动台。
+5. 不删除、移动、重命名真实 NAS 文件，也不删除 MinIO 对象。
 
-## 3. 推荐实现口径
+## 1. 当前已有基础，必须优先复用
 
-### A. 新上传文件默认对象存储优先
+优先复用现有能力，不要重造一套项目系统：
 
-文件管理器上传文件时，目标口径是：
+- 项目台账：`core_projects`
+- 项目角色：`core_user_project_roles`
+- 审计日志：`core_audit_logs`
+- 现有项目创建基础：
+  - `AssetController`
+  - `AssetApplicationService#createProject`
+  - `BimAssetRepository#upsertProject`
+  - `BimAssetRepository#grantProjectAdmin`
+- 对象存储基础：
+  - `StorageService`
+  - `data_storage_objects`
+  - `data_file_object_versions`
+- 工程主数据基础：
+  - `masterdata_section_nodes`
+  - section node repository/service
+- 前端项目入口：
+  - `AssetOverviewPage.vue`
 
-1. 校验项目权限、灰度写开关和当前目录权限。
-2. 接收 multipart 文件。
-3. 计算 checksum / size / contentType。
-4. 上传到对象存储 active provider（MinIO / S3-compatible）。
-5. 写入 `data_storage_objects`。
-6. 写入 `data_file_resources` 业务台账。
-7. 写入 `data_file_object_versions`，并标记 active。
-8. 单文件 `storage-status` 返回 `OBJECT_STORED`。
-9. `file-access` 预览 / 下载可读取对象存储内容。
+如果发现已有接口或服务已经能满足，不要新增重复接口。
 
-新增文件不应再为了保存内容而先写入真实业务 NAS 目录。
+## 2. 功能范围
 
-### B. NAS 兼容回退必须受控
+### A. 创建项目
 
-如果对象存储未配置或不可用，请不要静默假成功。
+在资产总览页把“新建项目”从占位提示改成真实弹窗。
 
-推荐策略：
+字段保持最小：
 
-- 默认返回清晰业务错误：`对象存储暂不可用，新增文件未写入`。
-- 如代码中已有明确兼容配置，可支持显式 `OBJECT_FIRST_WITH_NAS_FALLBACK`，但必须：
-  - 写审计。
-  - response / operation log 显示发生 NAS fallback。
-  - storage-status 为 `NAS_ONLY`，不能伪装成 `OBJECT_STORED`。
+- 项目名称
+- 项目编码
+- 项目类型/行业类型，沿用现有字段或默认值
+- 负责人/责任组织，如现有字段支持则保留；不支持不要强行加表
 
-不要把对象存储失败时的 NAS fallback 做成用户无感的默认行为。
+后端创建项目时必须做到：
 
-### C. 空文件夹仍按现有 NAS 目录能力处理
+1. 仅超级管理员可创建。
+2. 校验项目编码和项目名称。
+3. 写入 `core_projects`，优先复用现有 `createProject/upsertProject`。
+4. 给创建人授予该项目 `PROJECT_ADMIN`。
+5. 初始化一个对象存储工作区占位。
+   - 只通过平台 StorageService / MinIO API。
+   - 不暴露 bucket、object key、storage_uri。
+   - object key 必须是不含真实业务路径的 opaque 规则。
+6. 初始化工程树根节点。
+   - 只创建根节点，不自动生成大量模板节点。
+   - 如果根节点已存在，保持幂等，不重复创建。
+7. 写审计日志。
+8. 返回业务化结果：
+   - projectId
+   - projectCode
+   - projectName
+   - projectAdminGranted
+   - storageWorkspaceStatus
+   - sectionRootStatus / sectionRootNodeId
 
-对象存储天然没有真实空目录。本批不要求重做目录模型。
+注意：
 
-保持：
+- 不要读取或扫描真实 NAS。
+- 不要自动创建交付物标准。
+- 不要自动生成完整工程树。
+- 不要宣称项目已经完成工程主数据初始化。
 
-- 新建文件夹仍走现有受控 NAS 目录能力。
-- 历史 NAS 文件仍按既有文件管理器和迁移任务工作。
-- 本批只改变“新增文件内容”的默认落点。
+### B. 归档项目
 
-如需在对象存储中表达逻辑目录，请先在报告中说明，不要大改目录系统。
+资产总览项目行增加“归档项目”操作，仅超级管理员可见。
 
-### D. 业务台账必须继续稳定
+归档必须：
 
-新上传对象存储文件仍必须进入 `data_file_resources`，并具备：
+1. 二次确认。
+2. 要求 `confirmed=true`。
+3. 要求输入项目编码或项目名称进行确认，避免误操作。
+4. 只做软归档/软删除，不做物理删除。
+5. 默认项目列表不再显示归档项目。
+6. 不删除 MinIO 对象。
+7. 不删除真实 NAS 原文件。
+8. 不删除工程主数据、交付记录、审计记录。
+9. 写审计日志。
 
-- `assetUuid`
-- `projectId`
-- `fileName`
-- `fileKind`
-- `extension`
-- `sizeBytes`
-- `checksum`
-- `version`
-- `discipline`
-- 当前目录逻辑路径或相对路径提示
-- `processStatus`
-- `confidenceLevel`
+建议后端语义：
 
-前端和 API 不得返回底层对象定位。用户只能看到平台资产 ID、文件名、类型、大小、预览状态、对象存储状态等业务字段。
+- 如果现有项目列表依赖 `core_projects.deleted=0`，可以将归档项目设为 `deleted=1` 或使用现有归档状态字段，但必须保持软删除语义。
+- 如果已有 `asset_status` / `status` 等字段，按当前项目约定标记为 `ARCHIVED` / `INACTIVE`。
+- 不要物理删除任何业务数据。
 
-### E. 审计与操作记录
+### C. 权限边界
 
-新上传对象存储文件必须写审计或操作记录，至少表达：
+本批的“超级管理员”优先复用现有系统里已经实现的超级管理员判断。
 
-- 谁上传。
-- 上传到哪个项目。
-- 文件名。
-- 写入对象存储是否成功。
-- 是否发生 fallback。
+如果当前后端已有：
 
-审计 / 操作记录不得包含 bucket、object_key、真实 NAS 路径。
+- `admin` 超级管理员
+- `platform.admin`
+- `isSuperAdmin`
+- 员工权限管理里的超级管理员判断
 
-## 4. 建议新增或调整接口
+请直接复用，不要新建一套权限模型。
 
-优先复用现有上传接口：
+普通项目管理员不能创建/归档全局项目。
 
-- `POST /api/data-steward/projects/{projectId}/nas/files:upload`
+## 3. API 建议
 
-外部契约尽量不变，但行为改为对象存储优先。
+优先少新增接口。
 
-如你认为接口名称里的 `nas` 会造成误解，本批不要直接删除旧接口；可以：
+创建项目：
 
-- 保留旧接口兼容。
-- 内部实现转为 object-first。
-- 可新增别名接口，但必须保证旧前端和测试不回归。
+- 优先增强现有 `POST /api/data-steward/assets/projects`
+- 如果兼容风险更低，也可以新增：
+  - `POST /api/data-steward/projects:lifecycle-create`
 
-上传响应建议返回：
+归档项目：
 
-- `fileId`
-- `assetUuid`
-- `projectId`
-- `fileName`
-- `fileKind`
-- `extension`
-- `sizeBytes`
-- `checksum`
-- `storageStatus=OBJECT_STORED`
-- `storageProvider=OBJECT_STORAGE` 或业务化 provider label
-- `message`
+- 建议新增：
+  - `POST /api/data-steward/assets/projects/{projectId}:archive`
 
-绝不返回：
+归档请求体建议：
 
-- bucket
-- object key
+```json
+{
+  "confirmed": true,
+  "confirmText": "项目编码或项目名称"
+}
+```
+
+响应禁止包含：
+
+- `/Volumes`
+- `smb://`
+- `nas://`
 - `storage_uri`
-- 真实 NAS 路径
-- raw row
+- bucket
+- object_key
 - SQL
+- raw row
 - token / secret
 
-## 5. 前端要求
+## 4. 前端要求
 
-最小前端接入即可，不要大改 UI：
+只改必要交互，不做大 UI 重构。
 
-- 文件管理器上传后刷新当前目录。
-- 新上传文件在列表中可见。
-- 新上传文件的存储状态能显示为“对象存储”或 `OBJECT_STORED` 对应业务文案。
-- 文件详情 / 技术信息中可看到平台资产 ID，但不暴露对象 key。
-- 预览 / 下载仍走受控 `file-access`。
-- 对象存储不可用时显示友好错误，不要只弹英文堆栈。
+### 资产总览
 
-## 6. 专项脚本
+1. “新建项目”按钮：
+   - 超级管理员可见并可用。
+   - 非超级管理员隐藏或禁用，并提示联系管理员。
+2. 新建项目弹窗：
+   - 简洁字段。
+   - 创建成功后刷新项目列表。
+   - 可选择进入新项目工作台。
+3. 项目行操作：
+   - 增加“归档项目”。
+   - 仅超级管理员可见。
+   - 二次确认时要求输入项目编码或名称。
+4. 归档成功后刷新列表。
+5. 不新增复杂页面。
+
+## 5. 专项脚本
 
 新增：
 
-`scripts/dev/check-m3f-object-storage-first-write.sh`
+`scripts/dev/check-plm1-project-lifecycle.sh`
 
-脚本至少验证：
+至少验证：
 
-1. 登录管理员。
-2. 准备隔离测试项目或安全测试目录，不能写真实业务目录。
-3. 通过现有上传接口上传一个小文件。
-4. 新文件生成 `assetUuid`。
-5. 新文件 `storage-status=OBJECT_STORED`。
-6. 数据库存在 active object version。
-7. 受控 `file-access` 可读取上传内容。
-8. 响应和访问结果不包含 `/Volumes`、`smb://`、`nas://`、`storage_uri`、bucket、object_key、SQL、raw row、token、secret。
-9. 对象存储不可用场景返回业务错误或明确 fallback 状态，不 500，不假成功。
-10. 未在真实业务 NAS 目录生成新增文件本体。
+1. 超级管理员登录。
+2. 创建唯一测试项目成功。
+3. 创建结果包含项目 ID、项目编码、工程树根节点状态、对象存储工作区状态。
+4. 新项目出现在项目列表。
+5. 创建人拥有该项目 `PROJECT_ADMIN`。
+6. 工程树根节点存在且不重复。
+7. 响应不泄露 bucket/object_key/storage_uri/raw NAS path。
+8. `confirmed=false` 归档被拒绝。
+9. 确认文本错误归档被拒绝。
+10. 正确确认后归档成功。
+11. 归档项目默认不再出现在项目列表。
+12. 归档不删除 MinIO 对象、不触碰真实 NAS 文件。
 
-必须回归：
+脚本可以创建并归档一个临时项目，但不得影响 105/503 等真实项目。
 
-- `scripts/dev/check-m3e-preview-artifacts-object-storage.sh`
-- `scripts/dev/check-m3d-real-nas-object-mirror-gray.sh`
-- `scripts/dev/check-m3c-storage-migration-task-center.sh`
-- `scripts/dev/check-m3b-object-storage-mirror-trial.sh`
-- `scripts/dev/check-m3a-storage-service-foundation.sh`
-- `scripts/dev/check-phase2-batch4-file-access.sh`
+## 6. 必跑验证
 
-## 7. 自测要求
-
-完成后至少执行并记录：
+完成后至少运行：
 
 ```bash
 cd /Users/vc/Documents/数字化交付平台/backend
@@ -238,47 +224,46 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-m3f-object-storage-first-write.sh
-bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
-bash scripts/dev/check-m3d-real-nas-object-mirror-gray.sh
-bash scripts/dev/check-m3c-storage-migration-task-center.sh
-bash scripts/dev/check-m3b-object-storage-mirror-trial.sh
-bash scripts/dev/check-m3a-storage-service-foundation.sh
+bash scripts/dev/check-plm1-project-lifecycle.sh
+bash scripts/dev/check-m3g8-object-first-read-fallback.sh
 bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
 
-如后端未启动，请按项目已有方式启动后再重试健康检查和脚本。
+如本地后端未运行，可按项目既有方式启动；不要把密钥写入仓库或报告。
 
-## 8. 报告要求
+## 7. 禁止事项
 
-完成后写入：
+严禁：
+
+- 修改 `docs/**`
+- 新建完整 PLM 子系统
+- 重做权限模型
+- 物理删除项目数据
+- 删除、移动、重命名真实 NAS 文件
+- 删除 MinIO 对象
+- 自动生成完整工程树或交付标准
+- 引入 Hermes 新能力
+- 引入 BIM 新能力
+- 写 documents/chunks/Qdrant/OpenSearch/Hermes memory
+- 暴露真实路径、bucket、object key、token、secret
+
+## 8. 交付报告
+
+完成后更新：
 
 `handoff/dev-agent/latest-report.md`
 
-报告必须包含：
+报告必须写清：
 
-- 改动文件清单。
-- 是否新增迁移。
-- 新上传文件写入对象存储的完整流程。
-- 是否保留旧上传接口兼容。
-- 是否存在 NAS fallback，以及 fallback 是否显式。
-- 新文件如何写入 `data_file_resources` / `data_storage_objects` / `data_file_object_versions`。
-- file-access 是否可读取对象存储新增文件。
-- 前端显示变化。
-- 禁出字段扫描结果。
-- 自测命令结果。
-- 未完成事项和风险。
+1. 修改了哪些文件。
+2. 是否新增迁移。
+3. 创建项目如何复用现有项目台账。
+4. 对象存储工作区如何初始化。
+5. 工程树根节点如何创建且保持幂等。
+6. 归档项目如何软归档。
+7. 超级管理员权限如何判断。
+8. 验证结果。
+9. 是否存在风险或未完成项。
 
-## 9. 完成定义
-
-只有同时满足以下条件，才可交给测试 agent：
-
-1. 新上传文件默认进入对象存储。
-2. 新上传文件有稳定 `assetUuid`。
-3. 新上传文件 `storage-status=OBJECT_STORED`。
-4. `file-access` 可受控读取对象存储新增文件。
-5. 响应不暴露底层对象定位或真实 NAS 路径。
-6. 对象存储不可用时不假成功。
-7. 历史 NAS 文件、对象迁移任务、预览产物不回归。
-8. 前后端构建、专项脚本、回归脚本和 `git diff --check` 通过。
+注意当前工作区可能已有其他 agent 的未提交改动。你只能处理 PLM-1 必需文件，不要混入无关 staged / unstaged / untracked 文件；如发现无关改动，报告即可，不要回退。

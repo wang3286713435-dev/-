@@ -32,6 +32,7 @@
       </div>
       <div class="delivery-next-action__actions">
         <el-button :type="nextActionButtonType" @click="handleNextAction">{{ nextActionButtonText }}</el-button>
+        <el-button v-if="completeness.standardReady" :loading="candidatesLoading" @click="loadCandidates">查看候选文件</el-button>
         <el-button v-if="completeness.standardReady" @click="loadPrecheck">导出预检查</el-button>
       </div>
     </section>
@@ -96,6 +97,26 @@
 
     <section v-else-if="completeness" class="completeness-card completeness-card--empty">
       <p>当前{{ title }}还没有可计算的交付标准。请先在交付物标准中补齐{{ viewLabel }}类交付物类型。</p>
+    </section>
+
+    <section v-if="showCandidatesView" class="completeness-card">
+      <div class="completeness-card__summary">
+        <span>待交付候选：</span>
+        <strong>缺失 {{ deliveryCandidates?.missingCount ?? 0 }} 项</strong>
+        <span>，候选 </span>
+        <strong class="text-success">{{ deliveryCandidates?.candidateCount ?? 0 }} 个文件</strong>
+      </div>
+      <p class="tab-helper">
+        候选只基于工程节点归属、文件类型、专业、版本和文件名推荐；不会自动挂接，不读取文件正文，也不操作 NAS 文件。
+      </p>
+      <el-table v-loading="candidatesLoading" :data="deliveryCandidates?.rows ?? []" class="master-table" empty-text="暂无候选文件">
+        <el-table-column prop="targetName" label="目标" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="deliverableTypeName" label="交付类型" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="fileName" label="候选文件" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="fileKind" label="类型" width="90" />
+        <el-table-column prop="confidence" label="置信度" width="90" />
+        <el-table-column prop="recommendationReason" label="推荐依据" min-width="260" show-overflow-tooltip />
+      </el-table>
     </section>
 
     <!-- Tabs: bounded / missing -->
@@ -544,6 +565,11 @@
               <span>{{ row.versionNo ?? '-' }}</span>
             </template>
           </el-table-column>
+          <el-table-column prop="storageStatus" label="读取口径" width="130">
+            <template #default="{ row }">
+              <el-tag :type="storageStatusTagType(row)" size="small">{{ storageStatusLabel(row) }}</el-tag>
+            </template>
+          </el-table-column>
           <el-table-column prop="reviewStatus" label="审核状态" width="90">
             <template #default="{ row }">
               <el-tag v-if="row.reviewStatus" :type="reviewTagType(row.reviewStatus)" size="small">{{ reviewLabel(row.reviewStatus) }}</el-tag>
@@ -601,11 +627,12 @@ import {
 import { fetchDeliverableTypes, fetchSectionTree, type DeliverableType, type SectionNode } from '@/modules/master-data/api/masterData';
 import {
   createBatchDeliveryBinding, fetchDeliveryCompleteness, fetchDeliveryView,
-  fetchDeliveryPackageSummary, fetchExportPrecheck, submitForReview, approveBinding, rejectBinding, fetchReviewRecords,
+  fetchDeliveryPackageSummary, fetchDeliveryCandidates, fetchExportPrecheck, submitForReview, approveBinding, rejectBinding, fetchReviewRecords,
   exportDeliveryCompletenessCsv, exportReviewSummaryCsv,
   type BatchBindingRowResult, type BatchDeliveryBindingResponse,
+  type DeliveryCandidatesResponse,
   type DeliveryBinding, type DeliveryCompletenessRow, type DeliveryPackageSummaryResponse, type DeliveryView,
-  type ExportPrecheckResponse, type ReviewRecordItem
+  type ExportPrecheckResponse, type ExportPrecheckRow, type ReviewRecordItem
 } from '@/modules/work-center/api/delivery';
 import { useAuthStore } from '@/stores/auth';
 
@@ -648,6 +675,9 @@ const batchResultVisible = ref(false);
 const packageSummary = ref<DeliveryPackageSummaryResponse | null>(null);
 const packageLoading = ref(false);
 const showPackageView = ref(false);
+const deliveryCandidates = ref<DeliveryCandidatesResponse | null>(null);
+const candidatesLoading = ref(false);
+const showCandidatesView = ref(false);
 
 // Export precheck
 const precheckResult = ref<ExportPrecheckResponse | null>(null);
@@ -757,6 +787,7 @@ async function loadPage() {
   await loadCompleteness();
   await Promise.all([
     showPackageView.value ? loadPackageSummary() : Promise.resolve(),
+    showCandidatesView.value ? loadCandidates() : Promise.resolve(),
     showPrecheckView.value ? loadPrecheck() : Promise.resolve()
   ]);
 }
@@ -780,6 +811,27 @@ function reviewTagType(status: string) {
 function reviewLabel(status: string) {
   const map: Record<string, string> = { DRAFT: '草稿', PENDING: '待审核', APPROVED: '已通过', REJECTED: '已驳回' };
   return map[status] ?? status;
+}
+
+function storageStatusLabel(row: ExportPrecheckRow) {
+  const status = (row.storageStatus || '').toUpperCase();
+  const source = (row.readSource || '').toUpperCase();
+  if (status === 'OBJECT_STORED' || source === 'OBJECT_STORAGE') return '对象存储';
+  if (status === 'NAS_ONLY' || source === 'LEGACY_NAS') return '历史 NAS';
+  if (status === 'MIGRATION_PENDING') return '对象化中';
+  if (status === 'MIGRATION_FAILED') return '迁移失败';
+  if (status === 'OBJECT_UNREADABLE') return '对象异常';
+  if (status === 'MISSING') return '缺失';
+  return '未判定';
+}
+
+function storageStatusTagType(row: ExportPrecheckRow) {
+  const status = (row.storageStatus || '').toUpperCase();
+  const source = (row.readSource || '').toUpperCase();
+  if (status === 'OBJECT_STORED' || source === 'OBJECT_STORAGE') return 'success';
+  if (status === 'MIGRATION_PENDING' || source === 'LEGACY_NAS') return 'warning';
+  if (status === 'MIGRATION_FAILED' || status === 'OBJECT_UNREADABLE' || status === 'MISSING') return 'danger';
+  return 'info';
 }
 
 function statusCount(status: string) {
@@ -959,6 +1011,19 @@ async function loadPrecheck() {
     precheckResult.value = null;
   } finally {
     precheckLoading.value = false;
+  }
+}
+
+async function loadCandidates() {
+  if (!projectId.value) return;
+  candidatesLoading.value = true;
+  try {
+    deliveryCandidates.value = await fetchDeliveryCandidates(projectId.value, props.viewType, 'SECTION');
+    showCandidatesView.value = true;
+  } catch {
+    deliveryCandidates.value = null;
+  } finally {
+    candidatesLoading.value = false;
   }
 }
 

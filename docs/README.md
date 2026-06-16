@@ -24,22 +24,29 @@
    Windows 原生开发迁移说明，包含源码交接风险、启动命令、验收脚本和 Windows Codex 接手入口。
 10. [10-phase2-development-roadmap.md](/Users/vc/Documents/数字化交付平台/docs/10-phase2-development-roadmap.md)
    二期客户交付版当前开发路线，明确一期收口后的二期主视角、已完成批次、后续批次、上下文减负规则和近期禁止事项。
+11. [11-current-baseline-and-next-roadmap.md](/Users/vc/Documents/数字化交付平台/docs/11-current-baseline-and-next-roadmap.md)
+   当前真实开发基线与后续路线，说明平台已经完成什么、不能承诺什么，以及 M3/M4/M5/8D/9A 的下一步顺序。
+12. [12-api-contract-and-maintenance.md](/Users/vc/Documents/数字化交付平台/docs/12-api-contract-and-maintenance.md)
+   API 契约与文档维护说明，保留运行期 OpenAPI 入口、接口分组、禁出字段和后续 API 同步规则。
+13. [13-ux4-frontend-architecture-baseline.md](/Users/vc/Documents/数字化交付平台/docs/13-ux4-frontend-architecture-baseline.md)
+   UX4 前端信息架构与交互基线，明确全局壳层、项目启动台、项目工作台、文件管理、工程主数据、交付闭环、BIM 协同和旧链接兼容规则。
 
 ## 当前版本结论
 
 - 产品焦点：`建筑机电/BIM交付`
 - 部署模式：`单客户私有化部署`
 - 一期状态：`已收口，后续仅处理 P0/P1 回归或真实 NAS 数据治理必要修复`
-- 二期当前主线：`客户交付版，优先收口文件访问安全闭环，再补齐数据管家客户版模块、客户项目初始化、文件预览转换、BIM 轻量化、构件级能力和客户部署交付包`
+- 当前主线：`M3 对象存储主链路收口，105 样板项目已完成全量对象化，后续全项目对象化需单开批次`
+- 后续主线：`M4 语义证据层 -> M5 Hermes 受控证据问答 -> BIM 构件级深化 -> 9A 客户交付准备`
 - 后端架构：`Java + Spring Boot 模块化单体`
-- 存储底座：`StorageProvider 抽象，一期 NAS，二期可扩展对象存储`
+- 存储底座：`StorageService / StorageProvider 抽象，当前已接 NAS 侧 MinIO 对象存储；105 已 100% 对象化，非 105 仍按覆盖率报告分批推进`
 - 一期文件范围：`.rvt`、`.dwg`、`.ifc`、`.nwd`、`.nwc`、`.dxf`、`.pdf`
 - 一期治理链路：`项目清单/路径映射 -> NAS扫描 -> 自动入库/待审核 -> 资产库 -> SQL View -> 事件流`
 - 真实 NAS 试点：`/Volumes/zyzn/卓羽智能项目`，采用只读影子导入，不移动、不改名、不删除原文件
 - 真实 NAS 治理裁决：标准项目可入库，`98`、`95`、`99` 等非标准目录暂不自动进入正式资产库
 - agent 接入：`API Key + 项目范围授权 + SQL View + REST/OpenAPI`
 - 删除策略：`逻辑删除不碰 NAS，物理删除需申请审核并隔离 30 天`
-- 三维底座：`可插拔适配层`
+- 三维底座：`可插拔适配层；当前已接葛兰岱尔 READY Viewer 小样本能力，但未完成构件级 BIM 能力`
 - 首要差异化：`标准驱动交付`
 
 ## 使用方式
@@ -59,6 +66,9 @@
 - [08-acceptance-and-agent-integration.md](/Users/vc/Documents/数字化交付平台/docs/08-acceptance-and-agent-integration.md)
 - [03-architecture-and-system-design.md](/Users/vc/Documents/数字化交付平台/docs/03-architecture-and-system-design.md)
 - [10-phase2-development-roadmap.md](/Users/vc/Documents/数字化交付平台/docs/10-phase2-development-roadmap.md)
+- [11-current-baseline-and-next-roadmap.md](/Users/vc/Documents/数字化交付平台/docs/11-current-baseline-and-next-roadmap.md)
+- [12-api-contract-and-maintenance.md](/Users/vc/Documents/数字化交付平台/docs/12-api-contract-and-maintenance.md)
+- [13-ux4-frontend-architecture-baseline.md](/Users/vc/Documents/数字化交付平台/docs/13-ux4-frontend-architecture-baseline.md)
 - [phase2-current-roadmap.md](/Users/vc/Documents/数字化交付平台/handoff/main-agent/phase2-current-roadmap.md)
 - [hermes-jarvis-coupling-roadmap.md](/Users/vc/Documents/数字化交付平台/handoff/main-agent/hermes-jarvis-coupling-roadmap.md)
 

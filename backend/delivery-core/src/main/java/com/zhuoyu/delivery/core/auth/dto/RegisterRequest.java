@@ -5,6 +5,9 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record RegisterRequest(
+    @Size(max = 64, message = "用户名不能超过 64 个字符")
+    String username,
+
     @NotBlank(message = "请输入手机号")
     @Pattern(regexp = "^1[3-9]\\d{9}$", message = "请输入有效的手机号")
     String phoneNumber,

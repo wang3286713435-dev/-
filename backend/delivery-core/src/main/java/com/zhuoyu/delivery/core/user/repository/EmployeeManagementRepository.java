@@ -15,6 +15,8 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -98,6 +100,35 @@ public class EmployeeManagementRepository {
             .addValue("operatorId", operatorId));
     }
 
+    public Long insertEmployee(
+        String username,
+        String phoneNumber,
+        String passwordHash,
+        String displayName,
+        String departmentName,
+        Long operatorId
+    ) {
+        String sql = """
+            INSERT INTO core_users (
+                username, phone_number, password_hash, display_name,
+                department_name, status, created_by, updated_by
+            ) VALUES (
+                :username, :phoneNumber, :passwordHash, :displayName,
+                :departmentName, 'ACTIVE', :operatorId, :operatorId
+            )
+            """;
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(sql, new MapSqlParameterSource()
+            .addValue("username", username)
+            .addValue("phoneNumber", phoneNumber)
+            .addValue("passwordHash", passwordHash)
+            .addValue("displayName", displayName)
+            .addValue("departmentName", blankToNull(departmentName))
+            .addValue("operatorId", operatorId), keyHolder);
+        Number key = keyHolder.getKey();
+        return key == null ? null : key.longValue();
+    }
+
     public void softDeleteUser(Long userId, Long operatorId) {
         jdbcTemplate.update("""
             UPDATE core_users
@@ -136,8 +167,25 @@ public class EmployeeManagementRepository {
         );
     }
 
+    public List<AssignableProjectResponse> findAllActiveProjects() {
+        String sql = """
+            SELECT p.id, p.code, p.name, p.industry_type, p.status
+            FROM core_projects p
+            WHERE p.deleted = 0
+              AND p.status = 'ACTIVE'
+            ORDER BY p.id
+            """;
+        return jdbcTemplate.query(sql, new MapSqlParameterSource(), EmployeeManagementRepository::mapAssignableProject);
+    }
+
     public List<Long> findAssignableProjectIds(Long adminUserId) {
         return findAssignableProjects(adminUserId).stream()
+            .map(AssignableProjectResponse::id)
+            .toList();
+    }
+
+    public List<Long> findAllActiveProjectIds() {
+        return findAllActiveProjects().stream()
             .map(AssignableProjectResponse::id)
             .toList();
     }

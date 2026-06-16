@@ -79,13 +79,13 @@ Windows PowerShell:
 macOS / Linux:
 
 ```bash
-bash scripts/dev/check-minimal-chain.sh http://localhost:8080 platform.admin Admin@123 2
+bash scripts/dev/check-minimal-chain.sh http://localhost:8080 admin 123456 2
 ```
 
 Windows PowerShell:
 
 ```powershell
-.\scripts\dev\check-minimal-chain.ps1 http://localhost:8080 platform.admin Admin@123 2
+.\scripts\dev\check-minimal-chain.ps1 http://localhost:8080 admin 123456 2
 ```
 
 该脚本会依次验证登录、刷新 token、当前用户、项目切换和工作中心首页概览接口。
@@ -95,13 +95,13 @@ Windows PowerShell:
 macOS / Linux:
 
 ```bash
-bash scripts/dev/check-master-data-chain.sh http://localhost:8080 platform.admin Admin@123 2
+bash scripts/dev/check-master-data-chain.sh http://localhost:8080 admin 123456 2
 ```
 
 Windows PowerShell:
 
 ```powershell
-.\scripts\dev\check-master-data-chain.ps1 http://localhost:8080 platform.admin Admin@123 2
+.\scripts\dev\check-master-data-chain.ps1 http://localhost:8080 admin 123456 2
 ```
 
 该脚本会依次验证登录、项目切换、标准前置条件状态、创建部位节点、查询部位树、创建节点类型、锁定节点类型和查询锁定状态。
@@ -111,13 +111,13 @@ Windows PowerShell:
 macOS / Linux:
 
 ```bash
-bash scripts/dev/check-deliverable-standard-chain.sh http://localhost:8080 platform.admin Admin@123 2
+bash scripts/dev/check-deliverable-standard-chain.sh http://localhost:8080 admin 123456 2
 ```
 
 Windows PowerShell:
 
 ```powershell
-.\scripts\dev\check-deliverable-standard-chain.ps1 http://localhost:8080 platform.admin Admin@123 2
+.\scripts\dev\check-deliverable-standard-chain.ps1 http://localhost:8080 admin 123456 2
 ```
 
 ### 7. 执行 MVP 全链路检查
@@ -125,13 +125,13 @@ Windows PowerShell:
 macOS / Linux:
 
 ```bash
-bash scripts/dev/check-mvp-chain.sh http://localhost:8080 platform.admin Admin@123 2
+bash scripts/dev/check-mvp-chain.sh http://localhost:8080 admin 123456 2
 ```
 
 Windows PowerShell:
 
 ```powershell
-.\scripts\dev\check-mvp-chain.ps1 http://localhost:8080 platform.admin Admin@123 2
+.\scripts\dev\check-mvp-chain.ps1 http://localhost:8080 admin 123456 2
 ```
 
 ### 8. 执行企业 Agent DB-2 只读合同检查
@@ -162,7 +162,7 @@ READONLY_PASSWORD='***' bash scripts/dev/check-agent-db2-contract.sh
 macOS / Linux:
 
 ```bash
-bash scripts/dev/check-asset-quality-overview.sh http://localhost:8080 platform.admin Admin@123 2
+bash scripts/dev/check-asset-quality-overview.sh http://localhost:8080 admin 123456 2
 ```
 
 该脚本会验证“数据质量”页面对应的后端接口：真实 NAS 资产体检、项目级体检、菜单入口，以及固定项目的权限隔离。脚本只读取平台元数据，不读取文件正文，也不会修改或删除 NAS 文件。

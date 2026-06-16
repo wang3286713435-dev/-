@@ -1,8 +1,8 @@
 package com.zhuoyu.delivery.core.user.application;
 
 import com.zhuoyu.delivery.core.audit.application.AuditLogApplicationService;
-import com.zhuoyu.delivery.core.rbac.application.PermissionApplicationService;
 import com.zhuoyu.delivery.core.user.dto.AssignableProjectResponse;
+import com.zhuoyu.delivery.core.user.dto.EmployeeCreateRequest;
 import com.zhuoyu.delivery.core.user.dto.EmployeeDetailResponse;
 import com.zhuoyu.delivery.core.user.dto.EmployeeProjectRoleItem;
 import com.zhuoyu.delivery.core.user.dto.EmployeeProjectRoleUpdateRequest;
@@ -16,29 +16,31 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class EmployeeManagementApplicationService {
 
-    private static final Set<String> MANAGEMENT_PERMISSIONS = Set.of("CORE_USER_MANAGE", "CORE_PROJECT_ROLE_MANAGE");
+    private static final String SUPER_ADMIN_USERNAME = "admin";
     private static final Set<String> ALLOWED_PROJECT_ROLES = Set.of("PROJECT_VIEWER", "DELIVERY_ENGINEER", "PROJECT_ADMIN");
     private static final Set<String> ALLOWED_USER_STATUS = Set.of("ACTIVE", "DISABLED");
 
     private final EmployeeManagementRepository employeeManagementRepository;
-    private final PermissionApplicationService permissionApplicationService;
     private final AuditLogApplicationService auditLogApplicationService;
+    private final PasswordEncoder passwordEncoder;
 
     public EmployeeManagementApplicationService(
         EmployeeManagementRepository employeeManagementRepository,
-        PermissionApplicationService permissionApplicationService,
-        AuditLogApplicationService auditLogApplicationService
+        AuditLogApplicationService auditLogApplicationService,
+        PasswordEncoder passwordEncoder
     ) {
         this.employeeManagementRepository = employeeManagementRepository;
-        this.permissionApplicationService = permissionApplicationService;
         this.auditLogApplicationService = auditLogApplicationService;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public List<EmployeeSummaryResponse> listEmployees(Long operatorId, String keyword, String status) {
@@ -49,6 +51,37 @@ public class EmployeeManagementApplicationService {
 
     public EmployeeDetailResponse getEmployee(Long operatorId, Long userId) {
         requireManagementPermission(operatorId);
+        return getEmployeeDetail(userId);
+    }
+
+    @Transactional
+    public EmployeeDetailResponse createEmployee(Long operatorId, EmployeeCreateRequest request) {
+        requireManagementPermission(operatorId);
+        String username = normalizeUsername(request.username());
+        String phoneNumber = normalizePhoneNumber(request.phoneNumber());
+        String displayName = request.displayName().trim();
+        String departmentName = request.departmentName() == null ? null : request.departmentName().trim();
+        Long userId;
+        try {
+            userId = employeeManagementRepository.insertEmployee(
+                username,
+                phoneNumber,
+                passwordEncoder.encode(request.password()),
+                displayName,
+                departmentName,
+                operatorId
+            );
+        } catch (DuplicateKeyException exception) {
+            throw new BusinessException("CORE_AUTH_ACCOUNT_DUPLICATED", "用户名或手机号已存在", HttpStatus.CONFLICT);
+        }
+        auditLogApplicationService.record(
+            null,
+            "core.user.create",
+            "USER",
+            String.valueOf(userId),
+            operatorId,
+            Map.of("username", username, "phoneNumber", phoneNumber, "projectAuthorized", false)
+        );
         return getEmployeeDetail(userId);
     }
 
@@ -135,7 +168,7 @@ public class EmployeeManagementApplicationService {
 
     public List<AssignableProjectResponse> listAssignableProjects(Long operatorId) {
         requireManagementPermission(operatorId);
-        return employeeManagementRepository.findAssignableProjects(operatorId);
+        return employeeManagementRepository.findAllActiveProjects();
     }
 
     public List<ProjectRoleOptionResponse> listProjectRoleOptions(Long operatorId) {
@@ -143,15 +176,14 @@ public class EmployeeManagementApplicationService {
         return List.of(
             new ProjectRoleOptionResponse("PROJECT_VIEWER", "查看者", "只读查看项目、目录和交付状态"),
             new ProjectRoleOptionResponse("DELIVERY_ENGINEER", "交付工程师", "可参与交付，并维护真实 NAS 文件资源目录"),
-            new ProjectRoleOptionResponse("PROJECT_ADMIN", "项目管理员", "可管理项目数据、真实 NAS 资产和员工授权")
+            new ProjectRoleOptionResponse("PROJECT_ADMIN", "项目管理员", "可管理项目数据和真实 NAS 资产，不包含员工账号权限")
         );
     }
 
     private void requireManagementPermission(Long operatorId) {
-        List<String> permissions = permissionApplicationService.listPermissionCodes(operatorId);
-        boolean allowed = permissions.stream().anyMatch(MANAGEMENT_PERMISSIONS::contains);
-        if (!allowed) {
-            throw new BusinessException("CORE_USER_MANAGE_FORBIDDEN", "当前账号无权管理员工权限", HttpStatus.FORBIDDEN);
+        EmployeeBaseRecord operator = requireEmployee(operatorId);
+        if (!SUPER_ADMIN_USERNAME.equalsIgnoreCase(operator.username())) {
+            throw new BusinessException("CORE_USER_MANAGE_FORBIDDEN", "仅超级管理员可管理员工账号和项目权限", HttpStatus.FORBIDDEN);
         }
     }
 
@@ -177,7 +209,7 @@ public class EmployeeManagementApplicationService {
     }
 
     private void validateAssignments(Long operatorId, List<EmployeeProjectRoleItem> assignments) {
-        Set<Long> assignableProjectIds = new LinkedHashSet<>(employeeManagementRepository.findAssignableProjectIds(operatorId));
+        Set<Long> assignableProjectIds = new LinkedHashSet<>(employeeManagementRepository.findAllActiveProjectIds());
         Set<Long> seenProjectIds = new LinkedHashSet<>();
         for (EmployeeProjectRoleItem item : assignments) {
             if (item.projectId() == null) {
@@ -188,7 +220,7 @@ public class EmployeeManagementApplicationService {
                 throw new BusinessException("CORE_PROJECT_ROLE_INVALID", "项目角色不允许授权", HttpStatus.BAD_REQUEST);
             }
             if (!assignableProjectIds.contains(item.projectId())) {
-                throw new BusinessException("CORE_PROJECT_ROLE_ASSIGN_FORBIDDEN", "不能授权自己无项目管理员权限的项目", HttpStatus.FORBIDDEN);
+                throw new BusinessException("CORE_PROJECT_ROLE_ASSIGN_FORBIDDEN", "只能授权当前可用项目", HttpStatus.FORBIDDEN);
             }
             if (!seenProjectIds.add(item.projectId())) {
                 throw new BusinessException("CORE_PROJECT_ROLE_DUPLICATED", "同一项目只能选择一个角色", HttpStatus.BAD_REQUEST);
@@ -212,5 +244,28 @@ public class EmployeeManagementApplicationService {
             throw new BusinessException("CORE_REQUEST_INVALID", message, HttpStatus.BAD_REQUEST);
         }
         return value.trim().toUpperCase();
+    }
+
+    private String normalizePhoneNumber(String value) {
+        String phoneNumber = normalizeRequired(value, "请输入手机号");
+        if (!phoneNumber.matches("^1[3-9]\\d{9}$")) {
+            throw new BusinessException("CORE_AUTH_PHONE_INVALID", "请输入有效的手机号", HttpStatus.BAD_REQUEST);
+        }
+        return phoneNumber;
+    }
+
+    private String normalizeUsername(String value) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException("CORE_REQUEST_INVALID", "请输入用户名", HttpStatus.BAD_REQUEST);
+        }
+        String username = value.trim();
+        if (!username.matches("^[A-Za-z][A-Za-z0-9._-]{2,31}$")) {
+            throw new BusinessException(
+                "CORE_AUTH_USERNAME_INVALID",
+                "用户名需以字母开头，支持字母、数字、点、下划线和短横线，长度 3-32 位",
+                HttpStatus.BAD_REQUEST
+            );
+        }
+        return username;
     }
 }

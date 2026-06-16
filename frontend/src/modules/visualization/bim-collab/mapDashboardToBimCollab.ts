@@ -31,6 +31,7 @@ export function mapDashboardToBimCollab(dashboard: DigitalTwinDashboard): BimCol
     ?? '';
 
   return {
+    projectId: project.projectId,
     projectName: project.name,
     projectCode: project.code,
     projectStage: project.projectStage || '未维护',

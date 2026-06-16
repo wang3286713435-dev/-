@@ -2,38 +2,95 @@
   <div class="app-layout">
     <aside class="app-layout__sidebar">
       <div class="app-layout__brand">
-        <strong>卓羽智能数据中台</strong>
-        <span>ZHUOYU · DATA HUB</span>
+        <span class="app-layout__brand-mark" aria-hidden="true"></span>
+        <div>
+          <strong>卓羽智能数据中台</strong>
+          <span>ZHUOYU · DATA HUB</span>
+        </div>
       </div>
       <SidebarMenu :menus="menus" />
       <div class="app-layout__sidebar-foot">
-        <strong>BUILD · UX3</strong>
-        <span>主视图聚焦 / Main focus</span>
+        <strong>BUILD · UX4-A</strong>
+        <span>项目壳层 / SaaS shell</span>
       </div>
     </aside>
 
     <div class="app-layout__main">
       <header class="app-layout__header">
         <div class="app-layout__header-left">
-          <span class="app-layout__route-eyebrow">{{ shellEyebrow }}</span>
-          <div class="app-layout__route-context">
-            <strong>{{ shellTitle }}</strong>
-            <small>{{ shellSubtitle }}</small>
-          </div>
+          <button
+            v-if="showBreadcrumbBack"
+            class="app-layout__breadcrumb-back"
+            type="button"
+            :aria-label="`返回${breadcrumbRootLabel}`"
+            @click="goBreadcrumbRoot"
+          >
+            <el-icon><Back /></el-icon>
+          </button>
+          <nav class="app-layout__breadcrumbs" aria-label="当前位置">
+            <strong v-if="isBreadcrumbRootOnly">{{ breadcrumbRootLabel }}</strong>
+            <button v-else type="button" @click="goBreadcrumbRoot">{{ breadcrumbRootLabel }}</button>
+            <template v-if="shellProject">
+              <span>/</span>
+              <button type="button" @click="goProjectDashboard(shellProject.id)">{{ shellProject.name }}</button>
+            </template>
+            <template v-if="!isBreadcrumbRootOnly">
+              <span>/</span>
+              <strong>{{ shellCurrentLabel }}</strong>
+            </template>
+          </nav>
         </div>
-        <div class="app-layout__actions">
-          <div class="app-layout__user">
-            <strong>{{ authStore.currentUser?.displayName }}</strong>
-            <span>{{ authStore.currentUser?.username }}</span>
-          </div>
-          <el-button text @click="handleLogout">退出</el-button>
+        <div class="app-layout__toolbar">
+          <el-select
+            v-if="showHeaderProjectSelect"
+            :model-value="shellProjectId"
+            class="app-layout__project-select"
+            filterable
+            size="small"
+            placeholder="选择项目"
+            @change="handleProjectSelect"
+          >
+            <el-option
+              v-for="item in authorizedProjects"
+              :key="item.id"
+              :label="`${item.code} · ${item.name}`"
+              :value="item.id"
+            />
+          </el-select>
+          <button class="app-layout__search-entry" type="button" @click="showSearchPlaceholder">
+            <el-icon><Search /></el-icon>
+            <span>搜索项目、文件、交付事项</span>
+            <kbd>⌘K</kbd>
+          </button>
+          <el-tooltip content="通知中心占位">
+            <el-button circle text :icon="Bell" aria-label="通知中心" />
+          </el-tooltip>
+          <el-tooltip content="帮助中心占位">
+            <el-button circle text :icon="QuestionFilled" aria-label="帮助中心" @click="router.push({ name: 'home' })" />
+          </el-tooltip>
+          <el-dropdown trigger="click" @command="handleUserCommand">
+            <button class="app-layout__user-button" type="button">
+              <span>{{ userInitial }}</span>
+              <div>
+                <strong>{{ authStore.currentUser?.displayName || '当前用户' }}</strong>
+                <small>{{ authStore.currentUser?.username }}</small>
+              </div>
+              <el-icon><ArrowDown /></el-icon>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="profile">个人中心</el-dropdown-item>
+                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </header>
 
       <main class="app-layout__content">
         <ProjectWorkspaceNav
-          v-if="routeProjectId && !assetProjectContext"
-          :project-id="routeProjectId"
+          v-if="projectWorkspaceNavProjectId && !assetProjectContext"
+          :project-id="projectWorkspaceNavProjectId"
         />
         <RouterView />
       </main>
@@ -69,7 +126,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ChatDotRound } from '@element-plus/icons-vue';
+import { ArrowDown, Back, Bell, ChatDotRound, QuestionFilled, Search } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
 
 import DataStewardPanel from '@/modules/data-steward/components/DataStewardPanel.vue';
 import HermesWorkspaceDrawer from '@/modules/data-steward/components/HermesWorkspaceDrawer.vue';
@@ -84,10 +142,8 @@ const route = useRoute();
 const router = useRouter();
 const hermesDrawerVisible = ref(false);
 
-const { assetProjectContext, routeProjectId, workspaceProjectId } = useProjectWorkspaceContext();
+const { assetProjectContext, routeProjectId } = useProjectWorkspaceContext();
 
-const hiddenTopLevelKeys = new Set(['home', 'master-data', 'work-center']);
-const hiddenTopLevelPathPrefixes = ['/home', '/master-data', '/work'];
 const hermesEnabledRouteNames = new Set([
   'data-steward-assets',
   'data-steward-asset-detail',
@@ -96,40 +152,132 @@ const hermesEnabledRouteNames = new Set([
 ]);
 
 const menus = computed(() => {
-  const all = (authStore.currentUser?.menus ?? []).map((item) => {
-    if (item.key !== 'digital-twin') return item;
-    return {
-      ...item,
-      label: 'BIM协同管理',
-      path: '/bim-collaboration'
-    };
-  });
-  const visibleMenus = all.filter((m) => {
-    if (hiddenTopLevelKeys.has(m.key)) return false;
-    return !hiddenTopLevelPathPrefixes.some((prefix) => m.path === prefix || m.path.startsWith(`${prefix}/`));
-  });
-  if (visibleMenus.some((item) => item.key === 'digital-twin')) {
-    return visibleMenus;
-  }
-  const canUseDigitalTwin = Boolean(authStore.currentUser?.projects.length);
-  if (!canUseDigitalTwin) return visibleMenus;
-  const digitalTwinMenu: MenuItem = {
-    key: 'digital-twin',
-    label: 'BIM协同管理',
-    path: '/bim-collaboration',
-    icon: 'Monitor'
-  };
-  const dataStewardIndex = visibleMenus.findIndex((item) => item.key === 'data-steward');
-  if (dataStewardIndex < 0) return [digitalTwinMenu, ...visibleMenus];
-  return [
-    ...visibleMenus.slice(0, dataStewardIndex + 1),
-    digitalTwinMenu,
-    ...visibleMenus.slice(dataStewardIndex + 1)
+  const globalMenus: MenuItem[] = [
+    {
+      key: 'project-launchpad',
+      label: '项目启动台',
+      path: '/data-steward/assets',
+      icon: 'House'
+    },
+    {
+      key: 'asset-governance',
+      label: '资产治理',
+      path: '/data-steward/catalog',
+      icon: 'DataBoard',
+      children: [
+        {
+          key: 'asset-catalog',
+          label: '资产目录',
+          path: '/data-steward/catalog',
+          icon: 'FolderOpened'
+        },
+        {
+          key: 'asset-quality',
+          label: '数据质量',
+          path: '/data-steward/quality',
+          icon: 'Warning'
+        },
+        {
+          key: 'asset-object-storage',
+          label: '对象存储',
+          path: '/data-steward/file-service',
+          icon: 'Box'
+        }
+      ]
+    },
+    {
+      key: 'bim-collaboration',
+      label: 'BIM 协同',
+      path: '/bim-collaboration',
+      icon: 'Monitor'
+    }
   ];
+  if (hasEmployeeManagementPermission()) {
+    globalMenus.push({
+      key: 'admin-center',
+      label: '管理中心',
+      path: '/admin/employees',
+      icon: 'User'
+    });
+  }
+  globalMenus.push({
+    key: 'my-projects',
+    label: '我的项目',
+    path: '/data-steward/assets',
+    icon: 'OfficeBuilding',
+    children: authorizedProjects.value.slice(0, 8).map((item) => ({
+      key: `project-${item.id}`,
+      label: item.name,
+      path: `/data-steward/assets/${item.id}`,
+      icon: 'FolderOpened'
+    }))
+  });
+  globalMenus.push(
+    {
+      key: 'help-center',
+      label: '帮助中心',
+      path: '/home',
+      icon: 'QuestionFilled'
+    },
+    {
+      key: 'hermes-assistant',
+      label: 'Hermes 助手',
+      path: '/data-steward/agent-preview',
+      icon: 'ChatDotRound'
+    }
+  );
+  return globalMenus;
+});
+
+const authorizedProjects = computed(() => authStore.currentUser?.projects ?? []);
+
+const routeQueryProjectId = computed(() => {
+  const raw = route.query.projectId;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  const id = Number(value);
+  return Number.isFinite(id) && id > 0 ? id : null;
+});
+
+const platformRootRouteNames = new Set([
+  'data-steward-assets',
+  'bim-collaboration',
+  'data-steward-catalog',
+  'data-steward-file-service',
+  'data-steward-quality',
+  'data-steward-scans',
+  'data-steward-agent-preview',
+  'admin-employees',
+  'user-profile',
+  'home',
+  'access-pending'
+]);
+
+const platformProjectQueryRouteNames = new Set([
+  'bim-collaboration'
+]);
+
+const routeName = computed(() => String(route.name ?? ''));
+
+const shellProjectId = computed(() => {
+  if (routeProjectId.value) return routeProjectId.value;
+  if (platformProjectQueryRouteNames.has(routeName.value)) return routeQueryProjectId.value;
+  return null;
+});
+
+const shellProject = computed(() => {
+  const projectId = shellProjectId.value;
+  if (!projectId || !authStore.currentUser) return null;
+  return authStore.currentUser.projects.find((item) => item.id === projectId)
+    ?? (authStore.currentUser.currentProject?.id === projectId ? authStore.currentUser.currentProject : null);
+});
+
+const projectWorkspaceNavProjectId = computed(() => {
+  const id = routeProjectId.value ?? (routeName.value === 'bim-collaboration' ? routeQueryProjectId.value : null);
+  return typeof id === 'number' && Number.isFinite(id) ? id : null;
 });
 
 const globalHermesProjectId = computed(() => {
-  const id = workspaceProjectId.value;
+  const id = shellProjectId.value ?? routeProjectId.value;
   return typeof id === 'number' && Number.isFinite(id) ? id : null;
 });
 
@@ -141,40 +289,30 @@ const globalHermesProject = computed(() => {
 });
 
 const showHermesEntry = computed(() => {
-  const routeName = String(route.name ?? '');
-  return Boolean(globalHermesProjectId.value && hermesEnabledRouteNames.has(routeName));
+  return Boolean(globalHermesProjectId.value && hermesEnabledRouteNames.has(routeName.value));
 });
 
 const globalHermesPageType = computed(() => {
-  const routeName = String(route.name ?? '');
   const labels: Record<string, string> = {
     'data-steward-assets': 'assets_overview',
     'data-steward-asset-detail': 'project_detail',
     'project-master-data-initialization': 'real_project_onboarding',
     'project-work-agent-governance': 'agent_governance'
   };
-  return labels[routeName] ?? 'data_steward_workspace';
+  return labels[routeName.value] ?? 'data_steward_workspace';
 });
 
 const globalHermesPageTitle = computed(() => {
-  const routeName = String(route.name ?? '');
   const labels: Record<string, string> = {
     'data-steward-assets': '资产总览',
     'data-steward-asset-detail': '项目工作台',
     'project-master-data-initialization': '真实项目接入向导',
     'project-work-agent-governance': '交付治理助手'
   };
-  return labels[routeName] ?? '数据管家工作区';
+  return labels[routeName.value] ?? '数据管家工作区';
 });
 
 const globalHermesHint = computed(() => globalHermesPageTitle.value);
-
-const shellEyebrow = computed(() => {
-  if (routeProjectId.value) return '当前项目工作台';
-  if (String(route.name ?? '') === 'bim-collaboration') return 'BIM协同管理';
-  if (String(route.name ?? '').startsWith('admin-')) return '管理中心';
-  return '平台主入口';
-});
 
 const shellTitle = computed(() => {
   if (routeProjectId.value) {
@@ -185,32 +323,116 @@ const shellTitle = computed(() => {
     'data-steward-scans': '扫描任务',
     'data-steward-quality': '数据质量',
     'data-steward-catalog': '资产目录',
+    'data-steward-file-service': '对象存储',
     'bim-collaboration': 'BIM协同管理',
     'admin-employees': '员工权限管理',
+    'user-profile': '个人中心',
     'access-pending': '等待项目授权'
   };
   return labels[String(route.name ?? '')] ?? '卓羽智能数据中台';
 });
 
-const shellSubtitle = computed(() => {
-  if (routeProjectId.value) {
-    return '先看资产，再确认工程主数据，最后进入交付工作中心。';
+const shellCurrentLabel = computed(() => {
+  if (routeName.value === 'data-steward-asset-detail') {
+    const tab = typeof route.query.tab === 'string' ? route.query.tab : 'dashboard';
+    const labels: Record<string, string> = {
+      dashboard: '概览',
+      files: '文件管理',
+      'master-data': '工程主数据',
+      ownership: '工程主数据',
+      delivery: '交付闭环',
+      bim: 'BIM 协同',
+      archive: '档案目录',
+      scans: '扫描任务',
+      mappings: '路径映射'
+    };
+    return labels[tab] ?? '概览';
   }
-  if (String(route.name ?? '') === 'data-steward-assets') {
-    return '从真实 NAS 项目进入工作台，按项目推进数字化交付。';
+  if (routeName.value.startsWith('project-work-')) {
+    if (routeName.value === 'project-work-delivery-package') return '档案目录';
+    return '交付闭环';
   }
-  if (String(route.name ?? '') === 'bim-collaboration') {
-    return '按项目查看模型、设备设施、房屋空间、交付风险和协同任务。';
-  }
-  if (String(route.name ?? '').startsWith('admin-')) {
-    return '管理员工账号、项目授权和试运行访问范围。';
-  }
-  return '请选择项目或功能入口继续。';
+  if (routeName.value.startsWith('project-master-data-')) return '工程主数据';
+  if (routeName.value === 'bim-collaboration' && shellProject.value) return '协同看板';
+  if (routeName.value === 'bim-collaboration') return 'BIM 协同';
+  return shellTitle.value;
 });
+
+const breadcrumbRootLabel = computed(() => {
+  if (routeName.value === 'bim-collaboration') return 'BIM 协同';
+  return '项目启动台';
+});
+
+const breadcrumbRootRouteName = computed(() => {
+  if (routeName.value === 'bim-collaboration') return 'bim-collaboration';
+  return 'data-steward-assets';
+});
+
+const isBreadcrumbRootOnly = computed(() =>
+  platformRootRouteNames.has(routeName.value) && !shellProject.value
+);
+
+const showBreadcrumbBack = computed(() => !isBreadcrumbRootOnly.value);
+const showHeaderProjectSelect = computed(() =>
+  Boolean(authorizedProjects.value.length && !platformRootRouteNames.has(routeName.value))
+);
 
 async function handleLogout() {
   await authStore.signOut();
   router.replace({ name: 'login' });
+}
+
+async function handleUserCommand(command: string) {
+  if (command === 'profile') {
+    router.push({ name: 'user-profile' });
+    return;
+  }
+  if (command === 'logout') {
+    await handleLogout();
+  }
+}
+
+function goBreadcrumbRoot() {
+  router.push({ name: breadcrumbRootRouteName.value });
+}
+
+function goProjectDashboard(projectId: number) {
+  router.push({ name: 'data-steward-asset-detail', params: { projectId }, query: { tab: 'dashboard' } });
+}
+
+async function handleProjectSelect(value: number | string) {
+  const projectId = Number(value);
+  if (!Number.isFinite(projectId) || projectId <= 0) return;
+  try {
+    if (projectId !== authStore.currentProjectId) {
+      await authStore.changeProject(projectId);
+    }
+    if (routeName.value === 'bim-collaboration') {
+      router.push({ name: 'bim-collaboration', query: { projectId } });
+      return;
+    }
+    if (routeProjectId.value && route.name) {
+      router.push({ name: route.name, params: { ...route.params, projectId }, query: route.query });
+      return;
+    }
+    goProjectDashboard(projectId);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '项目切换失败');
+  }
+}
+
+function showSearchPlaceholder() {
+  ElMessage.info('全局搜索入口已预留，当前可先通过项目启动台和文件管理筛选。');
+}
+
+const userInitial = computed(() => {
+  const name = authStore.currentUser?.displayName || authStore.currentUser?.username || 'U';
+  return name.trim().slice(0, 1).toUpperCase();
+});
+
+function hasEmployeeManagementPermission() {
+  const permissions = authStore.currentUser?.permissions ?? [];
+  return permissions.includes('CORE_USER_MANAGE') || permissions.includes('CORE_PROJECT_ROLE_MANAGE');
 }
 </script>
 

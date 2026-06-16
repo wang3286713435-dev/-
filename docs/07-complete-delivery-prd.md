@@ -44,6 +44,31 @@
 - 主线健康度当前为 `黄灯可控`：Git 主线已回正，已完成能力较多，但路线文档刚完成纠偏，平台闭环仍需通过 M1A 做最新验证。
 - 后续路线按 `平台核心闭环 -> 数据管家深化 -> BIM 选型/接入 -> 客户交付准备` 推进。
 
+### 3.2 2026-06-04 当前基线更新
+
+当前平台已经进入 `M3 对象存储主链路收口` 阶段。早期 M1/M2 和 8B-0 口径不再代表最新主线。
+
+当前基线：
+
+- 105 / `projectId=503` / `启航华居项目` 已完成 `2928 / 2928` 文件对象化，作为对象存储完整样板项目。
+- 平台文件读取链路已形成：`MySQL 业务台账 -> active object version -> NAS 侧 MinIO -> 受控 file-access`。
+- 新上传文件默认对象存储优先写入；历史文件按项目和批次对象化。
+- 全项目对象化覆盖率报告已可查询，但非 105 项目仍存在 `PARTIAL` 和 `NAS_ONLY` 状态，不得对外宣称全项目已完成对象化。
+- 葛兰岱尔 READY Viewer 已接入 BIM 协同页，105 可识别 READY 模型并签发 Viewer 入口；但构件级 BIM 查询、图模联动、碰撞检查仍未完成。
+- Hermes 仍未进入正文证据问答阶段；当前不得把 catalog metadata 当成正文 evidence。
+
+后续主线按以下顺序推进：
+
+1. `DOC-BASE`：文档基线收口。
+2. `M3-CLOSE`：M3 整体收口判断。
+3. `M3X`：全项目对象化独立批次。
+4. `M4`：documents / chunks 语义证据层。
+5. `M5`：Hermes Evidence API 与受控证据问答。
+6. `8D/8E`：BIM 构件级深化。
+7. `9A`：客户交付准备。
+
+当前详细基线以 [11-current-baseline-and-next-roadmap.md](/Users/vc/Documents/数字化交付平台/docs/11-current-baseline-and-next-roadmap.md) 为准。
+
 ## 4. 一期：内部 BIM 资产管理试点
 
 ### 4.1 一期目标

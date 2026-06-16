@@ -1,43 +1,35 @@
-# 测试 Agent 当前任务：M3F 新文件对象存储优先写入验收
+# Test Agent 当前任务：PLM-1 项目生命周期管理 MVP 轻量验收
 
-你是卓羽智能数据中台的测试 agent。工作目录：
+你是数字化交付平台 v1 的测试 agent。工作目录：
 
 `/Users/vc/Documents/数字化交付平台`
 
-当前验收批次：
+先阅读：
 
-`M3F：新文件对象存储优先写入与 NAS 兼容回退`
+- `handoff/main-agent/status.md`
+- `handoff/main-agent/development-log.md`
+- `handoff/dev-agent/latest-report.md`
+
+不要修改 `docs/**`。
 
 ## 0. 验收目标
 
-本轮只验收 M3F：
+本轮只验收：
 
-- 通过平台上传的新文件默认写入对象存储。
-- 新文件仍进入 MySQL 业务台账。
-- 新文件有 `assetUuid` 和 active object version。
-- 新文件 `storage-status=OBJECT_STORED`。
-- 新文件可通过受控 `file-access` 读取。
-- 历史 NAS 文件、迁移任务、预览产物不回归。
+`PLM-1：项目生命周期管理 MVP`
 
-本轮不验收：
+重点看：
 
-- 全量 NAS 搬迁。
-- Hermes 正文问答。
-- documents / chunks / Qdrant / OpenSearch。
-- 文件正文读取。
-- 真实 BIM 引擎。
+1. 超级管理员能创建项目。
+2. 创建项目会初始化对象存储工作区和工程树根节点。
+3. 超级管理员能二次确认后归档项目。
+4. 归档项目不会物理删除 NAS / MinIO 数据。
+5. 普通用户不能执行全局项目创建/归档。
+6. 响应不泄露真实路径、bucket、object key、storage_uri、token、secret。
 
-## 1. 必读文件
+不要做全量浏览器逐页点击，保持轻量。
 
-- `handoff/dev-agent/latest-report.md`
-- `handoff/dev-agent/current-prompt.md`
-- `handoff/main-agent/m3f-object-storage-first-write-plan.md`
-- `handoff/main-agent/m3-storage-evidence-chain-todo.md`
-- `scripts/dev/check-m3f-object-storage-first-write.sh`
-
-## 2. 必跑命令
-
-请执行：
+## 1. 必跑命令
 
 ```bash
 cd /Users/vc/Documents/数字化交付平台/backend
@@ -46,137 +38,90 @@ cd /Users/vc/Documents/数字化交付平台/backend
 cd /Users/vc/Documents/数字化交付平台
 corepack pnpm --dir frontend build
 curl -fsS http://127.0.0.1:8080/actuator/health
-bash scripts/dev/check-m3f-object-storage-first-write.sh
-bash scripts/dev/check-m3e-preview-artifacts-object-storage.sh
-bash scripts/dev/check-m3d-real-nas-object-mirror-gray.sh
-bash scripts/dev/check-m3c-storage-migration-task-center.sh
-bash scripts/dev/check-m3b-object-storage-mirror-trial.sh
-bash scripts/dev/check-m3a-storage-service-foundation.sh
+bash scripts/dev/check-plm1-project-lifecycle.sh
+bash scripts/dev/check-m3g8-object-first-read-fallback.sh
 bash scripts/dev/check-phase2-batch4-file-access.sh
 git diff --check
 ```
 
-如后端未运行，可按项目已有方式启动后重试健康检查和专项脚本。
-
-## 3. Git 范围检查
-
-请检查：
-
-```bash
-git status --short
-git diff --name-only
-git diff --cached --name-status
-```
-
-M3F 允许包含：
-
-- `backend/**` 中与 StorageService、文件上传、对象版本、受控访问相关的最小改动。
-- `frontend/**` 中文件管理器上传后状态展示的最小改动。
-- `scripts/dev/check-m3f-object-storage-first-write.sh`
-- `handoff/dev-agent/latest-report.md`
-- 必要的 Flyway 新迁移。
-
-M3F 不允许包含：
-
-- `docs/**`
-- Hermes 正文问答。
-- documents / chunks / Qdrant / OpenSearch / parser / indexing。
-- 真实 BIM 引擎。
-- 全量 NAS 迁移入口。
-- 真实 NAS 批量移动、删除、重命名能力扩展。
-
-## 4. 核心验收点
+## 2. API/脚本验收点
 
 重点确认：
 
-1. 新上传文件不是先写真实业务 NAS 目录。
-2. 新上传文件创建 `data_file_resources` 记录。
-3. 新上传文件有 `assetUuid`。
-4. 新上传文件创建 `data_storage_objects`。
-5. 新上传文件创建 active `data_file_object_versions`。
-6. `GET /api/data-steward/assets/files/{fileId}/storage-status` 返回 `OBJECT_STORED`。
-7. `file-access` 可读取对象存储新增文件内容。
-8. 对象存储不可用时不 500、不假成功。
-9. 历史 NAS 文件仍可走原有受控访问。
-10. M3E 预览产物、M3D 灰度镜像、M3C 迁移任务不回归。
+1. 创建唯一临时项目成功。
+2. 新项目能在项目列表中查询到。
+3. 创建人获得 `PROJECT_ADMIN`。
+4. 工程树根节点存在。
+5. 重复初始化不会产生重复根节点。
+6. 对象存储工作区状态返回业务化结果。
+7. `confirmed=false` 归档被拒绝。
+8. 确认文本错误归档被拒绝。
+9. 确认文本正确归档成功。
+10. 归档项目默认从项目列表隐藏。
+11. 普通用户创建/归档被拒绝。
+12. 禁出字段扫描通过。
 
-## 5. 禁出字段扫描
-
-所有 M3F 响应和脚本输出中不得出现：
+禁出字段：
 
 - `/Volumes`
-- `/Users`
 - `smb://`
 - `nas://`
 - `storage_uri`
-- `storageUri`
 - `bucket`
 - `object_key`
-- `objectKey`
-- raw row
 - SQL
+- raw row
 - token
 - secret
-- password
 
-说明性文案里可以出现“对象存储”这个业务词，但不能出现真实 bucket / object key 值。
+## 3. 前端轻验
 
-## 6. 浏览器轻量检查
+只做极短浏览器确认：
 
-本轮不要求全量浏览器逐页点击，只做轻量检查：
+1. 资产总览页能打开。
+2. 超级管理员能看到“新建项目”入口。
+3. 项目行能看到归档入口或更多菜单中的归档入口。
+4. 非超级管理员不应看到全局归档入口，或点击后被拒绝。
+5. 页面不白屏、不横向溢出。
 
-- 打开 `http://127.0.0.1:5173/data-steward/assets/503?tab=files`
-- 文件管理器页面不白屏。
-- 上传入口仍可见。
-- 上传成功后的文件能显示在当前目录。
-- 新文件的存储状态或详情可体现对象存储状态。
-- 不需要在真实业务目录执行破坏性操作。
+不需要逐个点击工程主数据、文件管理、BIM、交付页面。
 
-## 7. P0 / P1 判定
+## 4. P0 / P1 判定
 
 P0：
 
-- 新上传文件泄露真实 NAS 路径、bucket、object key、storage URI、token、secret。
-- 真实业务 NAS 文件被移动、删除、覆盖或改名。
-- file-access 权限链路回归失败。
-- 引入 Hermes 正文问答、parser、indexing、documents / chunks。
-- 全量历史 NAS 迁移被误开启。
+- 创建项目导致真实 NAS 文件被移动/删除/重命名。
+- 归档项目物理删除业务数据。
+- 普通用户可创建/归档全局项目。
+- API/前端泄露 token/secret 或真实存储路径。
+- 主链路白屏。
 
 P1：
 
-- 新上传文件仍默认写 NAS，未写对象存储。
-- 新文件无 `assetUuid`。
-- 新文件无 active object version。
-- 新文件 storage-status 不是 `OBJECT_STORED`。
-- 新文件无法通过受控 file-access 读取。
-- 对象存储不可用时假成功或 500。
-- M3F 专项脚本失败。
-- M3E / M3D / M3C / M3B / M3A 关键回归失败。
-- M3F 专项脚本未纳入 Git。
+- 超级管理员不能创建项目。
+- 创建项目没有工程树根节点。
+- 创建项目没有对象存储工作区状态。
+- 归档不需要二次确认。
+- 归档后项目仍默认显示在项目启动台。
+- PLM-1 脚本失败。
+- 运行期新增文件未纳入 Git。
 
 P2：
 
+- 文案、间距、按钮位置等不影响主链路的小问题。
 - 既有 Vite chunk warning。
-- `.claude/**`、`CLAUDE.md`、`tmp/**` 等非交付未跟踪项，只记录，不阻塞。
-- 文案细节粗糙但不影响主链路。
 
-## 8. 报告要求
+## 5. 报告要求
 
 完成后写入：
 
 `handoff/test-agent/latest-report.md`
 
-报告至少包含：
+报告写清：
 
-- 测试结论：通过 / 不通过。
-- P0 / P1 / P2。
-- 必跑命令结果。
-- M3F 专项脚本结果。
-- 新上传文件对象存储验证结果。
-- `assetUuid` / active object version / storage-status 验证结果。
-- file-access 读取验证结果。
-- 对象存储不可用场景验证结果。
-- 回归脚本结果。
-- 禁出字段扫描结果。
-- Git 范围检查结果。
-- 是否建议主 agent 收口 M3F。
+1. 结论：通过 / 不通过。
+2. P0 / P1 / P2。
+3. 必跑命令结果。
+4. PLM-1 创建/归档链路结果。
+5. 禁出字段扫描结果。
+6. 是否建议主 agent 收口。

@@ -3,13 +3,20 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8080}"
-ADMIN_USER="${ADMIN_USER:-platform.admin}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-Admin@123}"
+ADMIN_USER="${ADMIN_USER:-admin}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-123456}"
 PROJECT_ID="${PROJECT_ID:-503}"
 MINIO_CONTAINER="${MINIO_CONTAINER:-delivery-minio}"
-MINIO_BUCKET="${MINIO_BUCKET:-delivery-m3a-smoke}"
-MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}"
-MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minioadmin123}"
+if [[ -f "tmp/local-env/nas-minio.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "tmp/local-env/nas-minio.env"
+  set +a
+fi
+MINIO_ENDPOINT="${MINIO_ENDPOINT:-${DELIVERY_MINIO_ENDPOINT:-http://127.0.0.1:9000}}"
+MINIO_BUCKET="${MINIO_BUCKET:-${DELIVERY_MINIO_DEFAULT_BUCKET:-delivery-m3a-smoke}}"
+MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-${DELIVERY_MINIO_ACCESS_KEY:-minioadmin}}"
+MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-${DELIVERY_MINIO_SECRET_KEY:-minioadmin123}}"
 
 PASS=0
 FAIL=0
@@ -127,10 +134,11 @@ cleanup() {
     docker exec \
       -e MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY}" \
       -e MINIO_SECRET_KEY="${MINIO_SECRET_KEY}" \
+      -e MINIO_ENDPOINT="${MINIO_ENDPOINT}" \
       -e MINIO_BUCKET="${MINIO_BUCKET}" \
       -e OBJECT_KEY="${OBJECT_KEY}" \
       "${MINIO_CONTAINER}" sh -c '
-        mc alias set local http://127.0.0.1:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null 2>&1 || exit 0
+        mc alias set local "$MINIO_ENDPOINT" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null 2>&1 || exit 0
         mc rm --force "local/${MINIO_BUCKET}/${OBJECT_KEY}" >/dev/null 2>&1 || true
       ' >/dev/null 2>&1 || true
   fi
@@ -197,12 +205,13 @@ else
   docker exec \
     -e MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY}" \
     -e MINIO_SECRET_KEY="${MINIO_SECRET_KEY}" \
+    -e MINIO_ENDPOINT="${MINIO_ENDPOINT}" \
     -e MINIO_BUCKET="${MINIO_BUCKET}" \
     -e OBJECT_KEY="${OBJECT_KEY}" \
     "${MINIO_CONTAINER}" sh -c '
       set -e
       printf "%s\n" "M3A MinIO smoke object for StorageService read path" > /tmp/m3a-smoke.pdf
-      mc alias set local http://127.0.0.1:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null
+      mc alias set local "$MINIO_ENDPOINT" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null
       mc mb -p "local/${MINIO_BUCKET}" >/dev/null
       mc cp /tmp/m3a-smoke.pdf "local/${MINIO_BUCKET}/${OBJECT_KEY}" >/dev/null
       rm -f /tmp/m3a-smoke.pdf

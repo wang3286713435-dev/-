@@ -6,8 +6,8 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8080}"
-ADMIN_USER="${ADMIN_USER:-platform.admin}"
-ADMIN_PASS="${ADMIN_PASS:-Admin@123}"
+ADMIN_USER="${ADMIN_USER:-admin}"
+ADMIN_PASS="${ADMIN_PASS:-123456}"
 
 PASS=0
 FAIL=0

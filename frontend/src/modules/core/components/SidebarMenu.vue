@@ -22,6 +22,7 @@
 <script setup lang="ts">
 import {
   Box,
+  ChatDotRound,
   Connection,
   DataBoard,
   Document,
@@ -31,6 +32,7 @@ import {
   Monitor,
   OfficeBuilding,
   Picture,
+  QuestionFilled,
   Search,
   Warning,
   Tickets,
@@ -48,6 +50,7 @@ const route = useRoute();
 
 const icons = {
   Box,
+  ChatDotRound,
   Connection,
   DataBoard,
   Document,
@@ -57,6 +60,7 @@ const icons = {
   Monitor,
   OfficeBuilding,
   Picture,
+  QuestionFilled,
   Search,
   Warning,
   Tickets,

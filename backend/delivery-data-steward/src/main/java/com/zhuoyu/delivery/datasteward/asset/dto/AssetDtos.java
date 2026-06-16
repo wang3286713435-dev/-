@@ -73,6 +73,35 @@ public final class AssetDtos {
     ) {
     }
 
+    public record ProjectLifecycleCreateResponse(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        Boolean projectAdminGranted,
+        String storageWorkspaceStatus,
+        String sectionRootStatus,
+        Long sectionRootNodeId,
+        AssetProjectResponse project
+    ) {
+    }
+
+    public record AssetProjectArchiveRequest(
+        Boolean confirmed,
+        String confirmText
+    ) {
+    }
+
+    public record AssetProjectArchiveResponse(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        Boolean archived,
+        String archiveStatus,
+        Boolean objectStorageDeleted,
+        Boolean nasTouched
+    ) {
+    }
+
     public record AssetProjectUpdateRequest(
         String name,
         String industryType,
@@ -940,6 +969,8 @@ public final class AssetDtos {
         String status,
         String confidenceLevel,
         String storageProvider,
+        String storageState,
+        String accessSource,
         String logicalPath,
         Boolean storagePathVisible,
         String storagePathVisibilityReason,
@@ -979,6 +1010,8 @@ public final class AssetDtos {
         String status,
         String confidenceLevel,
         String storageProvider,
+        String storageState,
+        String accessSource,
         String logicalPath,
         String storagePath,
         Boolean storagePathVisible,
@@ -1331,6 +1364,87 @@ public final class AssetDtos {
     ) {
     }
 
+    public record FileOwnershipTreeDraftResponse(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        Boolean draftOnly,
+        Boolean formalTreeOverwritten,
+        String evidenceMode,
+        String analysisBoundary,
+        Integer totalFiles,
+        Integer nodeCount,
+        List<FileOwnershipTreeDraftNode> nodes
+    ) {
+    }
+
+    public record FileOwnershipTreeDraftNode(
+        String nodeKey,
+        String nodeLabel,
+        String suggestedNodePath,
+        Integer fileCount,
+        Integer drawingCount,
+        Integer modelCount,
+        Integer confirmedOwnershipCount,
+        Integer pendingReviewCount,
+        Integer formalDeliveryCandidateCount,
+        Integer currentMissingDeliverableCount,
+        String recommendationReason,
+        List<String> riskHints
+    ) {
+    }
+
+    public record FileOwnershipTreeDraftApplyRequest(
+        Boolean confirmed,
+        List<String> nodeKeys
+    ) {
+    }
+
+    public record FileOwnershipTreeDraftApplyResponse(
+        Long projectId,
+        Boolean confirmed,
+        Boolean formalTreeOverwritten,
+        Integer requestedNodeCount,
+        Integer appliedNodeCount,
+        Integer assignmentUpdatedCount,
+        String message
+    ) {
+    }
+
+    public record ModelDrawingGapResponse(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        String evidenceMode,
+        String analysisBoundary,
+        Integer totalNodeCount,
+        Integer hasModelAndDrawingCount,
+        Integer drawingMissingModelCount,
+        Integer modelMissingDrawingCount,
+        Integer processOnlyCount,
+        Integer needsReviewCount,
+        List<ModelDrawingGapRow> rows
+    ) {
+    }
+
+    public record ModelDrawingGapRow(
+        String nodeKey,
+        String nodeLabel,
+        String nodePath,
+        String gapStatus,
+        Integer fileCount,
+        Integer modelCount,
+        Integer drawingCount,
+        Integer processCount,
+        Integer pendingReviewCount,
+        List<Long> sampleFileIds,
+        List<String> sampleFileNames,
+        String recommendation,
+        String evidenceMode,
+        String missingEvidenceReason
+    ) {
+    }
+
     // ===== phase2 batch4: file access tickets =====
 
     public record AccessTicketCreateRequest(
@@ -1349,6 +1463,13 @@ public final class AssetDtos {
         String fileName,
         Boolean previewable,
         Boolean downloadable,
+        String storageStatus,
+        String readSource,
+        Boolean fallbackUsed,
+        String fallbackReason,
+        String storageHealth,
+        Boolean objectReadable,
+        String userMessage,
         String message
     ) {
     }
@@ -1376,7 +1497,28 @@ public final class AssetDtos {
         Boolean checksumAvailable,
         Instant lastVerifiedAt,
         String migrationStatus,
+        String readSource,
+        Boolean fallbackUsed,
+        String fallbackReason,
+        String storageHealth,
+        Boolean objectReadable,
+        String userMessage,
         String message
+    ) {
+    }
+
+    public record StorageReadPolicyResponse(
+        Boolean objectFirstEnabled,
+        Boolean nasFallbackEnabled,
+        Long totalFileCount,
+        Long objectStoredCount,
+        Long nasOnlyCount,
+        Long migrationPendingCount,
+        Long migrationFailedCount,
+        Long objectUnreadableCount,
+        Long recentObjectReadFailureCount,
+        Long recentNasFallbackCount,
+        String policyMessage
     ) {
     }
 
@@ -1438,6 +1580,638 @@ public final class AssetDtos {
         Integer maxFilesPerTask,
         Long maxFileSizeBytes,
         String policyMessage
+    ) {
+    }
+
+    // ===== M3G-1: NAS-side MinIO readiness and objectification planning =====
+
+    public record StorageProviderReadinessResponse(
+        String providerCode,
+        Boolean configured,
+        Boolean reachable,
+        Boolean readable,
+        Boolean writable,
+        String endpointType,
+        String readinessStatus,
+        String message
+    ) {
+    }
+
+    public record StorageObjectificationInventoryResponse(
+        Boolean allProjects,
+        Long projectId,
+        String projectCode,
+        String projectName,
+        Long totalProjects,
+        Long totalFiles,
+        Long totalBytes,
+        Long objectStoredFiles,
+        Long objectStoredBytes,
+        Long nasOnlyFiles,
+        Long migrationPendingFiles,
+        Long migrationFailedFiles,
+        BigDecimal objectificationCoverageRate,
+        List<ProjectStorageObjectificationInventoryResponse> projects
+    ) {
+    }
+
+    public record StorageObjectificationCoverageReportResponse(
+        Boolean dryRun,
+        String reportCode,
+        StorageObjectificationCoverageSummaryResponse summary,
+        StorageObjectificationClosureAssessmentResponse closureAssessment,
+        List<ProjectStorageObjectificationCoverageResponse> projects
+    ) {
+    }
+
+    public record StorageObjectificationCoverageSummaryResponse(
+        Long totalProjects,
+        Long completedProjects,
+        Long partialProjects,
+        Long nasOnlyProjects,
+        Long failedOrGovernanceProjects,
+        Long excludedProjects,
+        Long totalFiles,
+        Long objectStoredFiles,
+        Long nasOnlyFiles,
+        Long failedFiles,
+        BigDecimal overallObjectificationRate,
+        Long totalSizeBytes,
+        Long objectStoredSizeBytes,
+        BigDecimal checksumCoverageRate
+    ) {
+    }
+
+    public record StorageObjectificationClosureAssessmentResponse(
+        Boolean m3ClosureReady,
+        List<String> blockingReasons,
+        List<String> warnings,
+        List<String> nextActions
+    ) {
+    }
+
+    public record ProjectStorageObjectificationCoverageResponse(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        String projectStage,
+        String assetSource,
+        String projectCategory,
+        String onboardingStatus,
+        Long totalFiles,
+        Long objectStoredCount,
+        Long nasOnlyCount,
+        Long migrationFailedCount,
+        Long governanceCount,
+        Long unreadableCount,
+        BigDecimal checksumCoverageRate,
+        BigDecimal objectificationCoverageRate,
+        Long totalSizeBytes,
+        Long objectStoredSizeBytes,
+        Instant lastObjectifiedAt,
+        String readStrategySummary,
+        String status,
+        List<StorageObjectificationFailureSummary> failureSummary,
+        List<String> warnings,
+        List<String> nextActions
+    ) {
+    }
+
+    public record ProjectStorageObjectificationInventoryResponse(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        String projectStage,
+        String assetSource,
+        String projectCategory,
+        Boolean realNasProject,
+        Long totalFiles,
+        Long totalBytes,
+        Long objectStoredFiles,
+        Long objectStoredBytes,
+        Long nasOnlyFiles,
+        Long nasOnlyBytes,
+        Long estimatedObjectificationBytes,
+        Long migrationPendingFiles,
+        Long migrationFailedFiles,
+        Long checksumCoveredFiles,
+        BigDecimal checksumCoverageRate,
+        Long modelFiles,
+        Long drawingFiles,
+        Long documentFiles,
+        Long largeFileCount,
+        Long unreadablePathFiles,
+        BigDecimal objectificationCoverageRate,
+        String riskLevel,
+        List<String> riskMessages,
+        List<StorageObjectificationDistributionItem> fileKindDistribution,
+        List<StorageObjectificationDistributionItem> extensionDistribution
+    ) {
+    }
+
+    public record StorageObjectificationDistributionItem(
+        String code,
+        Long fileCount,
+        Long totalBytes
+    ) {
+    }
+
+    public record StorageObjectificationPlanDryRunRequest(
+        String directoryPath,
+        List<String> fileKinds,
+        List<String> extensions,
+        Long minSizeBytes,
+        Long maxSizeBytes,
+        String checksumState,
+        String storageState,
+        Integer limit,
+        Long maxTotalBytes
+    ) {
+    }
+
+    public record StorageObjectificationPlanDryRunResponse(
+        Boolean dryRun,
+        Boolean migrationStarted,
+        Long projectId,
+        Long selectedFileCount,
+        Long selectedTotalBytes,
+        Long objectStoredSkipCount,
+        Long missingChecksumCount,
+        Long oversizedCount,
+        Long unreadableRiskCount,
+        Long estimatedBatches,
+        List<String> riskMessages,
+        List<StorageObjectificationPlanSampleItem> sampleItems
+    ) {
+    }
+
+    public record StorageObjectificationFullPlanRequest(
+        String directoryPath,
+        List<String> fileKinds,
+        List<String> extensions,
+        Long minSizeBytes,
+        Long maxSizeBytes,
+        String checksumState,
+        Integer batchFileLimit,
+        Long batchBytesLimit
+    ) {
+    }
+
+    public record StorageObjectificationFullPlanResponse(
+        Boolean dryRun,
+        Boolean migrationStarted,
+        Long projectId,
+        String projectCode,
+        String projectName,
+        Long totalFileCount,
+        Long totalBytes,
+        Long objectStoredCount,
+        Long objectStoredBytes,
+        Long nasOnlyCount,
+        Long nasOnlyBytes,
+        Long migrationPendingCount,
+        Long migrationFailedCount,
+        Long skippedCount,
+        Long checksumCoveredFiles,
+        BigDecimal checksumCoverageRate,
+        BigDecimal objectificationCoverageRate,
+        Long eligibleRemainingCount,
+        Long eligibleRemainingBytes,
+        Integer maxFilesPerTask,
+        Long maxFileSizeBytes,
+        Integer batchFileLimit,
+        Long batchBytesLimit,
+        Long nextBatchFileCount,
+        Long nextBatchTotalBytes,
+        Boolean hasNextBatch,
+        Long estimatedRemainingBatches,
+        Long latestTaskId,
+        String latestTaskStatus,
+        Integer latestTaskSuccessCount,
+        Integer latestTaskSkippedCount,
+        Integer latestTaskFailureCount,
+        Instant latestTaskUpdatedAt,
+        List<StorageObjectificationFailureSummary> failureReasons,
+        List<String> riskMessages,
+        List<String> nextBatchSuggestions,
+        List<StorageObjectificationPlanSampleItem> nextBatchItems,
+        List<StorageObjectificationPlanSampleItem> governanceItems
+    ) {
+    }
+
+    public record StorageObjectificationLongRunRequest(
+        Integer batchFileLimit,
+        Long batchBytesLimit,
+        Long maxFileSizeBytes,
+        Integer maxContinuousBatches,
+        Boolean continueOnFailure,
+        Boolean confirmed,
+        String targetProvider
+    ) {
+    }
+
+    public record StorageObjectificationLongRunResponse(
+        Boolean dryRun,
+        Boolean executionStarted,
+        Long projectId,
+        String projectCode,
+        String projectName,
+        String runState,
+        Boolean paused,
+        Long totalFileCount,
+        Long totalBytes,
+        Long objectStoredCount,
+        Long objectStoredBytes,
+        Long nasOnlyCount,
+        Long nasOnlyBytes,
+        Long migrationFailedCount,
+        Long skippedCount,
+        Long checksumCoveredFiles,
+        BigDecimal checksumCoverageRate,
+        BigDecimal objectificationCoverageRate,
+        Long eligibleRemainingCount,
+        Long eligibleRemainingBytes,
+        Long governanceItemCount,
+        Integer batchFileLimit,
+        Long batchBytesLimit,
+        Long maxFileSizeBytes,
+        Integer maxContinuousBatches,
+        Boolean continueOnFailure,
+        Integer processedBatchCount,
+        Long processedFileCount,
+        Integer createdTaskCount,
+        List<Long> createdTaskIds,
+        Integer createdCount,
+        Integer skippedThisRun,
+        Integer failedCount,
+        Instant lastRunAt,
+        String lastFailureReason,
+        Long latestTaskId,
+        String latestTaskStatus,
+        Integer latestTaskSuccessCount,
+        Integer latestTaskSkippedCount,
+        Integer latestTaskFailureCount,
+        List<StorageObjectificationFailureSummary> failureReasons,
+        List<StorageObjectificationFailureSummary> governanceReasons,
+        List<String> warnings,
+        List<String> nextBatchSuggestions,
+        List<StorageObjectificationPlanSampleItem> governanceItems,
+        List<MultiProjectStorageObjectificationExecutionProject> batchResults
+    ) {
+    }
+
+    public record StorageObjectificationIntegrityResponse(
+        Long projectId,
+        Long totalObjectStoredCount,
+        Long verifiedObjectCount,
+        Long missingObjectCount,
+        Long unreadableObjectCount,
+        Long checksumMismatchCount,
+        Long sampleCheckedCount,
+        Long governanceItemCount,
+        Boolean fullyVerified,
+        String latestFailureReason,
+        List<StorageObjectificationIntegrityIssue> sampleIssues,
+        List<String> warnings
+    ) {
+    }
+
+    public record StorageObjectificationIntegrityIssue(
+        Long fileId,
+        String assetUuid,
+        String fileName,
+        String fileKind,
+        String issueCode,
+        String issueMessage,
+        Boolean repairable
+    ) {
+    }
+
+    public record StorageObjectificationIntegrityRepairRequest(
+        Boolean confirmed,
+        Integer batchFileLimit,
+        Long batchBytesLimit,
+        Long maxFileSizeBytes,
+        String targetProvider
+    ) {
+    }
+
+    public record StorageObjectificationIntegrityRepairResponse(
+        Boolean repairStarted,
+        Long projectId,
+        Long checkedCount,
+        Long missingBeforeCount,
+        Long repairedCount,
+        Long skippedCount,
+        Long failedCount,
+        Long governanceItemCount,
+        Long totalObjectStoredCount,
+        Long verifiedObjectCount,
+        Long missingObjectCount,
+        Long unreadableObjectCount,
+        Long checksumMismatchCount,
+        String latestFailureReason,
+        List<StorageObjectificationIntegrityIssue> results,
+        List<String> warnings
+    ) {
+    }
+
+    public record StorageObjectificationWaveCandidatesResponse(
+        Boolean dryRun,
+        String waveCode,
+        Integer maxProjectCount,
+        Integer maxTotalFiles,
+        Long maxTotalBytes,
+        Integer maxFilesPerProject,
+        Long maxBytesPerProject,
+        Long maxFileSizeBytes,
+        List<String> warnings,
+        List<StorageObjectificationWaveProject> candidates,
+        List<StorageObjectificationWaveProject> excludedProjects
+    ) {
+    }
+
+    public record StorageObjectificationWaveProject(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        String projectCategory,
+        Boolean realNasProject,
+        Boolean executable,
+        String waveStatus,
+        String exclusionReason,
+        Long totalFiles,
+        Long totalBytes,
+        Long objectStoredFiles,
+        Long nasOnlyFiles,
+        Long nasOnlyBytes,
+        Long migrationFailedFiles,
+        Long unreadablePathFiles,
+        Long recommendedFileCount,
+        Long recommendedBytes,
+        BigDecimal objectificationCoverageRate,
+        BigDecimal checksumCoverageRate,
+        List<String> riskMessages
+    ) {
+    }
+
+    public record StorageObjectificationWaveDryRunRequest(
+        List<Long> projectIds,
+        Integer maxProjects,
+        Integer limit,
+        Long maxTotalBytes,
+        Integer maxFilesPerProject,
+        Long maxBytesPerProject,
+        List<String> extensions
+    ) {
+    }
+
+    public record StorageObjectificationWaveExecuteRequest(
+        List<Long> projectIds,
+        List<Long> fileIds,
+        Boolean confirmed,
+        String targetProvider,
+        Integer limit,
+        Long maxTotalBytes,
+        Integer maxFilesPerProject,
+        Long maxBytesPerProject
+    ) {
+    }
+
+    public record StorageObjectificationWaveReportsResponse(
+        Boolean allProjects,
+        String waveCode,
+        Integer projectCount,
+        Long totalFiles,
+        Long objectStoredFiles,
+        Long nasOnlyFiles,
+        Long migrationFailedFiles,
+        BigDecimal objectificationCoverageRate,
+        List<String> warnings,
+        List<StorageObjectificationWaveProject> projects
+    ) {
+    }
+
+    public record StorageObjectificationRunOverviewResponse(
+        Boolean dryRun,
+        String runCode,
+        String runState,
+        Boolean paused,
+        Long totalFiles,
+        Long objectStoredFiles,
+        Long nasOnlyFiles,
+        Long migrationFailedFiles,
+        Long governanceItemCount,
+        Long checksumCoveredFiles,
+        BigDecimal objectificationCoverageRate,
+        BigDecimal checksumCoverageRate,
+        Integer executableProjectCount,
+        Integer governanceProjectCount,
+        Integer completedProjectCount,
+        Integer skippedProjectCount,
+        Integer maxProjectCount,
+        Integer maxTotalFiles,
+        Long maxTotalBytes,
+        Integer maxFilesPerProject,
+        Long maxBytesPerProject,
+        Long maxFileSizeBytes,
+        Integer maxContinuousBatches,
+        List<String> warnings,
+        List<StorageObjectificationRunProject> projects
+    ) {
+    }
+
+    public record StorageObjectificationRunProjectsResponse(
+        String runCode,
+        Integer executableProjectCount,
+        Integer governanceProjectCount,
+        Integer completedProjectCount,
+        Integer skippedProjectCount,
+        List<String> warnings,
+        List<StorageObjectificationRunProject> projects
+    ) {
+    }
+
+    public record StorageObjectificationRunProject(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        String projectCategory,
+        String queueStatus,
+        String queueReason,
+        Boolean realNasProject,
+        Boolean executable,
+        Long totalFiles,
+        Long totalBytes,
+        Long objectStoredFiles,
+        Long nasOnlyFiles,
+        Long nasOnlyBytes,
+        Long migrationFailedFiles,
+        Long unreadablePathFiles,
+        Long governanceItemCount,
+        Long checksumCoveredFiles,
+        BigDecimal objectificationCoverageRate,
+        BigDecimal checksumCoverageRate,
+        List<String> riskMessages
+    ) {
+    }
+
+    public record StorageObjectificationRunRequest(
+        List<Long> projectIds,
+        Integer maxProjects,
+        Integer maxTotalFiles,
+        Long maxTotalBytes,
+        Integer maxFilesPerProject,
+        Long maxBytesPerProject,
+        Long maxFileSizeBytes,
+        Integer maxContinuousBatches,
+        Long rateLimitBytesPerMinute,
+        Boolean continueOnFailure,
+        Boolean confirmed,
+        String targetProvider
+    ) {
+    }
+
+    public record StorageObjectificationFailureSummary(
+        String reasonCode,
+        String message,
+        Long fileCount
+    ) {
+    }
+
+    public record MultiProjectStorageObjectificationPlanDryRunRequest(
+        List<Long> projectIds,
+        List<Long> fileIds,
+        Boolean realProjectsOnly,
+        String directoryPath,
+        List<String> fileKinds,
+        List<String> extensions,
+        Long minSizeBytes,
+        Long maxSizeBytes,
+        String checksumState,
+        String storageState,
+        Integer limit,
+        Long maxTotalBytes,
+        Integer maxFilesPerProject,
+        Long maxBytesPerProject,
+        Integer concurrencyLimit,
+        Long rateLimitBytesPerMinute
+    ) {
+    }
+
+    public record MultiProjectStorageObjectificationExecuteRequest(
+        List<Long> projectIds,
+        List<Long> fileIds,
+        Boolean realProjectsOnly,
+        String directoryPath,
+        List<String> fileKinds,
+        List<String> extensions,
+        Long minSizeBytes,
+        Long maxSizeBytes,
+        String checksumState,
+        String storageState,
+        Integer limit,
+        Long maxTotalBytes,
+        Integer maxFilesPerProject,
+        Long maxBytesPerProject,
+        Integer concurrencyLimit,
+        Long rateLimitBytesPerMinute,
+        Boolean confirmed,
+        String targetProvider
+    ) {
+    }
+
+    public record MultiProjectStorageObjectificationPlanDryRunResponse(
+        Boolean dryRun,
+        Boolean migrationStarted,
+        String taskSource,
+        Integer requestedProjectCount,
+        Integer plannedProjectCount,
+        Long selectedFileCount,
+        Long selectedTotalBytes,
+        Long objectStoredSkipCount,
+        Long missingChecksumCount,
+        Long oversizedCount,
+        Long unreadableRiskCount,
+        Long estimatedBatches,
+        Integer maxFilesPerTask,
+        Long maxFileSizeBytes,
+        Long maxTotalBytes,
+        Integer maxFilesPerProject,
+        Long maxBytesPerProject,
+        Integer concurrencyLimit,
+        Long rateLimitBytesPerMinute,
+        List<String> riskMessages,
+        List<MultiProjectStorageObjectificationPlanProject> projects
+    ) {
+    }
+
+    public record MultiProjectStorageObjectificationExecuteResponse(
+        Boolean dryRun,
+        Boolean executionStarted,
+        String taskSource,
+        Integer selectedProjectCount,
+        Long selectedFileCount,
+        Long selectedTotalBytes,
+        Long maxTotalBytes,
+        Integer maxFilesPerProject,
+        Long maxBytesPerProject,
+        Integer createdTaskCount,
+        List<Long> createdTaskIds,
+        Integer createdCount,
+        Integer skippedCount,
+        Integer failedCount,
+        List<String> failureReasons,
+        List<String> warnings,
+        List<MultiProjectStorageObjectificationExecutionProject> projectResults
+    ) {
+    }
+
+    public record MultiProjectStorageObjectificationExecutionProject(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        Long selectedFileCount,
+        Long selectedTotalBytes,
+        Long taskId,
+        String taskStatus,
+        Integer successCount,
+        Integer skippedCount,
+        Integer failureCount,
+        String failureReason,
+        List<Long> fileIds
+    ) {
+    }
+
+    public record MultiProjectStorageObjectificationPlanProject(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        String assetSource,
+        String projectCategory,
+        Boolean realNasProject,
+        Long selectedFileCount,
+        Long selectedTotalBytes,
+        Long objectStoredSkipCount,
+        Long missingChecksumCount,
+        Long oversizedCount,
+        Long unreadableRiskCount,
+        Long estimatedBatches,
+        List<String> riskMessages,
+        List<StorageObjectificationPlanSampleItem> sampleItems
+    ) {
+    }
+
+    public record StorageObjectificationPlanSampleItem(
+        Long fileId,
+        String assetUuid,
+        String fileName,
+        String fileKind,
+        String extension,
+        Long sizeBytes,
+        String checksumStatus,
+        String storageStatus,
+        String reason
     ) {
     }
 

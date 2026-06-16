@@ -12,9 +12,15 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipRecommen
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipRecommendationResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipRecommendationRow;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipStatusSummary;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipTreeDraftApplyRequest;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipTreeDraftApplyResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipTreeDraftNode;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipTreeDraftResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipTreeNode;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipTreeResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileOwnershipTypeSummary;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ModelDrawingGapResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ModelDrawingGapRow;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.PathMappingResponse;
 import com.zhuoyu.delivery.datasteward.asset.repository.AssetPathMappingRepository;
 import com.zhuoyu.delivery.shared.api.PageResponse;
@@ -51,6 +57,13 @@ public class FileOwnershipApplicationService {
     private static final int MAX_RECOMMENDATION_LIMIT = 500;
     private static final Pattern UNSAFE_NODE_KEY = Pattern.compile("[^A-Za-z0-9_:-]+");
     private static final Set<String> WRITE_ROLES = Set.of("DELIVERY_ENGINEER", "PROJECT_ADMIN");
+    private static final Long M3G6T_PROJECT_ID = 503L;
+    private static final Set<String> MODEL_EXTENSIONS = Set.of("rvt", "ifc", "nwd", "nwc", "glb", "gltf", "obj", "fbx");
+    private static final Set<String> DRAWING_EXTENSIONS = Set.of("dwg", "dxf", "pdf");
+    private static final List<String> DRAFT_NODE_LABELS = List.of(
+        "项目通用", "地下室", "首层", "标准层", "屋面", "公区", "户型", "机房/设备房",
+        "模型资料", "图纸收发", "过程资料", "待判定/归档资料"
+    );
     private static final Logger LOGGER = LoggerFactory.getLogger(FileOwnershipApplicationService.class);
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -168,6 +181,133 @@ public class FileOwnershipApplicationService {
             coverage.assignedFiles(),
             coverage.unassignedFiles(),
             List.of(root.toResponse())
+        );
+    }
+
+    public FileOwnershipTreeDraftResponse treeDraft(Long userId, Long projectId) {
+        ProjectInfo project = requireProjectAccess(userId, projectId);
+        if (!M3G6T_PROJECT_ID.equals(projectId)) {
+            return new FileOwnershipTreeDraftResponse(
+                projectId,
+                project.code(),
+                project.name(),
+                true,
+                false,
+                "catalog_metadata_only",
+                "M3G-6T 当前仅把 105 作为验收项目；其他项目暂不生成工程树优化草案。",
+                0,
+                0,
+                List.of()
+            );
+        }
+
+        Map<String, DraftAccumulator> nodes = new LinkedHashMap<>();
+        for (String label : DRAFT_NODE_LABELS) {
+            nodes.put(label, new DraftAccumulator(project.name(), label));
+        }
+        for (OwnershipAnalysisRow row : ownershipAnalysisRows(projectId, project.name())) {
+            String label = inferDraftNodeLabel(row);
+            DraftAccumulator accumulator = nodes.computeIfAbsent(label, ignored -> new DraftAccumulator(project.name(), label));
+            accumulator.add(row);
+        }
+
+        List<FileOwnershipTreeDraftNode> rows = nodes.values().stream()
+            .map(DraftAccumulator::toResponse)
+            .toList();
+        int totalFiles = rows.stream().mapToInt(FileOwnershipTreeDraftNode::fileCount).sum();
+        return new FileOwnershipTreeDraftResponse(
+            projectId,
+            project.code(),
+            project.name(),
+            true,
+            false,
+            "catalog_metadata_only",
+            "草案只使用目录级元数据、文件名、扩展名、专业、版本、现有归属和文件类型；未读取 PDF/Office/DWG/RVT/IFC 正文，未做 BIM 构件级解析。",
+            totalFiles,
+            rows.size(),
+            rows
+        );
+    }
+
+    @Transactional
+    public FileOwnershipTreeDraftApplyResponse applyTreeDraft(
+        Long userId,
+        Long projectId,
+        FileOwnershipTreeDraftApplyRequest request
+    ) {
+        requireProjectWriteAccess(userId, projectId);
+        if (!M3G6T_PROJECT_ID.equals(projectId)) {
+            throw new BusinessException("FILE_OWNERSHIP_TREE_DRAFT_PROJECT_UNSUPPORTED",
+                "M3G-6T 当前只允许 105 项目执行工程树草案确认", HttpStatus.BAD_REQUEST);
+        }
+        if (request == null || !Boolean.TRUE.equals(request.confirmed())) {
+            throw new BusinessException("FILE_OWNERSHIP_TREE_DRAFT_CONFIRM_REQUIRED",
+                "必须人工确认后才能应用工程树优化草案", HttpStatus.BAD_REQUEST);
+        }
+        int requested = request.nodeKeys() == null || request.nodeKeys().isEmpty()
+            ? DRAFT_NODE_LABELS.size()
+            : request.nodeKeys().size();
+        auditLogApplicationService.record(projectId, MODULE_CODE, "data.file-ownership.tree-draft.apply", "PROJECT",
+            String.valueOf(projectId), userId, Map.of(
+                "requestedNodeCount", requested,
+                "formalTreeOverwritten", false,
+                "assignmentUpdatedCount", 0
+            ));
+        return new FileOwnershipTreeDraftApplyResponse(
+            projectId,
+            true,
+            false,
+            requested,
+            requested,
+            0,
+            "已记录人工确认草案；本批不自动覆盖正式工程树，也不移动或修改 NAS 文件。"
+        );
+    }
+
+    public ModelDrawingGapResponse modelDrawingGap(Long userId, Long projectId) {
+        ProjectInfo project = requireProjectAccess(userId, projectId);
+        if (!M3G6T_PROJECT_ID.equals(projectId)) {
+            return new ModelDrawingGapResponse(
+                projectId,
+                project.code(),
+                project.name(),
+                "catalog_metadata_only",
+                "M3G-6T 当前仅把 105 作为验收项目；其他项目暂不生成模型/图纸缺口分析。",
+                0, 0, 0, 0, 0, 0,
+                List.of()
+            );
+        }
+
+        Map<String, GapAccumulator> nodes = new LinkedHashMap<>();
+        for (OwnershipAnalysisRow row : ownershipAnalysisRows(projectId, project.name())) {
+            String label = inferGapNodeLabel(row);
+            GapAccumulator accumulator = nodes.computeIfAbsent(label, ignored -> new GapAccumulator(project.name(), label));
+            accumulator.add(row);
+            if (isModelFile(row)) {
+                nodes.computeIfAbsent("模型资料", ignored -> new GapAccumulator(project.name(), "模型资料")).add(row);
+            }
+            if (isDrawingFile(row)) {
+                nodes.computeIfAbsent("图纸收发", ignored -> new GapAccumulator(project.name(), "图纸收发")).add(row);
+            }
+        }
+
+        List<ModelDrawingGapRow> rows = nodes.values().stream()
+            .map(GapAccumulator::toResponse)
+            .sorted(Comparator.comparing(ModelDrawingGapRow::gapStatus).thenComparing(ModelDrawingGapRow::nodePath))
+            .toList();
+        return new ModelDrawingGapResponse(
+            projectId,
+            project.code(),
+            project.name(),
+            "catalog_metadata_only",
+            "这是目录级和文件名线索分析，包含部位节点和资料类型补充桶；不是 BIM 构件级解析。平台未读取 DWG/RVT/PDF 正文，不能证明模型内部构件或图纸内容。",
+            rows.size(),
+            (int) rows.stream().filter(row -> "HAS_MODEL_AND_DRAWING".equals(row.gapStatus())).count(),
+            (int) rows.stream().filter(row -> "DRAWING_MISSING_MODEL".equals(row.gapStatus())).count(),
+            (int) rows.stream().filter(row -> "MODEL_MISSING_DRAWING".equals(row.gapStatus())).count(),
+            (int) rows.stream().filter(row -> "PROCESS_ONLY".equals(row.gapStatus())).count(),
+            (int) rows.stream().filter(row -> "NEEDS_REVIEW".equals(row.gapStatus())).count(),
+            rows
         );
     }
 
@@ -1261,6 +1401,275 @@ public class FileOwnershipApplicationService {
             .map(String::trim)
             .filter(part -> !part.isBlank())
             .toList();
+    }
+
+    private List<OwnershipAnalysisRow> ownershipAnalysisRows(Long projectId, String projectName) {
+        return jdbcTemplate.query("""
+            SELECT f.id AS file_id,
+                   f.original_name,
+                   f.file_kind,
+                   f.discipline AS discipline_code,
+                   f.version_no,
+                   f.size_bytes,
+                   f.process_status,
+                   LOWER(SUBSTRING_INDEX(f.original_name, '.', -1)) AS file_ext,
+                   own.node_key,
+                   own.node_label,
+                   own.node_path,
+                   own.ownership_type,
+                   own.status,
+                   own.confidence
+            FROM data_file_resources f
+            LEFT JOIN data_file_ownership_assignments own
+              ON own.file_id = f.id
+             AND own.project_id = f.project_id
+             AND own.deleted = 0
+            WHERE f.project_id = :projectId
+              AND f.deleted = 0
+            ORDER BY f.id ASC
+            """, new MapSqlParameterSource("projectId", projectId), (rs, rowNum) -> new OwnershipAnalysisRow(
+            rs.getLong("file_id"),
+            sanitizeDisplayText(rs.getString("original_name"), "未命名文件"),
+            safeText(rs.getString("file_kind"), "OTHER").toUpperCase(Locale.ROOT),
+            safeText(rs.getString("file_ext"), "").toLowerCase(Locale.ROOT),
+            rs.getString("discipline_code"),
+            rs.getString("version_no"),
+            rs.getLong("size_bytes"),
+            rs.getString("process_status"),
+            safeText(rs.getString("node_key"), "UNASSIGNED"),
+            sanitizeDisplayText(rs.getString("node_label"), "待判定"),
+            sanitizeNodePath(safeText(rs.getString("node_path"), projectName + "/待判定资料/通用/项目通用"), projectName),
+            normalizeOwnershipType(rs.getString("ownership_type")),
+            safeText(rs.getString("status"), "UNASSIGNED").toUpperCase(Locale.ROOT),
+            normalizeConfidence(rs.getString("confidence"))
+        ));
+    }
+
+    private String inferDraftNodeLabel(OwnershipAnalysisRow row) {
+        String haystack = analysisHaystack(row);
+        if (containsAny(haystack, "地下室", "地下", "b1", "b2", "b3")) return "地下室";
+        if (containsAny(haystack, "首层", "一层", "1层", "1f")) return "首层";
+        if (containsAny(haystack, "标准层", "塔楼", "标准")) return "标准层";
+        if (containsAny(haystack, "屋面", "天面")) return "屋面";
+        if (containsAny(haystack, "公区", "公共区", "公共区域")) return "公区";
+        if (containsAny(haystack, "户型", "户内")) return "户型";
+        if (containsAny(haystack, "机房", "设备房")) return "机房/设备房";
+        if (isModelFile(row)) return "模型资料";
+        if (isDrawingFile(row) || "DRAWING_EXCHANGE".equals(row.ownershipType())) return "图纸收发";
+        if ("PROCESS".equals(row.ownershipType())) return "过程资料";
+        if ("ARCHIVE".equals(row.ownershipType()) || "PENDING_REVIEW".equals(row.ownershipType()) || "REJECTED".equals(row.status())) {
+            return "待判定/归档资料";
+        }
+        return "项目通用";
+    }
+
+    private String inferGapNodeLabel(OwnershipAnalysisRow row) {
+        String haystack = analysisHaystack(row);
+        if (containsAny(haystack, "地下室", "地下", "b1", "b2", "b3")) return "地下室";
+        if (containsAny(haystack, "首层", "一层", "1层", "1f")) return "首层";
+        if (containsAny(haystack, "标准层", "塔楼", "标准")) return "标准层";
+        if (containsAny(haystack, "屋面", "天面")) return "屋面";
+        if (containsAny(haystack, "公区", "公共区", "公共区域")) return "公区";
+        if (containsAny(haystack, "户型", "户内")) return "户型";
+        if (containsAny(haystack, "机房", "设备房")) return "机房/设备房";
+        if ("PROCESS".equals(row.ownershipType())) return "过程资料";
+        if ("ARCHIVE".equals(row.ownershipType()) || "PENDING_REVIEW".equals(row.ownershipType())) return "待判定/归档资料";
+        return "项目通用";
+    }
+
+    private String analysisHaystack(OwnershipAnalysisRow row) {
+        return (safeText(row.fileName(), "")
+            + " " + safeText(row.fileKind(), "")
+            + " " + safeText(row.fileExt(), "")
+            + " " + safeText(row.disciplineCode(), "")
+            + " " + safeText(row.nodeLabel(), "")
+            + " " + safeText(row.nodePath(), "")
+            + " " + safeText(row.ownershipType(), "")).toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isModelFile(OwnershipAnalysisRow row) {
+        return "MODEL".equals(row.fileKind()) || MODEL_EXTENSIONS.contains(safeText(row.fileExt(), "").toLowerCase(Locale.ROOT));
+    }
+
+    private boolean isDrawingFile(OwnershipAnalysisRow row) {
+        String ext = safeText(row.fileExt(), "").toLowerCase(Locale.ROOT);
+        String haystack = analysisHaystack(row);
+        return "DRAWING".equals(row.fileKind())
+            || DRAWING_EXTENSIONS.contains(ext)
+            || containsAny(haystack, "图纸", "图框", "平面图", "剖面图", "立面图", "dwg", "dxf");
+    }
+
+    private boolean isProcessOnlyFile(OwnershipAnalysisRow row) {
+        return !isModelFile(row)
+            && !isDrawingFile(row)
+            && List.of("PROCESS", "REFERENCE", "ARCHIVE").contains(row.ownershipType());
+    }
+
+    private boolean isFormalDeliveryCandidate(OwnershipAnalysisRow row) {
+        return "PROCESSED".equalsIgnoreCase(row.processStatus())
+            && List.of("DOCUMENT", "DRAWING").contains(row.fileKind())
+            && !"ARCHIVE".equals(row.ownershipType())
+            && !"REJECTED".equals(row.status());
+    }
+
+    private record OwnershipAnalysisRow(
+        Long fileId,
+        String fileName,
+        String fileKind,
+        String fileExt,
+        String disciplineCode,
+        String version,
+        Long sizeBytes,
+        String processStatus,
+        String nodeKey,
+        String nodeLabel,
+        String nodePath,
+        String ownershipType,
+        String status,
+        String confidence
+    ) {
+    }
+
+    private final class DraftAccumulator {
+        private final String projectName;
+        private final String nodeLabel;
+        private final String nodePath;
+        private final String nodeKey;
+        private int fileCount;
+        private int drawingCount;
+        private int modelCount;
+        private int confirmedOwnershipCount;
+        private int pendingReviewCount;
+        private int formalDeliveryCandidateCount;
+
+        private DraftAccumulator(String projectName, String nodeLabel) {
+            this.projectName = projectName;
+            this.nodeLabel = nodeLabel;
+            this.nodePath = projectName + "/工程树草案/" + nodeLabel;
+            this.nodeKey = stableKey("M3G6T:" + nodeLabel);
+        }
+
+        private void add(OwnershipAnalysisRow row) {
+            fileCount += 1;
+            if (isDrawingFile(row)) drawingCount += 1;
+            if (isModelFile(row)) modelCount += 1;
+            if ("CONFIRMED".equals(row.status())) confirmedOwnershipCount += 1;
+            if (!"CONFIRMED".equals(row.status()) || "LOW".equals(row.confidence()) || "PENDING_REVIEW".equals(row.ownershipType())) {
+                pendingReviewCount += 1;
+            }
+            if (isFormalDeliveryCandidate(row)) formalDeliveryCandidateCount += 1;
+        }
+
+        private FileOwnershipTreeDraftNode toResponse() {
+            List<String> risks = new ArrayList<>();
+            if (pendingReviewCount > 0) {
+                risks.add("存在待人工复核或低置信度文件，不能直接作为正式交付依据。");
+            }
+            if (modelCount == 0 && drawingCount > 0) {
+                risks.add("该节点有图纸线索但暂无模型线索，需人工确认是否缺 BIM 建模。");
+            }
+            if (drawingCount == 0 && modelCount > 0) {
+                risks.add("该节点有模型线索但暂无图纸线索，需人工确认图纸是否缺失或归属到其他节点。");
+            }
+            if (fileCount == 0) {
+                risks.add("当前节点为草案占位，尚未命中文件。");
+            }
+            int missingDeliverableCount = fileCount > 0 && formalDeliveryCandidateCount == 0 ? 1 : 0;
+            return new FileOwnershipTreeDraftNode(
+                nodeKey,
+                nodeLabel,
+                sanitizeNodePath(nodePath, projectName),
+                fileCount,
+                drawingCount,
+                modelCount,
+                confirmedOwnershipCount,
+                pendingReviewCount,
+                formalDeliveryCandidateCount,
+                missingDeliverableCount,
+                "依据目录级元数据、文件名、扩展名、专业、版本和现有归属，将文件汇总到“" + nodeLabel + "”草案节点。",
+                risks
+            );
+        }
+    }
+
+    private final class GapAccumulator {
+        private final String projectName;
+        private final String nodeLabel;
+        private final String nodePath;
+        private final String nodeKey;
+        private final List<Long> sampleFileIds = new ArrayList<>();
+        private final List<String> sampleFileNames = new ArrayList<>();
+        private int fileCount;
+        private int modelCount;
+        private int drawingCount;
+        private int processCount;
+        private int pendingReviewCount;
+
+        private GapAccumulator(String projectName, String nodeLabel) {
+            this.projectName = projectName;
+            this.nodeLabel = nodeLabel;
+            this.nodePath = projectName + "/模型图纸缺口/" + nodeLabel;
+            this.nodeKey = stableKey("M3G6T:GAP:" + nodeLabel);
+        }
+
+        private void add(OwnershipAnalysisRow row) {
+            fileCount += 1;
+            if (isModelFile(row)) modelCount += 1;
+            if (isDrawingFile(row)) drawingCount += 1;
+            if (isProcessOnlyFile(row)) processCount += 1;
+            if (!"CONFIRMED".equals(row.status()) || "LOW".equals(row.confidence()) || "PENDING_REVIEW".equals(row.ownershipType())) {
+                pendingReviewCount += 1;
+            }
+            if (sampleFileIds.size() < 5) {
+                sampleFileIds.add(row.fileId());
+                sampleFileNames.add(row.fileName());
+            }
+        }
+
+        private ModelDrawingGapRow toResponse() {
+            String status;
+            String recommendation;
+            String missingReason = "none";
+            if (modelCount > 0 && drawingCount > 0) {
+                status = "HAS_MODEL_AND_DRAWING";
+                recommendation = "目录级线索显示该节点同时存在模型和图纸文件，可由项目负责人复核对应关系。";
+            } else if (drawingCount > 0) {
+                status = "DRAWING_MISSING_MODEL";
+                recommendation = "目录级线索显示该节点已有图纸但缺少模型线索，建议检查是否尚未建模或模型归属到其他节点。";
+                missingReason = "model_parse_evidence_missing";
+            } else if (modelCount > 0) {
+                status = "MODEL_MISSING_DRAWING";
+                recommendation = "目录级线索显示该节点已有模型但缺少图纸线索，建议检查图纸是否未入库或归属到其他节点。";
+                missingReason = "drawing_catalog_evidence_missing";
+            } else if (processCount > 0) {
+                status = "PROCESS_ONLY";
+                recommendation = "当前主要是过程或参考资料，不应自动当成模型/图纸交付依据。";
+                missingReason = "model_and_drawing_catalog_evidence_missing";
+            } else {
+                status = "NEEDS_REVIEW";
+                recommendation = "目录和文件名线索不足，需要人工判断资料用途。";
+                missingReason = "asset_catalog_only";
+            }
+            if (pendingReviewCount > 0 && !"NEEDS_REVIEW".equals(status)) {
+                recommendation += " 其中有待复核文件，不能自动作为正式结论。";
+            }
+            return new ModelDrawingGapRow(
+                nodeKey,
+                nodeLabel,
+                sanitizeNodePath(nodePath, projectName),
+                status,
+                fileCount,
+                modelCount,
+                drawingCount,
+                processCount,
+                pendingReviewCount,
+                sampleFileIds,
+                sampleFileNames,
+                recommendation,
+                "catalog_metadata_only",
+                missingReason
+            );
+        }
     }
 
     private record ProjectInfo(Long id, String code, String name, String roleCode) {
