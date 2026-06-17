@@ -157,7 +157,10 @@ public class BimAssetRepository {
                    CASE WHEN COALESCE(wb.binding_count, 0) > 0 THEN 1 ELSE 0 END AS has_delivery_governance,
                    p.updated_at AS project_updated_at
             FROM core_user_project_roles upr
-            JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
+            JOIN core_projects p ON p.id = upr.project_id
+                AND p.deleted = 0
+                AND p.status = 'ACTIVE'
+                AND COALESCE(p.asset_status, 'ACTIVE') <> 'ARCHIVED'
             LEFT JOIN (
                 SELECT project_id,
                        COUNT(1) AS file_count,

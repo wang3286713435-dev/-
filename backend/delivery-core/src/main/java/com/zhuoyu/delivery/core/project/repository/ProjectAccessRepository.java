@@ -26,7 +26,10 @@ public class ProjectAccessRepository {
             SELECT p.id, p.code, p.name, p.industry_type, p.status, p.project_manager_name,
                    r.code AS role_code, r.name AS role_name
             FROM core_user_project_roles upr
-            JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
+            JOIN core_projects p ON p.id = upr.project_id
+                AND p.deleted = 0
+                AND p.status = 'ACTIVE'
+                AND COALESCE(p.asset_status, 'ACTIVE') <> 'ARCHIVED'
             JOIN core_roles r ON r.id = upr.role_id AND r.deleted = 0
             WHERE upr.user_id = :userId AND upr.deleted = 0
             ORDER BY p.id
@@ -39,7 +42,10 @@ public class ProjectAccessRepository {
             SELECT p.id, p.code, p.name, p.industry_type, p.status, p.project_manager_name,
                    r.code AS role_code, r.name AS role_name
             FROM core_user_project_roles upr
-            JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
+            JOIN core_projects p ON p.id = upr.project_id
+                AND p.deleted = 0
+                AND p.status = 'ACTIVE'
+                AND COALESCE(p.asset_status, 'ACTIVE') <> 'ARCHIVED'
             JOIN core_roles r ON r.id = upr.role_id AND r.deleted = 0
             WHERE upr.user_id = :userId AND upr.project_id = :projectId AND upr.deleted = 0
             """;

@@ -32,9 +32,13 @@ public class EmployeeManagementRepository {
         String sql = """
             SELECT u.id, u.username, u.phone_number, u.display_name, u.department_name,
                    u.status, u.last_login_at, u.created_at, u.updated_at,
-                   COUNT(DISTINCT CASE WHEN upr.deleted = 0 THEN upr.project_id ELSE NULL END) AS project_count
+                   COUNT(DISTINCT CASE WHEN upr.deleted = 0 AND p.id IS NOT NULL THEN upr.project_id ELSE NULL END) AS project_count
             FROM core_users u
             LEFT JOIN core_user_project_roles upr ON upr.user_id = u.id
+            LEFT JOIN core_projects p ON p.id = upr.project_id
+                AND p.deleted = 0
+                AND p.status = 'ACTIVE'
+                AND COALESCE(p.asset_status, 'ACTIVE') <> 'ARCHIVED'
             WHERE u.deleted = 0
               AND (:status IS NULL OR u.status = :status)
               AND (
@@ -75,7 +79,10 @@ public class EmployeeManagementRepository {
             SELECT p.id AS project_id, p.code AS project_code, p.name AS project_name,
                    r.code AS role_code, r.name AS role_name
             FROM core_user_project_roles upr
-            JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
+            JOIN core_projects p ON p.id = upr.project_id
+                AND p.deleted = 0
+                AND p.status = 'ACTIVE'
+                AND COALESCE(p.asset_status, 'ACTIVE') <> 'ARCHIVED'
             JOIN core_roles r ON r.id = upr.role_id AND r.deleted = 0
             WHERE upr.user_id = :userId AND upr.deleted = 0
             ORDER BY p.id
@@ -154,7 +161,10 @@ public class EmployeeManagementRepository {
             SELECT DISTINCT p.id, p.code, p.name, p.industry_type, p.status
             FROM core_user_project_roles upr
             JOIN core_roles r ON r.id = upr.role_id AND r.deleted = 0
-            JOIN core_projects p ON p.id = upr.project_id AND p.deleted = 0
+            JOIN core_projects p ON p.id = upr.project_id
+                AND p.deleted = 0
+                AND p.status = 'ACTIVE'
+                AND COALESCE(p.asset_status, 'ACTIVE') <> 'ARCHIVED'
             WHERE upr.user_id = :adminUserId
               AND upr.deleted = 0
               AND r.code = 'PROJECT_ADMIN'
@@ -173,6 +183,7 @@ public class EmployeeManagementRepository {
             FROM core_projects p
             WHERE p.deleted = 0
               AND p.status = 'ACTIVE'
+              AND COALESCE(p.asset_status, 'ACTIVE') <> 'ARCHIVED'
             ORDER BY p.id
             """;
         return jdbcTemplate.query(sql, new MapSqlParameterSource(), EmployeeManagementRepository::mapAssignableProject);
