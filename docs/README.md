@@ -30,6 +30,8 @@
    API 契约与文档维护说明，保留运行期 OpenAPI 入口、接口分组、禁出字段和后续 API 同步规则。
 13. [13-ux4-frontend-architecture-baseline.md](/Users/vc/Documents/数字化交付平台/docs/13-ux4-frontend-architecture-baseline.md)
    UX4 前端信息架构与交互基线，明确全局壳层、项目启动台、项目工作台、文件管理、工程主数据、交付闭环、BIM 协同和旧链接兼容规则。
+14. [14-phase2-closure-requirements.md](/Users/vc/Documents/数字化交付平台/docs/14-phase2-closure-requirements.md)
+   二期当前基线、收口分级、后续任务图和必须验收的红线清单。
 
 ## 当前版本结论
 
@@ -69,6 +71,7 @@
 - [11-current-baseline-and-next-roadmap.md](/Users/vc/Documents/数字化交付平台/docs/11-current-baseline-and-next-roadmap.md)
 - [12-api-contract-and-maintenance.md](/Users/vc/Documents/数字化交付平台/docs/12-api-contract-and-maintenance.md)
 - [13-ux4-frontend-architecture-baseline.md](/Users/vc/Documents/数字化交付平台/docs/13-ux4-frontend-architecture-baseline.md)
+- [14-phase2-closure-requirements.md](/Users/vc/Documents/数字化交付平台/docs/14-phase2-closure-requirements.md)
 - [phase2-current-roadmap.md](/Users/vc/Documents/数字化交付平台/handoff/main-agent/phase2-current-roadmap.md)
 - [hermes-jarvis-coupling-roadmap.md](/Users/vc/Documents/数字化交付平台/handoff/main-agent/hermes-jarvis-coupling-roadmap.md)
 
