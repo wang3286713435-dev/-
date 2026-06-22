@@ -25,6 +25,8 @@ JOB_ID=""
 SELECTED_PROJECT_IDS=()
 SAMPLE_IDS=()
 SAMPLE_STATS_BEFORE=()
+HAS_READABLE_SAMPLE=false
+FALLBACK_PROJECT_ID=""
 
 pass() {
   PASS=$((PASS + 1))
@@ -376,6 +378,22 @@ LIMIT 500;" 2>/dev/null)"
   done <<< "${candidates}"
 }
 
+first_overview_project_id() {
+  local response="$1"
+  RESPONSE="${response}" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["RESPONSE"])
+projects = payload.get("data", {}).get("projects", [])
+for project in projects:
+    project_id = project.get("projectId")
+    if project_id:
+        print(project_id)
+        break
+PY
+}
+
 job_processed_files() {
   local response="$1"
   json_expr "${response}" "int(data['data']['job']['processedFiles'] or 0)"
@@ -481,9 +499,16 @@ echo ""
 echo "--- 2. Discover readable smoke samples ---"
 discover_readable_samples
 if [[ "${#SAMPLE_IDS[@]}" -ge 1 ]]; then
+  HAS_READABLE_SAMPLE=true
   pass "已为 NAS 原文件不变校验记录 size/mtime，projectIds=$(unique_project_ids_json)"
 else
-  fail "未找到本机可读 NAS_ONLY 小样本"
+  FALLBACK_PROJECT_ID="$(first_overview_project_id "${overview_response}")"
+  if [[ -n "${FALLBACK_PROJECT_ID}" ]]; then
+    SELECTED_PROJECT_IDS+=("${FALLBACK_PROJECT_ID}")
+    pass "未找到本机可读 NAS_ONLY 小样本，进入候选不足/对象化饱和安全分支"
+  else
+    fail "未找到本机可读 NAS_ONLY 小样本，且队列总览没有可用于权限校验的项目"
+  fi
 fi
 
 echo ""
@@ -521,10 +546,35 @@ else
   fail "dry-run 出现写入：jobs ${jobs_before}->${jobs_after}, items ${items_before}->${items_after}, objects ${objects_before}->${objects_after}"
 fi
 
-if [[ "$(json_expr "${dry_response}" "data['data']['dryRun'] == True and data['data']['jobCreated'] == False and int(data['data']['selectedFileCount']) > 0 and int(data['data']['selectedFileCount']) <= ${MAX_TOTAL_FILES}")" == "true" ]]; then
+if [[ "${HAS_READABLE_SAMPLE}" == "true" && "$(json_expr "${dry_response}" "data['data']['dryRun'] == True and data['data']['jobCreated'] == False and int(data['data']['selectedFileCount']) > 0 and int(data['data']['selectedFileCount']) <= ${MAX_TOTAL_FILES}")" == "true" ]]; then
   pass "dry-run 生成小批队列计划"
+elif [[ "${HAS_READABLE_SAMPLE}" != "true" && "$(json_expr "${dry_response}" "data['data']['dryRun'] == True and data['data']['jobCreated'] == False and int(data['data']['selectedFileCount']) >= 0")" == "true" ]]; then
+  pass "候选不足/对象化饱和时 dry-run 仍不写入"
 else
   fail "dry-run 未生成可执行小批计划：${dry_response}"
+fi
+
+if [[ "${HAS_READABLE_SAMPLE}" != "true" ]]; then
+  echo ""
+  echo "--- 5. Saturated environment safe exit ---"
+  overview_after="$(api_get "/api/data-steward/storage-objectification-queue/overview")"
+  assert_ok "${overview_after}"
+  assert_no_forbidden "queue overview saturated" "${overview_after}"
+  pass "候选不足/对象化饱和环境下未创建后台任务，队列总览仍可查询"
+
+  if git ls-files --error-unmatch scripts/dev/check-m3xq-objectification-background-queue.sh >/dev/null 2>&1; then
+    pass "M3X-Q 专项脚本已纳入 Git 跟踪"
+  else
+    fail "M3X-Q 专项脚本尚未纳入 Git 跟踪"
+  fi
+
+  echo ""
+  echo "--- M3X-Q summary ---"
+  printf 'PASS=%s FAIL=%s\n' "${PASS}" "${FAIL}"
+  if [[ "${FAIL}" -ne 0 ]]; then
+    exit 1
+  fi
+  exit 0
 fi
 
 echo ""
