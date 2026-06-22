@@ -6,15 +6,6 @@
         <p>选择项目，查看工作状态，快速进入项目工作台</p>
       </div>
       <div class="launchpad-page__tools">
-        <el-input
-          v-model="keyword"
-          class="launchpad-search"
-          clearable
-          placeholder="搜索项目名称 / 编码 / 负责人"
-          :prefix-icon="Search"
-          @keyup.enter="loadPage"
-          @clear="loadPage"
-        />
         <el-button :icon="Refresh" @click="loadPage">刷新</el-button>
       </div>
     </header>
@@ -369,7 +360,7 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { ArrowRight, MoreFilled, Refresh, Search } from '@element-plus/icons-vue';
+import { ArrowRight, MoreFilled, Refresh } from '@element-plus/icons-vue';
 
 import projectCoverImage from '@/assets/ux4/project-cover-reference.png';
 import { useAuthStore } from '@/stores/auth';
@@ -411,7 +402,6 @@ const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const loading = ref(false);
-const keyword = ref('');
 const sourceFilter = ref('ALL');
 const onboardingFilter = ref('ALL');
 const managerFilter = ref('ALL');
@@ -675,19 +665,12 @@ async function loadPage() {
 }
 
 async function loadLaunchpadProjects() {
-  const rows = await fetchAssetProjects(keyword.value.trim() || undefined, undefined);
+  const rows = await fetchAssetProjects(undefined, undefined);
   if (rows.length) {
     return rows;
   }
   const catalogRows = await fetchCatalogProjects();
-  return catalogRows.filter(matchesCatalogKeyword).map(mapCatalogProject);
-}
-
-function matchesCatalogKeyword(row: CatalogProject) {
-  const query = keyword.value.trim().toLowerCase();
-  if (!query) return true;
-  return [row.projectCode, row.projectName]
-    .some((value) => (value || '').toLowerCase().includes(query));
+  return catalogRows.map(mapCatalogProject);
 }
 
 function mapCatalogProject(row: CatalogProject): AssetProject {
@@ -1061,7 +1044,7 @@ function noticeTitle(actionCode: string, summary: string | null) {
 
 .launchpad-page__header {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(360px, 520px);
+  grid-template-columns: minmax(240px, 1fr) auto;
   gap: 24px;
   align-items: center;
 }
@@ -1083,15 +1066,9 @@ function noticeTitle(actionCode: string, summary: string | null) {
 }
 
 .launchpad-page__tools {
-  display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto;
-  gap: 12px;
+  display: flex;
+  justify-content: flex-end;
   align-items: center;
-}
-
-.launchpad-search :deep(.el-input__wrapper) {
-  min-height: 44px;
-  border-radius: 10px;
 }
 
 .launchpad-create-alert {

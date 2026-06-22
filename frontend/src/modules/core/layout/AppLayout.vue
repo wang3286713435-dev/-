@@ -8,10 +8,13 @@
           <span>ZHUOYU · DATA HUB</span>
         </div>
       </div>
-      <SidebarMenu :menus="menus" />
+      <SidebarMenu :menus="primaryMenus" />
       <div class="app-layout__sidebar-foot">
-        <strong>BUILD · UX4-A</strong>
-        <span>项目壳层 / SaaS shell</span>
+        <SidebarMenu :menus="supportMenus" class="app-layout__sidebar-support-menu" />
+        <div class="app-layout__build-info">
+          <strong>BUILD · UX4-A</strong>
+          <span>项目壳层 / SaaS shell</span>
+        </div>
       </div>
     </aside>
 
@@ -30,7 +33,7 @@
           <nav class="app-layout__breadcrumbs" aria-label="当前位置">
             <strong v-if="isBreadcrumbRootOnly">{{ breadcrumbRootLabel }}</strong>
             <button v-else type="button" @click="goBreadcrumbRoot">{{ breadcrumbRootLabel }}</button>
-            <template v-if="shellProject">
+            <template v-if="showShellProjectBreadcrumb && shellProject">
               <span>/</span>
               <button type="button" @click="goProjectDashboard(shellProject.id)">{{ shellProject.name }}</button>
             </template>
@@ -57,11 +60,74 @@
               :value="item.id"
             />
           </el-select>
-          <button class="app-layout__search-entry" type="button" @click="showSearchPlaceholder">
-            <el-icon><Search /></el-icon>
-            <span>搜索项目、文件、交付事项</span>
-            <kbd>⌘K</kbd>
-          </button>
+          <div ref="globalSearchShellRef" class="global-search-shell">
+            <button class="app-layout__search-entry" type="button" @click="openGlobalSearch">
+              <el-icon><Search /></el-icon>
+              <span>搜索项目、文件、交付事项</span>
+              <kbd>⌘K</kbd>
+            </button>
+            <section v-if="globalSearchVisible" class="global-search-panel" aria-label="全局搜索">
+              <div class="global-search-panel__field">
+                <el-icon><Search /></el-icon>
+                <input
+                  ref="globalSearchInputRef"
+                  v-model="globalSearchKeyword"
+                  type="search"
+                  placeholder="搜索项目、文件、模型、交付事项..."
+                  @keydown.enter.prevent="openFirstGlobalSearchResult"
+                  @keydown.esc.prevent="closeGlobalSearch"
+                />
+              </div>
+              <div class="global-search-panel__meta">
+                <span>{{ globalSearchScopeLabel }}</span>
+                <small>按 Enter 打开第一条结果</small>
+              </div>
+
+              <div v-if="globalSearchLoading" class="global-search-panel__state">
+                正在搜索...
+              </div>
+              <div v-else-if="globalSearchError" class="global-search-panel__state is-error">
+                {{ globalSearchError }}
+              </div>
+              <div
+                v-else-if="globalSearchKeyword.trim() && !globalSearchResult?.totalCount"
+                class="global-search-panel__state"
+              >
+                没有找到相关项目或文件
+              </div>
+              <div v-else-if="!globalSearchKeyword.trim()" class="global-search-panel__state">
+                输入关键词后，会在你有权限的项目、文件、模型和交付事项中搜索。
+              </div>
+              <div v-else class="global-search-panel__groups">
+                <section
+                  v-for="group in visibleGlobalSearchGroups"
+                  :key="group.type"
+                  class="global-search-group"
+                >
+                  <header>
+                    <strong>{{ group.label }}</strong>
+                    <span>{{ group.count }}</span>
+                  </header>
+                  <button
+                    v-for="item in group.items"
+                    :key="`${item.type}-${item.id}`"
+                    class="global-search-result"
+                    type="button"
+                    @click="openGlobalSearchItem(item)"
+                  >
+                    <span class="global-search-result__type" :class="`is-${item.type.toLowerCase()}`">
+                      {{ globalSearchTypeLabel(item.type) }}
+                    </span>
+                    <span class="global-search-result__main">
+                      <strong>{{ item.title }}</strong>
+                      <small>{{ item.projectName }} · {{ item.subtitle }}</small>
+                    </span>
+                    <span class="global-search-result__status">{{ item.status || '可打开' }}</span>
+                  </button>
+                </section>
+              </div>
+            </section>
+          </div>
           <el-tooltip content="通知中心占位">
             <el-button circle text :icon="Bell" aria-label="通知中心" />
           </el-tooltip>
@@ -124,7 +190,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ArrowDown, Back, Bell, ChatDotRound, QuestionFilled, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
@@ -135,12 +201,22 @@ import ProjectWorkspaceNav from '@/modules/core/components/ProjectWorkspaceNav.v
 import SidebarMenu from '@/modules/core/components/SidebarMenu.vue';
 import { useProjectWorkspaceContext } from '@/modules/core/composables/useProjectWorkspaceContext';
 import type { MenuItem } from '@/modules/core/api/types';
+import { fetchGlobalSearch, type GlobalSearchGroup, type GlobalSearchItem } from '@/modules/core/api/search';
 import { useAuthStore } from '@/stores/auth';
 
 const authStore = useAuthStore();
 const route = useRoute();
 const router = useRouter();
 const hermesDrawerVisible = ref(false);
+const globalSearchVisible = ref(false);
+const globalSearchKeyword = ref('');
+const globalSearchLoading = ref(false);
+const globalSearchError = ref('');
+const globalSearchResult = ref<Awaited<ReturnType<typeof fetchGlobalSearch>> | null>(null);
+const globalSearchShellRef = ref<HTMLElement | null>(null);
+const globalSearchInputRef = ref<HTMLInputElement | null>(null);
+let globalSearchTimer: ReturnType<typeof window.setTimeout> | null = null;
+let globalSearchRequestSeq = 0;
 
 const { assetProjectContext, routeProjectId } = useProjectWorkspaceContext();
 
@@ -151,7 +227,7 @@ const hermesEnabledRouteNames = new Set([
   'project-work-agent-governance'
 ]);
 
-const menus = computed(() => {
+const primaryMenus = computed(() => {
   const globalMenus: MenuItem[] = [
     {
       key: 'project-launchpad',
@@ -192,14 +268,6 @@ const menus = computed(() => {
       icon: 'Monitor'
     }
   ];
-  if (hasEmployeeManagementPermission()) {
-    globalMenus.push({
-      key: 'admin-center',
-      label: '管理中心',
-      path: '/admin/employees',
-      icon: 'User'
-    });
-  }
   globalMenus.push({
     key: 'my-projects',
     label: '我的项目',
@@ -212,22 +280,31 @@ const menus = computed(() => {
       icon: 'FolderOpened'
     }))
   });
-  globalMenus.push(
-    {
-      key: 'help-center',
-      label: '帮助中心',
-      path: '/home',
-      icon: 'QuestionFilled'
-    },
-    {
-      key: 'hermes-assistant',
-      label: 'Hermes 助手',
-      path: '/data-steward/agent-preview',
-      icon: 'ChatDotRound'
-    }
-  );
+  if (hasEmployeeManagementPermission()) {
+    globalMenus.push({
+      key: 'admin-center',
+      label: '管理中心',
+      path: '/admin/employees',
+      icon: 'User'
+    });
+  }
   return globalMenus;
 });
+
+const supportMenus = computed<MenuItem[]>(() => [
+  {
+    key: 'help-center',
+    label: '帮助中心',
+    path: '/home',
+    icon: 'QuestionFilled'
+  },
+  {
+    key: 'hermes-assistant',
+    label: 'Hermes 助手',
+    path: '/data-steward/agent-preview',
+    icon: 'ChatDotRound'
+  }
+]);
 
 const authorizedProjects = computed(() => authStore.currentUser?.projects ?? []);
 
@@ -253,10 +330,17 @@ const platformRootRouteNames = new Set([
 ]);
 
 const platformProjectQueryRouteNames = new Set([
-  'bim-collaboration'
+  'bim-collaboration',
+  'glandar-model-preview'
 ]);
 
 const routeName = computed(() => String(route.name ?? ''));
+
+const routeQueryFileName = computed(() => {
+  const raw = route.query.fileName;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return typeof value === 'string' ? value.trim() : '';
+});
 
 const shellProjectId = computed(() => {
   if (routeProjectId.value) return routeProjectId.value;
@@ -333,6 +417,9 @@ const shellTitle = computed(() => {
 });
 
 const shellCurrentLabel = computed(() => {
+  if (routeName.value === 'glandar-model-preview') {
+    return routeQueryFileName.value || '模型预览';
+  }
   if (routeName.value === 'data-steward-asset-detail') {
     const tab = typeof route.query.tab === 'string' ? route.query.tab : 'dashboard';
     const labels: Record<string, string> = {
@@ -359,14 +446,22 @@ const shellCurrentLabel = computed(() => {
 });
 
 const breadcrumbRootLabel = computed(() => {
-  if (routeName.value === 'bim-collaboration') return 'BIM 协同';
+  if (routeName.value === 'bim-collaboration' || routeName.value === 'glandar-model-preview') return 'BIM 协同';
   return '项目启动台';
 });
 
 const breadcrumbRootRouteName = computed(() => {
-  if (routeName.value === 'bim-collaboration') return 'bim-collaboration';
+  if (routeName.value === 'bim-collaboration' || routeName.value === 'glandar-model-preview') return 'bim-collaboration';
   return 'data-steward-assets';
 });
+
+const breadcrumbRootQuery = computed(() => {
+  if (breadcrumbRootRouteName.value !== 'bim-collaboration') return {};
+  const projectId = routeQueryProjectId.value ?? shellProjectId.value;
+  return projectId ? { projectId } : {};
+});
+
+const showShellProjectBreadcrumb = computed(() => routeName.value !== 'glandar-model-preview');
 
 const isBreadcrumbRootOnly = computed(() =>
   platformRootRouteNames.has(routeName.value) && !shellProject.value
@@ -375,6 +470,15 @@ const isBreadcrumbRootOnly = computed(() =>
 const showBreadcrumbBack = computed(() => !isBreadcrumbRootOnly.value);
 const showHeaderProjectSelect = computed(() =>
   Boolean(authorizedProjects.value.length && !platformRootRouteNames.has(routeName.value))
+);
+
+const globalSearchScopeLabel = computed(() => {
+  if (shellProject.value) return `搜索全部授权项目 · 当前在 ${shellProject.value.name}`;
+  return '搜索全部授权项目';
+});
+
+const visibleGlobalSearchGroups = computed<GlobalSearchGroup[]>(() =>
+  (globalSearchResult.value?.groups ?? []).filter((group) => group.count > 0)
 );
 
 async function handleLogout() {
@@ -393,7 +497,7 @@ async function handleUserCommand(command: string) {
 }
 
 function goBreadcrumbRoot() {
-  router.push({ name: breadcrumbRootRouteName.value });
+  router.push({ name: breadcrumbRootRouteName.value, query: breadcrumbRootQuery.value });
 }
 
 function goProjectDashboard(projectId: number) {
@@ -421,9 +525,104 @@ async function handleProjectSelect(value: number | string) {
   }
 }
 
-function showSearchPlaceholder() {
-  ElMessage.info('全局搜索入口已预留，当前可先通过项目启动台和文件管理筛选。');
+function openGlobalSearch() {
+  globalSearchVisible.value = true;
+  nextTick(() => globalSearchInputRef.value?.focus());
 }
+
+function closeGlobalSearch() {
+  globalSearchVisible.value = false;
+}
+
+async function runGlobalSearch() {
+  const keyword = globalSearchKeyword.value.trim();
+  globalSearchError.value = '';
+  if (!keyword) {
+    globalSearchResult.value = null;
+    globalSearchLoading.value = false;
+    return;
+  }
+  const seq = ++globalSearchRequestSeq;
+  globalSearchLoading.value = true;
+  try {
+    const result = await fetchGlobalSearch({ keyword, limit: 5 });
+    if (seq === globalSearchRequestSeq) {
+      globalSearchResult.value = result;
+    }
+  } catch (error) {
+    if (seq === globalSearchRequestSeq) {
+      globalSearchResult.value = null;
+      globalSearchError.value = error instanceof Error ? error.message : '搜索失败，请稍后重试';
+    }
+  } finally {
+    if (seq === globalSearchRequestSeq) {
+      globalSearchLoading.value = false;
+    }
+  }
+}
+
+function scheduleGlobalSearch() {
+  if (globalSearchTimer) window.clearTimeout(globalSearchTimer);
+  globalSearchTimer = window.setTimeout(() => {
+    void runGlobalSearch();
+  }, 260);
+}
+
+function openFirstGlobalSearchResult() {
+  const item = visibleGlobalSearchGroups.value.flatMap((group) => group.items)[0];
+  if (item) openGlobalSearchItem(item);
+}
+
+function openGlobalSearchItem(item: GlobalSearchItem) {
+  closeGlobalSearch();
+  router.push({
+    name: item.routeName,
+    params: item.routeParams ?? {},
+    query: item.routeQuery ?? {}
+  });
+}
+
+function globalSearchTypeLabel(type: GlobalSearchItem['type']) {
+  const labels: Record<GlobalSearchItem['type'], string> = {
+    PROJECT: '项目',
+    FILE: '文件',
+    MODEL: '模型',
+    DELIVERY: '交付',
+    RECTIFICATION: '整改'
+  };
+  return labels[type] ?? '结果';
+}
+
+function handleGlobalSearchShortcut(event: KeyboardEvent) {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+    event.preventDefault();
+    openGlobalSearch();
+    return;
+  }
+  if (event.key === 'Escape' && globalSearchVisible.value) {
+    closeGlobalSearch();
+  }
+}
+
+function handleGlobalSearchOutside(event: MouseEvent) {
+  if (!globalSearchVisible.value) return;
+  const target = event.target as Node | null;
+  if (target && globalSearchShellRef.value?.contains(target)) return;
+  closeGlobalSearch();
+}
+
+watch(globalSearchKeyword, scheduleGlobalSearch);
+
+onMounted(() => {
+  window.addEventListener('keydown', handleGlobalSearchShortcut);
+  window.addEventListener('mousedown', handleGlobalSearchOutside);
+});
+
+onBeforeUnmount(() => {
+  if (globalSearchTimer) window.clearTimeout(globalSearchTimer);
+  window.removeEventListener('keydown', handleGlobalSearchShortcut);
+  window.removeEventListener('mousedown', handleGlobalSearchOutside);
+});
 
 const userInitial = computed(() => {
   const name = authStore.currentUser?.displayName || authStore.currentUser?.username || 'U';
@@ -437,6 +636,201 @@ function hasEmployeeManagementPermission() {
 </script>
 
 <style scoped>
+.global-search-shell {
+  position: relative;
+}
+
+.global-search-panel {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 22px;
+  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.16);
+  left: 50%;
+  overflow: hidden;
+  position: absolute;
+  top: calc(100% + 12px);
+  transform: translateX(-50%);
+  width: min(620px, calc(100vw - 380px));
+  z-index: 80;
+}
+
+.global-search-panel__field {
+  align-items: center;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
+  display: flex;
+  gap: 10px;
+  padding: 14px 16px;
+}
+
+.global-search-panel__field .el-icon {
+  color: #2563eb;
+  font-size: 18px;
+}
+
+.global-search-panel__field input {
+  background: transparent;
+  border: 0;
+  color: #0f172a;
+  flex: 1;
+  font-size: 15px;
+  line-height: 24px;
+  min-width: 0;
+  outline: none;
+}
+
+.global-search-panel__field input::placeholder {
+  color: #94a3b8;
+}
+
+.global-search-panel__meta {
+  align-items: center;
+  color: #64748b;
+  display: flex;
+  font-size: 12px;
+  justify-content: space-between;
+  padding: 9px 16px 0;
+}
+
+.global-search-panel__meta small {
+  color: #94a3b8;
+}
+
+.global-search-panel__state {
+  color: #64748b;
+  font-size: 14px;
+  padding: 28px 16px 30px;
+  text-align: center;
+}
+
+.global-search-panel__state.is-error {
+  color: #dc2626;
+}
+
+.global-search-panel__groups {
+  max-height: min(60vh, 560px);
+  overflow: auto;
+  padding: 10px 10px 12px;
+}
+
+.global-search-group + .global-search-group {
+  border-top: 1px solid rgba(226, 232, 240, 0.82);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.global-search-group header {
+  align-items: center;
+  color: #64748b;
+  display: flex;
+  font-size: 12px;
+  justify-content: space-between;
+  padding: 6px 8px;
+}
+
+.global-search-group header strong {
+  color: #334155;
+  font-size: 12px;
+}
+
+.global-search-group header span {
+  background: #eff6ff;
+  border-radius: 999px;
+  color: #2563eb;
+  font-weight: 700;
+  min-width: 24px;
+  padding: 2px 8px;
+  text-align: center;
+}
+
+.global-search-result {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 14px;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 10px 8px;
+  text-align: left;
+  width: 100%;
+}
+
+.global-search-result:hover,
+.global-search-result:focus-visible {
+  background: #f8fafc;
+  outline: none;
+}
+
+.global-search-result__type {
+  align-items: center;
+  border-radius: 12px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  height: 32px;
+  justify-content: center;
+  width: 44px;
+}
+
+.global-search-result__type.is-project {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.global-search-result__type.is-file {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.global-search-result__type.is-model {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.global-search-result__type.is-delivery {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.global-search-result__type.is-rectification {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.global-search-result__main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.global-search-result__main strong,
+.global-search-result__main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.global-search-result__main strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.global-search-result__main small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.global-search-result__status {
+  color: #64748b;
+  font-size: 12px;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .hermes-global-entry {
   align-items: center;
   bottom: 24px;
@@ -477,6 +871,17 @@ function hasEmployeeManagementPermission() {
 }
 
 @media (max-width: 720px) {
+  .global-search-panel {
+    left: auto;
+    right: 0;
+    transform: none;
+    width: min(92vw, 520px);
+  }
+
+  .global-search-panel__meta small {
+    display: none;
+  }
+
   .hermes-global-entry {
     bottom: 14px;
     right: 14px;

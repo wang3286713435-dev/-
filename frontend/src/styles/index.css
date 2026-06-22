@@ -259,15 +259,32 @@ a:hover {
 .app-layout__sidebar-foot {
   position: relative;
   z-index: 1;
-  padding: 16px 20px 22px;
+  padding: 8px 10px 16px;
   border-top: 1px solid oklch(0.92 0.016 255);
   color: oklch(0.43 0.035 260);
   font-size: var(--zy-fs-xs);
   line-height: 1.5;
   background: oklch(0.99 0.004 255);
+  display: grid;
+  gap: 8px;
+  min-height: 0;
 }
 
-.app-layout__sidebar-foot strong {
+.app-layout__sidebar-support-menu.sidebar-menu {
+  padding: 0;
+  overflow: visible;
+}
+
+.app-layout__sidebar-support-menu.sidebar-menu .el-menu-item {
+  height: 38px;
+  line-height: 38px;
+}
+
+.app-layout__build-info {
+  padding: 0 10px;
+}
+
+.app-layout__build-info strong {
   display: block;
   color: oklch(0.24 0.04 260);
   font-weight: var(--zy-fw-semi);
