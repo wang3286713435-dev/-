@@ -54,6 +54,31 @@
 - 不写 OpenSearch、Qdrant、长期 memory 或生产级 NAS 向量库。
 - 不让 Jarvis/Hermes 自动执行 DB CRUD、NAS CRUD、审批、删除、修复或扫描。
 
+## Blender 模型加工与轻量预览辅助引擎
+
+状态：进入 backlog，待主 agent 裁定批次命名和插入点。
+
+来源：
+
+- `handoff/main-agent/blender-model-conversion-provider-plan.md`
+
+目标：
+
+1. 新增 `BLENDER` provider，作为平台免费模型加工与轻量预览辅助引擎。
+2. 支持 L0 模型缩略图生成，用于文件管理器、资产目录、模型列表快速识别。
+3. 支持 L1 小模型 / 通用模型 GLB 轻量预览产物生成。
+4. 产物统一写入 MinIO / 对象存储，MySQL 记录任务、版本、权限和审计。
+5. 前端明确区分 `缩略图`、`轻量 GLB 预览`、`正式 BIM 轻量化预览`。
+
+边界：
+
+- `BLENDER` 不替代 `GLANDAR` 正式 BIM 轻量化主链路。
+- 首批不把 `.rvt`、`.dwg`、`.nwd`、`.nwc` 投给 Blender。
+- Blender 低精度 GLB 预览不得包装成正式工程审查能力。
+- 不绕过 StorageService、file-access、对象存储权限和审计。
+- 不暴露真实 NAS 路径、bucket、object key、`storage_uri`、SQL、raw row、secret。
+- 不写 Hermes memory，不进入语义理解。
+
 ## 下一阶段
 
 ## 当前裁决：一期后端数据治理已收口

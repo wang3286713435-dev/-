@@ -1,5 +1,102 @@
 # 主 Agent 开发监控日志
 
+## 2026-06-17：M3X-Q-UX2 启动，对象存储页覆盖率信息减负
+
+- 用户反馈：
+  - `资产治理 / 对象存储` 页面中，`全项目对象化覆盖率` 与下方 `项目对象化盘点` 展示数据大部分重合。
+  - 当前阅读成本偏高，用户需要看两块相似内容。
+- 主 agent 判断：
+  - 这是对象存储页的信息层级问题，不是后端数据问题。
+  - 页面应保留一个轻量总览和一个项目级明细，不应重复铺两张项目覆盖率表。
+  - 本批只做前端展示减负，不修改对象化后台队列、权限、后端接口或数据库。
+- 当前批次：
+  - `M3X-Q-UX2：对象存储页覆盖率信息减负`
+- 开发 agent 必须处理：
+  - 合并 `全项目对象化覆盖率` 与 `项目对象化盘点` 的重复项目数据。
+  - 总览区只展示总体对象化率、已对象化、仍在 NAS、失败 / 治理项、MinIO 状态等关键指标。
+  - 项目对象化明细作为唯一项目级列表保留。
+  - 收口依据 / 覆盖率诊断下沉为折叠或弱化信息。
+- 本批禁止：
+  - 不修改 `backend/**`。
+  - 不修改数据库迁移。
+  - 不修改 `docs/**`。
+  - 不移动、不删除、不重命名、不覆盖真实 NAS 原文件。
+  - 不新增 Hermes / BIM / parser / indexing / documents / chunks 能力。
+- 已写入：
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+  - `handoff/main-agent/status.md`
+
+## 2026-06-17：M3X-Q-UX1-F1 收口
+
+- 测试 agent 已完成 `M3X-Q-UX1-F1：旧对象化跑批入口权限收口` 复验，报告写入 `handoff/test-agent/latest-report.md`。
+- 复验结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- 复验结果：
+  - 旧对象化跑批入口权限 P0 已关闭。
+  - 普通用户访问旧 `storage-objectification-run:*` 接口已返回 403，不再返回 `OK`。
+  - 普通用户页面不再暴露旧 `105 对象化长跑控制` / `M3G-7R 全项目对象化跑批` 可操作按钮。
+  - M3X-Q 后台队列专项通过，`PASS=41 FAIL=0`。
+  - M3G-8 对象优先读取回归通过，`PASS=7 FAIL=0`。
+  - file-access 回归通过，`PASS=18 FAIL=0`。
+  - 后端构建、前端构建、健康检查、`git diff --check`、`git diff --cached --check` 均通过。
+  - 未发现真实 NAS 文件移动、删除、重命名、覆盖。
+  - 未发现 raw path、bucket、object key、`storage_uri`、token、secret 泄露。
+- 主 agent 收口判断：
+  - `M3X-Q-UX1-F1` 正式收口。
+  - `M3X-Q-UX1` 正式收口。
+  - M3X-Q 后台队列已经具备“默认简单、后台自动、超级管理员控制、旧入口无侧门”的当前阶段可用状态。
+- 后续注意：
+  - 当前仍有既有 P2：前端 Vite chunk warning。
+  - 工作区仍有未暂存 Glandar / UX 相关改动，以及未跟踪 `handoff/main-agent/blender-model-conversion-provider-plan.md`，后续提交时不要混入 M3X-Q-UX1-F1。
+- 已更新：
+  - `handoff/main-agent/status.md`
+  - `handoff/main-agent/m3-m5-storage-evidence-task-graph.md`
+
+## 2026-06-17：M3X-Q-UX1-F1 开发 agent 返回，进入测试复验
+
+- 开发 agent 已完成 `M3X-Q-UX1-F1：旧对象化跑批入口权限收口` 并写入 `handoff/dev-agent/latest-report.md`。
+- 主 agent 初审结果：
+  - 后端旧 `storage-objectification-run/overview`、`projects`、`:dry-run`、`:start`、`:continue`、`:pause`、`retry-failed` 已统一调用 `requireSuperAdminForQueue(userId)`。
+  - 前端旧 `105 对象化长跑控制` 和 `M3G-7R 全项目对象化跑批` 已放入 `canManageObjectificationQueue` 包裹的超级管理员诊断区，不再给普通用户默认展示。
+  - `scripts/dev/check-m3xq-objectification-background-queue.sh` 已新增普通用户访问旧跑批接口必须被拒绝的断言。
+- 开发 agent 自测：
+  - 后端构建通过。
+  - 前端构建通过。
+  - 后端健康检查通过。
+  - M3X-Q 专项脚本通过，`PASS=41 FAIL=0`。
+  - M3G-8 回归通过，`PASS=7 FAIL=0`。
+  - file-access 回归通过，`PASS=18 FAIL=0`。
+  - `git diff --check` 与 `git diff --cached --check` 通过。
+- 当前裁决：
+  - 可以交给测试 agent 按 `handoff/test-agent/current-prompt.md` 做 UX1-F1 极短复验。
+  - M3X-Q-UX1-F1 暂不收口，等待测试 agent 确认 P0 关闭。
+  - 收口提交时需要注意：当前 staged 中包含 M3X-Q / M3X-Q-F1 / UX1-F1 相关队列文件；工作区另有 Glandar / UX 未暂存改动，不要混入本批提交。
+
+## 2026-06-17：M3X-Q-UX1 测试 P0，插入 UX1-F1 旧入口权限收口
+
+- 测试 agent 结论：
+  - `M3X-Q-UX1：对象化后台队列极简控制台` 验收不通过。
+  - 新极简控制台主卡片基本通过。
+  - P0：普通用户仍能在同一 `资产治理 / 对象存储` 页面看到旧 `105 对象化长跑控制` 和 `M3G-7R 全项目对象化跑批` 控制入口。
+  - 更严重的是，旧 `storage-objectification-run:*` 后端接口仍使用 `ensureAnyProjectAccess(userId)`，普通用户调用旧 dry-run 可返回 `OK`。
+  - `pauseObjectificationRun` 旧路径会写全局暂停状态，必须收紧。
+- 主 agent 判断：
+  - 这是“旧入口未收口”的 P0，不是继续美化 UI 的问题。
+  - 本质是新控制台门禁已修，但旧全项目跑批侧门还开着。
+  - 当前不收口 M3X-Q-UX1。
+- 已插入返工批次：
+  - `M3X-Q-UX1-F1：旧对象化跑批入口权限收口`
+- 开发 agent 必须修复：
+  - 旧 `storage-objectification-run/overview`、`projects`、`:dry-run`、`:start`、`:continue`、`:pause`、`retry-failed` 全部统一为超级管理员 `admin` 专属。
+  - 前端旧长跑 / 全项目跑批控制不得在普通用户默认视图暴露。
+  - `scripts/dev/check-m3xq-objectification-background-queue.sh` 增加旧接口越权断言。
+- 已写入：
+  - `handoff/dev-agent/current-prompt.md`
+  - `handoff/test-agent/current-prompt.md`
+  - `handoff/main-agent/status.md`
+
 ## 2026-06-15：PLM-1 开发 agent 返回，进入测试前审计
 
 - 开发 agent 已完成 PLM-1 并写入 `handoff/dev-agent/latest-report.md`。
@@ -5268,6 +5365,28 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - 可以交给测试 agent 按 `handoff/test-agent/current-prompt.md` 做 UX4-A P0 极短复验。
   - 主 agent 仍不收口 UX4-A，等待测试 agent 确认浏览器白屏已关闭。
 
+## 2026-06-17 M3X-Q 启动：全平台对象化后台任务队列与可视化
+
+- 用户反馈：
+  - 当前对象化仍然像“推一下动一下”，效率太低。
+  - 需要一个后台任务队列，让平台在后端服务运行期间持续、慢速、可控地对象化全平台文件。
+  - 需要在 `资产治理 / 对象存储` 中看到不同项目对象化进度，以及当前后台任务。
+- 主 agent 判断：
+  - 现有 M3G / M3X 已具备对象化执行能力、对象优先读取、覆盖率报告和全项目 run 接口。
+  - 但现有 run 仍偏同步小批请求，暂停状态也不够持久化，不能满足“页面关闭后继续跑、服务重启后可恢复”的任务队列需求。
+  - 本批应补齐“持久化队列 + 后台 worker + 前端任务中心”，而不是继续扩大脚本。
+- 当前批次：
+  - `M3X-Q：全平台对象化后台任务队列与可视化`
+- 已写入：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+- 本批边界：
+  - 不移动、不删除、不重命名、不覆盖真实 NAS 原文件。
+  - 不读取文件正文。
+  - 不新增 Hermes / BIM / parser / documents / chunks / Qdrant / OpenSearch 能力。
+  - 不修改 `docs/**`。
+  - 不暴露真实路径、bucket、object key、storage_uri、token、secret。
+
 ## 2026-06-05 UX4-A 不收口：进入 UX4-A-R1 参考图驱动返工
 
 - 用户反馈：
@@ -5334,3 +5453,104 @@ tail -f /Users/vc/Documents/数字化交付平台/handoff/main-agent/claude-logs
   - `UX4-B-R3` 可以收口。
   - 仅保留既有 P2：Vite chunk size warning。
   - 后续进入下一批前，需要根据用户优先级决定是继续 UX4 视觉/交互精修，还是先整理当前 UX4 分支提交。
+
+## 2026-06-17 M3X-Q 初审：发现后台队列权限门禁风险，进入 M3X-Q-F1
+
+- 开发 agent 已完成 `M3X-Q：全平台对象化后台任务队列与可视化` 初版。
+- 初版能力方向正确：
+  - 已新增持久化对象化 job / item。
+  - 已新增后台 worker 自动慢速处理。
+  - `资产治理 / 对象存储` 页面已展示全平台进度、项目进度、当前任务和失败项。
+- 主 agent 初审发现必须先修的权限风险：
+  - `StorageMigrationApplicationService` 中对象化后台队列接口当前多处只调用 `ensureAnyProjectAccess(userId)`。
+  - 这可能导致“只要有任意项目访问权”的普通用户也能创建、暂停、继续、重试或取消全平台对象化任务。
+  - 全平台对象化会持续复制真实项目文件副本到 NAS 侧 MinIO，必须是超级管理员级操作。
+- 裁决：
+  - `M3X-Q` 暂不进入正式测试 / 收口。
+  - 插入返工批次 `M3X-Q-F1：对象化后台队列权限门禁返工`。
+- 已更新：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+- M3X-Q-F1 核心要求：
+  - `admin` 超级管理员才能 dry-run、创建、暂停、继续、重试失败项、取消全平台对象化后台任务。
+  - 普通用户越权必须被脚本断言拒绝。
+  - 后台 worker 不能因权限修复而停止推进。
+  - 不移动、不删除、不重命名、不覆盖真实 NAS 原文件。
+  - 不修改 `docs/**`。
+
+## 2026-06-17 M3X-Q-F1 与 M3X-Q 正式收口
+
+- 测试 agent 已完成 `M3X-Q-F1：对象化后台队列权限门禁返工` 验收，报告写入 `handoff/test-agent/latest-report.md`。
+- 验收结论：通过。
+- 当前 P0：无。
+- 当前 P1：无。
+- 验收结果：
+  - M3X-Q-F1 专项脚本通过，`PASS=34 FAIL=0`。
+  - M3G-8 对象优先读取回归通过，`PASS=7 FAIL=0`。
+  - file-access 回归通过，`PASS=18 FAIL=0`。
+  - 普通用户越权控制队列全部被拒绝。
+  - 超级管理员 `admin` 创建、暂停、继续、失败重试队列能力未回归。
+  - 后台 worker 可自动推进任务到 `COMPLETED`。
+  - NAS 原文件 `size / mtime` 未变化。
+  - 未发现真实路径、bucket、object key、token、secret 泄露。
+- 主 agent 收口判断：
+  - `M3X-Q-F1` 正式收口。
+  - `M3X-Q：全平台对象化后台任务队列与可视化` 正式收口。
+  - M3X-Q 已满足用户提出的“不要再推一下动一下，需要后台 24 小时慢慢对象化，并在资产治理 / 对象存储中看到全平台进度和任务状态”的核心目标。
+- 已更新：
+  - `handoff/main-agent/status.md`
+  - `handoff/main-agent/m3-m5-storage-evidence-task-graph.md`
+
+## 2026-06-17 M3X-Q-UX1 启动：对象化后台队列极简控制台
+
+- 用户反馈：
+  - 当前对象化后台队列功能太复杂，不太会用。
+  - 用户只需要开始、暂停和几个重要按钮。
+  - 点击开始后应按项目自动对象化，点击暂停后停止对象化。
+- 主 agent 判断：
+  - 底层 M3X-Q 队列能力和权限门禁是必要的，不能删除。
+  - 问题在于默认前端暴露了过多技术参数和任务细节。
+  - 本批应只做前端使用性减负，不改对象化底层流程，不放大执行上限。
+- 当前批次：
+  - `M3X-Q-UX1：对象化后台队列极简控制台`
+- 已写入：
+  - 开发 prompt：`handoff/dev-agent/current-prompt.md`
+  - 测试 prompt：`handoff/test-agent/current-prompt.md`
+- 本批目标：
+  - `资产治理 / 对象存储` 页面默认只展示对象化状态、总进度、失败项、MinIO 状态和开始 / 暂停 / 继续 / 查看失败项按钮。
+  - jobName、scopeType、批大小、容量上限、jobId、itemId、worker lease、取消任务等复杂内容默认折叠到高级诊断。
+  - 普通用户只看进度或权限提示，不看到一堆灰色控制按钮。
+  - 后端权限仍以 `admin` 超级管理员为准。
+- 本批禁止：
+  - 不修改 `backend/**`，除非开发 agent 明确报告无法避免。
+  - 不修改数据库迁移。
+  - 不修改 `docs/**`。
+  - 不移动、不删除、不重命名、不覆盖真实 NAS 原文件。
+  - 不新增 Hermes / BIM / parser / indexing / documents / chunks 能力。
+
+## 2026-06-17 M3X-Q-UX1 开发报告初审
+
+- 开发 agent 已完成 `M3X-Q-UX1：对象化后台队列极简控制台` 并写回 `handoff/dev-agent/latest-report.md`。
+- 主 agent 初审结论：
+  - 本轮实际改动集中在 `frontend/src/modules/data-steward/pages/DataStewardFileServicePage.vue` 和 `handoff/dev-agent/latest-report.md`。
+  - 未看到本轮新增 `backend/**`、数据库迁移或 `docs/**` 改动。
+  - 默认视图已从原来的工程化队列面板改为“后台对象化控制台”：
+    - 展示当前状态、对象化率、已对象化、仍在 NAS、当前任务、失败项、MinIO 状态。
+    - 主按钮收敛为开始对象化、暂停对象化、继续对象化、查看失败项。
+    - jobName、scopeType、tick 参数、job 表、项目进度表等复杂项已移入 `高级诊断` 折叠区。
+  - 普通用户视角已有只读提示，不展示一堆可点击控制按钮。
+  - 后端权限边界仍依赖已收口的 `M3X-Q-F1` 超级管理员门禁。
+- 开发 agent 自测：
+  - 前端构建通过。
+  - 后端健康检查通过。
+  - M3X-Q 专项脚本通过，`PASS=34 FAIL=0`。
+  - M3G-8 回归通过，`PASS=7 FAIL=0`。
+  - file-access 回归通过，`PASS=18 FAIL=0`。
+  - `git diff --check` 通过。
+- 待测试确认：
+  - 开发 agent 未完成浏览器短验，原因是本机 Chrome 登录 / Apple 事件限制。
+  - 下一步交测试 agent 按 `handoff/test-agent/current-prompt.md` 做极短浏览器验收。
+  - 测试重点是默认首屏是否足够简单、高级诊断是否默认折叠、普通用户是否不能控制后台队列。
+- 当前裁决：
+  - `M3X-Q-UX1` 暂不收口。
+  - 可以进入测试 agent 验收。
