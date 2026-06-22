@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.http.HttpStatus;
@@ -247,6 +248,24 @@ public class AssetScanTaskRepository {
             ORDER BY task.id DESC
             LIMIT :limit
             """, new MapSqlParameterSource("limit", Math.max(1, Math.min(limit, 100))), ROW_MAPPER);
+    }
+
+    public boolean hasActiveOrRecentMappingScan(Long projectId, String rootPath, Instant cutoff) {
+        Integer count = jdbcTemplate.queryForObject("""
+            SELECT COUNT(1)
+            FROM data_asset_scan_tasks
+            WHERE deleted = 0
+              AND project_id = :projectId
+              AND root_path = :rootPath
+              AND (
+                    status IN ('PENDING', 'RUNNING')
+                    OR COALESCE(completed_at, started_at, created_at) >= :cutoff
+                  )
+            """, new MapSqlParameterSource()
+            .addValue("projectId", projectId)
+            .addValue("rootPath", rootPath)
+            .addValue("cutoff", Timestamp.from(cutoff)), Integer.class);
+        return count != null && count > 0;
     }
 
     private static ScanTaskResponse map(ResultSet rs, int rowNum) throws SQLException {

@@ -151,6 +151,26 @@ public class AssetPathMappingRepository {
         return jdbcTemplate.query(sb.toString(), params, ROW_MAPPER);
     }
 
+    public List<PathMappingResponse> listEnabledPatrolMappings(int limit) {
+        return jdbcTemplate.query("""
+            SELECT m.id, m.project_id, p.code AS project_code, p.name AS project_name,
+                   m.provider_code, m.nas_path, m.match_strategy, m.enabled,
+                   m.sort_order, m.remark, m.created_at
+            FROM data_asset_project_path_mappings m
+            JOIN core_projects p ON p.id = m.project_id AND p.deleted = 0
+            WHERE m.deleted = 0
+              AND m.enabled = 1
+              AND COALESCE(UPPER(p.status), 'ACTIVE') NOT IN ('ARCHIVED', 'DELETED')
+              AND COALESCE(UPPER(p.asset_status), 'ACTIVE') NOT IN ('ARCHIVED', 'DELETED')
+              AND COALESCE(UPPER(p.asset_source), '') NOT IN ('SAMPLE', 'TEMPLATE', 'TEST', 'AGENT_TEST')
+              AND UPPER(p.name) NOT LIKE '%样例%'
+              AND UPPER(p.name) NOT LIKE '%模板%'
+              AND UPPER(p.name) NOT LIKE '%测试%'
+            ORDER BY p.id, m.sort_order, m.id
+            LIMIT :limit
+            """, new MapSqlParameterSource("limit", Math.max(1, Math.min(limit, 200))), ROW_MAPPER);
+    }
+
     public List<PathMappingResponse> findEnabledByNasPath(String nasPath) {
         return jdbcTemplate.query("""
             SELECT m.id, m.project_id, p.code AS project_code, p.name AS project_name,

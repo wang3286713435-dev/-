@@ -44,6 +44,327 @@
       </article>
     </section>
 
+    <section class="service-section queue-section">
+      <div class="service-section__header">
+        <div>
+          <h2>后台对象化控制台</h2>
+          <span>对象化只复制一份对象存储副本，NAS 原文件不会被移动、删除、改名或覆盖。</span>
+        </div>
+        <el-tag :type="queueConsoleTagType" effect="plain">{{ queueConsoleStateLabel }}</el-tag>
+      </div>
+
+      <div v-loading="queueLoading" class="queue-console">
+        <div class="queue-console__main">
+          <div class="queue-console__status">
+            <span class="queue-console__eyebrow">全平台对象化</span>
+            <strong>{{ queueConsoleHeadline }}</strong>
+            <p>{{ queueConsoleDescription }}</p>
+            <div class="queue-console__meta">
+              <span>队列：{{ queueStateLabel(queueOverview?.queueState) }}</span>
+              <span>最近更新：{{ queueLastActivityLabel }}</span>
+              <span>最近处理：{{ queueRecentItemLabel }}</span>
+            </div>
+          </div>
+          <div class="queue-console__meter" aria-label="全平台对象化进度">
+            <span>{{ formatPercent(queueProgressPercent) }}%</span>
+            <el-progress :percentage="queueProgressPercent" :stroke-width="10" :show-text="false" />
+          </div>
+        </div>
+
+        <div class="queue-progress-grid">
+          <article>
+            <span>已对象化</span>
+            <strong>{{ formatCount(queueObjectStoredFiles) }}</strong>
+            <p>已具备对象优先读取副本。</p>
+          </article>
+          <article>
+            <span>仍在 NAS</span>
+            <strong>{{ formatCount(queueNasOnlyFiles) }}</strong>
+            <p>未完成对象化时仍走受控 NAS 读取。</p>
+          </article>
+          <article>
+            <span>当前任务</span>
+            <strong>{{ queueCurrentJobTitle }}</strong>
+            <p>{{ queueCurrentJobHint }}</p>
+          </article>
+          <article>
+            <span>失败项</span>
+            <strong>{{ formatCount(queueFailureCount) }}</strong>
+            <p>{{ queueFailureHint }}</p>
+          </article>
+          <article>
+            <span>MinIO 状态</span>
+            <strong>{{ readinessReady ? '已就绪' : readinessStatusLabel(readiness?.readinessStatus) }}</strong>
+            <p>{{ endpointTypeLabel(readiness?.endpointType) }}</p>
+          </article>
+        </div>
+
+        <div v-if="canManageObjectificationQueue" class="queue-action-bar">
+          <div class="queue-project-picker">
+            <span>对象化项目</span>
+            <el-select
+              v-model="selectedQueueProjectId"
+              filterable
+              placeholder="选择要对象化的项目"
+              :disabled="Boolean(queuePauseableJob || queuePausedJob)"
+            >
+              <el-option
+                v-for="project in queueProjectOptions"
+                :key="project.projectId"
+                :label="`${project.projectCode} ${project.projectName} · 剩余 ${formatCount(project.nasOnlyFiles)} 个`"
+                :value="project.projectId"
+              />
+            </el-select>
+            <small>{{ queueActionHint }}</small>
+          </div>
+          <div class="queue-action-bar__buttons">
+            <el-button
+              v-if="queuePrimaryAction === 'start'"
+              type="primary"
+              :loading="queueCreateLoading"
+              :disabled="!canStartQueueFromConsole"
+              @click="startQueueFromConsole"
+            >
+              开始当前项目
+            </el-button>
+            <el-button
+              v-if="queuePrimaryAction === 'pause'"
+              plain
+              :loading="queueActionLoading"
+              :disabled="!canPauseRelevantQueueJob"
+              @click="pauseRelevantQueueJob"
+            >
+              暂停对象化
+            </el-button>
+            <el-button
+              v-if="queuePrimaryAction === 'resume'"
+              type="primary"
+              plain
+              :loading="queueActionLoading"
+              :disabled="!canResumeRelevantQueueJob"
+              @click="resumeRelevantQueueJob"
+            >
+              继续对象化
+            </el-button>
+            <el-button
+              v-if="queueFailureCount > 0"
+              plain
+              :disabled="queueFailureRows.length === 0"
+              @click="queueFailuresVisible = true"
+            >
+              查看失败项
+            </el-button>
+          </div>
+        </div>
+
+        <el-alert
+          v-else
+          type="warning"
+          :closable="false"
+          show-icon
+          class="service-notice queue-permission-alert"
+          title="当前账号只能查看对象化状态"
+          description="创建、暂停、继续和重试后台对象化任务仅限超级管理员。普通账号不会看到可点击的后台控制按钮。"
+        />
+
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          class="queue-boundary-alert"
+          title="安全边界"
+          :description="(queueOverview?.warnings ?? ['只复制对象存储副本；不移动、不删除、不重命名、不覆盖 NAS 原文件；不读取文件正文。']).join(' ')"
+        />
+      </div>
+
+      <el-collapse v-model="queueDiagnosticsSections" class="queue-diagnostics">
+        <el-collapse-item title="高级诊断" name="diagnostics">
+          <div class="queue-diagnostics__toolbar">
+            <span>给管理员和测试 agent 排障使用，默认不需要调整。</span>
+            <div class="dry-run-actions__buttons">
+              <el-button :loading="queueLoading" @click="loadQueueOverview">刷新队列</el-button>
+              <el-button type="primary" plain :loading="queueDryRunLoading" :disabled="!canManageObjectificationQueue || !readinessReady" @click="dryRunQueueJob">
+                生成计划
+              </el-button>
+              <el-button type="primary" :loading="queueCreateLoading" :disabled="!canCreateQueueJob" @click="createQueueJob">
+                创建并启动后台任务
+              </el-button>
+            </div>
+          </div>
+
+          <div class="dry-run-summary">
+            <div>
+              <span>队列状态</span>
+              <strong>{{ queueStateLabel(queueOverview?.queueState) }}</strong>
+            </div>
+            <div>
+              <span>运行中任务</span>
+              <strong>{{ formatCount(queueOverview?.runningJobCount) }}</strong>
+            </div>
+            <div>
+              <span>排队任务</span>
+              <strong>{{ formatCount(queueOverview?.queuedJobCount) }}</strong>
+            </div>
+            <div>
+              <span>已对象化</span>
+              <strong>{{ formatCount(queueObjectStoredFiles) }}</strong>
+            </div>
+            <div>
+              <span>仍在 NAS</span>
+              <strong>{{ formatCount(queueNasOnlyFiles) }}</strong>
+            </div>
+            <div>
+              <span>对象化率</span>
+              <strong>{{ formatPercent(queueProgressPercent) }}%</strong>
+            </div>
+          </div>
+
+          <div class="multi-plan-form run-plan-form">
+            <label class="long-run-field">
+              <span>任务名称</span>
+              <el-input v-model="queueForm.jobName" placeholder="全平台对象化后台任务" :disabled="!canManageObjectificationQueue" />
+            </label>
+            <label class="long-run-field">
+              <span>排队文件</span>
+              <el-input-number v-model="queueForm.maxTotalFiles" :min="1" :max="200" controls-position="right" :disabled="!canManageObjectificationQueue" />
+            </label>
+            <label class="long-run-field">
+              <span>每次处理</span>
+              <el-input-number v-model="queueForm.maxFilesPerTick" :min="1" :max="20" controls-position="right" :disabled="!canManageObjectificationQueue" />
+            </label>
+            <label class="long-run-field">
+              <span>每次 MB</span>
+              <el-input-number v-model="queueForm.maxBytesPerTickMb" :min="1" :max="200" controls-position="right" :disabled="!canManageObjectificationQueue" />
+            </label>
+            <label class="long-run-field">
+              <span>单文件 MB</span>
+              <el-input-number v-model="queueForm.maxFileSizeMb" :min="1" :max="500" controls-position="right" :disabled="!canManageObjectificationQueue" />
+            </label>
+            <el-switch v-model="queueForm.continueOnFailure" active-text="失败后继续" inactive-text="失败即停" :disabled="!canManageObjectificationQueue" />
+          </div>
+
+          <template v-if="queuePlanResult">
+            <div class="dry-run-summary">
+              <div>
+                <span>规划项目</span>
+                <strong>{{ formatCount(queuePlanResult.plannedProjectCount) }}</strong>
+              </div>
+              <div>
+                <span>排队文件</span>
+                <strong>{{ formatCount(queuePlanResult.selectedFileCount) }}</strong>
+              </div>
+              <div>
+                <span>预估容量</span>
+                <strong>{{ formatBytes(queuePlanResult.selectedTotalBytes) }}</strong>
+              </div>
+              <div>
+                <span>每次处理</span>
+                <strong>{{ formatCount(queuePlanResult.maxFilesPerTick) }} 个</strong>
+              </div>
+            </div>
+          </template>
+
+          <el-table :data="queueOverview?.activeJobs ?? []" row-key="jobId" empty-text="暂无后台对象化任务">
+            <el-table-column label="当前任务" min-width="240" show-overflow-tooltip>
+              <template #default="{ row }">
+                <div class="coverage-project-cell">
+                  <strong>{{ row.jobName }}</strong>
+                  <span>{{ row.progressMessage }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="110">
+              <template #default="{ row }">
+                <el-tag :type="queueStatusTagType(row.jobStatus)" size="small">{{ queueStateLabel(row.jobStatus) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="成功/失败/跳过" width="160" align="right">
+              <template #default="{ row }">{{ formatCount(row.successFiles) }} / {{ formatCount(row.failedFiles) }} / {{ formatCount(row.skippedFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="容量" width="130" align="right">
+              <template #default="{ row }">{{ formatBytes(row.processedBytes) }}</template>
+            </el-table-column>
+            <el-table-column label="最近更新" width="170">
+              <template #default="{ row }">{{ formatDate(row.updatedAt) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="260" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" plain :loading="queueActionLoading" :disabled="!canManageObjectificationQueue || (row.jobStatus !== 'RUNNING' && row.jobStatus !== 'QUEUED')" @click="pauseQueueJob(row.jobId)">暂停</el-button>
+                <el-button size="small" plain :loading="queueActionLoading" :disabled="!canManageObjectificationQueue || (row.jobStatus !== 'PAUSED' && row.jobStatus !== 'FAILED')" @click="resumeQueueJob(row.jobId)">继续</el-button>
+                <el-button size="small" plain :loading="queueActionLoading" :disabled="!canManageObjectificationQueue || !row.failedFiles" @click="retryQueueJob(row.jobId)">重试失败</el-button>
+                <el-button size="small" type="danger" plain :loading="queueActionLoading" :disabled="!canManageObjectificationQueue || row.jobStatus === 'COMPLETED' || row.jobStatus === 'CANCELED'" @click="cancelQueueJob(row.jobId)">取消</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <el-table :data="queueOverview?.projects ?? []" row-key="projectId" empty-text="暂无项目队列进度" class="coverage-table">
+            <el-table-column label="项目进度" min-width="240" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.projectCode }} {{ row.projectName }}</template>
+            </el-table-column>
+            <el-table-column label="队列" width="110">
+              <template #default="{ row }">
+                <el-tag :type="queueStatusTagType(row.queueStatus)" size="small" effect="plain">{{ queueStateLabel(row.queueStatus) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="总文件" width="100" align="right">
+              <template #default="{ row }">{{ formatCount(row.totalFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="已对象化" width="110" align="right">
+              <template #default="{ row }">{{ formatCount(row.objectStoredFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="仍在 NAS" width="110" align="right">
+              <template #default="{ row }">{{ formatCount(row.nasOnlyFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="排队/运行/失败" width="150" align="right">
+              <template #default="{ row }">{{ formatCount(row.queuedFiles) }} / {{ formatCount(row.runningFiles) }} / {{ formatCount(row.failedQueueFiles) }}</template>
+            </el-table-column>
+            <el-table-column label="覆盖率" width="150">
+              <template #default="{ row }">
+                <el-progress :percentage="Number(row.objectificationCoverageRate || 0)" :stroke-width="8" />
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-collapse-item>
+      </el-collapse>
+    </section>
+
+    <el-drawer v-model="queueFailuresVisible" title="对象化失败项" size="640px">
+      <div class="queue-failure-drawer">
+        <el-alert
+          type="warning"
+          :closable="false"
+          show-icon
+          title="这里只展示脱敏失败信息"
+          description="失败项不会展示对象 key、底层路径、storage_uri 或 NAS 原始路径；重试仍走后台队列和权限门禁。"
+        />
+        <el-table :data="queueFailureRows" row-key="itemId" empty-text="暂无可查看的失败项">
+          <el-table-column label="项目 / 文件" min-width="220" show-overflow-tooltip>
+            <template #default="{ row }">
+              <div class="coverage-project-cell">
+                <strong>{{ row.projectCode }} {{ row.projectName }}</strong>
+                <span>{{ row.fileName }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="110">
+            <template #default="{ row }">
+              <el-tag :type="queueStatusTagType(row.itemStatus)" size="small">{{ queueStateLabel(row.itemStatus) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="失败原因" min-width="220" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.failureReason || '对象化失败，请重试或转入治理。' }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="110" fixed="right">
+            <template #default="{ row }">
+              <el-button text type="primary" :loading="queueActionLoading" :disabled="!canManageObjectificationQueue" @click="retryQueueJob(row.jobId)">
+                重试
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </el-drawer>
+
     <section class="service-section coverage-section">
       <div class="service-section__header">
         <div>
@@ -97,85 +418,28 @@
         :description="coverageClosureDescription"
       />
 
-      <el-table
-        :data="coverageRows"
-        row-key="projectId"
-        empty-text="暂无全项目覆盖率报告"
-        class="coverage-table"
-      >
-        <el-table-column type="expand">
-          <template #default="{ row }">
-            <div class="coverage-diagnostics">
-              <section>
-                <h3>诊断信息</h3>
-                <p>本区只展示脱敏分组说明，不展示底层路径、对象定位信息或原始数据库行。</p>
-              </section>
-              <section v-if="row.failureSummary?.length">
-                <h4>失败 / 治理原因</h4>
-                <ul>
-                  <li v-for="item in row.failureSummary" :key="`${row.projectId}-${item.reasonCode}`">
-                    {{ item.reasonCode }}：{{ item.message }}（{{ formatCount(item.fileCount) }} 个文件）
-                  </li>
-                </ul>
-              </section>
-              <section v-if="row.warnings?.length">
-                <h4>状态说明</h4>
-                <ul>
-                  <li v-for="item in row.warnings" :key="item">{{ item }}</li>
-                </ul>
-              </section>
-              <section v-if="row.nextActions?.length">
-                <h4>下一步</h4>
-                <ul>
-                  <li v-for="item in row.nextActions" :key="item">{{ item }}</li>
-                </ul>
-              </section>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="项目" min-width="240" show-overflow-tooltip>
-          <template #default="{ row }">
-            <div class="coverage-project-cell">
-              <strong>{{ row.projectCode }} {{ row.projectName }}</strong>
-              <span>{{ projectCategoryLabel(row.projectCategory) }} / {{ row.onboardingStatus }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="128">
-          <template #default="{ row }">
-            <el-tag :type="coverageStatusTagType(row.status)" size="small">
-              {{ coverageStatusLabel(row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="读取策略" width="120">
-          <template #default="{ row }">
-            <el-tag :type="readStrategyTagType(row.readStrategySummary)" size="small" effect="plain">
-              {{ readStrategyLabel(row.readStrategySummary) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="文件" width="100" align="right">
-          <template #default="{ row }">{{ formatCount(row.totalFiles) }}</template>
-        </el-table-column>
-        <el-table-column label="已对象化" width="110" align="right">
-          <template #default="{ row }">{{ formatCount(row.objectStoredCount) }}</template>
-        </el-table-column>
-        <el-table-column label="仍在 NAS" width="110" align="right">
-          <template #default="{ row }">{{ formatCount(row.nasOnlyCount) }}</template>
-        </el-table-column>
-        <el-table-column label="治理项" width="100" align="right">
-          <template #default="{ row }">{{ formatCount(row.governanceCount) }}</template>
-        </el-table-column>
-        <el-table-column label="对象化率" width="150">
-          <template #default="{ row }">
-            <el-progress :percentage="Number(row.objectificationCoverageRate || 0)" :stroke-width="8" />
-          </template>
-        </el-table-column>
-        <el-table-column label="最后对象化" width="170">
-          <template #default="{ row }">{{ formatDate(row.lastObjectifiedAt) }}</template>
-        </el-table-column>
-      </el-table>
+      <el-collapse v-model="coverageDiagnosticSections" class="coverage-diagnostics-collapse">
+        <el-collapse-item title="覆盖率诊断 / 收口依据" name="closure">
+          <div class="coverage-diagnostics coverage-diagnostics--compact">
+            <section>
+              <h3>{{ coverageClosureTitle }}</h3>
+              <p>{{ coverageClosureDescription }}</p>
+            </section>
+            <section>
+              <h4>项目明细在哪里看？</h4>
+              <p>下方“项目对象化盘点”保留唯一项目级明细表，避免同一批项目数据在页面上下重复出现。</p>
+            </section>
+            <section v-if="coverageBlockingProjectRows.length">
+              <h4>需要关注的项目</h4>
+              <ul>
+                <li v-for="row in coverageBlockingProjectRows" :key="row.projectId">
+                  {{ row.projectCode }} {{ row.projectName }}：{{ coverageStatusLabel(row.status) }}，仍在 NAS {{ formatCount(row.nasOnlyCount) }} 个，治理项 {{ formatCount(row.governanceCount) }} 个。
+                </li>
+              </ul>
+            </section>
+          </div>
+        </el-collapse-item>
+      </el-collapse>
     </section>
 
     <section class="service-section read-policy-section">
@@ -389,69 +653,71 @@
           </template>
         </section>
 
-        <section v-if="projectScoped" class="service-section">
-          <div class="service-section__header">
-            <div>
-              <h2>105 对象化长跑控制</h2>
-              <span>按硬上限分批推进，可暂停、继续和重试失败项；不启动无边界后台迁移。</span>
-            </div>
-            <div class="dry-run-actions__buttons">
-              <el-button :loading="longRunLoading" @click="loadLongRunStatus">刷新状态</el-button>
-              <el-button
-                type="danger"
-                plain
-                :loading="longRunActionLoading"
-                :disabled="!canStartLongRun"
-                @click="startLongRun"
-              >
-                开始 / 继续
-              </el-button>
-              <el-button
-                plain
-                :loading="longRunActionLoading"
-                :disabled="!canPauseLongRun"
-                @click="pauseLongRun"
-              >
-                暂停
-              </el-button>
-              <el-button
-                type="primary"
-                plain
-                :loading="longRunActionLoading"
-                :disabled="!canResumeLongRun"
-                @click="resumeLongRun"
-              >
-                继续
-              </el-button>
-              <el-button plain :loading="longRunActionLoading" @click="retryLongRunFailures">
-                重试失败项
-              </el-button>
-            </div>
-          </div>
+        <el-collapse v-if="canManageObjectificationQueue" v-model="legacyRunDiagnosticsSections" class="queue-diagnostics legacy-run-diagnostics">
+          <el-collapse-item title="旧对象化跑批诊断（超级管理员）" name="legacy-run">
+            <section v-if="projectScoped" class="service-section">
+              <div class="service-section__header">
+                <div>
+                  <h2>105 对象化长跑控制</h2>
+                  <span>按硬上限分批推进，可暂停、继续和重试失败项；不启动无边界后台迁移。</span>
+                </div>
+                <div class="dry-run-actions__buttons">
+                  <el-button :loading="longRunLoading" @click="loadLongRunStatus">刷新状态</el-button>
+                  <el-button
+                    type="danger"
+                    plain
+                    :loading="longRunActionLoading"
+                    :disabled="!canStartLongRun"
+                    @click="startLongRun"
+                  >
+                    开始 / 继续
+                  </el-button>
+                  <el-button
+                    plain
+                    :loading="longRunActionLoading"
+                    :disabled="!canPauseLongRun"
+                    @click="pauseLongRun"
+                  >
+                    暂停
+                  </el-button>
+                  <el-button
+                    type="primary"
+                    plain
+                    :loading="longRunActionLoading"
+                    :disabled="!canResumeLongRun"
+                    @click="resumeLongRun"
+                  >
+                    继续
+                  </el-button>
+                  <el-button plain :loading="longRunActionLoading" @click="retryLongRunFailures">
+                    重试失败项
+                  </el-button>
+                </div>
+              </div>
 
-          <div class="multi-plan-form">
-            <label class="long-run-field">
-              <span>每批文件数</span>
-              <el-input-number v-model="longRunForm.batchFileLimit" :min="1" :max="15" controls-position="right" />
-            </label>
-            <label class="long-run-field">
-              <span>每批容量 MB</span>
-              <el-input-number v-model="longRunForm.batchBytesMb" :min="1" :max="512" controls-position="right" />
-            </label>
-            <label class="long-run-field">
-              <span>单文件上限 MB</span>
-              <el-input-number v-model="longRunForm.maxFileSizeMb" :min="1" :max="500" controls-position="right" />
-            </label>
-            <label class="long-run-field">
-              <span>连续批次数</span>
-              <el-input-number v-model="longRunForm.maxContinuousBatches" :min="1" :max="5" controls-position="right" />
-            </label>
-            <el-switch
-              v-model="longRunForm.continueOnFailure"
-              active-text="失败后继续"
-              inactive-text="失败即停"
-            />
-          </div>
+              <div class="multi-plan-form">
+                <label class="long-run-field">
+                  <span>每批文件数</span>
+                  <el-input-number v-model="longRunForm.batchFileLimit" :min="1" :max="15" controls-position="right" />
+                </label>
+                <label class="long-run-field">
+                  <span>每批容量 MB</span>
+                  <el-input-number v-model="longRunForm.batchBytesMb" :min="1" :max="512" controls-position="right" />
+                </label>
+                <label class="long-run-field">
+                  <span>单文件上限 MB</span>
+                  <el-input-number v-model="longRunForm.maxFileSizeMb" :min="1" :max="500" controls-position="right" />
+                </label>
+                <label class="long-run-field">
+                  <span>连续批次数</span>
+                  <el-input-number v-model="longRunForm.maxContinuousBatches" :min="1" :max="5" controls-position="right" />
+                </label>
+                <el-switch
+                  v-model="longRunForm.continueOnFailure"
+                  active-text="失败后继续"
+                  inactive-text="失败即停"
+                />
+              </div>
 
           <template v-if="longRunStatus">
             <div class="dry-run-summary">
@@ -547,9 +813,9 @@
               <el-table-column prop="reason" label="治理原因" min-width="220" show-overflow-tooltip />
             </el-table>
           </template>
-        </section>
+            </section>
 
-        <section class="service-section">
+            <section class="service-section">
           <div class="service-section__header">
             <div>
               <h2>M3G-7R 全项目对象化跑批</h2>
@@ -860,7 +1126,9 @@
               </template>
             </el-table-column>
           </el-table>
-        </section>
+            </section>
+          </el-collapse-item>
+        </el-collapse>
 
         <section class="service-section">
           <div class="service-section__header">
@@ -1607,7 +1875,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import type { RouteRecordName } from 'vue-router';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -1615,7 +1883,10 @@ import { Plus, Refresh, Search } from '@element-plus/icons-vue';
 
 import {
   createStorageMigrationTask,
+  cancelStorageObjectificationQueueJob,
   continueStorageObjectificationRun,
+  createStorageObjectificationQueueJob,
+  dryRunStorageObjectificationQueueJob,
   dryRunStorageObjectificationRun,
   dryRunStorageObjectificationWave,
   dryRunMultiProjectStorageObjectificationPlan,
@@ -1624,6 +1895,7 @@ import {
   executeMultiProjectStorageObjectificationPlan,
   fetchCatalogFiles,
   fetchStorageObjectificationCoverage,
+  fetchStorageObjectificationQueueOverview,
   fetchStorageObjectificationRunOverview,
   fetchStorageObjectificationRunProjects,
   fetchStorageObjectificationWaveCandidates,
@@ -1636,10 +1908,13 @@ import {
   fetchStorageMigrationTasks,
   fetchStorageProviderReadiness,
   fetchStorageReadPolicy,
+  pauseStorageObjectificationQueueJob,
   retryStorageMigrationTask,
   pauseStorageObjectificationRun,
   pauseStorageObjectificationLongRun,
   retryFailedStorageObjectificationRun,
+  retryFailedStorageObjectificationQueueJob,
+  resumeStorageObjectificationQueueJob,
   resumeStorageObjectificationLongRun,
   retryStorageObjectificationLongRunFailures,
   startStorageObjectificationLongRun,
@@ -1654,6 +1929,8 @@ import {
   type StorageObjectificationFullPlan,
   type StorageObjectificationInventory,
   type StorageObjectificationLongRun,
+  type StorageObjectificationQueueDryRun,
+  type StorageObjectificationQueueOverview,
   type StorageObjectificationRunOverview,
   type StorageObjectificationRunProjects,
   type StorageObjectificationWaveCandidates,
@@ -1691,6 +1968,15 @@ const runDryRunLoading = ref(false);
 const runExecutionLoading = ref(false);
 const runPauseLoading = ref(false);
 const runRetryLoading = ref(false);
+const queueLoading = ref(false);
+const queueDryRunLoading = ref(false);
+const queueCreateLoading = ref(false);
+const queueActionLoading = ref(false);
+const queueDiagnosticsSections = ref<string[]>([]);
+const coverageDiagnosticSections = ref<string[]>([]);
+const queueFailuresVisible = ref(false);
+const selectedQueueProjectId = ref<number | null>(null);
+const legacyRunDiagnosticsSections = ref<string[]>([]);
 const detailVisible = ref(false);
 const summary = ref<StorageMigrationSummary | null>(null);
 const readiness = ref<StorageProviderReadiness | null>(null);
@@ -1711,6 +1997,8 @@ const runOverview = ref<StorageObjectificationRunOverview | null>(null);
 const runProjects = ref<StorageObjectificationRunProjects | null>(null);
 const runPlanResult = ref<MultiProjectStorageObjectificationDryRun | null>(null);
 const runExecutionResult = ref<MultiProjectStorageObjectificationExecuteResult | null>(null);
+const queueOverview = ref<StorageObjectificationQueueOverview | null>(null);
+const queuePlanResult = ref<StorageObjectificationQueueDryRun | null>(null);
 const tasks = ref<StorageMigrationTaskListItem[]>([]);
 const selectedTask = ref<StorageMigrationTaskDetail | null>(null);
 const candidateRows = ref<CatalogFile[]>([]);
@@ -1719,6 +2007,15 @@ const candidateSelection = ref<CatalogFile[]>([]);
 const createForm = reactive({
   targetProvider: 'MINIO',
   fileIdsText: ''
+});
+
+const queueForm = reactive({
+  jobName: '项目对象化后台任务',
+  maxTotalFiles: 200,
+  maxFilesPerTick: 5,
+  maxBytesPerTickMb: 20,
+  maxFileSizeMb: 50,
+  continueOnFailure: true
 });
 
 const candidateFilters = reactive({
@@ -1862,6 +2159,10 @@ const coverageRows = computed<ProjectStorageObjectificationCoverage[]>(() => {
     return Number(b.totalFiles || 0) - Number(a.totalFiles || 0);
   });
 });
+
+const coverageBlockingProjectRows = computed(() => coverageRows.value
+  .filter((row) => row.status !== 'COMPLETED')
+  .slice(0, 5));
 
 const coverageClosureTitle = computed(() => {
   if (!coverageReport.value) return '正在读取 M3G-9 覆盖率报告';
@@ -2049,6 +2350,166 @@ const runExecutionHint = computed(() => {
   return `本轮计划 ${runPlanResult.value.plannedProjectCount} 个项目、${runPlanResult.value.selectedFileCount} 个文件，只复制对象存储副本，不改动 NAS 原文件。`;
 });
 
+const queueMaxTotalBytes = computed(() => Math.max(1, Number(queueForm.maxTotalFiles || 20)) * Math.max(1, Number(queueForm.maxFileSizeMb || 50)) * 1024 * 1024);
+const queueMaxBytesPerTick = computed(() => Math.max(1, Number(queueForm.maxBytesPerTickMb || 20)) * 1024 * 1024);
+const queueMaxFileSizeBytes = computed(() => Math.max(1, Number(queueForm.maxFileSizeMb || 50)) * 1024 * 1024);
+const canManageObjectificationQueue = computed(() => authStore.currentUser?.username?.toLowerCase() === 'admin');
+const canCreateQueueJob = computed(() => canManageObjectificationQueue.value && readinessReady.value && Boolean(queuePlanResult.value?.selectedFileCount));
+const queueProjectOptions = computed(() => [...(inventory.value?.projects ?? [])]
+  .filter((project) => Number(project.totalFiles ?? 0) > 0)
+  .sort((a, b) => {
+    const aDone = Number(a.nasOnlyFiles ?? 0) <= 0 ? 1 : 0;
+    const bDone = Number(b.nasOnlyFiles ?? 0) <= 0 ? 1 : 0;
+    if (aDone !== bDone) return aDone - bDone;
+    return Number(b.nasOnlyFiles ?? 0) - Number(a.nasOnlyFiles ?? 0);
+  }));
+const selectedQueueProject = computed(() => queueProjectOptions.value.find((project) => Number(project.projectId) === Number(selectedQueueProjectId.value)) ?? null);
+const selectedQueueProjectProgress = computed(() => queueOverview.value?.projects?.find((project) => Number(project.projectId) === Number(selectedQueueProjectId.value)) ?? null);
+const queueJobs = computed(() => queueOverview.value?.activeJobs ?? []);
+const queueRunningJob = computed(() => queueJobs.value.find((job) => job.jobStatus === 'RUNNING'));
+const queueQueuedJob = computed(() => queueJobs.value.find((job) => job.jobStatus === 'QUEUED'));
+const queuePauseableJob = computed(() => queueRunningJob.value ?? queueQueuedJob.value ?? null);
+const queuePausedJob = computed(() => queueJobs.value.find((job) => ['PAUSED', 'FAILED'].includes(job.jobStatus)));
+const queueCurrentJob = computed(() => queueRunningJob.value ?? queueQueuedJob.value ?? queuePausedJob.value ?? queueJobs.value[0] ?? null);
+const queueFailureRows = computed(() => queueOverview.value?.failedItems ?? []);
+const queueFailureCount = computed(() => Math.max(
+  queueFailureRows.value.length,
+  Number(queueOverview.value?.failedJobCount ?? 0),
+  queueJobs.value.reduce((total, job) => total + Number(job.failedFiles ?? 0), 0)
+));
+const queueTotalFiles = computed(() => Number(selectedQueueProjectProgress.value?.totalFiles ?? selectedQueueProject.value?.totalFiles ?? queueOverview.value?.totalFiles ?? coverageReport.value?.summary?.totalFiles ?? 0));
+const queueObjectStoredFiles = computed(() => Number(selectedQueueProjectProgress.value?.objectStoredFiles ?? selectedQueueProject.value?.objectStoredFiles ?? queueOverview.value?.objectStoredFiles ?? coverageReport.value?.summary?.objectStoredFiles ?? 0));
+const queueNasOnlyFiles = computed(() => Number(selectedQueueProjectProgress.value?.nasOnlyFiles ?? selectedQueueProject.value?.nasOnlyFiles ?? queueOverview.value?.nasOnlyFiles ?? coverageReport.value?.summary?.nasOnlyFiles ?? 0));
+const queueProgressPercent = computed(() => {
+  const value = Number(selectedQueueProjectProgress.value?.objectificationCoverageRate ?? selectedQueueProject.value?.objectificationCoverageRate ?? queueOverview.value?.objectificationCoverageRate ?? coverageReport.value?.summary?.overallObjectificationRate ?? 0);
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, Number(value.toFixed(2))));
+});
+const queueBackendState = computed(() => String(queueOverview.value?.queueState ?? '').toUpperCase());
+const queueRecentItem = computed(() => queueOverview.value?.recentItems?.[0] ?? null);
+const queueLastActivityLabel = computed(() => {
+  const time = queueCurrentJob.value?.updatedAt
+    ?? queueRecentItem.value?.updatedAt
+    ?? queueRecentItem.value?.completedAt
+    ?? queueCurrentJob.value?.finishedAt
+    ?? null;
+  return formatDate(time);
+});
+const queueRecentItemLabel = computed(() => {
+  const item = queueRecentItem.value;
+  if (!item) {
+    if (queueOverview.value?.completedJobCount) return `最近完成 ${formatCount(queueOverview.value.completedJobCount)} 个任务`;
+    return '暂无最近记录';
+  }
+  const state = queueStateLabel(item.itemStatus);
+  return `${item.projectCode} ${item.fileName} · ${state}`;
+});
+const queueConsoleState = computed(() => {
+  if (!canManageObjectificationQueue.value) return 'readonly';
+  if (!readinessReady.value) return 'storage-not-ready';
+  if (queueBackendState.value === 'RUNNING' || Number(queueOverview.value?.runningJobCount ?? 0) > 0) return 'running';
+  if (queueBackendState.value === 'QUEUED' || Number(queueOverview.value?.queuedJobCount ?? 0) > 0) return 'queued';
+  if (queueBackendState.value === 'PAUSED' || Number(queueOverview.value?.pausedJobCount ?? 0) > 0) return 'paused';
+  if (queueBackendState.value === 'FAILED') return 'attention';
+  if (queueRunningJob.value) return 'running';
+  if (queuePausedJob.value) return 'paused';
+  if (queueFailureCount.value > 0) return 'attention';
+  if (queueNasOnlyFiles.value > 0) return 'ready';
+  if (queueTotalFiles.value > 0) return 'completed';
+  return 'checking';
+});
+const queueConsoleStateLabel = computed(() => ({
+  readonly: '只读可见',
+  'storage-not-ready': 'MinIO 未就绪',
+  running: '运行中',
+  queued: '排队中',
+  paused: '已暂停',
+  attention: '有失败项',
+  ready: '可开始',
+  completed: '已完成',
+  checking: '读取中'
+} as Record<string, string>)[queueConsoleState.value] ?? '待确认');
+const queueConsoleTagType = computed(() => {
+  if (queueConsoleState.value === 'running' || queueConsoleState.value === 'completed') return 'success';
+  if (queueConsoleState.value === 'paused' || queueConsoleState.value === 'ready' || queueConsoleState.value === 'queued') return 'warning';
+  if (queueConsoleState.value === 'attention' || queueConsoleState.value === 'storage-not-ready') return 'danger';
+  return 'info';
+});
+const queueConsoleHeadline = computed(() => {
+  if (!canManageObjectificationQueue.value) return '对象化进度可查看，控制权仅限超级管理员';
+  if (!readinessReady.value) return '对象存储未就绪，暂不能启动后台对象化';
+  if (selectedQueueProject.value && queueNasOnlyFiles.value <= 0) return '当前项目已完成对象化';
+  if (queueRunningJob.value) return '后台正在自动推进对象化';
+  if (queueConsoleState.value === 'running') return '后台正在自动推进对象化';
+  if (queueConsoleState.value === 'queued') return '后台任务已排队，等待 worker 处理';
+  if (queuePausedJob.value) return '后台对象化已暂停';
+  if (queueFailureCount.value > 0) return '存在对象化失败项，需要复核';
+  if (queueNasOnlyFiles.value > 0) return '可以开始后台对象化';
+  if (queueTotalFiles.value > 0) return '登记文件已完成对象化';
+  return '正在读取对象化状态';
+});
+const queueConsoleDescription = computed(() => {
+  if (!canManageObjectificationQueue.value) return '你可以查看全平台对象化覆盖率，但不会看到创建、暂停、继续或重试按钮。';
+  if (!readinessReady.value) return '请先确认 NAS 侧 MinIO 为 READY；平台不会退回到本机对象存储执行真实任务。';
+  if (!selectedQueueProject.value) return '先选择一个项目，然后点击开始；后台会持续处理该项目，完成后再选择下一个项目。';
+  if (queueNasOnlyFiles.value <= 0) return '这个项目已经没有需要对象化的登记文件。请选择下一个项目。';
+  if (queueRunningJob.value) return queueRunningJob.value.progressMessage || 'worker 正在按小批次复制对象存储副本。';
+  if (queueConsoleState.value === 'running') return 'worker 正在按小批次复制对象存储副本，页面会自动刷新当前队列状态。';
+  if (queueConsoleState.value === 'queued') return '后台任务已进入队列，worker 会按小批次慢速推进，页面刷新后仍可继续看到状态。';
+  if (queuePausedJob.value) return '点击继续对象化后，worker 会从已暂停或失败待处理任务恢复推进。';
+  if (queueFailureCount.value > 0) return '先查看失败项，确认原因后可按队列重试；不会改动 NAS 原文件。';
+  if (queueNasOnlyFiles.value > 0) return `仍有 ${formatCount(queueNasOnlyFiles.value)} 个文件停留在 NAS_ONLY，可由后台队列慢速推进。`;
+  if (queueTotalFiles.value > 0) return '当前覆盖率已达到 100%，后续新增文件会继续进入对象化治理。';
+  return '正在读取全平台覆盖率和队列信息。';
+});
+const queueCurrentJobTitle = computed(() => {
+  if (queueCurrentJob.value) return queueCurrentJob.value.jobName;
+  if (queueRecentItem.value) return '最近处理记录';
+  if (queueOverview.value?.completedJobCount) return '最近任务已完成';
+  if (queueNasOnlyFiles.value > 0) return selectedQueueProject.value ? '等待开始当前项目' : '请选择项目';
+  if (queueTotalFiles.value > 0) return '暂无待处理';
+  return '读取中';
+});
+const queueCurrentJobHint = computed(() => {
+  if (queueCurrentJob.value) {
+    return `${queueStateLabel(queueCurrentJob.value.jobStatus)}，已处理 ${formatCount(queueCurrentJob.value.processedFiles)} / ${formatCount(queueCurrentJob.value.totalFiles)}。`;
+  }
+  if (queueRecentItem.value) return `最近处理：${queueRecentItemLabel.value}`;
+  return queueNasOnlyFiles.value > 0 ? '还没有正在运行的后台任务。' : '当前没有可展示的后台任务。';
+});
+const queueFailureHint = computed(() => (
+  queueFailureCount.value > 0 ? '可查看失败原因并重试。' : '暂无失败项。'
+));
+const queuePrimaryAction = computed(() => {
+  if (!canManageObjectificationQueue.value) return 'none';
+  if (queuePauseableJob.value) return 'pause';
+  if (queueConsoleState.value === 'queued' || queueConsoleState.value === 'running') return 'none';
+  if (queuePausedJob.value) return 'resume';
+  return 'start';
+});
+const canStartQueueFromConsole = computed(() => (
+  canManageObjectificationQueue.value
+  && readinessReady.value
+  && Boolean(selectedQueueProject.value)
+  && !queuePauseableJob.value
+  && !queuePausedJob.value
+  && !Number(queueOverview.value?.queuedJobCount ?? 0)
+  && !Number(queueOverview.value?.runningJobCount ?? 0)
+  && !Number(queueOverview.value?.pausedJobCount ?? 0)
+  && queueNasOnlyFiles.value > 0
+));
+const canPauseRelevantQueueJob = computed(() => canManageObjectificationQueue.value && Boolean(queuePauseableJob.value));
+const canResumeRelevantQueueJob = computed(() => canManageObjectificationQueue.value && readinessReady.value && Boolean(queuePausedJob.value));
+const queueActionHint = computed(() => {
+  if (!readinessReady.value) return '对象存储未就绪时不能创建或继续后台任务。';
+  if (queueRunningJob.value) return '当前已有后台任务运行，可按需暂停。';
+  if (queueConsoleState.value === 'queued') return '任务已在队列中，等待 worker 自动取走处理。';
+  if (queuePausedJob.value) return '继续后会从当前暂停任务恢复推进。';
+  if (!selectedQueueProject.value) return '先选择一个项目。';
+  if (queueNasOnlyFiles.value > 0) return `开始后会持续对象化 ${selectedQueueProject.value.projectCode} ${selectedQueueProject.value.projectName}，直到该项目完成。`;
+  return '当前项目已完成对象化，请选择下一个项目。';
+});
+
 const enabledServices: Array<{ title: string; description: string; target: RouteRecordName }> = [
   { title: '文件预览', description: '查看预览状态，并通过短时票据打开可预览文件。', target: 'data-steward-asset-detail' },
   { title: '下载权限', description: '下载和预览分开判断，普通查看者不能下载。', target: 'data-steward-asset-detail' },
@@ -2064,6 +2525,8 @@ const disabledActions = [
   { title: '真实删除', reason: '必须走申请、审批、隔离、恢复和到期永久删除。' },
   { title: '批量打包下载', reason: '涉及大容量、权限聚合和审计，后续单独开放。' }
 ];
+
+let queueRefreshTimer: number | undefined;
 
 watch(
   () => route.name,
@@ -2083,8 +2546,37 @@ watch(
   }
 );
 
+watch(
+  queueProjectOptions,
+  (projects) => {
+    if (selectedQueueProjectId.value && projects.some((project) => Number(project.projectId) === Number(selectedQueueProjectId.value))) {
+      return;
+    }
+    const nextProject = projects.find((project) => Number(project.nasOnlyFiles ?? 0) > 0) ?? projects[0] ?? null;
+    selectedQueueProjectId.value = nextProject ? Number(nextProject.projectId) : null;
+  },
+  { immediate: true }
+);
+
 onMounted(() => {
   void refresh();
+  queueRefreshTimer = window.setInterval(() => {
+    const shouldRefreshQueue = canManageObjectificationQueue.value && (
+      ['RUNNING', 'QUEUED', 'PAUSED'].includes(queueBackendState.value)
+      || Boolean(queueOverview.value?.runningJobCount)
+      || Boolean(queueOverview.value?.queuedJobCount)
+      || Boolean(queueOverview.value?.pausedJobCount)
+    );
+    if (shouldRefreshQueue) {
+      void refreshQueueConsoleSnapshot();
+    }
+  }, 15000);
+});
+
+onUnmounted(() => {
+  if (queueRefreshTimer) {
+    window.clearInterval(queueRefreshTimer);
+  }
 });
 
 async function refresh() {
@@ -2095,10 +2587,20 @@ async function refresh() {
       loadReadPolicy(),
       loadInventory(),
       loadCoverageReport(),
-      loadRunOverview(),
       loadWaveCandidates(),
       loadWaveReports()
     ];
+    if (canManageObjectificationQueue.value) {
+      requests.push(loadRunOverview());
+      requests.push(loadQueueOverview());
+    } else {
+      queueOverview.value = null;
+      queuePlanResult.value = null;
+      runOverview.value = null;
+      runProjects.value = null;
+      runPlanResult.value = null;
+      runExecutionResult.value = null;
+    }
     if (projectScoped.value) {
       requests.push(
         loadSummary(),
@@ -2200,6 +2702,11 @@ async function refreshWave1() {
 }
 
 async function loadRunOverview() {
+  if (!canManageObjectificationQueue.value) {
+    runOverview.value = null;
+    runProjects.value = null;
+    return;
+  }
   runOverviewLoading.value = true;
   try {
     const [overview, projects] = await Promise.all([
@@ -2211,6 +2718,29 @@ async function loadRunOverview() {
   } finally {
     runOverviewLoading.value = false;
   }
+}
+
+async function loadQueueOverview() {
+  if (!canManageObjectificationQueue.value) {
+    queueOverview.value = null;
+    queuePlanResult.value = null;
+    return;
+  }
+  queueLoading.value = true;
+  try {
+    queueOverview.value = await fetchStorageObjectificationQueueOverview();
+  } finally {
+    queueLoading.value = false;
+  }
+}
+
+async function refreshQueueConsoleSnapshot() {
+  await Promise.allSettled([
+    loadQueueOverview(),
+    loadCoverageReport(),
+    loadInventory(),
+    loadReadPolicy()
+  ]);
 }
 
 async function loadTasks() {
@@ -2397,6 +2927,10 @@ function runPayload(confirmed = false) {
 }
 
 async function runAllProjectDryRun() {
+  if (!canManageObjectificationQueue.value) {
+    ElMessage.warning('全平台对象化由超级管理员统一管理。');
+    return;
+  }
   runDryRunLoading.value = true;
   try {
     runExecutionResult.value = null;
@@ -2408,6 +2942,10 @@ async function runAllProjectDryRun() {
 }
 
 async function startAllProjectRun() {
+  if (!canManageObjectificationQueue.value) {
+    ElMessage.warning('全平台对象化由超级管理员统一管理。');
+    return;
+  }
   if (!canExecuteRun.value) return;
   const confirmed = await confirmAction('将按 M3G-7R 全项目对象化队列执行受控跑批：只复制副本到 NAS 侧 MinIO，不移动、不删除、不改名 NAS 原文件；不会读取正文或写语义索引。');
   if (!confirmed) return;
@@ -2422,6 +2960,10 @@ async function startAllProjectRun() {
 }
 
 async function continueAllProjectRun() {
+  if (!canManageObjectificationQueue.value) {
+    ElMessage.warning('全平台对象化由超级管理员统一管理。');
+    return;
+  }
   const confirmed = await confirmAction('将继续 M3G-7R 受控跑批；仍按硬上限推进，不改动 NAS 原文件。');
   if (!confirmed) return;
   runExecutionLoading.value = true;
@@ -2435,6 +2977,10 @@ async function continueAllProjectRun() {
 }
 
 async function pauseAllProjectRun() {
+  if (!canManageObjectificationQueue.value) {
+    ElMessage.warning('全平台对象化由超级管理员统一管理。');
+    return;
+  }
   runPauseLoading.value = true;
   try {
     runOverview.value = await pauseStorageObjectificationRun();
@@ -2446,6 +2992,10 @@ async function pauseAllProjectRun() {
 }
 
 async function retryFailedAllProjectRun() {
+  if (!canManageObjectificationQueue.value) {
+    ElMessage.warning('全平台对象化由超级管理员统一管理。');
+    return;
+  }
   const confirmed = await confirmAction('将只重试迁移失败项；已对象化文件会按幂等策略跳过，治理项仍需人工处理。');
   if (!confirmed) return;
   runRetryLoading.value = true;
@@ -2455,6 +3005,160 @@ async function retryFailedAllProjectRun() {
     await Promise.all([loadInventory(), loadRunOverview(), loadWaveReports()]);
   } finally {
     runRetryLoading.value = false;
+  }
+}
+
+function queuePayload(confirmed = false) {
+  const project = selectedQueueProject.value;
+  return {
+    jobName: project ? `${project.projectCode} ${project.projectName} 对象化` : (queueForm.jobName || '项目对象化后台任务'),
+    scopeType: project ? 'PROJECT_CONTINUOUS' : 'ALL_REAL_PROJECTS',
+    projectIds: project ? [Number(project.projectId)] : undefined,
+    maxTotalFiles: Math.min(Math.max(1, Number(queueForm.maxTotalFiles || 200)), 200),
+    maxTotalBytes: Math.min(queueMaxTotalBytes.value, 2 * 1024 * 1024 * 1024),
+    maxFilesPerTick: Math.min(Math.max(1, Number(queueForm.maxFilesPerTick || 1)), 20),
+    maxBytesPerTick: Math.min(queueMaxBytesPerTick.value, 200 * 1024 * 1024),
+    maxFileSizeBytes: Math.min(queueMaxFileSizeBytes.value, 500 * 1024 * 1024),
+    continueOnFailure: queueForm.continueOnFailure,
+    confirmed,
+    targetProvider: 'MINIO'
+  };
+}
+
+async function dryRunQueueJob() {
+  if (!canManageObjectificationQueue.value) {
+    ElMessage.warning('仅超级管理员可以管理全平台对象化后台任务。');
+    return;
+  }
+  queueDryRunLoading.value = true;
+  try {
+    queuePlanResult.value = await dryRunStorageObjectificationQueueJob(queuePayload(false));
+    ElMessage.success('后台对象化队列 dry-run 已生成，未创建任务');
+  } finally {
+    queueDryRunLoading.value = false;
+  }
+}
+
+async function createQueueJob() {
+  if (!canCreateQueueJob.value) return;
+  const confirmed = await confirmAction('将创建后台对象化任务：后端 worker 会按小批次复制对象存储副本，页面关闭后仍会继续；不会移动、删除、重命名或覆盖 NAS 原文件。', '开始后台对象化？');
+  if (!confirmed) return;
+  queueCreateLoading.value = true;
+  try {
+    await createStorageObjectificationQueueJob(queuePayload(true));
+    ElMessage.success('后台对象化任务已创建，worker 将自动慢速推进');
+    queuePlanResult.value = null;
+    await Promise.all([refreshQueueConsoleSnapshot(), loadRunOverview()]);
+  } finally {
+    queueCreateLoading.value = false;
+  }
+}
+
+async function startQueueFromConsole() {
+  if (!canManageObjectificationQueue.value) {
+    ElMessage.warning('仅超级管理员可以管理全平台对象化后台任务。');
+    return;
+  }
+  if (!readinessReady.value) {
+    ElMessage.warning('NAS 侧 MinIO 尚未 READY，不能启动后台对象化。');
+    return;
+  }
+  if (!canStartQueueFromConsole.value) return;
+  const project = selectedQueueProject.value;
+  if (!project) {
+    ElMessage.warning('请先选择要对象化的项目。');
+    return;
+  }
+  const confirmed = await confirmAction(`将持续对象化「${project.projectCode} ${project.projectName}」：后台会按小批次复制对象存储副本，当前批次完成后自动续排下一批，直到该项目完成。`, '开始当前项目对象化？');
+  if (!confirmed) return;
+  queueCreateLoading.value = true;
+  try {
+    await createStorageObjectificationQueueJob(queuePayload(true));
+    ElMessage.success('后台对象化任务已创建，worker 将自动慢速推进');
+    queuePlanResult.value = null;
+    await Promise.all([refreshQueueConsoleSnapshot(), loadRunOverview()]);
+  } finally {
+    queueCreateLoading.value = false;
+  }
+}
+
+async function pauseRelevantQueueJob() {
+  const jobId = queuePauseableJob.value?.jobId;
+  if (!jobId) {
+    ElMessage.warning('当前没有正在运行或排队的后台对象化任务。');
+    return;
+  }
+  await pauseQueueJob(jobId);
+}
+
+async function resumeRelevantQueueJob() {
+  const jobId = queuePausedJob.value?.jobId;
+  if (!jobId) {
+    ElMessage.warning('当前没有已暂停的后台对象化任务。');
+    return;
+  }
+  await resumeQueueJob(jobId);
+}
+
+async function pauseQueueJob(jobId: number) {
+  if (!canManageObjectificationQueue.value) {
+    ElMessage.warning('仅超级管理员可以管理全平台对象化后台任务。');
+    return;
+  }
+  queueActionLoading.value = true;
+  try {
+    await pauseStorageObjectificationQueueJob(jobId);
+    ElMessage.success('后台对象化任务已暂停');
+    await refreshQueueConsoleSnapshot();
+  } finally {
+    queueActionLoading.value = false;
+  }
+}
+
+async function resumeQueueJob(jobId: number) {
+  if (!canManageObjectificationQueue.value) {
+    ElMessage.warning('仅超级管理员可以管理全平台对象化后台任务。');
+    return;
+  }
+  queueActionLoading.value = true;
+  try {
+    await resumeStorageObjectificationQueueJob(jobId);
+    ElMessage.success('后台对象化任务已继续');
+    await refreshQueueConsoleSnapshot();
+  } finally {
+    queueActionLoading.value = false;
+  }
+}
+
+async function retryQueueJob(jobId: number) {
+  if (!canManageObjectificationQueue.value) {
+    ElMessage.warning('仅超级管理员可以管理全平台对象化后台任务。');
+    return;
+  }
+  queueActionLoading.value = true;
+  try {
+    await retryFailedStorageObjectificationQueueJob(jobId);
+    ElMessage.success('后台对象化失败项已重新入队');
+    await refreshQueueConsoleSnapshot();
+  } finally {
+    queueActionLoading.value = false;
+  }
+}
+
+async function cancelQueueJob(jobId: number) {
+  if (!canManageObjectificationQueue.value) {
+    ElMessage.warning('仅超级管理员可以管理全平台对象化后台任务。');
+    return;
+  }
+  const confirmed = await confirmAction('将取消该后台对象化任务，未处理项会被跳过；已经复制成功的对象存储副本不会删除，NAS 原文件不会被改动。');
+  if (!confirmed) return;
+  queueActionLoading.value = true;
+  try {
+    await cancelStorageObjectificationQueueJob(jobId);
+    ElMessage.success('后台对象化任务已取消');
+    await refreshQueueConsoleSnapshot();
+  } finally {
+    queueActionLoading.value = false;
   }
 }
 
@@ -2594,9 +3298,9 @@ async function retryTask(row: StorageMigrationTaskListItem) {
   await Promise.all([loadSummary(), loadTasks()]);
 }
 
-async function confirmAction(message: string) {
+async function confirmAction(message: string, title = '确认迁移任务') {
   try {
-    await ElMessageBox.confirm(message, '确认迁移任务', {
+    await ElMessageBox.confirm(message, title, {
       confirmButtonText: '确认',
       cancelButtonText: '取消',
       type: 'warning'
@@ -2721,6 +3425,29 @@ function readStrategyTagType(value: string) {
   if (value === 'OBJECT_FIRST') return 'success';
   if (value === 'MIXED') return 'warning';
   if (value === 'LEGACY_NAS') return 'info';
+  return 'info';
+}
+
+function queueStateLabel(value: string | null | undefined) {
+  return ({
+    READY: '就绪',
+    QUEUED: '排队中',
+    RUNNING: '运行中',
+    PAUSED: '已暂停',
+    COMPLETED: '已完成',
+    FAILED: '待治理',
+    CANCELED: '已取消',
+    EXECUTABLE: '可排队',
+    GOVERNANCE_REQUIRED: '需治理',
+    SKIPPED: '跳过'
+  } as Record<string, string>)[value || ''] ?? value ?? '待确认';
+}
+
+function queueStatusTagType(value: string | null | undefined) {
+  if (value === 'RUNNING' || value === 'EXECUTABLE') return 'success';
+  if (value === 'QUEUED' || value === 'PAUSED') return 'warning';
+  if (value === 'FAILED' || value === 'GOVERNANCE_REQUIRED') return 'danger';
+  if (value === 'COMPLETED') return 'info';
   return 'info';
 }
 
@@ -3102,6 +3829,38 @@ function formatDate(value: string | null | undefined) {
   padding-left: 18px;
 }
 
+.coverage-diagnostics-collapse {
+  overflow: hidden;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+}
+
+.coverage-diagnostics-collapse :deep(.el-collapse-item__header) {
+  padding: 0 14px;
+  border-bottom: 1px solid var(--zy-line);
+  background: var(--zy-bg);
+  color: var(--zy-ink);
+  font-weight: 600;
+}
+
+.coverage-diagnostics-collapse :deep(.el-collapse-item__wrap) {
+  border-bottom: 0;
+}
+
+.coverage-diagnostics--compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 14px;
+  background: var(--zy-surface);
+}
+
+.coverage-diagnostics--compact section {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-bg);
+}
+
 .dry-run-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -3172,6 +3931,192 @@ function formatDate(value: string | null | undefined) {
   display: flex;
   flex: 0 0 auto;
   gap: 8px;
+}
+
+.queue-console {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--zy-surface) 92%, var(--zy-bg));
+}
+
+.queue-console__main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.42fr);
+  gap: 18px;
+  align-items: end;
+  min-width: 0;
+}
+
+.queue-console__status {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.queue-console__eyebrow {
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.queue-console__status strong {
+  color: var(--zy-ink);
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.queue-console__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.queue-console__meta span {
+  max-width: 100%;
+  padding: 4px 8px;
+  overflow: hidden;
+  border: 1px solid var(--zy-line);
+  border-radius: 999px;
+  background: var(--zy-bg);
+  color: var(--zy-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-console__status p,
+.queue-progress-grid p,
+.queue-action-bar span,
+.queue-diagnostics__toolbar span {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.queue-console__meter {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.queue-console__meter span {
+  justify-self: end;
+  color: var(--zy-ink);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.queue-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.queue-progress-grid > article {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-soft);
+}
+
+.queue-progress-grid span {
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.queue-progress-grid strong {
+  overflow: hidden;
+  color: var(--zy-ink);
+  font-size: 18px;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-action-bar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-bg);
+}
+
+.queue-action-bar > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.queue-action-bar strong {
+  color: var(--zy-ink);
+  font-size: 14px;
+}
+
+.queue-project-picker {
+  display: grid;
+  grid-template-columns: auto minmax(260px, 420px);
+  gap: 6px 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.queue-project-picker > span {
+  color: var(--zy-ink);
+  font-weight: 700;
+}
+
+.queue-project-picker small {
+  grid-column: 2;
+  color: var(--zy-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.queue-action-bar__buttons {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.queue-boundary-alert,
+.queue-permission-alert {
+  margin-top: 0;
+}
+
+.queue-diagnostics :deep(.el-collapse-item__content) {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 0;
+}
+
+.queue-diagnostics__toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-bg);
+}
+
+.queue-failure-drawer {
+  display: grid;
+  gap: 14px;
 }
 
 .service-grid {
@@ -3245,8 +4190,14 @@ function formatDate(value: string | null | undefined) {
   .m3g-readiness,
   .m3g-policy-grid,
   .coverage-summary-grid,
+  .coverage-diagnostics--compact,
+  .queue-progress-grid,
   .dry-run-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .queue-console__main {
+    grid-template-columns: 1fr;
   }
 
   .migration-progress {
@@ -3261,8 +4212,11 @@ function formatDate(value: string | null | undefined) {
   .m3g-readiness,
   .m3g-policy-grid,
   .coverage-summary-grid,
+  .coverage-diagnostics--compact,
   .multi-plan-form,
   .dry-run-form,
+  .queue-progress-grid,
+  .queue-console__main,
   .dry-run-summary,
   .service-grid,
   .disabled-action-grid {
@@ -3271,6 +4225,25 @@ function formatDate(value: string | null | undefined) {
 
   .migration-progress {
     grid-column: auto;
+  }
+
+  .queue-action-bar,
+  .queue-diagnostics__toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .queue-project-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .queue-project-picker small {
+    grid-column: auto;
+  }
+
+  .queue-action-bar__buttons,
+  .dry-run-actions__buttons {
+    flex-wrap: wrap;
   }
 }
 </style>

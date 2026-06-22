@@ -13,6 +13,11 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificatio
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationLongRunResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationPlanDryRunRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationPlanDryRunResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationQueueDryRunResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationQueueJobDetailResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationQueueJobRequest;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationQueueJobSummary;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationQueueOverviewResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageMigrationTaskCreateRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageMigrationTaskDetailResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageMigrationTaskListItemResponse;
@@ -255,6 +260,57 @@ public class StorageMigrationController {
     ) {
         return ApiResponse.success(storageMigrationApplicationService.retryFailedObjectificationRun(
             currentUserId(), request));
+    }
+
+    @GetMapping("/storage-objectification-queue/overview")
+    public ApiResponse<StorageObjectificationQueueOverviewResponse> objectificationQueueOverview() {
+        return ApiResponse.success(storageMigrationApplicationService.objectificationQueueOverview(currentUserId()));
+    }
+
+    @PostMapping("/storage-objectification-queue/jobs:dry-run")
+    public ApiResponse<StorageObjectificationQueueDryRunResponse> dryRunObjectificationQueueJob(
+        @RequestBody(required = false) StorageObjectificationQueueJobRequest request
+    ) {
+        return ApiResponse.success(storageMigrationApplicationService.dryRunObjectificationQueueJob(
+            currentUserId(), request));
+    }
+
+    @PostMapping("/storage-objectification-queue/jobs")
+    public ApiResponse<StorageObjectificationQueueJobDetailResponse> createObjectificationQueueJob(
+        @RequestBody StorageObjectificationQueueJobRequest request
+    ) {
+        return ApiResponse.success(storageMigrationApplicationService.createObjectificationQueueJob(
+            currentUserId(), request));
+    }
+
+    @GetMapping("/storage-objectification-queue/jobs")
+    public ApiResponse<List<StorageObjectificationQueueJobSummary>> listObjectificationQueueJobs() {
+        return ApiResponse.success(storageMigrationApplicationService.listObjectificationQueueJobs(currentUserId()));
+    }
+
+    @GetMapping("/storage-objectification-queue/jobs/{jobId}")
+    public ApiResponse<StorageObjectificationQueueJobDetailResponse> getObjectificationQueueJob(@PathVariable Long jobId) {
+        return ApiResponse.success(storageMigrationApplicationService.objectificationQueueJobDetail(currentUserId(), jobId));
+    }
+
+    @PostMapping("/storage-objectification-queue/jobs/{jobId}:pause")
+    public ApiResponse<StorageObjectificationQueueJobDetailResponse> pauseObjectificationQueueJob(@PathVariable Long jobId) {
+        return ApiResponse.success(storageMigrationApplicationService.pauseObjectificationQueueJob(currentUserId(), jobId));
+    }
+
+    @PostMapping("/storage-objectification-queue/jobs/{jobId}:resume")
+    public ApiResponse<StorageObjectificationQueueJobDetailResponse> resumeObjectificationQueueJob(@PathVariable Long jobId) {
+        return ApiResponse.success(storageMigrationApplicationService.resumeObjectificationQueueJob(currentUserId(), jobId));
+    }
+
+    @PostMapping("/storage-objectification-queue/jobs/{jobId}:retry-failed")
+    public ApiResponse<StorageObjectificationQueueJobDetailResponse> retryFailedObjectificationQueueJob(@PathVariable Long jobId) {
+        return ApiResponse.success(storageMigrationApplicationService.retryFailedObjectificationQueueJob(currentUserId(), jobId));
+    }
+
+    @PostMapping("/storage-objectification-queue/jobs/{jobId}:cancel")
+    public ApiResponse<StorageObjectificationQueueJobDetailResponse> cancelObjectificationQueueJob(@PathVariable Long jobId) {
+        return ApiResponse.success(storageMigrationApplicationService.cancelObjectificationQueueJob(currentUserId(), jobId));
     }
 
     @GetMapping("/storage-migration-tasks/{taskId}")

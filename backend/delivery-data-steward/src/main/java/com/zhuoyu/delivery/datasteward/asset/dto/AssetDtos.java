@@ -2128,6 +2128,129 @@ public final class AssetDtos {
     ) {
     }
 
+    public record StorageObjectificationQueueJobRequest(
+        String jobName,
+        String scopeType,
+        List<Long> projectIds,
+        Integer maxTotalFiles,
+        Long maxTotalBytes,
+        Integer maxFilesPerTick,
+        Long maxBytesPerTick,
+        Long maxFileSizeBytes,
+        Boolean continueOnFailure,
+        Boolean confirmed,
+        String targetProvider
+    ) {
+    }
+
+    public record StorageObjectificationQueueOverviewResponse(
+        String queueCode,
+        String queueState,
+        Long totalFiles,
+        Long objectStoredFiles,
+        Long nasOnlyFiles,
+        Long migrationFailedFiles,
+        Long governanceItemCount,
+        BigDecimal objectificationCoverageRate,
+        Long queuedJobCount,
+        Long runningJobCount,
+        Long pausedJobCount,
+        Long failedJobCount,
+        Long completedJobCount,
+        List<String> warnings,
+        List<StorageObjectificationQueueProjectProgress> projects,
+        List<StorageObjectificationQueueJobSummary> activeJobs,
+        List<StorageObjectificationQueueJobItemResponse> recentItems,
+        List<StorageObjectificationQueueJobItemResponse> failedItems
+    ) {
+    }
+
+    public record StorageObjectificationQueueProjectProgress(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        Long totalFiles,
+        Long objectStoredFiles,
+        Long nasOnlyFiles,
+        Long migrationFailedFiles,
+        Long queuedFiles,
+        Long runningFiles,
+        Long failedQueueFiles,
+        BigDecimal objectificationCoverageRate,
+        String queueStatus
+    ) {
+    }
+
+    public record StorageObjectificationQueueJobSummary(
+        Long jobId,
+        String jobCode,
+        String jobName,
+        String scopeType,
+        String jobStatus,
+        String targetProvider,
+        Long totalFiles,
+        Long processedFiles,
+        Long successFiles,
+        Long failedFiles,
+        Long skippedFiles,
+        Long totalBytes,
+        Long processedBytes,
+        Integer maxFilesPerTick,
+        Long maxBytesPerTick,
+        Long maxFileSizeBytes,
+        Boolean continueOnFailure,
+        Instant startedAt,
+        Instant pausedAt,
+        Instant finishedAt,
+        Instant updatedAt,
+        String progressMessage
+    ) {
+    }
+
+    public record StorageObjectificationQueueJobDetailResponse(
+        StorageObjectificationQueueJobSummary job,
+        List<StorageObjectificationQueueJobItemResponse> items,
+        List<StorageObjectificationQueueJobItemResponse> failedItems,
+        List<String> warnings
+    ) {
+    }
+
+    public record StorageObjectificationQueueJobItemResponse(
+        Long itemId,
+        Long jobId,
+        Long projectId,
+        String projectCode,
+        String projectName,
+        Long fileId,
+        String fileName,
+        String itemStatus,
+        String failureReason,
+        Integer retryCount,
+        Long sizeBytes,
+        Long migrationTaskId,
+        Boolean objectStored,
+        Instant startedAt,
+        Instant completedAt,
+        Instant updatedAt
+    ) {
+    }
+
+    public record StorageObjectificationQueueDryRunResponse(
+        Boolean dryRun,
+        Boolean jobCreated,
+        String queueCode,
+        String scopeType,
+        Long selectedFileCount,
+        Long selectedTotalBytes,
+        Integer plannedProjectCount,
+        Integer maxFilesPerTick,
+        Long maxBytesPerTick,
+        Long maxFileSizeBytes,
+        List<String> warnings,
+        List<MultiProjectStorageObjectificationPlanProject> projects
+    ) {
+    }
+
     public record StorageObjectificationFailureSummary(
         String reasonCode,
         String message,

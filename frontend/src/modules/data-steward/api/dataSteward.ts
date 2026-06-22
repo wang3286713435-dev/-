@@ -1009,6 +1009,122 @@ export interface StorageObjectificationRunPayload {
   targetProvider?: string;
 }
 
+export interface StorageObjectificationQueueProjectProgress {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  totalFiles: number;
+  objectStoredFiles: number;
+  nasOnlyFiles: number;
+  migrationFailedFiles: number;
+  queuedFiles: number;
+  runningFiles: number;
+  failedQueueFiles: number;
+  objectificationCoverageRate: number;
+  queueStatus: string;
+}
+
+export interface StorageObjectificationQueueJobSummary {
+  jobId: number;
+  jobCode: string;
+  jobName: string;
+  scopeType: string;
+  jobStatus: string;
+  targetProvider: string;
+  totalFiles: number;
+  processedFiles: number;
+  successFiles: number;
+  failedFiles: number;
+  skippedFiles: number;
+  totalBytes: number;
+  processedBytes: number;
+  maxFilesPerTick: number;
+  maxBytesPerTick: number;
+  maxFileSizeBytes: number;
+  continueOnFailure: boolean;
+  startedAt: string | null;
+  pausedAt: string | null;
+  finishedAt: string | null;
+  updatedAt: string | null;
+  progressMessage: string;
+}
+
+export interface StorageObjectificationQueueJobItem {
+  itemId: number;
+  jobId: number;
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  fileId: number;
+  fileName: string;
+  itemStatus: string;
+  failureReason: string | null;
+  retryCount: number;
+  sizeBytes: number;
+  migrationTaskId: number | null;
+  objectStored: boolean;
+  startedAt: string | null;
+  completedAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface StorageObjectificationQueueOverview {
+  queueCode: string;
+  queueState: string;
+  totalFiles: number;
+  objectStoredFiles: number;
+  nasOnlyFiles: number;
+  migrationFailedFiles: number;
+  governanceItemCount: number;
+  objectificationCoverageRate: number;
+  queuedJobCount: number;
+  runningJobCount: number;
+  pausedJobCount: number;
+  failedJobCount: number;
+  completedJobCount: number;
+  warnings: string[];
+  projects: StorageObjectificationQueueProjectProgress[];
+  activeJobs: StorageObjectificationQueueJobSummary[];
+  recentItems: StorageObjectificationQueueJobItem[];
+  failedItems: StorageObjectificationQueueJobItem[];
+}
+
+export interface StorageObjectificationQueueJobDetail {
+  job: StorageObjectificationQueueJobSummary;
+  items: StorageObjectificationQueueJobItem[];
+  failedItems: StorageObjectificationQueueJobItem[];
+  warnings: string[];
+}
+
+export interface StorageObjectificationQueueDryRun {
+  dryRun: boolean;
+  jobCreated: boolean;
+  queueCode: string;
+  scopeType: string;
+  selectedFileCount: number;
+  selectedTotalBytes: number;
+  plannedProjectCount: number;
+  maxFilesPerTick: number;
+  maxBytesPerTick: number;
+  maxFileSizeBytes: number;
+  warnings: string[];
+  projects: MultiProjectStorageObjectificationPlanProject[];
+}
+
+export interface StorageObjectificationQueueJobPayload {
+  jobName?: string;
+  scopeType?: string;
+  projectIds?: number[];
+  maxTotalFiles?: number;
+  maxTotalBytes?: number;
+  maxFilesPerTick?: number;
+  maxBytesPerTick?: number;
+  maxFileSizeBytes?: number;
+  continueOnFailure?: boolean;
+  confirmed?: boolean;
+  targetProvider?: string;
+}
+
 export interface StorageMigrationTaskPayload {
   fileIds: number[];
   targetProvider?: string;
@@ -1680,6 +1796,61 @@ export async function retryFailedStorageObjectificationRun(payload: StorageObjec
   const { data } = await http.post<ApiResponse<MultiProjectStorageObjectificationExecuteResult>>(
     '/api/data-steward/storage-objectification-run/retry-failed',
     payload
+  );
+  return data.data;
+}
+
+export async function fetchStorageObjectificationQueueOverview() {
+  const { data } = await http.get<ApiResponse<StorageObjectificationQueueOverview>>(
+    '/api/data-steward/storage-objectification-queue/overview'
+  );
+  return data.data;
+}
+
+export async function dryRunStorageObjectificationQueueJob(payload: StorageObjectificationQueueJobPayload) {
+  const { data } = await http.post<ApiResponse<StorageObjectificationQueueDryRun>>(
+    '/api/data-steward/storage-objectification-queue/jobs:dry-run',
+    payload
+  );
+  return data.data;
+}
+
+export async function createStorageObjectificationQueueJob(payload: StorageObjectificationQueueJobPayload) {
+  const { data } = await http.post<ApiResponse<StorageObjectificationQueueJobDetail>>(
+    '/api/data-steward/storage-objectification-queue/jobs',
+    payload
+  );
+  return data.data;
+}
+
+export async function pauseStorageObjectificationQueueJob(jobId: number) {
+  const { data } = await http.post<ApiResponse<StorageObjectificationQueueJobDetail>>(
+    `/api/data-steward/storage-objectification-queue/jobs/${jobId}:pause`,
+    {}
+  );
+  return data.data;
+}
+
+export async function resumeStorageObjectificationQueueJob(jobId: number) {
+  const { data } = await http.post<ApiResponse<StorageObjectificationQueueJobDetail>>(
+    `/api/data-steward/storage-objectification-queue/jobs/${jobId}:resume`,
+    {}
+  );
+  return data.data;
+}
+
+export async function retryFailedStorageObjectificationQueueJob(jobId: number) {
+  const { data } = await http.post<ApiResponse<StorageObjectificationQueueJobDetail>>(
+    `/api/data-steward/storage-objectification-queue/jobs/${jobId}:retry-failed`,
+    {}
+  );
+  return data.data;
+}
+
+export async function cancelStorageObjectificationQueueJob(jobId: number) {
+  const { data } = await http.post<ApiResponse<StorageObjectificationQueueJobDetail>>(
+    `/api/data-steward/storage-objectification-queue/jobs/${jobId}:cancel`,
+    {}
   );
   return data.data;
 }

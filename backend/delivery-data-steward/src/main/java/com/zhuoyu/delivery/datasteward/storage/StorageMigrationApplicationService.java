@@ -29,6 +29,13 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificatio
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationPlanDryRunRequest;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationPlanDryRunResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationPlanSampleItem;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationQueueDryRunResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationQueueJobDetailResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationQueueJobItemResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationQueueJobRequest;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationQueueJobSummary;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationQueueOverviewResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationQueueProjectProgress;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationRunOverviewResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationRunProject;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.StorageObjectificationRunProjectsResponse;
@@ -76,6 +83,7 @@ import org.springframework.stereotype.Service;
 public class StorageMigrationApplicationService {
 
     private static final String MODULE_CODE = "data-steward";
+    private static final String SUPER_ADMIN_USERNAME = "admin";
     private static final int DEFAULT_MAX_FILES = 10;
     private static final long DEFAULT_MAX_FILE_SIZE_BYTES = 10L * 1024L * 1024L;
     private static final long LARGE_FILE_RISK_BYTES = 500L * 1024L * 1024L;
@@ -121,6 +129,17 @@ public class StorageMigrationApplicationService {
     private static final long RUN_MAX_FILE_SIZE_BYTES = 500L * 1024L * 1024L;
     private static final int RUN_MAX_CONTINUOUS_BATCHES = 3;
     private static final Set<String> RUN_GOVERNANCE_PROJECT_CODES = Set.of("95", "98", "99");
+    private static final String QUEUE_CODE = "M3X-Q";
+    private static final int QUEUE_DEFAULT_TOTAL_FILES = 20;
+    private static final int QUEUE_MAX_TOTAL_FILES = 200;
+    private static final long QUEUE_DEFAULT_TOTAL_BYTES = 200L * 1024L * 1024L;
+    private static final long QUEUE_MAX_TOTAL_BYTES = 2L * 1024L * 1024L * 1024L;
+    private static final int QUEUE_DEFAULT_FILES_PER_TICK = 5;
+    private static final int QUEUE_MAX_FILES_PER_TICK = 20;
+    private static final long QUEUE_DEFAULT_BYTES_PER_TICK = 50L * 1024L * 1024L;
+    private static final long QUEUE_MAX_BYTES_PER_TICK = 200L * 1024L * 1024L;
+    private static final long QUEUE_LEASE_SECONDS = 60L;
+    private static final int QUEUE_ITEM_LIMIT = 200;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final AssetApplicationService assetApplicationService;
@@ -1446,7 +1465,7 @@ public class StorageMigrationApplicationService {
     }
 
     public StorageObjectificationRunOverviewResponse objectificationRunOverview(Long userId) {
-        ensureAnyProjectAccess(userId);
+        requireSuperAdminForQueue(userId);
         List<StorageObjectificationRunProject> projects = objectificationRunProjectRows(userId);
         long totalFiles = projects.stream().mapToLong(row -> nullToZero(row.totalFiles())).sum();
         long objectStoredFiles = projects.stream().mapToLong(row -> nullToZero(row.objectStoredFiles())).sum();
@@ -1484,7 +1503,7 @@ public class StorageMigrationApplicationService {
     }
 
     public StorageObjectificationRunProjectsResponse objectificationRunProjects(Long userId) {
-        ensureAnyProjectAccess(userId);
+        requireSuperAdminForQueue(userId);
         List<StorageObjectificationRunProject> projects = objectificationRunProjectRows(userId);
         return new StorageObjectificationRunProjectsResponse(
             RUN_CODE,
@@ -1501,7 +1520,7 @@ public class StorageMigrationApplicationService {
         Long userId,
         StorageObjectificationRunRequest request
     ) {
-        ensureAnyProjectAccess(userId);
+        requireSuperAdminForQueue(userId);
         ObjectificationRunConfig config = normalizeRunConfig(request);
         ObjectificationRunSelection selection = selectObjectificationRunFiles(userId, config, false);
         return buildObjectificationRunDryRunResponse(selection, config, false);
@@ -1511,6 +1530,7 @@ public class StorageMigrationApplicationService {
         Long userId,
         StorageObjectificationRunRequest request
     ) {
+        requireSuperAdminForQueue(userId);
         if (objectificationRunPausedAt != null) {
             throw new BusinessException("STORAGE_OBJECTIFICATION_RUN_PAUSED",
                 "全项目对象化跑批已暂停；请使用 continue 接口继续。", HttpStatus.CONFLICT);
@@ -1522,12 +1542,13 @@ public class StorageMigrationApplicationService {
         Long userId,
         StorageObjectificationRunRequest request
     ) {
+        requireSuperAdminForQueue(userId);
         objectificationRunPausedAt = null;
         return executeObjectificationRun(userId, request, "storage.objectification.run.continue", false);
     }
 
     public StorageObjectificationRunOverviewResponse pauseObjectificationRun(Long userId) {
-        ensureAnyProjectAccess(userId);
+        requireSuperAdminForQueue(userId);
         objectificationRunPausedAt = Instant.now();
         auditLogApplicationService.record(null, MODULE_CODE, "storage.objectification.run.pause",
             "PROJECT_SET", RUN_CODE, userId, Map.of("runCode", RUN_CODE));
@@ -1538,7 +1559,200 @@ public class StorageMigrationApplicationService {
         Long userId,
         StorageObjectificationRunRequest request
     ) {
+        requireSuperAdminForQueue(userId);
         return executeObjectificationRun(userId, request, "storage.objectification.run.retry-failed", true);
+    }
+
+    public StorageObjectificationQueueOverviewResponse objectificationQueueOverview(Long userId) {
+        requireSuperAdminForQueue(userId);
+        StorageObjectificationRunOverviewResponse runOverview = objectificationRunOverview(userId);
+        QueueStatusCounts counts = queueStatusCounts();
+        return new StorageObjectificationQueueOverviewResponse(
+            QUEUE_CODE,
+            counts.runningJobCount() > 0 ? "RUNNING" : counts.queuedJobCount() > 0 ? "QUEUED" : "READY",
+            runOverview.totalFiles(),
+            runOverview.objectStoredFiles(),
+            runOverview.nasOnlyFiles(),
+            runOverview.migrationFailedFiles(),
+            runOverview.governanceItemCount(),
+            runOverview.objectificationCoverageRate(),
+            counts.queuedJobCount(),
+            counts.runningJobCount(),
+            counts.pausedJobCount(),
+            counts.failedJobCount(),
+            counts.completedJobCount(),
+            objectificationQueueWarnings(),
+            queueProjectProgressRows(runOverview.projects()),
+            recentQueueJobs(10),
+            queueItems(null, false, 20),
+            queueItems(null, true, 20)
+        );
+    }
+
+    public StorageObjectificationQueueDryRunResponse dryRunObjectificationQueueJob(
+        Long userId,
+        StorageObjectificationQueueJobRequest request
+    ) {
+        requireSuperAdminForQueue(userId);
+        ObjectificationQueueConfig config = normalizeQueueConfig(request, false);
+        ObjectificationRunSelection selection = selectObjectificationRunFiles(userId, queueRunConfig(config), false);
+        return new StorageObjectificationQueueDryRunResponse(
+            true,
+            false,
+            QUEUE_CODE,
+            config.scopeType(),
+            selection.selectedFileCount(),
+            selection.selectedTotalBytes(),
+            selection.projects().size(),
+            config.maxFilesPerTick(),
+            config.maxBytesPerTick(),
+            config.maxFileSizeBytes(),
+            objectificationQueueWarnings(),
+            selection.projects().stream().map(ObjectificationRunProjectSelection::toResponse).toList()
+        );
+    }
+
+    public StorageObjectificationQueueJobDetailResponse createObjectificationQueueJob(
+        Long userId,
+        StorageObjectificationQueueJobRequest request
+    ) {
+        requireSuperAdminForQueue(userId);
+        ObjectificationQueueConfig config = normalizeQueueConfig(request, true);
+        ObjectificationRunSelection selection = selectObjectificationRunFiles(userId, queueRunConfig(config), false);
+        if (selection.selectedFileCount() <= 0) {
+            throw new BusinessException("STORAGE_OBJECTIFICATION_QUEUE_EMPTY",
+                "当前没有符合队列条件的可对象化文件。", HttpStatus.PRECONDITION_FAILED);
+        }
+        Long jobId = insertQueueJob(userId, config, selection);
+        insertQueueItems(jobId, selection);
+        refreshQueueJobProgress(jobId, null);
+        auditLogApplicationService.record(null, MODULE_CODE, "storage.objectification.queue.job.create",
+            "OBJECTIFICATION_JOB", String.valueOf(jobId), userId,
+            Map.of("jobId", jobId, "fileCount", selection.selectedFileCount(),
+                "scopeType", config.scopeType()));
+        return objectificationQueueJobDetail(userId, jobId);
+    }
+
+    public List<StorageObjectificationQueueJobSummary> listObjectificationQueueJobs(Long userId) {
+        requireSuperAdminForQueue(userId);
+        return recentQueueJobs(50);
+    }
+
+    public StorageObjectificationQueueJobDetailResponse objectificationQueueJobDetail(Long userId, Long jobId) {
+        requireSuperAdminForQueue(userId);
+        StorageObjectificationQueueJobSummary job = queueJobSummary(jobId);
+        return new StorageObjectificationQueueJobDetailResponse(
+            job,
+            queueItems(jobId, false, QUEUE_ITEM_LIMIT),
+            queueItems(jobId, true, QUEUE_ITEM_LIMIT),
+            objectificationQueueWarnings()
+        );
+    }
+
+    public StorageObjectificationQueueJobDetailResponse pauseObjectificationQueueJob(Long userId, Long jobId) {
+        requireSuperAdminForQueue(userId);
+        jdbcTemplate.update("""
+            UPDATE data_objectification_jobs
+            SET job_status = 'PAUSED',
+                paused_at = CURRENT_TIMESTAMP,
+                worker_lease_until = NULL,
+                updated_by = :userId
+            WHERE id = :jobId
+              AND deleted = 0
+              AND job_status IN ('QUEUED', 'RUNNING')
+            """, new MapSqlParameterSource()
+            .addValue("jobId", jobId)
+            .addValue("userId", userId));
+        auditLogApplicationService.record(null, MODULE_CODE, "storage.objectification.queue.job.pause",
+            "OBJECTIFICATION_JOB", String.valueOf(jobId), userId, Map.of("jobId", jobId));
+        return objectificationQueueJobDetail(userId, jobId);
+    }
+
+    public StorageObjectificationQueueJobDetailResponse resumeObjectificationQueueJob(Long userId, Long jobId) {
+        requireSuperAdminForQueue(userId);
+        jdbcTemplate.update("""
+            UPDATE data_objectification_jobs
+            SET job_status = 'QUEUED',
+                paused_at = NULL,
+                worker_lease_until = NULL,
+                updated_by = :userId
+            WHERE id = :jobId
+              AND deleted = 0
+              AND job_status IN ('PAUSED', 'FAILED')
+            """, new MapSqlParameterSource()
+            .addValue("jobId", jobId)
+            .addValue("userId", userId));
+        auditLogApplicationService.record(null, MODULE_CODE, "storage.objectification.queue.job.resume",
+            "OBJECTIFICATION_JOB", String.valueOf(jobId), userId, Map.of("jobId", jobId));
+        return objectificationQueueJobDetail(userId, jobId);
+    }
+
+    public StorageObjectificationQueueJobDetailResponse retryFailedObjectificationQueueJob(Long userId, Long jobId) {
+        requireSuperAdminForQueue(userId);
+        jdbcTemplate.update("""
+            UPDATE data_objectification_job_items
+            SET item_status = 'PENDING',
+                failure_reason = NULL,
+                retry_count = retry_count + 1,
+                started_at = NULL,
+                completed_at = NULL
+            WHERE job_id = :jobId
+              AND deleted = 0
+              AND item_status = 'FAILED'
+            """, new MapSqlParameterSource("jobId", jobId));
+        jdbcTemplate.update("""
+            UPDATE data_objectification_jobs
+            SET job_status = 'QUEUED',
+                finished_at = NULL,
+                worker_lease_until = NULL,
+                updated_by = :userId
+            WHERE id = :jobId
+              AND deleted = 0
+              AND job_status IN ('FAILED', 'COMPLETED', 'PAUSED', 'RUNNING', 'QUEUED')
+            """, new MapSqlParameterSource()
+            .addValue("jobId", jobId)
+            .addValue("userId", userId));
+        refreshQueueJobProgress(jobId, null);
+        auditLogApplicationService.record(null, MODULE_CODE, "storage.objectification.queue.job.retry-failed",
+            "OBJECTIFICATION_JOB", String.valueOf(jobId), userId, Map.of("jobId", jobId));
+        return objectificationQueueJobDetail(userId, jobId);
+    }
+
+    public StorageObjectificationQueueJobDetailResponse cancelObjectificationQueueJob(Long userId, Long jobId) {
+        requireSuperAdminForQueue(userId);
+        jdbcTemplate.update("""
+            UPDATE data_objectification_job_items
+            SET item_status = 'SKIPPED',
+                failure_reason = 'JOB_CANCELED:任务已取消，未处理项跳过。',
+                completed_at = CURRENT_TIMESTAMP
+            WHERE job_id = :jobId
+              AND deleted = 0
+              AND item_status IN ('PENDING', 'RUNNING')
+            """, new MapSqlParameterSource("jobId", jobId));
+        jdbcTemplate.update("""
+            UPDATE data_objectification_jobs
+            SET job_status = 'CANCELED',
+                worker_lease_until = NULL,
+                finished_at = CURRENT_TIMESTAMP,
+                updated_by = :userId
+            WHERE id = :jobId
+              AND deleted = 0
+            """, new MapSqlParameterSource()
+            .addValue("jobId", jobId)
+            .addValue("userId", userId));
+        refreshQueueJobProgress(jobId, "CANCELED");
+        auditLogApplicationService.record(null, MODULE_CODE, "storage.objectification.queue.job.cancel",
+            "OBJECTIFICATION_JOB", String.valueOf(jobId), userId, Map.of("jobId", jobId));
+        return objectificationQueueJobDetail(userId, jobId);
+    }
+
+    public void pollObjectificationQueue() {
+        recoverStaleQueueItems();
+        QueueJobWorkRow job = leaseNextQueueJob();
+        if (job == null) {
+            return;
+        }
+        processQueueJob(job);
     }
 
     private MultiProjectStorageObjectificationExecuteResponse executeObjectificationRun(
@@ -1547,7 +1761,7 @@ public class StorageMigrationApplicationService {
         String auditAction,
         boolean retryFailed
     ) {
-        ensureAnyProjectAccess(userId);
+        requireSuperAdminForQueue(userId);
         requireRunConfirmed(request);
         if (objectificationRunPausedAt != null) {
             throw new BusinessException("STORAGE_OBJECTIFICATION_RUN_PAUSED",
@@ -1881,6 +2095,760 @@ public class StorageMigrationApplicationService {
             governanceItemCount,
             caps,
             projectSelections
+        );
+    }
+
+    private ObjectificationRunConfig queueRunConfig(ObjectificationQueueConfig config) {
+        int maxProjects = config.projectIds().isEmpty()
+            ? RUN_MAX_PROJECTS
+            : Math.min(config.projectIds().size(), RUN_MAX_PROJECTS);
+        return new ObjectificationRunConfig(
+            config.projectIds(),
+            maxProjects,
+            config.maxTotalFiles(),
+            config.maxTotalBytes(),
+            Math.min(config.maxTotalFiles(), RUN_MAX_FILES_PER_PROJECT),
+            Math.min(config.maxTotalBytes(), RUN_MAX_BYTES_PER_PROJECT),
+            config.maxFileSizeBytes(),
+            1,
+            null,
+            config.continueOnFailure(),
+            config.targetProvider()
+        );
+    }
+
+    private Long insertQueueJob(Long userId, ObjectificationQueueConfig config, ObjectificationRunSelection selection) {
+        String code = QUEUE_CODE + "-" + Instant.now().toEpochMilli();
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update("""
+            INSERT INTO data_objectification_jobs (
+                job_code, job_name, scope_type, project_ids_json, job_status, target_provider,
+                total_files, total_bytes, max_files_per_tick, max_bytes_per_tick,
+                max_file_size_bytes, continue_on_failure, created_by, updated_by
+            ) VALUES (
+                :jobCode, :jobName, :scopeType, :projectIdsJson, 'QUEUED', :targetProvider,
+                :totalFiles, :totalBytes, :maxFilesPerTick, :maxBytesPerTick,
+                :maxFileSizeBytes, :continueOnFailure, :userId, :userId
+            )
+            """, new MapSqlParameterSource()
+            .addValue("jobCode", code)
+            .addValue("jobName", config.jobName())
+            .addValue("scopeType", config.scopeType())
+            .addValue("projectIdsJson", config.projectIds().toString())
+            .addValue("targetProvider", config.targetProvider())
+            .addValue("totalFiles", selection.selectedFileCount())
+            .addValue("totalBytes", selection.selectedTotalBytes())
+            .addValue("maxFilesPerTick", config.maxFilesPerTick())
+            .addValue("maxBytesPerTick", config.maxBytesPerTick())
+            .addValue("maxFileSizeBytes", config.maxFileSizeBytes())
+            .addValue("continueOnFailure", config.continueOnFailure() ? 1 : 0)
+            .addValue("userId", userId), keyHolder);
+        return Objects.requireNonNull(keyHolder.getKey()).longValue();
+    }
+
+    private void insertQueueItems(Long jobId, ObjectificationRunSelection selection) {
+        for (ObjectificationRunProjectSelection project : selection.projects()) {
+            for (Long fileId : project.fileIds()) {
+                jdbcTemplate.update("""
+                    INSERT INTO data_objectification_job_items (
+                        job_id, project_id, file_id, item_status, size_bytes, checksum
+                    )
+                    SELECT :jobId, f.project_id, f.id, 'PENDING', f.size_bytes, f.checksum
+                    FROM data_file_resources f
+                    WHERE f.id = :fileId
+                      AND f.project_id = :projectId
+                      AND f.deleted = 0
+                    ON DUPLICATE KEY UPDATE
+                        item_status = IF(item_status IN ('OBJECT_STORED', 'RUNNING'), item_status, 'PENDING'),
+                        size_bytes = VALUES(size_bytes),
+                        checksum = VALUES(checksum),
+                        deleted = 0,
+                        delete_token = 0
+                    """, new MapSqlParameterSource()
+                    .addValue("jobId", jobId)
+                    .addValue("projectId", project.projectId())
+                    .addValue("fileId", fileId));
+            }
+        }
+    }
+
+    private QueueJobWorkRow leaseNextQueueJob() {
+        List<QueueJobWorkRow> rows = jdbcTemplate.query("""
+            SELECT id, job_code, job_name, job_status, target_provider,
+                   max_files_per_tick, max_bytes_per_tick, max_file_size_bytes,
+                   continue_on_failure, created_by
+            FROM data_objectification_jobs
+            WHERE deleted = 0
+              AND job_status IN ('QUEUED', 'RUNNING')
+              AND (worker_lease_until IS NULL OR worker_lease_until < CURRENT_TIMESTAMP)
+            ORDER BY created_at, id
+            LIMIT 1
+            """, new MapSqlParameterSource(), (rs, rowNum) -> new QueueJobWorkRow(
+            rs.getLong("id"),
+            rs.getString("job_code"),
+            rs.getString("job_name"),
+            rs.getString("job_status"),
+            rs.getString("target_provider"),
+            rs.getInt("max_files_per_tick"),
+            rs.getLong("max_bytes_per_tick"),
+            rs.getLong("max_file_size_bytes"),
+            rs.getBoolean("continue_on_failure"),
+            rs.getLong("created_by")
+        ));
+        if (rows.isEmpty()) {
+            return null;
+        }
+        QueueJobWorkRow row = rows.getFirst();
+        int updated = jdbcTemplate.update("""
+            UPDATE data_objectification_jobs
+            SET job_status = 'RUNNING',
+                started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+                worker_lease_until = :leaseUntil,
+                updated_by = COALESCE(updated_by, created_by)
+            WHERE id = :jobId
+              AND deleted = 0
+              AND job_status IN ('QUEUED', 'RUNNING')
+              AND (worker_lease_until IS NULL OR worker_lease_until < CURRENT_TIMESTAMP)
+            """, new MapSqlParameterSource()
+            .addValue("jobId", row.jobId())
+            .addValue("leaseUntil", Timestamp.from(Instant.now().plusSeconds(QUEUE_LEASE_SECONDS))));
+        return updated > 0 ? row : null;
+    }
+
+    private void processQueueJob(QueueJobWorkRow job) {
+        List<QueueItemWorkRow> items = pendingQueueItems(job);
+        if (items.isEmpty()) {
+            finalizeQueueJobIfDone(job.jobId());
+            return;
+        }
+        for (QueueItemWorkRow item : items) {
+            if (!isQueueJobRunning(job.jobId())) {
+                break;
+            }
+            processQueueItem(job, item);
+            if (!job.continueOnFailure() && isQueueItemFailed(item.itemId())) {
+                jdbcTemplate.update("""
+                    UPDATE data_objectification_jobs
+                    SET job_status = 'FAILED',
+                        worker_lease_until = NULL,
+                        finished_at = CURRENT_TIMESTAMP
+                    WHERE id = :jobId
+                    """, new MapSqlParameterSource("jobId", job.jobId()));
+                break;
+            }
+        }
+        refreshQueueJobProgress(job.jobId(), null);
+        finalizeQueueJobIfDone(job.jobId());
+    }
+
+    private List<QueueItemWorkRow> pendingQueueItems(QueueJobWorkRow job) {
+        List<QueueItemWorkRow> candidates = jdbcTemplate.query("""
+            SELECT id, project_id, file_id, COALESCE(size_bytes, 0) AS size_bytes
+            FROM data_objectification_job_items
+            WHERE job_id = :jobId
+              AND deleted = 0
+              AND item_status = 'PENDING'
+              AND COALESCE(size_bytes, 0) <= :maxFileSize
+            ORDER BY id
+            LIMIT :limit
+            """, new MapSqlParameterSource()
+            .addValue("jobId", job.jobId())
+            .addValue("maxFileSize", job.maxFileSizeBytes())
+            .addValue("limit", Math.max(job.maxFilesPerTick() * 3, job.maxFilesPerTick())), (rs, rowNum) -> new QueueItemWorkRow(
+            rs.getLong("id"),
+            rs.getLong("project_id"),
+            rs.getLong("file_id"),
+            rs.getLong("size_bytes")
+        ));
+        List<QueueItemWorkRow> result = new ArrayList<>();
+        long bytes = 0L;
+        for (QueueItemWorkRow item : candidates) {
+            if (result.size() >= job.maxFilesPerTick()) {
+                break;
+            }
+            if (!result.isEmpty() && bytes + nullToZero(item.sizeBytes()) > job.maxBytesPerTick()) {
+                break;
+            }
+            result.add(item);
+            bytes += nullToZero(item.sizeBytes());
+        }
+        return result;
+    }
+
+    private void processQueueItem(QueueJobWorkRow job, QueueItemWorkRow item) {
+        int marked = jdbcTemplate.update("""
+            UPDATE data_objectification_job_items
+            SET item_status = 'RUNNING',
+                started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+                failure_reason = NULL
+            WHERE id = :itemId
+              AND item_status = 'PENDING'
+              AND deleted = 0
+            """, new MapSqlParameterSource("itemId", item.itemId()));
+        if (marked <= 0) {
+            return;
+        }
+        try {
+            StorageMigrationTaskDetailResponse detail = createTask(
+                job.userId(),
+                item.projectId(),
+                new StorageMigrationTaskCreateRequest(List.of(item.fileId()), job.targetProvider()),
+                1,
+                job.maxFileSizeBytes()
+            );
+            StorageMigrationTaskRowResponse row = detail.rows().isEmpty() ? null : detail.rows().getFirst();
+            if (detail.successCount() != null && detail.successCount() > 0) {
+                markQueueItemDone(item.itemId(), "OBJECT_STORED", detail.taskId(), null);
+            } else if (detail.skippedCount() != null && detail.skippedCount() > 0) {
+                markQueueItemDone(item.itemId(), "SKIPPED", detail.taskId(),
+                    row == null ? "ALREADY_STORED:文件已对象化，队列跳过。" : row.resultCode() + ":" + row.message());
+            } else {
+                String reason = row == null ? safeMessage(detail.message(), detail.taskStatus())
+                    : row.resultCode() + ":" + row.message();
+                markQueueItemDone(item.itemId(), "FAILED", detail.taskId(), reason);
+            }
+        } catch (Exception exception) {
+            markQueueItemDone(item.itemId(), "FAILED", null, "QUEUE_ITEM_FAILED:对象化队列处理失败。");
+        }
+    }
+
+    private void markQueueItemDone(Long itemId, String status, Long taskId, String reason) {
+        Long objectId = null;
+        if ("OBJECT_STORED".equals(status) || "SKIPPED".equals(status)) {
+            objectId = activeObjectIdForQueueItem(itemId);
+        }
+        jdbcTemplate.update("""
+            UPDATE data_objectification_job_items
+            SET item_status = :status,
+                migration_task_id = :taskId,
+                storage_object_id = :objectId,
+                failure_reason = :reason,
+                completed_at = CURRENT_TIMESTAMP
+            WHERE id = :itemId
+            """, new MapSqlParameterSource()
+            .addValue("itemId", itemId)
+            .addValue("status", status)
+            .addValue("taskId", taskId)
+            .addValue("objectId", objectId)
+            .addValue("reason", truncate(reason, 1000)));
+    }
+
+    private Long activeObjectIdForQueueItem(Long itemId) {
+        List<Long> rows = jdbcTemplate.query("""
+            SELECT fov.storage_object_id
+            FROM data_objectification_job_items i
+            JOIN data_file_object_versions fov
+              ON fov.file_id = i.file_id
+             AND fov.active = 1
+             AND fov.deleted = 0
+             AND fov.storage_state = 'OBJECT_STORED'
+            WHERE i.id = :itemId
+            ORDER BY fov.id DESC
+            LIMIT 1
+            """, new MapSqlParameterSource("itemId", itemId), (rs, rowNum) -> rs.getLong("storage_object_id"));
+        return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    private void recoverStaleQueueItems() {
+        jdbcTemplate.update("""
+            UPDATE data_objectification_job_items i
+            JOIN data_objectification_jobs j ON j.id = i.job_id
+            SET i.item_status = 'PENDING',
+                i.failure_reason = 'WORKER_RECOVERED:后台 worker 重启后恢复待处理。',
+                i.started_at = NULL,
+                j.worker_lease_until = NULL,
+                j.job_status = 'QUEUED'
+            WHERE i.deleted = 0
+              AND j.deleted = 0
+              AND i.item_status = 'RUNNING'
+              AND i.updated_at < DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 10 MINUTE)
+              AND j.job_status = 'RUNNING'
+            """, new MapSqlParameterSource());
+    }
+
+    private void refreshQueueJobProgress(Long jobId, String forcedStatus) {
+        QueueItemCounts counts = queueItemCounts(jobId);
+        String status = forcedStatus == null ? queueJobSummary(jobId).jobStatus() : forcedStatus;
+        jdbcTemplate.update("""
+            UPDATE data_objectification_jobs
+            SET processed_files = :processedFiles,
+                success_files = :successFiles,
+                failed_files = :failedFiles,
+                skipped_files = :skippedFiles,
+                processed_bytes = :processedBytes,
+                job_status = :status
+            WHERE id = :jobId
+              AND deleted = 0
+            """, new MapSqlParameterSource()
+            .addValue("jobId", jobId)
+            .addValue("processedFiles", counts.processedFiles())
+            .addValue("successFiles", counts.successFiles())
+            .addValue("failedFiles", counts.failedFiles())
+            .addValue("skippedFiles", counts.skippedFiles())
+            .addValue("processedBytes", counts.processedBytes())
+            .addValue("status", status));
+    }
+
+    private void finalizeQueueJobIfDone(Long jobId) {
+        QueueItemCounts counts = queueItemCounts(jobId);
+        if (counts.pendingFiles() > 0 || counts.runningFiles() > 0) {
+            jdbcTemplate.update("""
+                UPDATE data_objectification_jobs
+                SET worker_lease_until = NULL
+                WHERE id = :jobId
+                  AND deleted = 0
+                  AND job_status = 'RUNNING'
+                """, new MapSqlParameterSource("jobId", jobId));
+            return;
+        }
+        String status = counts.failedFiles() > 0 && counts.successFiles() == 0 && counts.skippedFiles() == 0
+            ? "FAILED"
+            : "COMPLETED";
+        jdbcTemplate.update("""
+            UPDATE data_objectification_jobs
+            SET job_status = :status,
+                processed_files = :processedFiles,
+                success_files = :successFiles,
+                failed_files = :failedFiles,
+                skipped_files = :skippedFiles,
+                processed_bytes = :processedBytes,
+                worker_lease_until = NULL,
+                finished_at = CURRENT_TIMESTAMP
+            WHERE id = :jobId
+              AND deleted = 0
+              AND job_status IN ('QUEUED', 'RUNNING')
+            """, new MapSqlParameterSource()
+            .addValue("jobId", jobId)
+            .addValue("status", status)
+            .addValue("processedFiles", counts.processedFiles())
+            .addValue("successFiles", counts.successFiles())
+            .addValue("failedFiles", counts.failedFiles())
+            .addValue("skippedFiles", counts.skippedFiles())
+            .addValue("processedBytes", counts.processedBytes()));
+        autoContinueProjectQueueIfNeeded(jobId, status);
+    }
+
+    private void autoContinueProjectQueueIfNeeded(Long jobId, String completedStatus) {
+        if (!"COMPLETED".equals(completedStatus)) {
+            return;
+        }
+        QueueContinuationSource source = queueContinuationSource(jobId);
+        if (source == null || !"PROJECT_CONTINUOUS".equals(source.scopeType())) {
+            return;
+        }
+        List<Long> projectIds = parseStoredProjectIds(source.projectIdsJson());
+        if (projectIds.size() != 1 || hasActiveContinuousProjectJob(jobId, source.projectIdsJson())) {
+            return;
+        }
+        ObjectificationQueueConfig nextConfig = new ObjectificationQueueConfig(
+            source.jobName(),
+            "PROJECT_CONTINUOUS",
+            projectIds,
+            QUEUE_MAX_TOTAL_FILES,
+            QUEUE_MAX_TOTAL_BYTES,
+            source.maxFilesPerTick(),
+            source.maxBytesPerTick(),
+            source.maxFileSizeBytes(),
+            source.continueOnFailure(),
+            source.targetProvider()
+        );
+        try {
+            ObjectificationRunSelection selection = selectObjectificationRunFiles(source.userId(), queueRunConfig(nextConfig), false);
+            if (selection.selectedFileCount() <= 0) {
+                return;
+            }
+            Long nextJobId = insertQueueJob(source.userId(), nextConfig, selection);
+            insertQueueItems(nextJobId, selection);
+            auditLogApplicationService.record(null, MODULE_CODE, "storage.objectification.queue.project-continuation",
+                "PROJECT", String.valueOf(projectIds.getFirst()), source.userId(),
+                Map.of("previousJobId", jobId, "nextJobId", nextJobId, "fileCount", selection.selectedFileCount()));
+        } catch (BusinessException ignored) {
+            // The project may have become complete or non-executable between batches.
+        }
+    }
+
+    private QueueContinuationSource queueContinuationSource(Long jobId) {
+        List<QueueContinuationSource> rows = jdbcTemplate.query("""
+            SELECT id, job_name, scope_type, project_ids_json, target_provider,
+                   max_files_per_tick, max_bytes_per_tick, max_file_size_bytes,
+                   continue_on_failure, created_by
+            FROM data_objectification_jobs
+            WHERE id = :jobId
+              AND deleted = 0
+            LIMIT 1
+            """, new MapSqlParameterSource("jobId", jobId), (rs, rowNum) -> new QueueContinuationSource(
+            rs.getLong("id"),
+            rs.getString("job_name"),
+            rs.getString("scope_type"),
+            rs.getString("project_ids_json"),
+            rs.getString("target_provider"),
+            rs.getInt("max_files_per_tick"),
+            rs.getLong("max_bytes_per_tick"),
+            rs.getLong("max_file_size_bytes"),
+            rs.getBoolean("continue_on_failure"),
+            rs.getLong("created_by")
+        ));
+        return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    private boolean hasActiveContinuousProjectJob(Long currentJobId, String projectIdsJson) {
+        Integer count = jdbcTemplate.queryForObject("""
+            SELECT COUNT(1)
+            FROM data_objectification_jobs
+            WHERE deleted = 0
+              AND id <> :currentJobId
+              AND scope_type = 'PROJECT_CONTINUOUS'
+              AND project_ids_json = :projectIdsJson
+              AND job_status IN ('QUEUED', 'RUNNING', 'PAUSED')
+            """, new MapSqlParameterSource()
+            .addValue("currentJobId", currentJobId)
+            .addValue("projectIdsJson", projectIdsJson), Integer.class);
+        return count != null && count > 0;
+    }
+
+    private List<Long> parseStoredProjectIds(String raw) {
+        if (!hasText(raw)) {
+            return List.of();
+        }
+        String normalized = raw.trim();
+        if (normalized.startsWith("[") && normalized.endsWith("]")) {
+            normalized = normalized.substring(1, normalized.length() - 1);
+        }
+        if (!hasText(normalized)) {
+            return List.of();
+        }
+        List<Long> ids = new ArrayList<>();
+        for (String part : normalized.split(",")) {
+            String value = part.trim();
+            if (!hasText(value)) {
+                continue;
+            }
+            try {
+                ids.add(Long.parseLong(value));
+            } catch (NumberFormatException ignored) {
+                return List.of();
+            }
+        }
+        return ids;
+    }
+
+    private boolean isQueueJobRunning(Long jobId) {
+        Integer running = jdbcTemplate.queryForObject("""
+            SELECT COUNT(1)
+            FROM data_objectification_jobs
+            WHERE id = :jobId
+              AND deleted = 0
+              AND job_status = 'RUNNING'
+            """, new MapSqlParameterSource("jobId", jobId), Integer.class);
+        return running != null && running > 0;
+    }
+
+    private boolean isQueueItemFailed(Long itemId) {
+        Integer failed = jdbcTemplate.queryForObject("""
+            SELECT COUNT(1)
+            FROM data_objectification_job_items
+            WHERE id = :itemId
+              AND deleted = 0
+              AND item_status = 'FAILED'
+            """, new MapSqlParameterSource("itemId", itemId), Integer.class);
+        return failed != null && failed > 0;
+    }
+
+    private QueueItemCounts queueItemCounts(Long jobId) {
+        return jdbcTemplate.queryForObject("""
+            SELECT
+                SUM(CASE WHEN item_status = 'PENDING' THEN 1 ELSE 0 END) AS pending_files,
+                SUM(CASE WHEN item_status = 'RUNNING' THEN 1 ELSE 0 END) AS running_files,
+                SUM(CASE WHEN item_status = 'OBJECT_STORED' THEN 1 ELSE 0 END) AS success_files,
+                SUM(CASE WHEN item_status = 'FAILED' THEN 1 ELSE 0 END) AS failed_files,
+                SUM(CASE WHEN item_status = 'SKIPPED' THEN 1 ELSE 0 END) AS skipped_files,
+                SUM(CASE WHEN item_status IN ('OBJECT_STORED', 'FAILED', 'SKIPPED') THEN 1 ELSE 0 END) AS processed_files,
+                SUM(CASE WHEN item_status IN ('OBJECT_STORED', 'SKIPPED') THEN COALESCE(size_bytes, 0) ELSE 0 END) AS processed_bytes
+            FROM data_objectification_job_items
+            WHERE job_id = :jobId
+              AND deleted = 0
+            """, new MapSqlParameterSource("jobId", jobId), (rs, rowNum) -> new QueueItemCounts(
+            rs.getLong("pending_files"),
+            rs.getLong("running_files"),
+            rs.getLong("success_files"),
+            rs.getLong("failed_files"),
+            rs.getLong("skipped_files"),
+            rs.getLong("processed_files"),
+            rs.getLong("processed_bytes")
+        ));
+    }
+
+    private QueueStatusCounts queueStatusCounts() {
+        return jdbcTemplate.queryForObject("""
+            SELECT
+                SUM(CASE WHEN job_status = 'QUEUED' THEN 1 ELSE 0 END) AS queued_jobs,
+                SUM(CASE WHEN job_status = 'RUNNING' THEN 1 ELSE 0 END) AS running_jobs,
+                SUM(CASE WHEN job_status = 'PAUSED' THEN 1 ELSE 0 END) AS paused_jobs,
+                SUM(CASE WHEN job_status = 'FAILED' THEN 1 ELSE 0 END) AS failed_jobs,
+                SUM(CASE WHEN job_status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed_jobs
+            FROM data_objectification_jobs
+            WHERE deleted = 0
+            """, new MapSqlParameterSource(), (rs, rowNum) -> new QueueStatusCounts(
+            rs.getLong("queued_jobs"),
+            rs.getLong("running_jobs"),
+            rs.getLong("paused_jobs"),
+            rs.getLong("failed_jobs"),
+            rs.getLong("completed_jobs")
+        ));
+    }
+
+    private StorageObjectificationQueueJobSummary queueJobSummary(Long jobId) {
+        List<StorageObjectificationQueueJobSummary> rows = jdbcTemplate.query("""
+            SELECT id, job_code, job_name, scope_type, job_status, target_provider,
+                   total_files, processed_files, success_files, failed_files, skipped_files,
+                   total_bytes, processed_bytes, max_files_per_tick, max_bytes_per_tick,
+                   max_file_size_bytes, continue_on_failure, started_at, paused_at,
+                   finished_at, updated_at
+            FROM data_objectification_jobs
+            WHERE id = :jobId
+              AND deleted = 0
+            LIMIT 1
+            """, new MapSqlParameterSource("jobId", jobId), (rs, rowNum) -> mapQueueJobSummary(rs));
+        if (rows.isEmpty()) {
+            throw new BusinessException("STORAGE_OBJECTIFICATION_QUEUE_JOB_NOT_FOUND",
+                "对象化后台任务不存在。", HttpStatus.NOT_FOUND);
+        }
+        return rows.getFirst();
+    }
+
+    private List<StorageObjectificationQueueJobSummary> recentQueueJobs(int limit) {
+        return jdbcTemplate.query("""
+            SELECT id, job_code, job_name, scope_type, job_status, target_provider,
+                   total_files, processed_files, success_files, failed_files, skipped_files,
+                   total_bytes, processed_bytes, max_files_per_tick, max_bytes_per_tick,
+                   max_file_size_bytes, continue_on_failure, started_at, paused_at,
+                   finished_at, updated_at
+            FROM data_objectification_jobs
+            WHERE deleted = 0
+            ORDER BY updated_at DESC, id DESC
+            LIMIT :limit
+            """, new MapSqlParameterSource("limit", limit), (rs, rowNum) -> mapQueueJobSummary(rs));
+    }
+
+    private StorageObjectificationQueueJobSummary mapQueueJobSummary(java.sql.ResultSet rs) throws java.sql.SQLException {
+        long total = rs.getLong("total_files");
+        long processed = rs.getLong("processed_files");
+        String message = total <= 0
+            ? "暂无文件"
+            : processed + " / " + total + " 个文件已处理";
+        return new StorageObjectificationQueueJobSummary(
+            rs.getLong("id"),
+            rs.getString("job_code"),
+            rs.getString("job_name"),
+            rs.getString("scope_type"),
+            rs.getString("job_status"),
+            rs.getString("target_provider"),
+            total,
+            processed,
+            rs.getLong("success_files"),
+            rs.getLong("failed_files"),
+            rs.getLong("skipped_files"),
+            rs.getLong("total_bytes"),
+            rs.getLong("processed_bytes"),
+            rs.getInt("max_files_per_tick"),
+            rs.getLong("max_bytes_per_tick"),
+            rs.getLong("max_file_size_bytes"),
+            rs.getBoolean("continue_on_failure"),
+            instant(rs.getTimestamp("started_at")),
+            instant(rs.getTimestamp("paused_at")),
+            instant(rs.getTimestamp("finished_at")),
+            instant(rs.getTimestamp("updated_at")),
+            message
+        );
+    }
+
+    private List<StorageObjectificationQueueJobItemResponse> queueItems(Long jobId, boolean failedOnly, int limit) {
+        String jobFilter = jobId == null ? "" : " AND i.job_id = :jobId\n";
+        String failedFilter = failedOnly ? " AND i.item_status = 'FAILED'\n" : "";
+        MapSqlParameterSource params = new MapSqlParameterSource("limit", limit);
+        if (jobId != null) {
+            params.addValue("jobId", jobId);
+        }
+        return jdbcTemplate.query("""
+            SELECT i.id, i.job_id, i.project_id, p.code AS project_code, p.name AS project_name,
+                   i.file_id, f.original_name, i.item_status, i.failure_reason, i.retry_count,
+                   i.size_bytes, i.migration_task_id,
+                   CASE WHEN fov.file_id IS NULL THEN 0 ELSE 1 END AS object_stored,
+                   i.started_at, i.completed_at, i.updated_at
+            FROM data_objectification_job_items i
+            JOIN core_projects p ON p.id = i.project_id
+            JOIN data_file_resources f ON f.id = i.file_id
+            LEFT JOIN data_file_object_versions fov
+              ON fov.file_id = i.file_id
+             AND fov.active = 1
+             AND fov.deleted = 0
+             AND fov.storage_state = 'OBJECT_STORED'
+            WHERE i.deleted = 0
+            """ + jobFilter + failedFilter + """
+            ORDER BY i.updated_at DESC, i.id DESC
+            LIMIT :limit
+            """, params, (rs, rowNum) -> new StorageObjectificationQueueJobItemResponse(
+            rs.getLong("id"),
+            rs.getLong("job_id"),
+            rs.getLong("project_id"),
+            rs.getString("project_code"),
+            rs.getString("project_name"),
+            rs.getLong("file_id"),
+            rs.getString("original_name"),
+            rs.getString("item_status"),
+            safeMessage(rs.getString("failure_reason"), rs.getString("item_status")),
+            rs.getInt("retry_count"),
+            rs.getLong("size_bytes"),
+            rs.getLong("migration_task_id") == 0 ? null : rs.getLong("migration_task_id"),
+            rs.getBoolean("object_stored"),
+            instant(rs.getTimestamp("started_at")),
+            instant(rs.getTimestamp("completed_at")),
+            instant(rs.getTimestamp("updated_at"))
+        ));
+    }
+
+    private List<StorageObjectificationQueueProjectProgress> queueProjectProgressRows(
+        List<StorageObjectificationRunProject> projects
+    ) {
+        Map<Long, QueueProjectCounts> queueCounts = queueProjectCounts();
+        return projects.stream().map(project -> {
+            QueueProjectCounts counts = queueCounts.getOrDefault(project.projectId(), new QueueProjectCounts(0L, 0L, 0L));
+            String status = counts.runningFiles() > 0 ? "RUNNING"
+                : counts.queuedFiles() > 0 ? "QUEUED"
+                : counts.failedFiles() > 0 ? "FAILED"
+                : project.queueStatus();
+            return new StorageObjectificationQueueProjectProgress(
+                project.projectId(),
+                project.projectCode(),
+                project.projectName(),
+                project.totalFiles(),
+                project.objectStoredFiles(),
+                project.nasOnlyFiles(),
+                project.migrationFailedFiles(),
+                counts.queuedFiles(),
+                counts.runningFiles(),
+                counts.failedFiles(),
+                project.objectificationCoverageRate(),
+                status
+            );
+        }).toList();
+    }
+
+    private Map<Long, QueueProjectCounts> queueProjectCounts() {
+        List<QueueProjectCountRow> rows = jdbcTemplate.query("""
+            SELECT project_id,
+                   SUM(CASE WHEN item_status = 'PENDING' THEN 1 ELSE 0 END) AS queued_files,
+                   SUM(CASE WHEN item_status = 'RUNNING' THEN 1 ELSE 0 END) AS running_files,
+                   SUM(CASE WHEN item_status = 'FAILED' THEN 1 ELSE 0 END) AS failed_files
+            FROM data_objectification_job_items
+            WHERE deleted = 0
+            GROUP BY project_id
+            """, new MapSqlParameterSource(), (rs, rowNum) -> new QueueProjectCountRow(
+            rs.getLong("project_id"),
+            rs.getLong("queued_files"),
+            rs.getLong("running_files"),
+            rs.getLong("failed_files")
+        ));
+        Map<Long, QueueProjectCounts> result = new HashMap<>();
+        for (QueueProjectCountRow row : rows) {
+            result.put(row.projectId(), new QueueProjectCounts(row.queuedFiles(), row.runningFiles(), row.failedFiles()));
+        }
+        return result;
+    }
+
+    private ObjectificationQueueConfig normalizeQueueConfig(
+        StorageObjectificationQueueJobRequest request,
+        boolean requireConfirmed
+    ) {
+        if (requireConfirmed && !Boolean.TRUE.equals(request == null ? null : request.confirmed())) {
+            throw new BusinessException("STORAGE_OBJECTIFICATION_QUEUE_CONFIRM_REQUIRED",
+                "创建对象化后台任务必须 confirmed=true。", HttpStatus.BAD_REQUEST);
+        }
+        List<Long> projectIds = normalizeOptionalProjectIds(request == null ? null : request.projectIds());
+        if (projectIds.size() > RUN_MAX_PROJECTS) {
+            throw new BusinessException("STORAGE_OBJECTIFICATION_QUEUE_PROJECT_LIMIT_EXCEEDED",
+                "对象化后台任务一次最多纳入 5 个项目。", HttpStatus.BAD_REQUEST);
+        }
+        String requestedScopeType = request == null || !hasText(request.scopeType())
+            ? null
+            : request.scopeType().trim().toUpperCase(Locale.ROOT);
+        String scopeType = projectIds.isEmpty() ? "ALL_REAL_PROJECTS" : "SELECTED_PROJECTS";
+        if ("PROJECT_CONTINUOUS".equals(requestedScopeType)) {
+            if (projectIds.size() != 1) {
+                throw new BusinessException("STORAGE_OBJECTIFICATION_QUEUE_PROJECT_CONTINUOUS_SCOPE_INVALID",
+                    "项目持续对象化必须且只能选择一个项目。", HttpStatus.BAD_REQUEST);
+            }
+            scopeType = "PROJECT_CONTINUOUS";
+        } else if ("SELECTED_PROJECTS".equals(requestedScopeType)) {
+            if (projectIds.isEmpty()) {
+                throw new BusinessException("STORAGE_OBJECTIFICATION_QUEUE_PROJECTS_REQUIRED",
+                    "选择项目范围时必须提供 projectIds。", HttpStatus.BAD_REQUEST);
+            }
+            scopeType = "SELECTED_PROJECTS";
+        }
+        return new ObjectificationQueueConfig(
+            hasText(request == null ? null : request.jobName()) ? request.jobName().trim() : "全平台对象化后台任务",
+            scopeType,
+            projectIds,
+            normalizeQueueMaxTotalFiles(request == null ? null : request.maxTotalFiles()),
+            normalizeQueueMaxTotalBytes(request == null ? null : request.maxTotalBytes()),
+            normalizeQueueMaxFilesPerTick(request == null ? null : request.maxFilesPerTick()),
+            normalizeQueueMaxBytesPerTick(request == null ? null : request.maxBytesPerTick()),
+            normalizeRunMaxFileSizeBytes(request == null ? null : request.maxFileSizeBytes()),
+            !Boolean.FALSE.equals(request == null ? null : request.continueOnFailure()),
+            normalizeTargetProvider(request == null ? null : request.targetProvider())
+        );
+    }
+
+    private int normalizeQueueMaxTotalFiles(Integer value) {
+        if (value == null) {
+            return QUEUE_DEFAULT_TOTAL_FILES;
+        }
+        if (value <= 0 || value > QUEUE_MAX_TOTAL_FILES) {
+            throw new BusinessException("STORAGE_OBJECTIFICATION_QUEUE_TOTAL_FILE_LIMIT_EXCEEDED",
+                "后台任务单次最多排队 200 个文件。", HttpStatus.BAD_REQUEST);
+        }
+        return value;
+    }
+
+    private long normalizeQueueMaxTotalBytes(Long value) {
+        if (value == null) {
+            return QUEUE_DEFAULT_TOTAL_BYTES;
+        }
+        if (value <= 0 || value > QUEUE_MAX_TOTAL_BYTES) {
+            throw new BusinessException("STORAGE_OBJECTIFICATION_QUEUE_TOTAL_BYTES_LIMIT_EXCEEDED",
+                "后台任务单次排队容量不能超过 2GB。", HttpStatus.BAD_REQUEST);
+        }
+        return value;
+    }
+
+    private int normalizeQueueMaxFilesPerTick(Integer value) {
+        if (value == null) {
+            return QUEUE_DEFAULT_FILES_PER_TICK;
+        }
+        if (value <= 0 || value > QUEUE_MAX_FILES_PER_TICK) {
+            throw new BusinessException("STORAGE_OBJECTIFICATION_QUEUE_TICK_FILE_LIMIT_EXCEEDED",
+                "后台 worker 单次最多处理 20 个文件。", HttpStatus.BAD_REQUEST);
+        }
+        return value;
+    }
+
+    private long normalizeQueueMaxBytesPerTick(Long value) {
+        if (value == null) {
+            return QUEUE_DEFAULT_BYTES_PER_TICK;
+        }
+        if (value <= 0 || value > QUEUE_MAX_BYTES_PER_TICK) {
+            throw new BusinessException("STORAGE_OBJECTIFICATION_QUEUE_TICK_BYTES_LIMIT_EXCEEDED",
+                "后台 worker 单次处理容量不能超过 200MB。", HttpStatus.BAD_REQUEST);
+        }
+        return value;
+    }
+
+    private List<String> objectificationQueueWarnings() {
+        return List.of(
+            "后台队列只复制对象存储副本，不移动、不删除、不重命名、不覆盖 NAS 原文件。",
+            "worker 每个 tick 按文件数、容量和单文件大小硬上限慢速推进。",
+            "本批不读取文件正文，不写语义索引，不触发 Hermes 或 BIM 解析。"
         );
     }
 
@@ -3610,6 +4578,27 @@ public class StorageMigrationApplicationService {
         }
     }
 
+    private void requireSuperAdminForQueue(Long userId) {
+        if (userId == null) {
+            throw new BusinessException("STORAGE_OBJECTIFICATION_QUEUE_FORBIDDEN",
+                "仅超级管理员可以管理全平台对象化后台任务。", HttpStatus.FORBIDDEN);
+        }
+        List<String> rows = jdbcTemplate.query("""
+            SELECT username
+            FROM core_users
+            WHERE id = :userId
+              AND status = 'ACTIVE'
+              AND deleted = 0
+            LIMIT 1
+            """, new MapSqlParameterSource("userId", userId),
+            (rs, rowNum) -> rs.getString("username"));
+        String username = rows.isEmpty() ? null : rows.getFirst();
+        if (!SUPER_ADMIN_USERNAME.equalsIgnoreCase(username)) {
+            throw new BusinessException("STORAGE_OBJECTIFICATION_QUEUE_FORBIDDEN",
+                "仅超级管理员可以管理全平台对象化后台任务。", HttpStatus.FORBIDDEN);
+        }
+    }
+
     private DryRunFilters normalizeDryRunFilters(StorageObjectificationPlanDryRunRequest request) {
         String directoryPath = normalizeDirectoryPath(request == null ? null : request.directoryPath());
         List<String> fileKinds = normalizeUpperList(request == null ? null : request.fileKinds());
@@ -5056,6 +6045,13 @@ public class StorageMigrationApplicationService {
         return resultMessage.message();
     }
 
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, Math.max(0, maxLength));
+    }
+
     private ResultMessage splitResultMessage(String raw) {
         if (raw == null || raw.isBlank()) {
             return new ResultMessage(null, "迁移任务已记录。");
@@ -5336,6 +6332,91 @@ public class StorageMigrationApplicationService {
         long governanceItemCount,
         List<String> caps,
         List<ObjectificationRunProjectSelection> projects
+    ) {
+    }
+
+    private record ObjectificationQueueConfig(
+        String jobName,
+        String scopeType,
+        List<Long> projectIds,
+        int maxTotalFiles,
+        long maxTotalBytes,
+        int maxFilesPerTick,
+        long maxBytesPerTick,
+        long maxFileSizeBytes,
+        boolean continueOnFailure,
+        String targetProvider
+    ) {
+    }
+
+    private record QueueJobWorkRow(
+        Long jobId,
+        String jobCode,
+        String jobName,
+        String jobStatus,
+        String targetProvider,
+        int maxFilesPerTick,
+        long maxBytesPerTick,
+        long maxFileSizeBytes,
+        boolean continueOnFailure,
+        Long userId
+    ) {
+    }
+
+    private record QueueContinuationSource(
+        Long jobId,
+        String jobName,
+        String scopeType,
+        String projectIdsJson,
+        String targetProvider,
+        int maxFilesPerTick,
+        long maxBytesPerTick,
+        long maxFileSizeBytes,
+        boolean continueOnFailure,
+        Long userId
+    ) {
+    }
+
+    private record QueueItemWorkRow(
+        Long itemId,
+        Long projectId,
+        Long fileId,
+        Long sizeBytes
+    ) {
+    }
+
+    private record QueueItemCounts(
+        Long pendingFiles,
+        Long runningFiles,
+        Long successFiles,
+        Long failedFiles,
+        Long skippedFiles,
+        Long processedFiles,
+        Long processedBytes
+    ) {
+    }
+
+    private record QueueStatusCounts(
+        Long queuedJobCount,
+        Long runningJobCount,
+        Long pausedJobCount,
+        Long failedJobCount,
+        Long completedJobCount
+    ) {
+    }
+
+    private record QueueProjectCounts(
+        Long queuedFiles,
+        Long runningFiles,
+        Long failedFiles
+    ) {
+    }
+
+    private record QueueProjectCountRow(
+        Long projectId,
+        Long queuedFiles,
+        Long runningFiles,
+        Long failedFiles
     ) {
     }
 

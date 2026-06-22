@@ -627,6 +627,30 @@ public class AssetApplicationService {
         return executeScan(task, scopedMappings, userId, allowedIds);
     }
 
+    public ScanTaskResponse createAndRunPatrolScan(Long systemUserId, PathMappingResponse mapping) {
+        if (systemUserId == null || mapping == null || mapping.projectId() == null || mapping.nasPath() == null) {
+            throw new BusinessException("ASSET_SCAN_PATROL_INVALID", "巡检扫描参数不完整", HttpStatus.BAD_REQUEST);
+        }
+        String rootCode = truncate("HOURLY_PATROL_" + valueOrDash(mapping.projectCode()), 64);
+        Long taskId = scanTaskRepository.insert(rootCode, mapping.nasPath(), mapping.projectId(),
+            blankToNull(mapping.projectCode()), true, DEFAULT_SCAN_EXTENSIONS,
+            true, null, systemUserId);
+        auditLogApplicationService.record(mapping.projectId(), MODULE_CODE, "asset.scan.patrol.create",
+            "SCAN_TASK", String.valueOf(taskId), systemUserId,
+            Map.of("pathMappingId", mapping.id(), "projectCode", valueOrDash(mapping.projectCode())));
+        eventApplicationService.record("SCAN", mapping.projectId(), "SCAN_TASK", String.valueOf(taskId),
+            "scan.patrol.create", systemUserId, "SYSTEM", "创建项目资产巡检任务: " + valueOrDash(mapping.projectCode()), null);
+
+        scanTaskRepository.markRunning(taskId);
+        ScanTaskResponse task = scanTaskRepository.requireById(taskId);
+        auditLogApplicationService.record(mapping.projectId(), MODULE_CODE, "asset.scan.patrol.run",
+            "SCAN_TASK", String.valueOf(taskId), systemUserId,
+            Map.of("pathMappingId", mapping.id(), "projectCode", valueOrDash(mapping.projectCode())));
+        eventApplicationService.record("SCAN", mapping.projectId(), "SCAN_TASK", String.valueOf(taskId),
+            "scan.patrol.start", systemUserId, "SYSTEM", "开始项目资产巡检: " + valueOrDash(mapping.projectCode()), null);
+        return executeScan(task, List.of(mapping), systemUserId, java.util.Set.of(mapping.projectId()));
+    }
+
     private ScanTaskResponse executeScan(ScanTaskResponse task, List<PathMappingResponse> mappings,
                                            Long userId, java.util.Set<Long> allowedIds) {
         ScanCounters counters = new ScanCounters();
