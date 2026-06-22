@@ -126,7 +126,8 @@ api_post() {
 printf '== 8C-GD-F4 component pick / blow / property smoke ==\n'
 
 assert_file_contains "frontend/src/modules/visualization/components/GlandarViewerCanvas.vue" "enginePickPositionCandidates" "前端包含多坐标拾取兼容逻辑"
-assert_file_contains "frontend/src/modules/visualization/components/GlandarViewerCanvas.vue" "waitForEnginePickResult" "前端包含引擎拾取失败后的 DOM 兜底等待逻辑"
+assert_file_contains "frontend/src/modules/visualization/components/GlandarViewerCanvas.vue" "stopViewerClickEvent" "前端会拦截默认 click，避免构件重复拾取"
+assert_file_contains "frontend/src/modules/visualization/components/GlandarViewerCanvas.vue" "pointerPickIntent" "前端区分短按拾取和拖拽旋转"
 assert_file_contains "frontend/src/modules/visualization/components/GlandarViewerCanvas.vue" "buildExplosionPayloads" "前端包含多 tag 爆炸参数兼容逻辑"
 assert_file_contains "frontend/src/modules/visualization/components/GlandarViewerCanvas.vue" "showAxis: true" "前端模型爆炸参数包含 demo 使用的 showAxis"
 assert_file_contains "frontend/src/modules/visualization/components/GlandarViewerCanvas.vue" "const target = canvas \\|\\| viewerRef.value" "前端拾取坐标优先使用 canvas 真实矩形"

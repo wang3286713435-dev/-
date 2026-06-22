@@ -717,13 +717,33 @@
                 </div>
               </div>
               <div class="workspace-model-list">
-                <article v-for="item in bimModelRows" :key="item.name">
+                <article
+                  v-for="item in bimModelRows"
+                  :key="item.key"
+                  :class="{ 'is-active': item.fileId === selectedBimModelFileId, 'is-empty': item.empty }"
+                  tabindex="0"
+                  @click="selectBimModelRow(item)"
+                  @dblclick="openBimModelFileLocation(item)"
+                  @keydown.enter.prevent="openBimModelFileLocation(item)"
+                >
                   <div>
                     <strong>{{ item.name }}</strong>
                     <span>{{ item.version }}</span>
                     <em v-if="item.action">{{ item.action }}</em>
                   </div>
-                  <el-tag size="small" :type="item.tag">{{ item.status }}</el-tag>
+                  <div class="workspace-model-list__actions">
+                    <el-tag size="small" :type="item.tag">{{ item.status }}</el-tag>
+                    <el-button
+                      v-if="!item.empty"
+                      size="small"
+                      :type="item.viewerAvailable ? 'primary' : 'default'"
+                      :loading="lightweightSubmittingFileId === item.fileId"
+                      :disabled="!item.viewerAvailable && !item.supported"
+                      @click.stop="handleBimModelPrimaryAction(item)"
+                    >
+                      {{ item.viewerAvailable ? '打开 Viewer' : '提交轻量化' }}
+                    </el-button>
+                  </div>
                 </article>
               </div>
             </section>
@@ -1247,7 +1267,11 @@ import {
   previewStatusLabel
 } from '@/modules/data-steward/utils/previewStatus';
 import { fetchInitializationStatus, type InitializationStatus } from '@/modules/master-data/api/masterData';
-import { fetchGlandarModelFiles, type GlandarModelFile } from '@/modules/visualization/api/visualization';
+import {
+  createFileLightweightJob,
+  fetchGlandarModelFiles,
+  type GlandarModelFile
+} from '@/modules/visualization/api/visualization';
 import projectCoverImage from '@/assets/ux4/project-cover-reference.png';
 
 const route = useRoute();
@@ -1301,6 +1325,8 @@ const qualityFilesPage = reactive({
   total: 0
 });
 const glandarModelFiles = ref<GlandarModelFile[]>([]);
+const selectedBimModelFileId = ref<number | null>(null);
+const lightweightSubmittingFileId = ref<number | null>(null);
 const detailDrawerVisible = ref(false);
 const selectedFile = ref<FileAsset | null>(null);
 const metadataDialogVisible = ref(false);
@@ -1379,6 +1405,21 @@ type WorkspaceFlowStepItem = {
 type WorkspaceMetricTone = 'default' | 'accent' | 'success' | 'warning' | 'danger';
 type FileWorkspaceSubtabKey = 'all' | 'quality';
 type MasterDataWorkspaceSubtabKey = 'tree' | 'onboarding' | 'sections' | 'node-types' | 'standard';
+type BimModelRow = {
+  key: string;
+  fileId: number | null;
+  name: string;
+  version: string;
+  status: string;
+  tag: 'success' | 'warning' | 'info' | 'primary' | 'danger';
+  action: string;
+  supported: boolean;
+  viewerAvailable: boolean;
+  latestJobId: string | null;
+  relativePathHint: string | null;
+  fileName: string;
+  empty?: boolean;
+};
 const projectWorkspaceTabs: ProjectWorkspaceTab[] = [
   { key: 'dashboard', label: '概览', tab: 'dashboard' },
   { key: 'files', label: '文件管理', tab: 'files' },
@@ -1854,27 +1895,55 @@ const bimKpiCards = computed(() => [
   },
   { label: '问题票据', value: formatCount(riskSignalCount.value), helper: '来自文件治理和协同提醒', tone: riskSignalCount.value > 0 ? 'warning' : 'success' }
 ]);
-const bimModelRows = computed(() => {
+const bimModelRows = computed<BimModelRow[]>(() => {
   if (glandarModelFiles.value.length) {
     return glandarModelFiles.value.slice(0, 6).map((item) => ({
+      key: `glandar-${item.fileId}`,
+      fileId: item.fileId,
       name: item.fileName,
       version: `${(item.extension || item.fileKind || 'MODEL').toUpperCase()} · ${formatBytes(item.sizeBytes)}`,
       status: item.statusLabel || (item.viewerAvailable ? '可预览' : item.supported ? '待轻量化' : '不支持'),
       tag: item.viewerAvailable ? 'success' : item.supported ? 'warning' : 'info',
-      action: item.actionHint || item.unsupportedReason || item.failureReason || item.relativePathHint || ''
+      action: item.actionHint || item.unsupportedReason || item.failureReason || item.relativePathHint || '双击定位到文件管理',
+      supported: item.supported,
+      viewerAvailable: item.viewerAvailable,
+      latestJobId: item.latestJobId,
+      relativePathHint: item.relativePathHint,
+      fileName: item.fileName
     }));
   }
   const rows = recentFiles.value.filter((item) => item.fileKind === 'MODEL').slice(0, 4);
   if (rows.length) {
     return rows.map((item) => ({
+      key: `catalog-${item.fileId ?? item.fileName}`,
+      fileId: item.fileId ?? null,
       name: item.fileName,
-      version: item.versionNo || fileKindLabel(item.fileKind),
+      version: item.version || fileKindLabel(item.fileKind),
       status: '目录级登记',
       tag: 'info',
-      action: '尚未同步葛兰岱尔轻量化状态'
+      action: '双击定位到文件管理',
+      supported: false,
+      viewerAvailable: false,
+      latestJobId: null,
+      relativePathHint: item.logicalPath ?? null,
+      fileName: item.fileName
     }));
   }
-  return [{ name: '暂无模型文件', version: '等待登记', status: '待接入', tag: 'info', action: '不会触发模型解析' }];
+  return [{
+    key: 'empty',
+    fileId: null,
+    name: '暂无模型文件',
+    version: '等待登记',
+    status: '待接入',
+    tag: 'info',
+    action: '不会触发模型解析',
+    supported: false,
+    viewerAvailable: false,
+    latestJobId: null,
+    relativePathHint: null,
+    fileName: '',
+    empty: true
+  }];
 });
 const bimTaskRows = computed(() => [
   {
@@ -2601,6 +2670,103 @@ function openActiveGlandarViewer() {
       theme: 'light'
     }
   });
+}
+
+function selectBimModelRow(item: BimModelRow) {
+  if (item.empty || !item.fileId) return;
+  selectedBimModelFileId.value = item.fileId;
+}
+
+function openBimModelViewer(item: BimModelRow) {
+  if (!item.latestJobId || !item.fileId) {
+    ElMessage.info('这个模型还没有可打开的轻量化 Viewer。');
+    return;
+  }
+  void router.push({
+    name: 'glandar-model-preview',
+    query: {
+      projectId: String(projectId.value),
+      jobId: item.latestJobId,
+      fileName: item.fileName,
+      modelFileId: String(item.fileId),
+      theme: 'light'
+    }
+  });
+}
+
+async function handleBimModelPrimaryAction(item: BimModelRow) {
+  if (item.viewerAvailable) {
+    openBimModelViewer(item);
+    return;
+  }
+  await submitBimModelLightweight(item);
+}
+
+async function submitBimModelLightweight(item: BimModelRow) {
+  if (!item.fileId) {
+    ElMessage.warning('当前模型缺少平台文件 ID，无法提交轻量化。');
+    return;
+  }
+  if (!item.supported) {
+    ElMessage.warning('当前文件格式暂不支持提交葛兰岱尔轻量化。');
+    return;
+  }
+  lightweightSubmittingFileId.value = item.fileId;
+  try {
+    const result = await createFileLightweightJob(projectId.value, item.fileId, false);
+    const done = result.viewerAvailable || String(result.taskStatus || '').toUpperCase().includes('READY');
+    ElMessage.success(done ? '轻量化结果已可预览。' : '已提交葛兰岱尔轻量化任务。');
+    glandarModelFiles.value = await fetchGlandarModelFiles(projectId.value);
+    if (done && result.jobId) {
+      openBimModelViewer({ ...item, latestJobId: result.jobId, viewerAvailable: true });
+    }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '提交轻量化任务失败');
+  } finally {
+    lightweightSubmittingFileId.value = null;
+  }
+}
+
+function openBimModelFileLocation(item: BimModelRow) {
+  if (item.empty || !item.fileId) return;
+  const directoryPath = directoryFromModelPathHint(item);
+  const query: Record<string, string> = {
+    tab: 'files',
+    fileView: 'all',
+    lastFileId: String(item.fileId),
+    filePage: '1'
+  };
+  if (directoryPath) {
+    query.fileDir = directoryPath;
+  } else if (item.fileName) {
+    query.fileKeyword = item.fileName;
+  }
+  selectedBimModelFileId.value = item.fileId;
+  void router.push({
+    name: 'data-steward-asset-detail',
+    params: { projectId: projectId.value },
+    query
+  });
+}
+
+function directoryFromModelPathHint(item: BimModelRow) {
+  const raw = item.relativePathHint || '';
+  if (!raw || containsForbiddenPathText(raw) || /^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) return '';
+  const normalized = raw.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  if (!normalized) return '';
+  const parts = normalized.split('/').map((part) => part.trim()).filter(Boolean);
+  if (!parts.length) return '';
+  const fileName = item.fileName.trim().toLowerCase();
+  if (parts[parts.length - 1]?.toLowerCase() === fileName) {
+    parts.pop();
+  }
+  const projectNames = [projectDisplayName.value, projectCodeText.value]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+  if (projectNames.includes(parts[0]?.toLowerCase() || '')) {
+    parts.shift();
+  }
+  return parts.join('/');
 }
 
 function openWorkspaceTab(item: ProjectWorkspaceTab) {
@@ -4137,12 +4303,41 @@ function scanProgressValue(task: AssetScanTask) {
   min-width: 0;
   padding: var(--zy-sp-2) 0;
   border-bottom: var(--zy-border-soft);
+  border-radius: 10px;
+  cursor: pointer;
+  outline: none;
+  transition: background-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.workspace-model-list article:hover,
+.workspace-model-list article:focus-visible,
+.workspace-model-list article.is-active {
+  background: oklch(0.975 0.018 255);
+  box-shadow: inset 3px 0 0 var(--zy-blue-500);
+}
+
+.workspace-model-list article.is-empty {
+  cursor: default;
+}
+
+.workspace-model-list article.is-empty:hover,
+.workspace-model-list article.is-empty:focus-visible {
+  background: transparent;
+  box-shadow: none;
 }
 
 .workspace-model-list article > div {
   display: grid;
   gap: 2px;
   min-width: 0;
+}
+
+.workspace-model-list__actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
 }
 
 .workspace-model-list strong,

@@ -11,7 +11,7 @@
           {{ viewerReady ? '已轻量化' : '等待模型' }}
         </el-tag>
         <el-button @click="refreshViewer">刷新 Viewer</el-button>
-        <el-button @click="goBack">返回</el-button>
+        <el-button aria-label="返回 BIM 协同看板" @click="goBack">返回</el-button>
       </div>
     </header>
 
@@ -78,10 +78,6 @@ watch(projectId, () => {
 }, { immediate: true });
 
 function goBack() {
-  if (window.history.length > 1) {
-    router.back();
-    return;
-  }
   router.push({ name: 'bim-collaboration', query: Number.isFinite(projectId.value) ? { projectId: projectId.value } : undefined });
 }
 

@@ -115,7 +115,7 @@ public class VisualizationAdapterApplicationService {
         "WRITE_HERMES_MEMORY"
     );
     private static final List<String> GLANDAR_SUPPORTED_OPERATIONS = List.of(
-        "CREATE_RVT_CONVERSION_TASK",
+        "CREATE_MODEL_CONVERSION_TASK",
         "CALL_STATION_SPLIT_UPLOAD",
         "QUERY_STATION_TASK",
         "ISSUE_CONTROLLED_VIEWER_ENTRY",
@@ -136,7 +136,7 @@ public class VisualizationAdapterApplicationService {
         1257L, 1261L, 1264L, 3730L, 1258L, 1251L, 1259L, 1262L, 3729L, 1243L
     );
     private static final List<String> GLANDAR_MODEL_EXTENSIONS = List.of("RVT", "IFC", "NWD", "NWC", "GLB", "GLTF");
-    private static final List<String> GLANDAR_SUBMIT_SUPPORTED_EXTENSIONS = List.of("RVT");
+    private static final List<String> GLANDAR_SUBMIT_SUPPORTED_EXTENSIONS = List.of("RVT", "IFC", "NWD", "NWC");
 
     private final ModelIntegrationApplicationService modelIntegrationApplicationService;
     private final ManagedObjectApplicationService managedObjectApplicationService;
@@ -651,10 +651,9 @@ public class VisualizationAdapterApplicationService {
     }
 
     private LightweightJobRecord refreshGlandarJobForList(LightweightJobRecord record) {
-        if (!glandarRealModeReady()) {
-            return record;
-        }
-        return refreshGlandarJob(record);
+        // 列表页可能包含上百个模型，不能在主链路里逐个等待 Station。
+        // 任务详情和 Viewer ticket 仍会刷新单个任务，保证打开预览时拿到最新状态。
+        return record;
     }
 
     private String glandarPilotStatusLabel(LightweightJobRecord latest) {
@@ -1005,7 +1004,8 @@ public class VisualizationAdapterApplicationService {
         String format = modelFormat(file.originalName());
         if (!"MODEL".equalsIgnoreCase(defaultText(file.fileKind(), "")) || !isSubmitSupportedGlandarFormat(format)) {
             throw new BusinessException("UNSUPPORTED_FILE_TYPE",
-                "当前葛兰岱尔接入只开放已登记 RVT 模型轻量化，其他模型格式仅展示状态", HttpStatus.BAD_REQUEST);
+                "当前葛兰岱尔接入支持 RVT / IFC / NWD / NWC 模型轻量化；GLB / GLTF 暂不走转换任务",
+                HttpStatus.BAD_REQUEST);
         }
     }
 
@@ -1261,7 +1261,7 @@ public class VisualizationAdapterApplicationService {
     private String unsupportedGlandarReason(String format) {
         String normalized = defaultText(format, "UNKNOWN").toUpperCase(Locale.ROOT);
         if (GLANDAR_MODEL_EXTENSIONS.contains(normalized)) {
-            return "%s 模型已识别，但当前葛兰岱尔 Station 接入只开放 RVT 轻量化提交。".formatted(normalized);
+            return "%s 模型已识别，但当前平台暂不把它提交给葛兰岱尔转换；RVT / IFC / NWD / NWC 可提交轻量化。".formatted(normalized);
         }
         return "当前文件格式未纳入葛兰岱尔轻量化支持矩阵。";
     }
@@ -1605,7 +1605,7 @@ public class VisualizationAdapterApplicationService {
 
     private String modelActionHint(String modelFormat, PreviewDecision preview) {
         if ("RVT".equals(modelFormat)) {
-            return "RVT 原始文件已入库，本轮只展示模型状态；需完成 IFC/XKT/Fragments 等轻量化产物后才能在线预览。";
+            return "RVT 原始文件已入库；完成葛兰岱尔轻量化后可在线预览。";
         }
         return preview.actionHint();
     }

@@ -6,6 +6,7 @@ import com.zhuoyu.delivery.shared.exception.BusinessException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.net.ProxySelector;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -40,7 +41,9 @@ public class GlandarStationClient {
         this.settings = settings;
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
+            .proxy(ProxySelector.of(null))
             .connectTimeout(Duration.ofSeconds(10))
+            .version(HttpClient.Version.HTTP_1_1)
             .build();
     }
 
@@ -215,6 +218,38 @@ public class GlandarStationClient {
             return new ModelOutputProbe(false, "葛兰岱尔模型输出服务检查被中断。");
         } catch (IllegalArgumentException exception) {
             return new ModelOutputProbe(false, "葛兰岱尔模型输出地址格式异常。");
+        }
+    }
+
+    public StaticAssetResult fetchStaticAsset(String relativePath) {
+        String safePath = safeStaticAssetPath(relativePath);
+        String stationWebBase = settings.stationWebBase();
+        if (!hasText(stationWebBase)) {
+            throw new BusinessException("GLANDAR_STATIC_BASE_MISSING",
+                "葛兰岱尔 Viewer 静态资源地址未配置", HttpStatus.PRECONDITION_FAILED);
+        }
+        String url = stationStaticRoot(stationWebBase) + "/" + encodePath(safePath);
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+            .timeout(Duration.ofSeconds(15))
+            .GET()
+            .build();
+        try {
+            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            if (response.statusCode() < 200 || response.statusCode() >= 300 || response.body() == null) {
+                throw new BusinessException("GLANDAR_STATIC_UNREACHABLE",
+                    "葛兰岱尔 Viewer 静态资源不可用：HTTP " + response.statusCode(), HttpStatus.BAD_GATEWAY);
+            }
+            String contentType = response.headers().firstValue("content-type").orElse(contentTypeForPath(safePath));
+            return new StaticAssetResult(safePath, contentType, response.body());
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (IOException exception) {
+            throw new BusinessException("GLANDAR_STATIC_UNREACHABLE",
+                "葛兰岱尔 Viewer 静态资源不可达", HttpStatus.BAD_GATEWAY);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException("GLANDAR_STATIC_UNREACHABLE",
+                "葛兰岱尔 Viewer 静态资源读取被中断", HttpStatus.BAD_GATEWAY);
         }
     }
 
@@ -435,6 +470,67 @@ public class GlandarStationClient {
         return value != null && !value.isBlank();
     }
 
+    private String safeStaticAssetPath(String relativePath) {
+        String value = relativePath == null ? "" : relativePath.trim().replace('\\', '/');
+        while (value.startsWith("/")) {
+            value = value.substring(1);
+        }
+        if (!hasText(value) || value.contains("..") || value.contains("//")
+            || !value.startsWith("ThreeJsEngine/")) {
+            throw new BusinessException("GLANDAR_STATIC_PATH_FORBIDDEN",
+                "葛兰岱尔 Viewer 静态资源路径不允许访问", HttpStatus.BAD_REQUEST);
+        }
+        return value;
+    }
+
+    private String stationStaticRoot(String stationWebBase) {
+        String root = stationWebBase;
+        while (root.endsWith("/")) {
+            root = root.substring(0, root.length() - 1);
+        }
+        if (root.endsWith("/static")) {
+            return root;
+        }
+        if (root.endsWith("/static/ThreeJsEngine")) {
+            return root.substring(0, root.length() - "/ThreeJsEngine".length());
+        }
+        return root + "/static";
+    }
+
+    private String encodePath(String path) {
+        String[] segments = path.split("/");
+        List<String> encoded = new ArrayList<>();
+        for (String segment : segments) {
+            if (!segment.isBlank()) {
+                encoded.add(URLEncoder.encode(segment, StandardCharsets.UTF_8).replace("+", "%20"));
+            }
+        }
+        return String.join("/", encoded);
+    }
+
+    private String contentTypeForPath(String path) {
+        String lower = path.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".js")) {
+            return "application/javascript;charset=UTF-8";
+        }
+        if (lower.endsWith(".wasm")) {
+            return "application/wasm";
+        }
+        if (lower.endsWith(".json")) {
+            return "application/json;charset=UTF-8";
+        }
+        if (lower.endsWith(".css")) {
+            return "text/css;charset=UTF-8";
+        }
+        if (lower.endsWith(".png")) {
+            return "image/png";
+        }
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+            return "image/jpeg";
+        }
+        return "application/octet-stream";
+    }
+
     private static String defaultText(String value, String fallback) {
         return hasText(value) ? value : fallback;
     }
@@ -483,6 +579,13 @@ public class GlandarStationClient {
     public record ModelOutputProbe(
         Boolean readable,
         String message
+    ) {
+    }
+
+    public record StaticAssetResult(
+        String relativePath,
+        String contentType,
+        byte[] body
     ) {
     }
 }

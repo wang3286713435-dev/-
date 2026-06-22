@@ -60,6 +60,7 @@ public class SecurityConfig {
                     "/api/core/auth/refresh",
                     "/api/core/system/health",
                     "/api/data-steward/assets/file-access/**",
+                    "/api/visualization-adapter/glandar/static/**",
                     "/actuator/health",
                     "/swagger-ui.html",
                     "/swagger-ui/**",

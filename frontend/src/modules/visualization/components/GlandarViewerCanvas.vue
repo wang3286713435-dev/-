@@ -1,7 +1,8 @@
 <template>
   <section
+    ref="viewerShellRef"
     class="glandar-viewer"
-    :class="{ 'is-embedded': embedded, 'is-light': theme === 'light' }"
+    :class="{ 'is-embedded': embedded, 'is-light': theme === 'light', 'is-app-fullscreen': fullscreenActive }"
     v-loading="loading"
   >
     <aside class="glandar-viewer__toolbar" aria-label="模型工具栏">
@@ -20,6 +21,9 @@
       <button type="button" :disabled="!viewerReady" @click="runViewerAction('measure-distance')">距离</button>
       <button type="button" :disabled="!viewerReady" @click="runViewerAction('measure-area')">面积</button>
       <button type="button" :disabled="!viewerReady" @click="runViewerAction('measure-clear')">清除</button>
+      <button type="button" :disabled="!viewerReady" @click="runViewerAction('fullscreen')">
+        {{ fullscreenActive ? '退出' : '全屏' }}
+      </button>
     </aside>
 
     <section class="glandar-viewer__canvas-card">
@@ -267,6 +271,7 @@ type ViewerAction =
   | 'clip'
   | 'clip-clear'
   | 'clear-selection'
+  | 'fullscreen'
   | 'clear';
 
 type ViewerActionPayload = {
@@ -305,6 +310,7 @@ const loading = ref(false);
 const ticket = ref<LightweightViewerTicketResponse | null>(null);
 const errorMessage = ref('');
 const viewerReady = ref(false);
+const viewerShellRef = ref<HTMLElement | null>(null);
 const viewerRef = ref<HTMLElement | null>(null);
 const selectedFeatureId = ref('');
 const selectedFeature = ref<GlandarFeature | null>(null);
@@ -312,6 +318,7 @@ const selectedFeatureProperties = ref<GlandarComponentPropertyResponse | null>(n
 const featurePropertiesLoading = ref(false);
 const featurePropertiesError = ref('');
 const engineComponentApiReady = ref(false);
+const fullscreenActive = ref(false);
 const instance = getCurrentInstance();
 const containerId = computed(() => props.containerId || `glandar-viewer-canvas-${instance?.uid ?? 'inline'}`);
 const selectedFeatureBatchText = computed(() => {
@@ -359,7 +366,6 @@ let roamRunning = false;
 let clipEnabled = false;
 let modelVisible = true;
 let activeInteractionMode: 'navigate' | 'pick' | 'measure' | 'roam' = 'navigate';
-let engineLeftClickPickRegistered = false;
 const hiddenFeatureIds = new Set<string>();
 
 const emptyTitle = computed(() => {
@@ -375,6 +381,8 @@ onMounted(() => {
   if (props.embedded) {
     window.addEventListener('message', handleHostMessage);
   }
+  document.addEventListener('fullscreenchange', handleFullscreenChange);
+  document.addEventListener('keydown', handleFullscreenKeydown);
   void loadViewer();
 });
 
@@ -392,6 +400,8 @@ watch(
 
 onBeforeUnmount(() => {
   window.removeEventListener('message', handleHostMessage);
+  document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  document.removeEventListener('keydown', handleFullscreenKeydown);
   stopAutoRotate();
   stopBlowAnimation();
   cleanupViewerInteraction();
@@ -607,7 +617,7 @@ async function assertModelAccessAddress(modelAccessAddress: string) {
 
 async function loadEngineScript(engineStaticBase: string) {
   if (window.GlendaleEngine) return;
-  const base = normalizeEngineStaticBase(engineStaticBase);
+  const base = platformEngineStaticBase(engineStaticBase);
   const scriptId = 'glandar-glendale-engine';
   const existing = document.getElementById(scriptId) as HTMLScriptElement | null;
   if (existing) {
@@ -944,6 +954,10 @@ async function runViewerAction(action: ViewerAction, payload: ViewerActionPayloa
       await clearSelectedFeature({ toast: true });
       return;
     }
+    if (action === 'fullscreen') {
+      await toggleFullscreen();
+      return;
+    }
     if (action === 'clear') {
       await closeClip();
       await clearMeasurement();
@@ -1000,7 +1014,6 @@ async function applyMouseNavigation() {
   }
   clearEngineLeftClickHandlers();
   reconnectCameraControls();
-  registerDefaultFeaturePickHandler();
 }
 
 function bindViewerInteraction() {
@@ -1014,6 +1027,7 @@ function bindViewerInteraction() {
   };
   element.addEventListener('contextmenu', preventContextMenu);
   element.addEventListener('pointerdown', focusCanvas, { capture: true });
+  element.addEventListener('click', stopViewerClickEvent, { capture: true });
   element.addEventListener('pointerdown', handleViewerPointerDown);
   element.addEventListener('pointermove', handleViewerPointerMove);
   element.addEventListener('pointerup', handleViewerPointerUp);
@@ -1022,6 +1036,7 @@ function bindViewerInteraction() {
   disposeViewerInteraction = () => {
     element.removeEventListener('contextmenu', preventContextMenu);
     element.removeEventListener('pointerdown', focusCanvas, { capture: true });
+    element.removeEventListener('click', stopViewerClickEvent, { capture: true });
     element.removeEventListener('pointerdown', handleViewerPointerDown);
     element.removeEventListener('pointermove', handleViewerPointerMove);
     element.removeEventListener('pointerup', handleViewerPointerUp);
@@ -1034,6 +1049,12 @@ function cleanupViewerInteraction() {
   navigationDrag = null;
   disposeViewerInteraction?.();
   disposeViewerInteraction = null;
+}
+
+function stopViewerClickEvent(event: MouseEvent) {
+  if (activeInteractionMode === 'measure' || activeInteractionMode === 'roam') return;
+  event.preventDefault();
+  event.stopPropagation();
 }
 
 function handleViewerPointerDown(event: PointerEvent) {
@@ -1113,13 +1134,7 @@ async function handleViewerPointerUp(event: PointerEvent) {
   });
   if (shouldPick) {
     if (componentInteractionAvailable.value) {
-      const beforeFeatureId = selectedFeatureId.value;
-      if (engineLeftClickPickRegistered) {
-        await waitForEnginePickResult(beforeFeatureId);
-      }
-      if (selectedFeatureId.value === beforeFeatureId) {
-        await pickFeatureFromPointer(event);
-      }
+      await pickFeatureFromPointer(event);
     }
   }
   event.preventDefault();
@@ -1247,20 +1262,6 @@ function firstFeatureText(...values: unknown[]) {
   return '';
 }
 
-function waitForEnginePickResult(previousFeatureId: string) {
-  return new Promise<void>((resolve) => {
-    const startedAt = performance.now();
-    const tick = () => {
-      if (selectedFeatureId.value !== previousFeatureId || performance.now() - startedAt > 180) {
-        resolve();
-        return;
-      }
-      window.requestAnimationFrame(tick);
-    };
-    window.requestAnimationFrame(tick);
-  });
-}
-
 function normalizePickPosition(position: Record<string, unknown>) {
   const x = Number(position.x ?? position.clientX);
   const y = Number(position.y ?? position.clientY);
@@ -1268,49 +1269,13 @@ function normalizePickPosition(position: Record<string, unknown>) {
   return { x, y };
 }
 
-function registerDefaultFeaturePickHandler() {
-  if (!viewerApi?.Feature?.getByEvent) {
-    engineLeftClickPickRegistered = false;
-    return;
-  }
-  if (!viewerApi?.Public?.event) {
-    engineLeftClickPickRegistered = false;
-    return;
-  }
-  clearEngineLeftClickHandlers();
-  try {
-    void viewerApi.Public.event({
-      event: 'LEFT_CLICK',
-      callback: (click: { position?: Record<string, unknown> }) => {
-        if (activeInteractionMode === 'measure' || activeInteractionMode === 'roam') return;
-        void pickFeatureFromEnginePosition(click.position, { missToast: false });
-      }
-    });
-    engineLeftClickPickRegistered = true;
-  } catch (error) {
-    engineLeftClickPickRegistered = false;
-    console.warn(error);
-  }
-}
-
 async function enableFeaturePick() {
   if (!viewerApi?.Feature?.getByEvent) {
     ElMessage.info(componentInteractionUnavailableReason.value);
     return;
   }
-  if (!viewerApi?.Public?.event) {
-    activeInteractionMode = 'pick';
-    return;
-  }
   clearEngineLeftClickHandlers();
-  await viewerApi.Public.event({
-    event: 'LEFT_CLICK',
-    callback: (click: { position?: Record<string, unknown> }) => {
-      if (!viewerApi?.Feature?.getByEvent) return;
-      void pickFeatureFromEnginePosition(click.position, { missToast: false });
-    }
-  });
-  engineLeftClickPickRegistered = true;
+  activeInteractionMode = 'pick';
 }
 
 function normalizeBlowMode(mode: ViewerActionPayload['mode']) {
@@ -1706,12 +1671,57 @@ async function selectFeature(feature: GlandarFeature) {
 }
 
 function clearEngineLeftClickHandlers() {
-  engineLeftClickPickRegistered = false;
   if (!viewerApi?.Public?.clearHandler) return;
   try {
     void viewerApi.Public.clearHandler({ event: 'LEFT_CLICK' });
   } catch (error) {
     console.warn(error);
+  }
+}
+
+function handleFullscreenChange() {
+  fullscreenActive.value = document.fullscreenElement === viewerShellRef.value;
+  window.setTimeout(() => {
+    reconnectCameraControls();
+    updateCameraControls();
+  }, 120);
+}
+
+function handleFullscreenKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || !fullscreenActive.value || document.fullscreenElement) return;
+  fullscreenActive.value = false;
+  reconnectCameraControls();
+  updateCameraControls();
+}
+
+async function toggleFullscreen() {
+  const target = viewerShellRef.value;
+  if (!target) return;
+  if (fullscreenActive.value) {
+    fullscreenActive.value = false;
+    if (document.fullscreenElement === target) {
+      await document.exitFullscreen?.();
+    }
+    reconnectCameraControls();
+    updateCameraControls();
+    return;
+  }
+  if (typeof target.requestFullscreen !== 'function') {
+    fullscreenActive.value = true;
+    window.setTimeout(() => {
+      reconnectCameraControls();
+      updateCameraControls();
+    }, 120);
+    return;
+  }
+  try {
+    await target.requestFullscreen();
+  } catch {
+    fullscreenActive.value = true;
+    window.setTimeout(() => {
+      reconnectCameraControls();
+      updateCameraControls();
+    }, 120);
   }
 }
 
@@ -1814,7 +1824,7 @@ function pointerPickIntent(options: {
 }) {
   const distance = Math.hypot(options.endX - options.startX, options.endY - options.startY);
   const duration = options.endedAt - options.startedAt;
-  return options.button === 0 && duration >= 0 && duration <= 600 && distance <= 10;
+  return options.button === 0 && duration >= 0 && duration <= 450 && distance <= 4;
 }
 
 function screenToEnginePickPosition(event: PointerEvent) {
@@ -1868,11 +1878,20 @@ function normalizeEngineStaticBase(value: string) {
   return `${trimmed}/static/ThreeJsEngine`;
 }
 
+function platformEngineStaticBase(value: string) {
+  const normalized = normalizeEngineStaticBase(value);
+  if (normalized.includes('/static/ThreeJsEngine')) {
+    return `${window.location.origin}/api/visualization-adapter/glandar/static/ThreeJsEngine`;
+  }
+  return normalized;
+}
+
 function resolveEngineSitePath(engineStaticBase: string) {
-  if (props.embedded) {
+  const normalized = normalizeEngineStaticBase(engineStaticBase);
+  if (props.embedded || normalized.includes('/static/ThreeJsEngine')) {
     return `${window.location.origin}/glandar-engine/`;
   }
-  return `${engineStaticBase.replace(/\/$/, '')}/`;
+  return `${normalized.replace(/\/$/, '')}/`;
 }
 
 function installGlandarWorkerUrlBridge() {
@@ -1927,6 +1946,37 @@ function viewerBackgroundNumber() {
   min-width: 0;
   overflow: hidden;
   padding: var(--zy-sp-3);
+}
+
+.glandar-viewer:fullscreen {
+  border: 0;
+  border-radius: 0;
+  grid-template-columns: 84px minmax(0, 1fr) 280px;
+  height: 100dvh;
+  min-height: 100dvh;
+  padding: var(--zy-sp-4);
+  width: 100dvw;
+}
+
+.glandar-viewer.is-app-fullscreen {
+  border: 0;
+  border-radius: 0;
+  grid-template-columns: 84px minmax(0, 1fr) 280px;
+  height: 100dvh;
+  inset: 0;
+  min-height: 100dvh;
+  padding: var(--zy-sp-4);
+  position: fixed;
+  width: 100dvw;
+  z-index: 9999;
+}
+
+.glandar-viewer:fullscreen .glandar-viewer__canvas-card {
+  min-height: calc(100dvh - 2 * var(--zy-sp-4));
+}
+
+.glandar-viewer.is-app-fullscreen .glandar-viewer__canvas-card {
+  min-height: calc(100dvh - 2 * var(--zy-sp-4));
 }
 
 .glandar-viewer.is-embedded {
