@@ -71,6 +71,53 @@
               </WorkspaceCard>
             </div>
 
+            <section v-loading="businessProfileLoading" class="workspace-panel project-business-panel">
+              <div class="workspace-panel__header">
+                <div>
+                  <span>PROJECT PROFILE</span>
+                  <strong>项目属性 / 经营信息</strong>
+                </div>
+                <el-button
+                  v-if="canEditBusinessProfile"
+                  type="primary"
+                  text
+                  @click="openBusinessProfileDialog"
+                >
+                  编辑项目属性
+                </el-button>
+                <el-tooltip v-else content="只有项目管理员可以维护项目经营信息" placement="top">
+                  <span>
+                    <el-button text disabled>只读</el-button>
+                  </span>
+                </el-tooltip>
+              </div>
+              <div class="project-business-grid">
+                <article>
+                  <span>合同金额</span>
+                  <strong>{{ formatMoney(businessSummary.contractAmount, businessSummary.currencyCode) }}</strong>
+                  <em>预算 {{ formatMoney(businessSummary.budgetAmount, businessSummary.currencyCode) }}</em>
+                </article>
+                <article>
+                  <span>回款进度</span>
+                  <strong>{{ paymentProgressText(businessSummary.paymentProgressPercent) }}</strong>
+                  <em>{{ paymentStatusLabel(businessSummary.paymentStatus) }} · 已回 {{ formatMoney(businessSummary.receivedAmount, businessSummary.currencyCode) }}</em>
+                </article>
+                <article>
+                  <span>计划交付</span>
+                  <strong>{{ formatDateOnly(businessSummary.plannedDeliveryDate) }}</strong>
+                  <em>预计回款 {{ formatDateOnly(businessSummary.expectedPaymentDate) }}</em>
+                </article>
+                <article>
+                  <span>项目成员</span>
+                  <strong>{{ formatCount(businessSummary.membersSummary.memberCount) }} 人</strong>
+                  <em>{{ formatCount(businessSummary.membersSummary.projectAdminCount) }} 管理员 / {{ formatCount(businessSummary.membersSummary.deliveryEngineerCount) }} 工程师</em>
+                </article>
+              </div>
+              <p class="project-business-remark">
+                {{ businessSummary.businessRemark || '经营备注待维护。这里仅记录项目级台账信息，不管理合同附件、发票或收款流水。' }}
+              </p>
+            </section>
+
             <section class="workspace-panel">
               <div class="workspace-panel__header">
                 <div>
@@ -1070,6 +1117,74 @@
         <el-button type="primary" :loading="metadataSaving" @click="saveMetadata">保存治理结果</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="businessProfileDialogVisible"
+      title="编辑项目属性 / 经营信息"
+      width="680px"
+      destroy-on-close
+    >
+      <el-alert
+        class="project-business-alert"
+        title="本表单只维护项目级经营台账，不上传合同附件，不生成财务流水，也不触碰真实 NAS 文件。"
+        type="info"
+        show-icon
+        :closable="false"
+      />
+      <el-form class="project-business-form" label-position="top">
+        <div class="project-business-form__grid">
+          <el-form-item label="预算金额">
+            <el-input-number v-model="businessProfileForm.budgetAmount" :min="0" :precision="2" controls-position="right" />
+          </el-form-item>
+          <el-form-item label="合同金额">
+            <el-input-number v-model="businessProfileForm.contractAmount" :min="0" :precision="2" controls-position="right" />
+          </el-form-item>
+          <el-form-item label="已回款金额">
+            <el-input-number v-model="businessProfileForm.receivedAmount" :min="0" :precision="2" controls-position="right" />
+          </el-form-item>
+          <el-form-item label="回款状态">
+            <el-select v-model="businessProfileForm.paymentStatus" placeholder="请选择">
+              <el-option label="未设置" value="UNSET" />
+              <el-option label="未开始" value="NOT_STARTED" />
+              <el-option label="部分回款" value="PARTIAL" />
+              <el-option label="已完成" value="COMPLETED" />
+              <el-option label="逾期" value="OVERDUE" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="预计回款日期">
+            <el-date-picker v-model="businessProfileForm.expectedPaymentDate" type="date" value-format="YYYY-MM-DD" />
+          </el-form-item>
+          <el-form-item label="计划开始日期">
+            <el-date-picker v-model="businessProfileForm.plannedStartDate" type="date" value-format="YYYY-MM-DD" />
+          </el-form-item>
+          <el-form-item label="计划交付日期">
+            <el-date-picker v-model="businessProfileForm.plannedDeliveryDate" type="date" value-format="YYYY-MM-DD" />
+          </el-form-item>
+          <el-form-item label="实际交付日期">
+            <el-date-picker v-model="businessProfileForm.actualDeliveryDate" type="date" value-format="YYYY-MM-DD" />
+          </el-form-item>
+          <el-form-item label="币种">
+            <el-input v-model.trim="businessProfileForm.currencyCode" maxlength="16" placeholder="CNY" />
+          </el-form-item>
+        </div>
+        <el-form-item label="经营备注">
+          <el-input
+            v-model="businessProfileForm.businessRemark"
+            type="textarea"
+            :rows="4"
+            maxlength="1000"
+            show-word-limit
+            placeholder="例如：回款待确认、客户验收前置条件、计划交付说明"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="businessProfileDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="businessProfileSaving" @click="saveBusinessProfile">
+          保存项目属性
+        </el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 
@@ -1090,12 +1205,14 @@ import {
   fetchAssetStatistics,
   fetchAssetJobs,
   fetchAssetJob,
+  fetchProjectBusinessProfile,
   fetchCatalogFiles,
   fetchFileAsset,
   fetchFilePreview,
   preparePreviewArtifact,
   createFileAccessTicket,
   retryAssetJob,
+  updateProjectBusinessProfile,
   updateFileAssetMetadata,
   type AssetJob,
   type AssetDiscipline,
@@ -1107,7 +1224,9 @@ import {
   type CatalogFile,
   type FileAsset,
   type FileAccessTicket,
-  type FilePreview
+  type FilePreview,
+  type ProjectBusinessProfile,
+  type ProjectBusinessProfilePayload
 } from '@/modules/data-steward/api/dataSteward';
 import AssetProjectFileBrowser from '@/modules/data-steward/components/AssetProjectFileBrowser.vue';
 import WorkspaceBoundaryStrip from '@/modules/core/components/workspace/WorkspaceBoundaryStrip.vue';
@@ -1139,6 +1258,10 @@ const projectId = computed(() => Number(route.params.projectId));
 const loading = ref(false);
 const activeTab = ref('dashboard');
 const project = ref<AssetProject | null>(null);
+const businessProfile = ref<ProjectBusinessProfile | null>(null);
+const businessProfileLoading = ref(false);
+const businessProfileDialogVisible = ref(false);
+const businessProfileSaving = ref(false);
 const statistics = ref<AssetStatistics | null>(null);
 const qualityOverview = ref<AssetQualityOverview | null>(null);
 const scanTasks = ref<AssetScanTask[]>([]);
@@ -1215,6 +1338,18 @@ const metadataForm = reactive({
   confidenceLevel: '',
   reviewStatus: ''
 });
+const businessProfileForm = reactive<ProjectBusinessProfilePayload>({
+  budgetAmount: null,
+  contractAmount: null,
+  receivedAmount: null,
+  paymentStatus: 'UNSET',
+  expectedPaymentDate: null,
+  plannedStartDate: null,
+  plannedDeliveryDate: null,
+  actualDeliveryDate: null,
+  currencyCode: 'CNY',
+  businessRemark: ''
+});
 
 const metadataFileKindOptions = [
   { label: '模型', value: 'MODEL' },
@@ -1278,6 +1413,35 @@ const projectOwnerText = computed(() =>
 const currentRoleName = computed(() =>
   currentUserProject.value?.roleName ?? '项目成员'
 );
+const canEditBusinessProfile = computed(() =>
+  Boolean(businessProfile.value?.editable)
+    || authStore.currentUser?.username?.toLowerCase() === 'admin'
+    || currentUserProject.value?.roleCode === 'PROJECT_ADMIN'
+);
+const businessSummary = computed(() => {
+  const detail = businessProfile.value;
+  const summary = project.value?.businessProfile;
+  const members = detail?.membersSummary ?? project.value?.membersSummary ?? {
+    memberCount: 0,
+    projectAdminCount: 0,
+    deliveryEngineerCount: 0,
+    viewerCount: 0
+  };
+  return {
+    budgetAmount: detail?.budgetAmount ?? summary?.budgetAmount ?? null,
+    contractAmount: detail?.contractAmount ?? summary?.contractAmount ?? null,
+    receivedAmount: detail?.receivedAmount ?? summary?.receivedAmount ?? null,
+    paymentProgressPercent: detail?.paymentProgressPercent ?? summary?.paymentProgressPercent ?? 0,
+    paymentStatus: detail?.paymentStatus ?? summary?.paymentStatus ?? 'UNSET',
+    expectedPaymentDate: detail?.expectedPaymentDate ?? null,
+    plannedStartDate: detail?.plannedStartDate ?? null,
+    plannedDeliveryDate: detail?.plannedDeliveryDate ?? summary?.plannedDeliveryDate ?? null,
+    actualDeliveryDate: detail?.actualDeliveryDate ?? null,
+    currencyCode: detail?.currencyCode ?? summary?.currencyCode ?? 'CNY',
+    businessRemark: detail?.businessRemark ?? '',
+    membersSummary: members
+  };
+});
 const projectStageText = computed(() =>
   project.value?.projectStage ?? '阶段待维护'
 );
@@ -1514,7 +1678,7 @@ const healthTiles = computed(() => [
   { label: '总体进度', value: `${Math.min(96, Math.max(18, masterDataCompletion.value + 18))}%`, helper: masterDataReady.value ? '可推进交付' : '主数据待确认', tone: masterDataReady.value ? 'success' : 'warning' },
   { label: '数据质量', value: `${riskSignalCount.value > 0 ? 72 : 88}%`, helper: riskSignalCount.value > 0 ? '存在待治理项' : '暂无明显风险', tone: riskSignalCount.value > 0 ? 'warning' : 'success' },
   { label: '合规性', value: masterDataReady.value ? '92%' : '64%', helper: masterDataReady.value ? '规则已建立' : '规则未完成', tone: masterDataReady.value ? 'success' : 'warning' },
-  { label: '活跃成员', value: '项目组', helper: currentRoleName.value, tone: 'accent' }
+  { label: '项目成员', value: formatCount(businessSummary.value.membersSummary.memberCount), helper: `${formatCount(businessSummary.value.membersSummary.projectAdminCount)} 名管理员`, tone: 'accent' }
 ]);
 const riskReminderRows = computed(() => riskCards.value.slice(0, 3));
 const nextActionTab = computed<ProjectWorkspaceTab>(() => {
@@ -1777,7 +1941,8 @@ async function loadPage() {
       qualityResult,
       disciplinesResult,
       recentFilesResult,
-      initStatusResult
+      initStatusResult,
+      businessProfileResult
     ] =
       await Promise.allSettled([
       fetchAssetProjects(),
@@ -1785,7 +1950,8 @@ async function loadPage() {
       fetchAssetQualityOverview(projectId.value),
       fetchAssetDisciplines(projectId.value),
       fetchCatalogFiles({ projectId: projectId.value, page: 1, pageSize: 6 }),
-      fetchInitializationStatus(projectId.value)
+      fetchInitializationStatus(projectId.value),
+      fetchProjectBusinessProfile(projectId.value)
     ]);
     if (requestId !== pageLoadRequestId) return;
     if (projectsResult.status === 'rejected' || statisticsResult.status === 'rejected') {
@@ -1798,6 +1964,7 @@ async function loadPage() {
     disciplineOptions.value = disciplinesResult.status === 'fulfilled' ? disciplinesResult.value : [];
     recentFiles.value = recentFilesResult.status === 'fulfilled' ? recentFilesResult.value.rows : [];
     initializationStatus.value = initStatusResult.status === 'fulfilled' ? initStatusResult.value : null;
+    businessProfile.value = businessProfileResult.status === 'fulfilled' ? businessProfileResult.value : null;
     void loadSupplementalProjectData(requestId);
     void loadChecksumJobs(false);
   } catch (error) {
@@ -1854,6 +2021,8 @@ function handleQualityPageSizeChange() {
 
 function resetProjectData() {
   project.value = null;
+  businessProfile.value = null;
+  businessProfileDialogVisible.value = false;
   statistics.value = null;
   qualityOverview.value = null;
   scanTasks.value = [];
@@ -2628,8 +2797,86 @@ function refreshFileBrowser() {
   fileBrowserRefreshKey.value += 1;
 }
 
+function openBusinessProfileDialog() {
+  if (!canEditBusinessProfile.value) {
+    ElMessage.warning('只有项目管理员可以维护项目经营信息。');
+    return;
+  }
+  Object.assign(businessProfileForm, {
+    budgetAmount: businessSummary.value.budgetAmount,
+    contractAmount: businessSummary.value.contractAmount,
+    receivedAmount: businessSummary.value.receivedAmount,
+    paymentStatus: businessSummary.value.paymentStatus || 'UNSET',
+    expectedPaymentDate: businessSummary.value.expectedPaymentDate,
+    plannedStartDate: businessSummary.value.plannedStartDate,
+    plannedDeliveryDate: businessSummary.value.plannedDeliveryDate,
+    actualDeliveryDate: businessSummary.value.actualDeliveryDate,
+    currencyCode: businessSummary.value.currencyCode || 'CNY',
+    businessRemark: businessSummary.value.businessRemark || ''
+  });
+  businessProfileDialogVisible.value = true;
+}
+
+async function saveBusinessProfile() {
+  const contractAmount = Number(businessProfileForm.contractAmount ?? 0);
+  const receivedAmount = Number(businessProfileForm.receivedAmount ?? 0);
+  if (contractAmount > 0 && receivedAmount > contractAmount) {
+    ElMessage.warning('已回款金额不能大于合同金额。');
+    return;
+  }
+  businessProfileSaving.value = true;
+  businessProfileLoading.value = true;
+  try {
+    const result = await updateProjectBusinessProfile(projectId.value, {
+      budgetAmount: businessProfileForm.budgetAmount ?? null,
+      contractAmount: businessProfileForm.contractAmount ?? null,
+      receivedAmount: businessProfileForm.receivedAmount ?? null,
+      paymentStatus: businessProfileForm.paymentStatus || 'UNSET',
+      expectedPaymentDate: businessProfileForm.expectedPaymentDate || null,
+      plannedStartDate: businessProfileForm.plannedStartDate || null,
+      plannedDeliveryDate: businessProfileForm.plannedDeliveryDate || null,
+      actualDeliveryDate: businessProfileForm.actualDeliveryDate || null,
+      currencyCode: businessProfileForm.currencyCode || 'CNY',
+      businessRemark: businessProfileForm.businessRemark || null
+    });
+    businessProfile.value = result;
+    if (project.value) {
+      project.value = {
+        ...project.value,
+        businessProfile: {
+          budgetAmount: result.budgetAmount,
+          contractAmount: result.contractAmount,
+          receivedAmount: result.receivedAmount,
+          paymentProgressPercent: result.paymentProgressPercent,
+          paymentStatus: result.paymentStatus,
+          plannedDeliveryDate: result.plannedDeliveryDate,
+          currencyCode: result.currencyCode
+        },
+        membersSummary: result.membersSummary
+      };
+    }
+    businessProfileDialogVisible.value = false;
+    ElMessage.success('项目属性已保存');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '保存项目属性失败');
+  } finally {
+    businessProfileSaving.value = false;
+    businessProfileLoading.value = false;
+  }
+}
+
 function formatCount(value: number | null | undefined) {
   return Number(value ?? 0).toLocaleString('zh-CN');
+}
+
+function formatMoney(value: number | null | undefined, currency = 'CNY') {
+  const amount = Number(value ?? 0);
+  if (!amount) return '未维护';
+  const unit = currency === 'CNY' ? '元' : currency;
+  if (Math.abs(amount) >= 10000) {
+    return `${(amount / 10000).toLocaleString('zh-CN', { maximumFractionDigits: 2 })} 万${unit === '元' ? '' : unit}`;
+  }
+  return `${amount.toLocaleString('zh-CN', { maximumFractionDigits: 2 })} ${unit}`;
 }
 
 function formatBytes(value: number | null | undefined) {
@@ -2675,6 +2922,30 @@ function formatDate(value: string | null | undefined) {
     hour: '2-digit',
     minute: '2-digit'
   }).format(new Date(value));
+}
+
+function formatDateOnly(value: string | null | undefined) {
+  if (!value) return '-';
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date(`${value}T00:00:00`));
+}
+
+function paymentProgressText(value: number | null | undefined) {
+  return `${Number(value ?? 0).toLocaleString('zh-CN', { maximumFractionDigits: 1 })}%`;
+}
+
+function paymentStatusLabel(value: string | null | undefined) {
+  const labels: Record<string, string> = {
+    UNSET: '回款状态待维护',
+    NOT_STARTED: '未开始回款',
+    PARTIAL: '部分回款',
+    COMPLETED: '已完成回款',
+    OVERDUE: '回款逾期'
+  };
+  return labels[value || 'UNSET'] ?? value ?? '回款状态待维护';
 }
 
 function disciplineLabel(value: string | null | undefined) {
@@ -3126,6 +3397,61 @@ function scanProgressValue(task: AssetScanTask) {
   justify-content: space-between;
   gap: var(--zy-sp-3);
   min-width: 0;
+}
+
+.project-business-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--zy-sp-3);
+}
+
+.project-business-grid article {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 14px;
+  border: var(--zy-border-soft);
+  border-radius: var(--zy-radius-base);
+  background: var(--zy-surface-soft);
+}
+
+.project-business-grid span,
+.project-business-grid em {
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-xs);
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.project-business-grid strong {
+  color: var(--zy-ink);
+  font-size: var(--zy-fs-lg);
+  font-weight: var(--zy-fw-bold);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.project-business-remark {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: var(--zy-fs-sm);
+  line-height: 1.7;
+}
+
+.project-business-alert {
+  margin-bottom: var(--zy-sp-4);
+}
+
+.project-business-form__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--zy-sp-4);
+}
+
+.project-business-form :deep(.el-input-number),
+.project-business-form :deep(.el-date-editor.el-input),
+.project-business-form :deep(.el-select) {
+  width: 100%;
 }
 
 .workspace-health-grid {
@@ -3904,6 +4230,7 @@ function scanProgressValue(task: AssetScanTask) {
   }
 
   .workspace-bim-kpis,
+  .project-business-grid,
   .workspace-master-steps,
   .project-quality-list__summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3941,6 +4268,8 @@ function scanProgressValue(task: AssetScanTask) {
   .workspace-flow,
   .workspace-action-grid,
   .workspace-health-grid,
+  .project-business-grid,
+  .project-business-form__grid,
   .workspace-delivery-state-grid,
   .workspace-bim-kpis,
   .workspace-master-steps,

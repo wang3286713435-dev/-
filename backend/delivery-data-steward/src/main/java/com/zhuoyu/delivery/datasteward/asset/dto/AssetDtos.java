@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 public final class AssetDtos {
@@ -139,7 +140,62 @@ public final class AssetDtos {
         String confidentialityLevel,
         Instant lastSeenAt,
         String lifecycleStatus,
-        String indexEligibility
+        String indexEligibility,
+        ProjectBusinessProfileSummaryResponse businessProfile,
+        ProjectMembersSummaryResponse membersSummary
+    ) {
+    }
+
+    public record ProjectBusinessProfileSummaryResponse(
+        BigDecimal budgetAmount,
+        BigDecimal contractAmount,
+        BigDecimal receivedAmount,
+        BigDecimal paymentProgressPercent,
+        String paymentStatus,
+        LocalDate plannedDeliveryDate,
+        String currencyCode
+    ) {
+    }
+
+    public record ProjectMembersSummaryResponse(
+        Integer memberCount,
+        Integer projectAdminCount,
+        Integer deliveryEngineerCount,
+        Integer viewerCount
+    ) {
+    }
+
+    public record ProjectBusinessProfileResponse(
+        Long projectId,
+        String projectCode,
+        String projectName,
+        BigDecimal budgetAmount,
+        BigDecimal contractAmount,
+        BigDecimal receivedAmount,
+        BigDecimal paymentProgressPercent,
+        String paymentStatus,
+        LocalDate expectedPaymentDate,
+        LocalDate plannedStartDate,
+        LocalDate plannedDeliveryDate,
+        LocalDate actualDeliveryDate,
+        String currencyCode,
+        String businessRemark,
+        ProjectMembersSummaryResponse membersSummary,
+        Boolean editable
+    ) {
+    }
+
+    public record ProjectBusinessProfileUpdateRequest(
+        BigDecimal budgetAmount,
+        BigDecimal contractAmount,
+        BigDecimal receivedAmount,
+        String paymentStatus,
+        LocalDate expectedPaymentDate,
+        LocalDate plannedStartDate,
+        LocalDate plannedDeliveryDate,
+        LocalDate actualDeliveryDate,
+        String currencyCode,
+        String businessRemark
     ) {
     }
 

@@ -40,16 +40,16 @@
                   <dd>{{ recommendedProject.code }}</dd>
                 </div>
                 <div>
-                  <dt>你的角色</dt>
-                  <dd>{{ currentRoleLabel }}</dd>
+                  <dt>计划交付</dt>
+                  <dd>{{ projectDeliveryDateText(recommendedProject) }}</dd>
                 </div>
                 <div>
                   <dt>负责人</dt>
                   <dd>{{ recommendedProject.projectManagerName || '-' }}</dd>
                 </div>
                 <div>
-                  <dt>最近访问</dt>
-                  <dd>{{ projectRecentText(recommendedProject) }}</dd>
+                  <dt>回款进度</dt>
+                  <dd>{{ projectPaymentProgressText(recommendedProject) }}</dd>
                 </div>
               </dl>
               <div class="launchpad-recommend__actions">
@@ -178,6 +178,20 @@
               <template #default="{ row }">
                 <span class="launchpad-phase">{{ governanceStage(row).index }} {{ governanceStage(row).shortLabel }}</span>
               </template>
+            </el-table-column>
+            <el-table-column label="计划交付" width="130">
+              <template #default="{ row }">{{ projectDeliveryDateText(row) }}</template>
+            </el-table-column>
+            <el-table-column label="回款进度" width="150">
+              <template #default="{ row }">
+                <div class="launchpad-business-cell">
+                  <strong>{{ projectPaymentProgressText(row) }}</strong>
+                  <span>{{ projectContractText(row) }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="成员" width="90">
+              <template #default="{ row }">{{ formatCount(row.membersSummary?.memberCount) }}</template>
             </el-table-column>
             <el-table-column label="整体进度" width="160">
               <template #default="{ row }">
@@ -490,10 +504,6 @@ const recentProjects = computed(() => recentProjectIds.value
 const recommendedProject = computed(() =>
   pendingProjects.value[0] ?? recentProjects.value[0] ?? primaryActionProject.value
 );
-
-const currentRoleLabel = computed(() => {
-  return recommendedProject.value ? '项目管理员' : '-';
-});
 
 const todoCards = computed<TodoCard[]>(() => {
   const rows = visibleProjects.value.length ? visibleProjects.value : projects.value;
@@ -964,9 +974,43 @@ function formatDate(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
+function formatDateOnly(value: string | null | undefined) {
+  if (!value) return '-';
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date(`${value}T00:00:00`));
+}
+
+function formatMoney(value: number | null | undefined, currency = 'CNY') {
+  const amount = Number(value ?? 0);
+  if (!amount) return '未维护';
+  const unit = currency === 'CNY' ? '元' : currency;
+  if (Math.abs(amount) >= 10000) {
+    return `${(amount / 10000).toLocaleString('zh-CN', { maximumFractionDigits: 2 })} 万${unit === '元' ? '' : unit}`;
+  }
+  return `${amount.toLocaleString('zh-CN', { maximumFractionDigits: 2 })} ${unit}`;
+}
+
 function projectTimestamp(row: AssetProject) {
   const value = row.lastScanAt || row.lastModelUpdatedAt;
   return value ? new Date(value).getTime() : 0;
+}
+
+function projectDeliveryDateText(row: AssetProject) {
+  return formatDateOnly(row.businessProfile?.plannedDeliveryDate);
+}
+
+function projectPaymentProgressText(row: AssetProject) {
+  const percent = Number(row.businessProfile?.paymentProgressPercent ?? 0);
+  const status = row.businessProfile?.paymentStatus || 'UNSET';
+  if (status === 'UNSET' && percent === 0) return '待维护';
+  return `${Math.min(percent, 100).toLocaleString('zh-CN', { maximumFractionDigits: 1 })}%`;
+}
+
+function projectContractText(row: AssetProject) {
+  return formatMoney(row.businessProfile?.contractAmount, row.businessProfile?.currencyCode || 'CNY');
 }
 
 function projectRecentText(row: AssetProject) {
@@ -1411,6 +1455,27 @@ function noticeTitle(actionCode: string, summary: string | null) {
   font-size: 12px;
   font-weight: 700;
   padding: 0 8px;
+}
+
+.launchpad-business-cell {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.launchpad-business-cell strong {
+  color: var(--ux4-text-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.launchpad-business-cell span {
+  min-width: 0;
+  color: var(--ux4-text-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .launchpad-progress {

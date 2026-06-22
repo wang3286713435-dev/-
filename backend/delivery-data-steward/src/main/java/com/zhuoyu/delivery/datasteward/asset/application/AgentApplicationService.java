@@ -332,7 +332,9 @@ public class AgentApplicationService {
             project.confidentialityLevel(),
             project.lastSeenAt(),
             project.lifecycleStatus(),
-            project.indexEligibility()
+            project.indexEligibility(),
+            project.businessProfile(),
+            project.membersSummary()
         );
     }
 

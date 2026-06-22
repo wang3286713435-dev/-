@@ -6,10 +6,15 @@ import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CapacityByFileKind;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.CapacityByProject;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.FileAssetResponse;
 import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ModelAssetResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ProjectBusinessProfileSummaryResponse;
+import com.zhuoyu.delivery.datasteward.asset.dto.AssetDtos.ProjectMembersSummaryResponse;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -155,6 +160,16 @@ public class BimAssetRepository {
                    CASE WHEN COALESCE(md.master_data_count, 0) > 0 THEN 1 ELSE 0 END AS has_master_data,
                    CASE WHEN COALESCE(ds.delivery_standard_count, 0) > 0 THEN 1 ELSE 0 END AS has_delivery_standard,
                    CASE WHEN COALESCE(wb.binding_count, 0) > 0 THEN 1 ELSE 0 END AS has_delivery_governance,
+                   bp.budget_amount,
+                   bp.contract_amount,
+                   bp.received_amount,
+                   COALESCE(bp.payment_status, 'UNSET') AS payment_status,
+                   bp.planned_delivery_date,
+                   COALESCE(bp.currency_code, 'CNY') AS currency_code,
+                   COALESCE(ms.member_count, 0) AS member_count,
+                   COALESCE(ms.project_admin_count, 0) AS project_admin_count,
+                   COALESCE(ms.delivery_engineer_count, 0) AS delivery_engineer_count,
+                   COALESCE(ms.viewer_count, 0) AS viewer_count,
                    p.updated_at AS project_updated_at
             FROM core_user_project_roles upr
             JOIN core_projects p ON p.id = upr.project_id
@@ -209,6 +224,21 @@ public class BimAssetRepository {
                 WHERE deleted = 0
                 GROUP BY project_id
             ) wb ON wb.project_id = p.id
+            LEFT JOIN core_project_business_profiles bp ON bp.project_id = p.id AND bp.deleted = 0
+            LEFT JOIN (
+                SELECT upr.project_id,
+                       COUNT(DISTINCT upr.user_id) AS member_count,
+                       COUNT(DISTINCT CASE WHEN r.code = 'PROJECT_ADMIN' THEN upr.user_id END) AS project_admin_count,
+                       COUNT(DISTINCT CASE WHEN r.code = 'DELIVERY_ENGINEER' THEN upr.user_id END) AS delivery_engineer_count,
+                       COUNT(DISTINCT CASE WHEN r.code = 'PROJECT_VIEWER' THEN upr.user_id END) AS viewer_count
+                FROM core_user_project_roles upr
+                JOIN core_users u ON u.id = upr.user_id
+                    AND u.deleted = 0
+                    AND u.status = 'ACTIVE'
+                JOIN core_roles r ON r.id = upr.role_id AND r.deleted = 0
+                WHERE upr.deleted = 0
+                GROUP BY upr.project_id
+            ) ms ON ms.project_id = p.id
             WHERE upr.user_id = :userId
               AND upr.deleted = 0
               AND (
@@ -599,6 +629,9 @@ public class BimAssetRepository {
         Timestamp lastAssetVerifiedAt = rs.getTimestamp("last_asset_verified_at");
         Timestamp lastScanAt = rs.getTimestamp("last_scan_at");
         Timestamp projectUpdatedAt = rs.getTimestamp("project_updated_at");
+        BigDecimal budgetAmount = rs.getBigDecimal("budget_amount");
+        BigDecimal contractAmount = rs.getBigDecimal("contract_amount");
+        BigDecimal receivedAmount = rs.getBigDecimal("received_amount");
         String assetSource = rs.getString("asset_source");
         String confidentialityLevel = projectConfidentialityLevel(assetSource);
         String indexEligibility = projectIndexEligibility(assetSource);
@@ -639,8 +672,37 @@ public class BimAssetRepository {
             confidentialityLevel,
             lastSeenAt,
             lifecycleStatus(rs.getString("asset_status"), null, null, null),
-            indexEligibility
+            indexEligibility,
+            new ProjectBusinessProfileSummaryResponse(
+                budgetAmount,
+                contractAmount,
+                receivedAmount,
+                paymentProgressPercent(receivedAmount, contractAmount),
+                rs.getString("payment_status"),
+                localDate(rs, "planned_delivery_date"),
+                rs.getString("currency_code")
+            ),
+            new ProjectMembersSummaryResponse(
+                rs.getInt("member_count"),
+                rs.getInt("project_admin_count"),
+                rs.getInt("delivery_engineer_count"),
+                rs.getInt("viewer_count")
+            )
         );
+    }
+
+    private static LocalDate localDate(ResultSet rs, String column) throws SQLException {
+        var date = rs.getDate(column);
+        return date == null ? null : date.toLocalDate();
+    }
+
+    private static BigDecimal paymentProgressPercent(BigDecimal receivedAmount, BigDecimal contractAmount) {
+        if (receivedAmount == null || contractAmount == null || contractAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        return receivedAmount
+            .multiply(BigDecimal.valueOf(100))
+            .divide(contractAmount, 2, RoundingMode.HALF_UP);
     }
 
     private static List<String> splitFileKinds(String value) {

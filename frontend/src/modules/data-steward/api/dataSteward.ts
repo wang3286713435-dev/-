@@ -154,6 +154,59 @@ export interface AssetProject {
   hasMasterData?: boolean;
   hasDeliveryStandard?: boolean;
   governanceReady?: boolean;
+  businessProfile?: ProjectBusinessProfileSummary | null;
+  membersSummary?: ProjectMembersSummary | null;
+}
+
+export type PaymentStatus = 'UNSET' | 'NOT_STARTED' | 'PARTIAL' | 'COMPLETED' | 'OVERDUE';
+
+export interface ProjectBusinessProfileSummary {
+  budgetAmount: number | null;
+  contractAmount: number | null;
+  receivedAmount: number | null;
+  paymentProgressPercent: number | null;
+  paymentStatus: PaymentStatus | string;
+  plannedDeliveryDate: string | null;
+  currencyCode: string | null;
+}
+
+export interface ProjectMembersSummary {
+  memberCount: number;
+  projectAdminCount: number;
+  deliveryEngineerCount: number;
+  viewerCount: number;
+}
+
+export interface ProjectBusinessProfile {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  budgetAmount: number | null;
+  contractAmount: number | null;
+  receivedAmount: number | null;
+  paymentProgressPercent: number | null;
+  paymentStatus: PaymentStatus | string;
+  expectedPaymentDate: string | null;
+  plannedStartDate: string | null;
+  plannedDeliveryDate: string | null;
+  actualDeliveryDate: string | null;
+  currencyCode: string | null;
+  businessRemark: string | null;
+  membersSummary: ProjectMembersSummary;
+  editable: boolean;
+}
+
+export interface ProjectBusinessProfilePayload {
+  budgetAmount?: number | null;
+  contractAmount?: number | null;
+  receivedAmount?: number | null;
+  paymentStatus?: PaymentStatus | string | null;
+  expectedPaymentDate?: string | null;
+  plannedStartDate?: string | null;
+  plannedDeliveryDate?: string | null;
+  actualDeliveryDate?: string | null;
+  currencyCode?: string | null;
+  businessRemark?: string | null;
 }
 
 export interface AssetProjectCreatePayload {
@@ -1305,6 +1358,28 @@ export async function archiveAssetProject(projectId: number, payload: AssetProje
   const { data } = await http.post<ApiResponse<AssetProjectArchiveResponse>>(
     `/api/data-steward/assets/projects/${projectId}:archive`,
     payload
+  );
+  return data.data;
+}
+
+export async function fetchProjectBusinessProfile(projectId: number) {
+  const { data } = await http.get<ApiResponse<ProjectBusinessProfile>>(
+    `/api/data-steward/projects/${projectId}/business-profile`
+  );
+  return data.data;
+}
+
+export async function updateProjectBusinessProfile(projectId: number, payload: ProjectBusinessProfilePayload) {
+  const { data } = await http.put<ApiResponse<ProjectBusinessProfile>>(
+    `/api/data-steward/projects/${projectId}/business-profile`,
+    payload
+  );
+  return data.data;
+}
+
+export async function fetchProjectMembersSummary(projectId: number) {
+  const { data } = await http.get<ApiResponse<ProjectMembersSummary>>(
+    `/api/data-steward/projects/${projectId}/members-summary`
   );
   return data.data;
 }
